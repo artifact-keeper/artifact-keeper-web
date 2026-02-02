@@ -648,11 +648,11 @@ function DetailRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex justify-between gap-4">
-      <span className="text-muted-foreground shrink-0">{label}</span>
+    <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+      <span className="text-muted-foreground text-xs font-medium pt-0.5">{label}</span>
       <div className="flex items-center gap-1 min-w-0">
         <span
-          className={`truncate text-right ${mono ? "font-mono text-xs" : ""}`}
+          className={`break-all ${mono ? "font-mono text-xs" : ""}`}
           title={value}
         >
           {value}
