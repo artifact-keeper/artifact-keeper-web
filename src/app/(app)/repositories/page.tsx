@@ -1,0 +1,672 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  RefreshCw,
+} from "lucide-react";
+
+import { repositoriesApi } from "@/lib/api/repositories";
+import type {
+  Repository,
+  CreateRepositoryRequest,
+  RepositoryFormat,
+  RepositoryType,
+} from "@/types";
+import { useAuth } from "@/providers/auth-provider";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+
+import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
+
+// -- constants --
+
+const FORMAT_OPTIONS: { value: RepositoryFormat; label: string }[] = [
+  { value: "maven", label: "Maven" },
+  { value: "pypi", label: "PyPI" },
+  { value: "npm", label: "NPM" },
+  { value: "docker", label: "Docker" },
+  { value: "helm", label: "Helm" },
+  { value: "rpm", label: "RPM" },
+  { value: "debian", label: "Debian" },
+  { value: "go", label: "Go" },
+  { value: "nuget", label: "NuGet" },
+  { value: "cargo", label: "Cargo" },
+  { value: "generic", label: "Generic" },
+];
+
+const TYPE_OPTIONS: { value: RepositoryType; label: string }[] = [
+  { value: "local", label: "Local" },
+  { value: "remote", label: "Remote" },
+  { value: "virtual", label: "Virtual" },
+];
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function formatBadgeVariant(
+  type: string
+): "default" | "secondary" | "outline" | "destructive" {
+  return "secondary";
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  local: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  remote: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  virtual: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+};
+
+// -- page --
+
+export default function RepositoriesPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { isAuthenticated, user } = useAuth();
+
+  // filter state
+  const [formatFilter, setFormatFilter] = useState<string>("__all__");
+  const [typeFilter, setTypeFilter] = useState<string>("__all__");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // modal state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
+
+  // create form
+  const [createForm, setCreateForm] = useState<CreateRepositoryRequest>({
+    key: "",
+    name: "",
+    description: "",
+    format: "generic",
+    repo_type: "local",
+    is_public: true,
+  });
+
+  // edit form
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    description: string;
+    is_public: boolean;
+  }>({ name: "", description: "", is_public: true });
+
+  // --- queries ---
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: [
+      "repositories",
+      formatFilter === "__all__" ? undefined : formatFilter,
+      typeFilter === "__all__" ? undefined : typeFilter,
+      page,
+      pageSize,
+    ],
+    queryFn: () =>
+      repositoriesApi.list({
+        per_page: pageSize,
+        page,
+        format: formatFilter === "__all__" ? undefined : formatFilter,
+        repo_type: typeFilter === "__all__" ? undefined : typeFilter,
+      }),
+  });
+
+  // --- mutations ---
+  const createMutation = useMutation({
+    mutationFn: (data: CreateRepositoryRequest) => repositoriesApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setCreateOpen(false);
+      resetCreateForm();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      key,
+      data,
+    }: {
+      key: string;
+      data: Partial<CreateRepositoryRequest>;
+    }) => repositoriesApi.update(key, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setEditOpen(false);
+      setSelectedRepo(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (key: string) => repositoriesApi.delete(key),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setDeleteOpen(false);
+      setSelectedRepo(null);
+    },
+  });
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm({
+      key: "",
+      name: "",
+      description: "",
+      format: "generic",
+      repo_type: "local",
+      is_public: true,
+    });
+  }, []);
+
+  const handleEdit = useCallback((repo: Repository) => {
+    setSelectedRepo(repo);
+    setEditForm({
+      name: repo.name,
+      description: repo.description ?? "",
+      is_public: repo.is_public,
+    });
+    setEditOpen(true);
+  }, []);
+
+  const handleDelete = useCallback((repo: Repository) => {
+    setSelectedRepo(repo);
+    setDeleteOpen(true);
+  }, []);
+
+  // --- filter data locally by search ---
+  const items = data?.items ?? [];
+  const filtered = searchQuery
+    ? items.filter(
+        (r) =>
+          r.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : items;
+
+  // --- columns ---
+  const columns: DataTableColumn<Repository>[] = [
+    {
+      id: "key",
+      header: "Key",
+      accessor: (r) => r.key,
+      sortable: true,
+      cell: (r) => (
+        <button
+          className="text-sm font-medium text-primary hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(`/repositories/${r.key}`);
+          }}
+        >
+          {r.key}
+        </button>
+      ),
+    },
+    {
+      id: "name",
+      header: "Name",
+      accessor: (r) => r.name,
+      sortable: true,
+      cell: (r) => <span className="text-sm">{r.name}</span>,
+    },
+    {
+      id: "format",
+      header: "Format",
+      accessor: (r) => r.format,
+      cell: (r) => (
+        <Badge variant="secondary" className="text-xs font-normal">
+          {r.format.toUpperCase()}
+        </Badge>
+      ),
+    },
+    {
+      id: "repo_type",
+      header: "Type",
+      accessor: (r) => r.repo_type,
+      cell: (r) => (
+        <span
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[r.repo_type] ?? ""}`}
+        >
+          {r.repo_type}
+        </span>
+      ),
+    },
+    {
+      id: "storage",
+      header: "Storage",
+      accessor: (r) => r.storage_used_bytes,
+      sortable: true,
+      cell: (r) => (
+        <span className="text-sm text-muted-foreground">
+          {formatBytes(r.storage_used_bytes)}
+        </span>
+      ),
+    },
+    {
+      id: "visibility",
+      header: "Visibility",
+      accessor: (r) => (r.is_public ? "Public" : "Private"),
+      cell: (r) => (
+        <Badge variant={r.is_public ? "outline" : "secondary"} className="text-xs font-normal">
+          {r.is_public ? "Public" : "Private"}
+        </Badge>
+      ),
+    },
+    ...(isAuthenticated && user?.is_admin
+      ? [
+          {
+            id: "actions",
+            header: "",
+            cell: (r: Repository) => (
+              <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => handleEdit(r)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(r)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete</TooltipContent>
+                </Tooltip>
+              </div>
+            ),
+          } as DataTableColumn<Repository>,
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Repositories</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage artifact repositories across all formats.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() =>
+                  queryClient.invalidateQueries({ queryKey: ["repositories"] })
+                }
+              >
+                <RefreshCw
+                  className={`size-4 ${isFetching ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh</TooltipContent>
+          </Tooltip>
+          {isAuthenticated && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              Create Repository
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filters row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={formatFilter} onValueChange={(v) => { setFormatFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Format" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All formats</SelectItem>
+            {FORMAT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All types</SelectItem>
+            {TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Search repositories..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {(formatFilter !== "__all__" || typeFilter !== "__all__" || searchQuery) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFormatFilter("__all__");
+              setTypeFilter("__all__");
+              setSearchQuery("");
+              setPage(1);
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {/* Data table */}
+      <DataTable
+        columns={columns}
+        data={filtered}
+        total={data?.pagination?.total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+        loading={isLoading}
+        emptyMessage="No repositories found."
+        rowKey={(r) => r.id}
+        onRowClick={(r) => router.push(`/repositories/${r.key}`)}
+      />
+
+      {/* -- Create Repository Dialog -- */}
+      <Dialog
+        open={createOpen}
+        onOpenChange={(o) => {
+          setCreateOpen(o);
+          if (!o) resetCreateForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Repository</DialogTitle>
+            <DialogDescription>
+              Add a new artifact repository to your registry.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMutation.mutate(createForm);
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="create-key">Key</Label>
+              <Input
+                id="create-key"
+                placeholder="my-repo"
+                value={createForm.key}
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, key: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-name">Name</Label>
+              <Input
+                id="create-name"
+                placeholder="My Repository"
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, name: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-desc">Description</Label>
+              <Textarea
+                id="create-desc"
+                placeholder="Optional description..."
+                value={createForm.description}
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, description: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Format</Label>
+                <Select
+                  value={createForm.format}
+                  onValueChange={(v) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      format: v as RepositoryFormat,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORMAT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={createForm.repo_type}
+                  onValueChange={(v) =>
+                    setCreateForm((f) => ({
+                      ...f,
+                      repo_type: v as RepositoryType,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="create-public"
+                checked={createForm.is_public}
+                onCheckedChange={(v) =>
+                  setCreateForm((f) => ({ ...f, is_public: v }))
+                }
+              />
+              <Label htmlFor="create-public">Public repository</Label>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setCreateOpen(false);
+                  resetCreateForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- Edit Repository Dialog -- */}
+      <Dialog
+        open={editOpen}
+        onOpenChange={(o) => {
+          setEditOpen(o);
+          if (!o) setSelectedRepo(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Repository: {selectedRepo?.key}</DialogTitle>
+            <DialogDescription>
+              Update the repository name, description, or visibility.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (selectedRepo) {
+                updateMutation.mutate({
+                  key: selectedRepo.key,
+                  data: editForm,
+                });
+              }
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, name: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea
+                id="edit-desc"
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, description: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="edit-public"
+                checked={editForm.is_public}
+                onCheckedChange={(v) =>
+                  setEditForm((f) => ({ ...f, is_public: v }))
+                }
+              />
+              <Label htmlFor="edit-public">Public repository</Label>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setEditOpen(false);
+                  setSelectedRepo(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- Delete Confirm Dialog -- */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={(o) => {
+          setDeleteOpen(o);
+          if (!o) setSelectedRepo(null);
+        }}
+        title="Delete Repository"
+        description={`Deleting "${selectedRepo?.key}" will permanently remove all artifacts and metadata. This action cannot be undone.`}
+        typeToConfirm={selectedRepo?.key}
+        confirmText="Delete Repository"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (selectedRepo) deleteMutation.mutate(selectedRepo.key);
+        }}
+      />
+    </div>
+  );
+}
