@@ -22,6 +22,7 @@ import {
   Users,
   UsersRound,
   HardDrive,
+  KeyRound,
   Settings,
   BarChart3,
   Recycle,
@@ -86,6 +87,7 @@ const adminItems: NavItem[] = [
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Backups", href: "/backups", icon: HardDrive },
+  { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },
 ];
 

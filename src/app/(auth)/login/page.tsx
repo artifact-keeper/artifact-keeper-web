@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { ssoApi } from "@/lib/api/sso";
+import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Card,
   CardContent,
@@ -38,6 +41,11 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+
+  useEffect(() => {
+    ssoApi.listProviders().then(setSsoProviders).catch(() => {});
+  }, []);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -139,6 +147,32 @@ export default function LoginPage() {
             </Button>
           </form>
         </Form>
+
+        {ssoProviders.length > 0 && (
+          <>
+            <div className="relative my-4">
+              <Separator />
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                or continue with
+              </span>
+            </div>
+            <div className="space-y-2">
+              {ssoProviders.map((provider) => (
+                <Button
+                  key={provider.id}
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    window.location.href = provider.login_url;
+                  }}
+                >
+                  <LogIn className="size-4 mr-2" />
+                  {provider.name}
+                </Button>
+              ))}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
