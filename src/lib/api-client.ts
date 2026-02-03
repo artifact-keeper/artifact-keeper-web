@@ -79,11 +79,19 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const isRemote = isRemoteInstance();
 
+    // Don't attempt token refresh for auth endpoints themselves, or when
+    // already retried, or for remote instances (they use proxied API keys).
+    const requestUrl = originalRequest?.url || '';
+    const isAuthEndpoint = requestUrl.includes('/auth/me') ||
+      requestUrl.includes('/auth/refresh') ||
+      requestUrl.includes('/auth/login');
+
     if (
       error.response?.status === 401 &&
       originalRequest &&
       typeof window !== 'undefined' &&
       !isRemote &&
+      !isAuthEndpoint &&
       !(originalRequest as InternalAxiosRequestConfig & { _retry?: boolean })._retry
     ) {
       if (isRefreshing) {
@@ -119,7 +127,11 @@ apiClient.interceptors.response.use(
         // Clean up any legacy localStorage tokens
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        // Only redirect to login if the user was on a protected page
+        // (not the login page itself, and not during initial auth check)
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
