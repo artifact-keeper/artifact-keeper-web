@@ -56,6 +56,7 @@ const artifactItems: NavItem[] = [
   { title: "Repositories", href: "/repositories", icon: Database },
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
+  { title: "Set Me Up", href: "/setup", icon: BookOpen },
 ];
 
 const integrationItems: NavItem[] = [
@@ -64,7 +65,6 @@ const integrationItems: NavItem[] = [
   { title: "Plugins", href: "/plugins", icon: Puzzle },
   { title: "Webhooks", href: "/webhooks", icon: Webhook },
   { title: "Migration", href: "/migration", icon: ArrowRightLeft },
-  { title: "Set Me Up", href: "/setup", icon: BookOpen },
 ];
 
 const securityItems: NavItem[] = [
