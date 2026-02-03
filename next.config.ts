@@ -4,6 +4,7 @@ const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  devIndicators: false,
   async headers() {
     return [
       {
