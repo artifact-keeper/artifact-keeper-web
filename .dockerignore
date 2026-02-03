@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.DS_Store
+.env*
+.vercel
+coverage
+out
+build
+*.tsbuildinfo
+next-env.d.ts
