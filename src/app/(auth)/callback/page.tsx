@@ -10,23 +10,21 @@ import { Button } from "@/components/ui/button";
 function CallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+
+  const token = searchParams.get("token");
+  const refreshToken = searchParams.get("refresh_token");
+  const error = !token || !refreshToken
+    ? searchParams.get("error") ||
+      "Authentication failed. No tokens received from the identity provider."
+    : null;
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    const refreshToken = searchParams.get("refresh_token");
-
     if (token && refreshToken) {
       localStorage.setItem("access_token", token);
       localStorage.setItem("refresh_token", refreshToken);
       router.replace("/");
-    } else {
-      setError(
-        searchParams.get("error") ||
-          "Authentication failed. No tokens received from the identity provider."
-      );
     }
-  }, [searchParams, router]);
+  }, [token, refreshToken, router]);
 
   if (error) {
     return (
