@@ -13,7 +13,11 @@ export { default as treeApi } from './tree';
 export { default as profileApi } from './profile';
 export { default as webhooksApi } from './webhooks';
 export { default as securityApi } from './security';
-export { default as replicationApi } from './replication';
+export { default as peersApi } from './replication';
+export { default as analyticsApi } from './analytics';
+export { default as lifecycleApi } from './lifecycle';
+export { default as telemetryApi } from './telemetry';
+export { default as monitoringApi } from './monitoring';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
@@ -69,10 +73,10 @@ export type {
   ListFindingsParams,
 } from './security';
 export type {
-  EdgeNode,
-  EdgeNodesResponse,
-  EdgeNodePeer,
-  EdgeNodePeersResponse,
+  PeerInstance,
+  PeerIdentity,
+  PeerConnection,
+  ReplicationMode,
+  RegisterPeerRequest,
   AssignRepoRequest,
-  ListEdgeNodesParams,
 } from './replication';

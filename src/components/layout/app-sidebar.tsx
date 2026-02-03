@@ -22,6 +22,10 @@ import {
   UsersRound,
   HardDrive,
   Settings,
+  BarChart3,
+  Recycle,
+  Radio,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -55,7 +59,7 @@ const artifactItems: NavItem[] = [
 ];
 
 const integrationItems: NavItem[] = [
-  { title: "Edge Nodes", href: "/edge-nodes", icon: Globe },
+  { title: "Peers", href: "/peers", icon: Globe },
   { title: "Replication", href: "/replication", icon: RefreshCw },
   { title: "Plugins", href: "/plugins", icon: Puzzle },
   { title: "Webhooks", href: "/webhooks", icon: Webhook },
@@ -68,6 +72,13 @@ const securityItems: NavItem[] = [
   { title: "Scan Results", href: "/security/scans", icon: Search },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "Permissions", href: "/permissions", icon: Lock },
+];
+
+const operationsItems: NavItem[] = [
+  { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
+  { title: "Monitoring", href: "/monitoring", icon: Activity },
+  { title: "Telemetry", href: "/telemetry", icon: Radio },
 ];
 
 const adminItems: NavItem[] = [
@@ -153,6 +164,11 @@ export function AppSidebar() {
             <NavGroup
               label="Security"
               items={securityItems}
+              pathname={pathname}
+            />
+            <NavGroup
+              label="Operations"
+              items={operationsItems}
               pathname={pathname}
             />
             <NavGroup

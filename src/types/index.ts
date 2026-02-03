@@ -9,6 +9,20 @@ export * from './builds';
 export * from './search';
 export * from './tree';
 export * from './security';
+export * from './analytics';
+export * from './lifecycle';
+export * from './telemetry';
+export * from './monitoring';
+
+// Re-export peer mesh types from API module for convenience
+export type {
+  PeerInstance,
+  PeerIdentity,
+  PeerConnection,
+  ReplicationMode,
+  RegisterPeerRequest,
+  AssignRepoRequest as PeerAssignRepoRequest,
+} from '@/lib/api/replication';
 
 export interface User {
   id: string;
