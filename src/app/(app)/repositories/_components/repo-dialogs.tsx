@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType } from "@/types";
 import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
 
@@ -26,14 +26,6 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
-// Build format groups for grouped select
-const FORMAT_GROUPS = Array.from(
-  FORMAT_OPTIONS.reduce((map, o) => {
-    if (!map.has(o.group)) map.set(o.group, []);
-    map.get(o.group)!.push(o);
-    return map;
-  }, new Map<string, typeof FORMAT_OPTIONS>())
-);
 
 interface RepoDialogsProps {
   createOpen: boolean;
@@ -78,23 +70,18 @@ export function RepoDialogs({
     is_public: true,
   });
 
-  // Edit form state
-  const [editForm, setEditForm] = useState<{
-    name: string;
-    description: string;
-    is_public: boolean;
-  }>({ name: "", description: "", is_public: true });
-
-  // Sync edit form when editRepo changes
-  useEffect(() => {
-    if (editRepo) {
-      setEditForm({
-        name: editRepo.name,
-        description: editRepo.description ?? "",
-        is_public: editRepo.is_public,
-      });
-    }
-  }, [editRepo]);
+  // Edit form state — derived from editRepo, with local overrides
+  const editFormDefaults = useMemo(() => ({
+    name: editRepo?.name ?? "",
+    description: editRepo?.description ?? "",
+    is_public: editRepo?.is_public ?? true,
+  }), [editRepo]);
+  const [editFormOverrides, setEditFormOverrides] = useState<{
+    name?: string;
+    description?: string;
+    is_public?: boolean;
+  }>({});
+  const editForm = { ...editFormDefaults, ...editFormOverrides };
 
   const resetCreateForm = () => {
     setCreateForm({
@@ -243,7 +230,7 @@ export function RepoDialogs({
       </Dialog>
 
       {/* -- Edit Repository Dialog -- */}
-      <Dialog open={editOpen} onOpenChange={onEditOpenChange}>
+      <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditFormOverrides({}); onEditOpenChange(open); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Repository: {editRepo?.key}</DialogTitle>
@@ -266,7 +253,7 @@ export function RepoDialogs({
                 id="edit-name"
                 value={editForm.name}
                 onChange={(e) =>
-                  setEditForm((f) => ({ ...f, name: e.target.value }))
+                  setEditFormOverrides((f) => ({ ...f, name: e.target.value }))
                 }
                 required
               />
@@ -277,7 +264,7 @@ export function RepoDialogs({
                 id="edit-desc"
                 value={editForm.description}
                 onChange={(e) =>
-                  setEditForm((f) => ({ ...f, description: e.target.value }))
+                  setEditFormOverrides((f) => ({ ...f, description: e.target.value }))
                 }
                 rows={2}
               />
@@ -287,7 +274,7 @@ export function RepoDialogs({
                 id="edit-public"
                 checked={editForm.is_public}
                 onCheckedChange={(v) =>
-                  setEditForm((f) => ({ ...f, is_public: v }))
+                  setEditFormOverrides((f) => ({ ...f, is_public: v }))
                 }
               />
               <Label htmlFor="edit-public">Public repository</Label>
