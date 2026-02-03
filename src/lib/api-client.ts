@@ -88,7 +88,7 @@ apiClient.interceptors.response.use(
     ) {
       if (isRefreshing) {
         return new Promise((resolve) => {
-          addRefreshSubscriber((_token: string) => {
+          addRefreshSubscriber(() => {
             // Cookies are updated by the refresh response; just retry the request
             resolve(apiClient(originalRequest));
           });

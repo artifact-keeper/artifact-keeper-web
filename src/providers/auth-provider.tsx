@@ -25,6 +25,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function storeTokens(_response: LoginResponse): void {
   // Tokens are now stored as httpOnly cookies by the backend.
   // No localStorage needed for the local instance.

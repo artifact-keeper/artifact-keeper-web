@@ -23,23 +23,21 @@ function getSsoErrorMessage(errorCode: string | null): string {
 function CallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
 
   const code = searchParams.get("code");
   const urlError = searchParams.get("error");
 
-  useEffect(() => {
-    if (urlError) {
-      setError(getSsoErrorMessage(urlError));
-      return;
-    }
+  // Derive error state from URL params without calling setState in the effect
+  const immediateError = urlError
+    ? getSsoErrorMessage(urlError)
+    : !code
+      ? "Authentication failed. No authorization code received from the identity provider."
+      : null;
 
-    if (!code) {
-      setError(
-        "Authentication failed. No authorization code received from the identity provider."
-      );
-      return;
-    }
+  const [error, setError] = useState<string | null>(immediateError);
+
+  useEffect(() => {
+    if (immediateError) return;
 
     // Exchange the single-use code for tokens via a secure POST request
     const exchangeCode = async () => {
@@ -70,7 +68,7 @@ function CallbackHandler() {
     };
 
     exchangeCode();
-  }, [code, urlError, router]);
+  }, [code, immediateError, router]);
 
   if (error) {
     return (
