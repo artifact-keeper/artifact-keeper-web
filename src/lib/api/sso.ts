@@ -117,6 +117,18 @@ export const ssoApi = {
     await apiClient.post(`/api/v1/admin/sso/ldap/${id}/disable`);
   },
 
+  ldapLogin: async (
+    providerId: string,
+    username: string,
+    password: string
+  ): Promise<{ access_token: string; refresh_token: string }> => {
+    const response = await apiClient.post<{
+      access_token: string;
+      refresh_token: string;
+    }>(`/api/v1/auth/sso/ldap/${providerId}/login`, { username, password });
+    return response.data;
+  },
+
   testLdap: async (id: string): Promise<LdapTestResult> => {
     const response = await apiClient.post<LdapTestResult>(
       `/api/v1/admin/sso/ldap/${id}/test`

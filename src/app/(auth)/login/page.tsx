@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,16 +36,36 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
+type SelectedProvider =
+  | { type: "local" }
+  | { type: "ldap"; id: string; name: string };
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>({
+    type: "local",
+  });
 
   useEffect(() => {
     ssoApi.listProviders().then(setSsoProviders).catch(() => {});
   }, []);
+
+  const ldapProviders = useMemo(
+    () => ssoProviders.filter((p) => p.provider_type === "ldap"),
+    [ssoProviders]
+  );
+
+  const redirectProviders = useMemo(
+    () =>
+      ssoProviders.filter(
+        (p) => p.provider_type === "oidc" || p.provider_type === "saml"
+      ),
+    [ssoProviders]
+  );
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -59,11 +79,26 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const needsPasswordChange = await login(values.username, values.password);
-      if (needsPasswordChange) {
-        router.push("/change-password");
-      } else {
+      if (selectedProvider.type === "ldap") {
+        const response = await ssoApi.ldapLogin(
+          selectedProvider.id,
+          values.username,
+          values.password
+        );
+        localStorage.setItem("access_token", response.access_token);
+        localStorage.setItem("refresh_token", response.refresh_token);
+        await refreshUser();
         router.push("/");
+      } else {
+        const needsPasswordChange = await login(
+          values.username,
+          values.password
+        );
+        if (needsPasswordChange) {
+          router.push("/change-password");
+        } else {
+          router.push("/");
+        }
       }
     } catch (err) {
       const message =
@@ -80,7 +115,12 @@ export default function LoginPage() {
     <Card className="border-0 shadow-lg">
       <CardHeader className="text-center pb-2">
         <div className="mx-auto mb-4 flex size-14 items-center justify-center">
-          <Image src="/logo-48.png" alt="Artifact Keeper" width={48} height={48} />
+          <Image
+            src="/logo-48.png"
+            alt="Artifact Keeper"
+            width={48}
+            height={48}
+          />
         </div>
         <CardTitle className="text-xl">Artifact Keeper</CardTitle>
         <CardDescription>Sign in to your account</CardDescription>
@@ -91,6 +131,44 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+
+        {ldapProviders.length > 0 && (
+          <div className="mb-4 flex gap-1 rounded-lg bg-muted p-1">
+            <button
+              type="button"
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                selectedProvider.type === "local"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setSelectedProvider({ type: "local" })}
+            >
+              Local
+            </button>
+            {ldapProviders.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  selectedProvider.type === "ldap" &&
+                  selectedProvider.id === provider.id
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() =>
+                  setSelectedProvider({
+                    type: "ldap",
+                    id: provider.id,
+                    name: provider.name,
+                  })
+                }
+              >
+                {provider.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -148,7 +226,7 @@ export default function LoginPage() {
           </form>
         </Form>
 
-        {ssoProviders.length > 0 && (
+        {redirectProviders.length > 0 && (
           <>
             <div className="relative my-4">
               <Separator />
@@ -157,7 +235,7 @@ export default function LoginPage() {
               </span>
             </div>
             <div className="space-y-2">
-              {ssoProviders.map((provider) => (
+              {redirectProviders.map((provider) => (
                 <Button
                   key={provider.id}
                   variant="outline"
@@ -167,7 +245,7 @@ export default function LoginPage() {
                   }}
                 >
                   <LogIn className="size-4 mr-2" />
-                  {provider.name}
+                  Sign in with {provider.name}
                 </Button>
               ))}
             </div>
