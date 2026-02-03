@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { QuickSearch } from "@/components/search/quick-search";
+import { InstanceSwitcher } from "./instance-switcher";
 
 export function AppHeader() {
   const router = useRouter();
@@ -88,6 +89,9 @@ export function AppHeader() {
           >
             <SearchIcon className="size-4" />
           </Button>
+
+          {/* Instance switcher */}
+          <InstanceSwitcher />
 
           {/* Theme toggle */}
           <Button

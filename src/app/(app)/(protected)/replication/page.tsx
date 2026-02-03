@@ -6,14 +6,15 @@ import {
   RefreshCw,
   Server,
   Wifi,
-  WifiOff,
-  RefreshCcw,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { replicationApi } from "@/lib/api/replication";
-import type { EdgeNode, EdgeNodePeer } from "@/lib/api/replication";
+import { peersApi } from "@/lib/api/replication";
+import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
+import { repositoriesApi } from "@/lib/api/repositories";
+import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,10 +67,10 @@ function formatBandwidth(bps: number): string {
   return `${parseFloat((bps / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function cachePercent(node: EdgeNode): number {
-  if (node.cache_size_bytes === 0) return 0;
+function cachePercent(peer: PeerInstance): number {
+  if (peer.cache_size_bytes === 0) return 0;
   return Math.round(
-    (node.cache_used_bytes / node.cache_size_bytes) * 100
+    (peer.cache_used_bytes / peer.cache_size_bytes) * 100
   );
 }
 
@@ -82,130 +83,231 @@ const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "yellow" | "defau
   disconnected: "red",
 };
 
+type ReplicationModeOption = "push" | "pull" | "mirror" | "none";
+
 // -- page --
 
 export default function ReplicationPage() {
   const queryClient = useQueryClient();
-  const [selectedNodeId, setSelectedNodeId] = useState<string>("__none__");
+  const [selectedPeerId, setSelectedPeerId] = useState<string>("__none__");
+  const [topologyPeerId, setTopologyPeerId] = useState<string>("__none__");
+  const [repoModes, setRepoModes] = useState<Record<string, ReplicationModeOption>>({});
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["replication", "edge-nodes"],
-    queryFn: () => replicationApi.listEdgeNodes({ per_page: 100 }),
+    queryKey: ["peers"],
+    queryFn: () => peersApi.list({ per_page: 100 }),
   });
 
-  const nodes = data?.items ?? [];
-  const onlineCount = nodes.filter((n) => n.status === "online").length;
-  const syncingCount = nodes.filter((n) => n.status === "syncing").length;
-  const degradedCount = nodes.filter((n) => n.status === "degraded").length;
-  const totalCacheUsed = nodes.reduce((a, n) => a + n.cache_used_bytes, 0);
-  const totalCacheSize = nodes.reduce((a, n) => a + n.cache_size_bytes, 0);
+  const peers = data?.items ?? [];
+  const onlineCount = peers.filter((p) => p.status === "online").length;
+  const syncingCount = peers.filter((p) => p.status === "syncing").length;
+  const totalCacheUsed = peers.reduce((a, p) => a + p.cache_used_bytes, 0);
+  const totalCacheSize = peers.reduce((a, p) => a + p.cache_size_bytes, 0);
 
-  const { data: peers = [], isLoading: peersLoading } = useQuery({
-    queryKey: ["replication", "peers", selectedNodeId],
-    queryFn: () => replicationApi.getEdgeNodePeers(selectedNodeId),
-    enabled: selectedNodeId !== "__none__",
+  // Subscriptions tab queries
+  const { data: reposData } = useQuery({
+    queryKey: ["repositories-list"],
+    queryFn: () => repositoriesApi.list({ per_page: 200 }),
   });
+  const repositories = reposData?.items ?? [];
 
   const { data: assignedRepos = [] } = useQuery({
-    queryKey: ["replication", "repos", selectedNodeId],
-    queryFn: () => replicationApi.getEdgeNodeRepos(selectedNodeId),
-    enabled: selectedNodeId !== "__none__",
+    queryKey: ["peer-repos", selectedPeerId],
+    queryFn: () => peersApi.getRepositories(selectedPeerId),
+    enabled: selectedPeerId !== "__none__",
   });
+
+  const assignedSet = new Set(assignedRepos);
+
+  // Topology tab queries
+  const { data: connections = [], isLoading: connectionsLoading } = useQuery({
+    queryKey: ["peer-connections", topologyPeerId],
+    queryFn: () => peersApi.getConnections(topologyPeerId),
+    enabled: topologyPeerId !== "__none__",
+  });
+
+  const peerMap = new Map(peers.map((p) => [p.id, p]));
 
   const assignMutation = useMutation({
     mutationFn: ({
-      nodeId,
+      peerId,
       repoId,
-      priority,
+      mode,
     }: {
-      nodeId: string;
+      peerId: string;
       repoId: string;
-      priority: number;
-    }) => replicationApi.assignRepoToEdge(nodeId, { repository_id: repoId, priority }),
+      mode: ReplicationModeOption;
+    }) =>
+      peersApi.assignRepository(peerId, {
+        repository_id: repoId,
+        sync_enabled: mode !== "none",
+        replication_mode: mode,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["replication", "repos", selectedNodeId],
+        queryKey: ["peer-repos", selectedPeerId],
       });
-      toast.success("Replication priority updated");
+      toast.success("Replication settings updated");
     },
-    onError: () => toast.error("Failed to update replication priority"),
+    onError: () => toast.error("Failed to update replication settings"),
   });
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n.name]));
-
-  // -- peer columns --
-  const peerColumns: DataTableColumn<EdgeNodePeer>[] = [
+  // -- subscription repo columns --
+  const repoColumns: DataTableColumn<Repository>[] = [
     {
-      id: "source",
-      header: "Source",
-      cell: () => (
-        <span className="text-sm font-medium">
-          {selectedNodeId !== "__none__"
-            ? nodeMap.get(selectedNodeId) ?? "Unknown"
-            : "-"}
-        </span>
+      id: "key",
+      header: "Repository Key",
+      accessor: (r) => r.key,
+      sortable: true,
+      cell: (r) => (
+        <span className="text-sm font-medium">{r.key}</span>
       ),
     },
     {
-      id: "target",
-      header: "Target",
-      cell: (p) => (
-        <span className="text-sm font-medium">
-          {nodeMap.get(p.target_node_id) ?? p.target_node_id.slice(0, 8)}
-        </span>
+      id: "format",
+      header: "Format",
+      cell: (r) => (
+        <Badge variant="secondary" className="text-xs">
+          {r.format}
+        </Badge>
       ),
+    },
+    {
+      id: "mode",
+      header: "Replication Mode",
+      cell: (r) => {
+        const currentMode = repoModes[r.id] ?? (assignedSet.has(r.id) ? "pull" : "none");
+        return (
+          <Select
+            value={currentMode}
+            onValueChange={(val) =>
+              setRepoModes((prev) => ({
+                ...prev,
+                [r.id]: val as ReplicationModeOption,
+              }))
+            }
+          >
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="push">Push</SelectItem>
+              <SelectItem value="pull">Pull</SelectItem>
+              <SelectItem value="mirror">Mirror</SelectItem>
+              <SelectItem value="none">None</SelectItem>
+            </SelectContent>
+          </Select>
+        );
+      },
+    },
+    {
+      id: "assigned",
+      header: "Assigned",
+      cell: (r) => (
+        <Badge
+          variant="secondary"
+          className={
+            assignedSet.has(r.id)
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-xs"
+              : "text-xs"
+          }
+        >
+          {assignedSet.has(r.id) ? "Yes" : "No"}
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (r) => {
+        const mode = repoModes[r.id];
+        if (!mode) return null;
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={assignMutation.isPending}
+            onClick={() =>
+              assignMutation.mutate({
+                peerId: selectedPeerId,
+                repoId: r.id,
+                mode,
+              })
+            }
+          >
+            Save
+          </Button>
+        );
+      },
+    },
+  ];
+
+  // -- connection columns --
+  const connectionColumns: DataTableColumn<PeerConnection>[] = [
+    {
+      id: "target",
+      header: "Target Peer",
+      cell: (c) => {
+        const target = peerMap.get(c.target_peer_id);
+        return (
+          <span className="text-sm font-medium">
+            {target?.name ?? c.target_peer_id.slice(0, 8)}
+          </span>
+        );
+      },
     },
     {
       id: "status",
       header: "Status",
-      cell: (p) => (
+      cell: (c) => (
         <StatusBadge
-          status={p.status}
-          color={STATUS_COLORS[p.status] ?? "default"}
+          status={c.status}
+          color={STATUS_COLORS[c.status] ?? "default"}
         />
       ),
     },
     {
       id: "latency",
       header: "Latency",
-      accessor: (p) => p.latency_ms,
+      accessor: (c) => c.latency_ms,
       sortable: true,
-      cell: (p) => (
-        <span className="text-sm text-muted-foreground">{p.latency_ms} ms</span>
+      cell: (c) => (
+        <span className="text-sm text-muted-foreground">{c.latency_ms} ms</span>
       ),
     },
     {
       id: "bandwidth",
       header: "Bandwidth",
-      cell: (p) => (
+      cell: (c) => (
         <span className="text-sm text-muted-foreground">
-          {formatBandwidth(p.bandwidth_estimate_bps)}
+          {formatBandwidth(c.bandwidth_estimate_bps)}
         </span>
       ),
     },
     {
       id: "shared",
       header: "Shared Artifacts",
-      cell: (p) => (
+      cell: (c) => (
         <span className="text-sm text-muted-foreground">
-          {p.shared_artifacts_count}
+          {c.shared_artifacts_count}
         </span>
       ),
     },
     {
       id: "transferred",
-      header: "Transferred",
-      cell: (p) => (
+      header: "Bytes Transferred",
+      cell: (c) => (
         <span className="text-sm text-muted-foreground">
-          {formatBytes(p.bytes_transferred_total)}
+          {formatBytes(c.bytes_transferred_total)}
         </span>
       ),
     },
     {
-      id: "success_rate",
+      id: "success_failure",
       header: "Success / Failure",
-      cell: (p) => {
-        const total = p.transfer_success_count + p.transfer_failure_count;
+      cell: (c) => {
+        const total = c.transfer_success_count + c.transfer_failure_count;
         if (total === 0)
           return <span className="text-sm text-muted-foreground">-</span>;
         return (
@@ -214,13 +316,13 @@ export default function ReplicationPage() {
               variant="secondary"
               className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-xs"
             >
-              {p.transfer_success_count}
+              {c.transfer_success_count}
             </Badge>
             <Badge
               variant="secondary"
-              className={`text-xs ${p.transfer_failure_count > 0 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : ""}`}
+              className={`text-xs ${c.transfer_failure_count > 0 ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : ""}`}
             >
-              {p.transfer_failure_count}
+              {c.transfer_failure_count}
             </Badge>
           </div>
         );
@@ -232,7 +334,7 @@ export default function ReplicationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Replication Dashboard"
-        description="Monitor edge node replication status and topology."
+        description="Monitor peer replication status and topology."
         actions={
           <Tooltip>
             <TooltipTrigger asChild>
@@ -240,9 +342,7 @@ export default function ReplicationPage() {
                 variant="outline"
                 size="icon"
                 onClick={() =>
-                  queryClient.invalidateQueries({
-                    queryKey: ["replication"],
-                  })
+                  queryClient.invalidateQueries({ queryKey: ["peers"] })
                 }
               >
                 <RefreshCw
@@ -260,8 +360,8 @@ export default function ReplicationPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Nodes</p>
-              <p className="text-2xl font-semibold">{nodes.length}</p>
+              <p className="text-sm text-muted-foreground">Total Peers</p>
+              <p className="text-2xl font-semibold">{peers.length}</p>
             </div>
             <Server className="size-8 text-muted-foreground/30" />
           </CardContent>
@@ -278,14 +378,14 @@ export default function ReplicationPage() {
           </CardContent>
         </Card>
         <Card className="py-4">
-          <CardContent>
-            <p className="text-sm text-muted-foreground">Syncing / Degraded</p>
-            <p className="text-2xl font-semibold">
-              <span className={syncingCount > 0 ? "text-blue-600" : ""}>
+          <CardContent className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Syncing</p>
+              <p className="text-2xl font-semibold text-blue-600">
                 {syncingCount}
-              </span>{" "}
-              / {degradedCount}
-            </p>
+              </p>
+            </div>
+            <Loader2 className="size-8 text-blue-200" />
           </CardContent>
         </Card>
         <Card className="py-4">
@@ -303,6 +403,7 @@ export default function ReplicationPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="subscriptions">Subscriptions</TabsTrigger>
           <TabsTrigger value="topology">Topology</TabsTrigger>
         </TabsList>
 
@@ -316,39 +417,42 @@ export default function ReplicationPage() {
                 </Card>
               ))}
             </div>
-          ) : nodes.length === 0 ? (
+          ) : peers.length === 0 ? (
             <EmptyState
               icon={Server}
-              title="No edge nodes"
-              description="Register edge nodes from the Edge Nodes page to see them here."
+              title="No peers"
+              description="Register peers from the Peers page to see them here."
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {nodes.map((node) => {
-                const pct = cachePercent(node);
+              {peers.map((peer) => {
+                const pct = cachePercent(peer);
                 return (
-                  <Card key={node.id}>
+                  <Card key={peer.id}>
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm">{node.name}</CardTitle>
+                        <CardTitle className="text-sm">{peer.name}</CardTitle>
                         <StatusBadge
-                          status={node.status}
-                          color={STATUS_COLORS[node.status] ?? "default"}
+                          status={peer.status}
+                          color={STATUS_COLORS[peer.status] ?? "default"}
                         />
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {node.region && (
+                      {peer.region && (
                         <p className="text-xs text-muted-foreground">
-                          Region: {node.region}
+                          Region: {peer.region}
                         </p>
                       )}
+                      <p className="text-xs text-muted-foreground truncate">
+                        {peer.endpoint_url}
+                      </p>
                       <div>
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                           <span>Cache Usage</span>
                           <span>
-                            {formatBytes(node.cache_used_bytes)} /{" "}
-                            {formatBytes(node.cache_size_bytes)}
+                            {formatBytes(peer.cache_used_bytes)} /{" "}
+                            {formatBytes(peer.cache_size_bytes)}
                           </span>
                         </div>
                         <Progress
@@ -362,8 +466,8 @@ export default function ReplicationPage() {
                             Last Sync
                           </p>
                           <p>
-                            {node.last_sync_at
-                              ? new Date(node.last_sync_at).toLocaleString()
+                            {peer.last_sync_at
+                              ? new Date(peer.last_sync_at).toLocaleString()
                               : "Never"}
                           </p>
                         </div>
@@ -372,9 +476,9 @@ export default function ReplicationPage() {
                             Heartbeat
                           </p>
                           <p>
-                            {node.last_heartbeat_at
+                            {peer.last_heartbeat_at
                               ? new Date(
-                                  node.last_heartbeat_at
+                                  peer.last_heartbeat_at
                                 ).toLocaleString()
                               : "Never"}
                           </p>
@@ -388,42 +492,83 @@ export default function ReplicationPage() {
           )}
         </TabsContent>
 
-        {/* -- Topology Tab -- */}
-        <TabsContent value="topology" className="mt-6 space-y-4">
+        {/* -- Subscriptions Tab -- */}
+        <TabsContent value="subscriptions" className="mt-6 space-y-4">
           <div>
             <Select
-              value={selectedNodeId}
-              onValueChange={setSelectedNodeId}
+              value={selectedPeerId}
+              onValueChange={(val) => {
+                setSelectedPeerId(val);
+                setRepoModes({});
+              }}
             >
               <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select an edge node to view peers" />
+                <SelectValue placeholder="Select a peer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">
-                  Select a node...
-                </SelectItem>
-                {nodes.map((node) => (
-                  <SelectItem key={node.id} value={node.id}>
-                    {node.name} ({node.status})
+                <SelectItem value="__none__">Select a peer...</SelectItem>
+                {peers.map((peer) => (
+                  <SelectItem key={peer.id} value={peer.id}>
+                    {peer.name} ({peer.status})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {selectedNodeId === "__none__" ? (
+          {selectedPeerId === "__none__" ? (
             <EmptyState
-              icon={Globe}
-              title="Select a node"
-              description="Choose an edge node above to view its peer connections."
+              icon={Server}
+              title="Select a peer"
+              description="Choose a peer above to manage repository subscriptions."
             />
           ) : (
             <DataTable
-              columns={peerColumns}
-              data={peers}
-              loading={peersLoading}
-              rowKey={(p) => p.id}
-              emptyMessage="No peers found for this node."
+              columns={repoColumns}
+              data={repositories}
+              loading={isLoading}
+              rowKey={(r) => r.id}
+              emptyMessage="No repositories found."
+            />
+          )}
+        </TabsContent>
+
+        {/* -- Topology Tab -- */}
+        <TabsContent value="topology" className="mt-6 space-y-4">
+          <div>
+            <Select
+              value={topologyPeerId}
+              onValueChange={setTopologyPeerId}
+            >
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Select a peer to view connections" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  Select a peer...
+                </SelectItem>
+                {peers.map((peer) => (
+                  <SelectItem key={peer.id} value={peer.id}>
+                    {peer.name} ({peer.status})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {topologyPeerId === "__none__" ? (
+            <EmptyState
+              icon={Globe}
+              title="Select a peer"
+              description="Choose a peer above to view its connections."
+            />
+          ) : (
+            <DataTable
+              columns={connectionColumns}
+              data={connections}
+              loading={connectionsLoading}
+              rowKey={(c) => c.id}
+              emptyMessage="No connections found for this peer."
             />
           )}
         </TabsContent>
