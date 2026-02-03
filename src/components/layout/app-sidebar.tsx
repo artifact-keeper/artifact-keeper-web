@@ -55,7 +55,6 @@ const overviewItems: NavItem[] = [
 
 const artifactItems: NavItem[] = [
   { title: "Repositories", href: "/repositories", icon: Database },
-  { title: "Artifacts", href: "/artifacts", icon: Package },
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
 ];
