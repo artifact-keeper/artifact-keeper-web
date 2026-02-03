@@ -769,7 +769,8 @@ function PackagesContent() {
         )}
       </div>
 
-      {/* Right Panel */}
+      {/* Right Panel - only show when there are packages to select */}
+      {(selectedPackageId || sortedPackages.length > 0) && (
       <div className="flex-1 min-w-0 hidden md:flex">
         {!selectedPackageId ? (
           <div className="flex flex-col items-center justify-center w-full text-center">
@@ -793,6 +794,7 @@ function PackagesContent() {
           </div>
         )}
       </div>
+      )}
 
       {/* Mobile detail view */}
       {selectedPackageId && detailPkg && (
