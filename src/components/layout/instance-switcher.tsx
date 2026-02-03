@@ -29,13 +29,26 @@ export function InstanceSwitcher() {
   const [url, setUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
 
-  const handleAdd = () => {
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
     if (!name.trim() || !url.trim()) return;
-    addInstance({ name: name.trim(), url: url.trim().replace(/\/$/, ""), apiKey: apiKey.trim() || undefined });
-    setAddOpen(false);
-    setName("");
-    setUrl("");
-    setApiKey("");
+    setAdding(true);
+    try {
+      await addInstance({
+        name: name.trim(),
+        url: url.trim().replace(/\/$/, ""),
+        apiKey: apiKey.trim() || "",
+      });
+      setAddOpen(false);
+      setName("");
+      setUrl("");
+      setApiKey("");
+    } catch {
+      // TODO: show error toast
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -119,7 +132,7 @@ export function InstanceSwitcher() {
               <Label htmlFor="inst-key">API Key</Label>
               <Input
                 id="inst-key"
-                placeholder="Optional — for authenticated access"
+                placeholder="Optional — stored encrypted on server"
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -130,8 +143,8 @@ export function InstanceSwitcher() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAdd} disabled={!name.trim() || !url.trim()}>
-              Add Instance
+            <Button onClick={handleAdd} disabled={!name.trim() || !url.trim() || adding}>
+              {adding ? "Adding..." : "Add Instance"}
             </Button>
           </DialogFooter>
         </DialogContent>

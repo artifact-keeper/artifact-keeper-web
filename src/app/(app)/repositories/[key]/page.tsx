@@ -168,15 +168,25 @@ export default function RepositoryDetailPage() {
 
   // --- handlers ---
   const handleDownload = useCallback(
-    (artifact: Artifact) => {
+    async (artifact: Artifact) => {
       const url = artifactsApi.getDownloadUrl(repoKey, artifact.path);
-      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-      const link = document.createElement("a");
-      link.href = token ? `${url}?token=${token}` : url;
-      link.download = artifact.name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const ticket = await artifactsApi.createDownloadTicket(repoKey, artifact.path);
+        const link = document.createElement("a");
+        link.href = `${url}?ticket=${ticket}`;
+        link.download = artifact.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch {
+        // Fallback: try without ticket (backend may allow cookie auth)
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = artifact.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     },
     [repoKey]
   );

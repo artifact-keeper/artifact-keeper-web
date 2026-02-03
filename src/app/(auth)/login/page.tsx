@@ -80,13 +80,12 @@ export default function LoginPage() {
     setError(null);
     try {
       if (selectedProvider.type === "ldap") {
-        const response = await ssoApi.ldapLogin(
+        // Tokens are set as httpOnly cookies by the backend
+        await ssoApi.ldapLogin(
           selectedProvider.id,
           values.username,
           values.password
         );
-        localStorage.setItem("access_token", response.access_token);
-        localStorage.setItem("refresh_token", response.refresh_token);
         await refreshUser();
         router.push("/");
       } else {

@@ -39,6 +39,14 @@ export const artifactsApi = {
     return `/api/v1/repositories/${repoKey}/artifacts/${encodeURIComponent(artifactPath)}/download`;
   },
 
+  createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
+    const { data } = await apiClient.post<{ ticket: string; expires_in: number }>(
+      '/api/v1/auth/ticket',
+      { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` }
+    );
+    return data.ticket;
+  },
+
   upload: async (
     repoKey: string,
     file: File,

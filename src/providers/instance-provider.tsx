@@ -1,20 +1,20 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import apiClient from "@/lib/api-client";
 
 export interface InstanceConfig {
   id: string;
   name: string;
   url: string;
-  apiKey?: string;
 }
 
 interface InstanceContextValue {
   instances: InstanceConfig[];
   activeInstance: InstanceConfig;
   switchInstance: (id: string) => void;
-  addInstance: (config: Omit<InstanceConfig, "id">) => void;
-  removeInstance: (id: string) => void;
+  addInstance: (config: { name: string; url: string; apiKey: string }) => Promise<void>;
+  removeInstance: (id: string) => Promise<void>;
 }
 
 const STORAGE_KEY = "ak_instances";
@@ -49,7 +49,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  // Persist remote instances to localStorage
+  // Persist remote instances to localStorage (metadata only, no API keys)
   const persist = useCallback((all: InstanceConfig[]) => {
     const remote = all.filter((i) => i.id !== "local");
     localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
@@ -63,10 +63,22 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addInstance = useCallback(
-    (config: Omit<InstanceConfig, "id">) => {
+    async (config: { name: string; url: string; apiKey: string }) => {
+      // Store API key securely on the backend; only metadata comes back
+      const { data } = await apiClient.post<{
+        id: string;
+        name: string;
+        url: string;
+      }>("/api/v1/instances", {
+        name: config.name,
+        url: config.url,
+        api_key: config.apiKey,
+      });
+
       const newInstance: InstanceConfig = {
-        ...config,
-        id: `instance-${Date.now()}`,
+        id: data.id,
+        name: data.name,
+        url: data.url,
       };
       setInstances((prev) => {
         const next = [...prev, newInstance];
@@ -78,8 +90,13 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
   );
 
   const removeInstance = useCallback(
-    (id: string) => {
+    async (id: string) => {
       if (id === "local") return;
+      try {
+        await apiClient.delete(`/api/v1/instances/${id}`);
+      } catch {
+        // Ignore backend errors - remove locally anyway
+      }
       setInstances((prev) => {
         const next = prev.filter((i) => i.id !== id);
         persist(next);

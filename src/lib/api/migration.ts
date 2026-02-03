@@ -182,12 +182,23 @@ export const migrationApi = {
     return response.data;
   },
 
+  // Download/stream tickets
+  createStreamTicket: async (jobId: string): Promise<string> => {
+    const { data } = await apiClient.post<{ ticket: string; expires_in: number }>(
+      '/api/v1/auth/ticket',
+      { purpose: 'stream', resource_path: `migration/${jobId}` }
+    );
+    return data.ticket;
+  },
+
   // SSE Stream for progress
-  createProgressStream: (jobId: string): EventSource => {
-    const token = localStorage.getItem('access_token');
+  createProgressStream: async (jobId: string): Promise<EventSource> => {
     const url = new URL(`/api/v1/migrations/${jobId}/stream`, window.location.origin);
-    if (token) {
-      url.searchParams.set('token', token);
+    try {
+      const ticket = await migrationApi.createStreamTicket(jobId);
+      url.searchParams.set('ticket', ticket);
+    } catch {
+      // Continue without ticket - backend may support cookie auth
     }
     return new EventSource(url.toString());
   },

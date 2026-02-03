@@ -5,38 +5,32 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /**
  * Get the base URL for the currently active instance.
- * Returns empty string for local instance (uses relative URLs).
+ * For "local", returns the normal API base URL.
+ * For remote instances, returns a proxy URL through the local backend so
+ * that API keys are never exposed to the browser.
  */
 export function getActiveInstanceBaseUrl(): string {
   if (typeof window === "undefined") return API_BASE_URL;
   try {
     const activeId = localStorage.getItem("ak_active_instance") || "local";
     if (activeId === "local") return API_BASE_URL;
-    const stored = localStorage.getItem("ak_instances");
-    if (!stored) return API_BASE_URL;
-    const instances = JSON.parse(stored) as Array<{ id: string; url: string }>;
-    const active = instances.find((i) => i.id === activeId);
-    return active?.url ?? API_BASE_URL;
+    // Route remote instance requests through the backend proxy
+    return `${API_BASE_URL}/api/v1/instances/${activeId}/proxy`;
   } catch {
     return API_BASE_URL;
   }
 }
 
 /**
- * Get the API key for the currently active remote instance, if any.
+ * Check whether the currently active instance is a remote one.
  */
-export function getActiveInstanceApiKey(): string | null {
-  if (typeof window === "undefined") return null;
+function isRemoteInstance(): boolean {
+  if (typeof window === "undefined") return false;
   try {
     const activeId = localStorage.getItem("ak_active_instance") || "local";
-    if (activeId === "local") return null;
-    const stored = localStorage.getItem("ak_instances");
-    if (!stored) return null;
-    const instances = JSON.parse(stored) as Array<{ id: string; apiKey?: string }>;
-    const active = instances.find((i) => i.id === activeId);
-    return active?.apiKey ?? null;
+    return activeId !== "local";
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -45,25 +39,20 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
-// Request interceptor to add auth token or remote API key
+// Request interceptor: set baseURL dynamically.
+// For remote instances the backend proxy handles the remote API key,
+// but the local auth cookie is still sent automatically via withCredentials
+// so the proxy can verify the caller's identity.
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (typeof window !== 'undefined') {
       // Update baseURL dynamically in case the active instance changed
       config.baseURL = getActiveInstanceBaseUrl();
-
-      const remoteApiKey = getActiveInstanceApiKey();
-      if (remoteApiKey) {
-        // Use API key for remote instances instead of local auth token
-        config.headers.Authorization = `Bearer ${remoteApiKey}`;
-      } else {
-        const token = localStorage.getItem('access_token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      }
+      // For local instance, httpOnly cookies handle auth automatically.
+      // For remote instances, the same cookies authorise the proxy call.
     }
     return config;
   },
@@ -88,7 +77,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiError>) => {
     const originalRequest = error.config;
-    const isRemote = getActiveInstanceApiKey() !== null;
+    const isRemote = isRemoteInstance();
 
     if (
       error.response?.status === 401 &&
@@ -99,8 +88,8 @@ apiClient.interceptors.response.use(
     ) {
       if (isRefreshing) {
         return new Promise((resolve) => {
-          addRefreshSubscriber((token: string) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
+          addRefreshSubscriber((_token: string) => {
+            // Cookies are updated by the refresh response; just retry the request
             resolve(apiClient(originalRequest));
           });
         });
@@ -109,31 +98,25 @@ apiClient.interceptors.response.use(
       (originalRequest as InternalAxiosRequestConfig & { _retry?: boolean })._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        isRefreshing = false;
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
       try {
+        // Send empty body - refresh token is sent automatically via httpOnly cookie
         const response = await axios.post(
           `${getActiveInstanceBaseUrl()}/api/v1/auth/refresh`,
-          { refresh_token: refreshToken }
+          {},
+          { withCredentials: true }
         );
 
-        const { access_token, refresh_token: newRefreshToken } = response.data;
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', newRefreshToken);
+        const { access_token } = response.data;
 
         isRefreshing = false;
         onTokenRefreshed(access_token);
 
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        // Don't set Authorization header - cookies handle auth for local instance
         return apiClient(originalRequest);
       } catch (refreshError) {
         isRefreshing = false;
         refreshSubscribers = [];
+        // Clean up any legacy localStorage tokens
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';

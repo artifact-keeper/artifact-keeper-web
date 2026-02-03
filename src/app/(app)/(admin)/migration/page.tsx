@@ -165,11 +165,11 @@ export default function MigrationPage() {
 
   // -- SSE streaming --
   const startStream = useCallback(
-    (jobId: string) => {
+    async (jobId: string) => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
-      const es = migrationApi.createProgressStream(jobId);
+      const es = await migrationApi.createProgressStream(jobId);
       eventSourceRef.current = es;
       setStreamingJobId(jobId);
 

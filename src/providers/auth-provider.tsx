@@ -25,12 +25,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function storeTokens(response: LoginResponse): void {
-  localStorage.setItem("access_token", response.access_token);
-  localStorage.setItem("refresh_token", response.refresh_token);
+function storeTokens(_response: LoginResponse): void {
+  // Tokens are now stored as httpOnly cookies by the backend.
+  // No localStorage needed for the local instance.
 }
 
 function clearTokens(): void {
+  // Cookies are cleared by the backend's logout endpoint.
+  // Clean up any legacy localStorage tokens.
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
 }
@@ -103,9 +105,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing token on mount, auto-login in demo mode
   useEffect(() => {
     async function initAuth(): Promise<void> {
-      const token = localStorage.getItem("access_token");
-      if (token) {
+      // Try to authenticate via httpOnly cookies (sent automatically by browser).
+      // refreshUser will set user state if a valid session cookie exists.
+      try {
+        const { data } = await apiClient.get<User>("/api/v1/auth/me");
+        if (data) {
+          setUser(data);
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // Not authenticated via cookie, continue
+      }
+
+      // Also check for legacy localStorage tokens (migration path)
+      const legacyToken = localStorage.getItem("access_token");
+      if (legacyToken) {
         await refreshUser();
+        // Clean up legacy tokens since cookies are now used
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
         setIsLoading(false);
         return;
       }

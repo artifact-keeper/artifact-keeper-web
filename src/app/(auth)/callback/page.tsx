@@ -47,6 +47,7 @@ function CallbackHandler() {
         const response = await fetch("/api/v1/auth/sso/exchange", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ code }),
         });
 
@@ -60,9 +61,8 @@ function CallbackHandler() {
           return;
         }
 
-        const data = await response.json();
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
+        // Tokens are now set as httpOnly cookies by the backend.
+        // No need to store them in localStorage.
         router.replace("/");
       } catch {
         setError("Failed to complete sign-in. Please try again.");
