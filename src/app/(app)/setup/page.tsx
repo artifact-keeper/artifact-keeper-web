@@ -462,7 +462,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
 function CodeBlock({ code }: { code: string }) {
   return (
     <div className="relative group">
-      <pre className="rounded-lg bg-muted border p-4 text-sm overflow-x-auto">
+      <pre className="rounded-lg bg-muted border p-4 text-sm overflow-x-auto whitespace-pre-wrap break-all">
         <code>{code}</code>
       </pre>
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -674,7 +674,7 @@ export default function SetupPage() {
           if (!o) setSelectedRepo(null);
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[80vh]">
+        <DialogContent className="sm:max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Set Up: {selectedRepo?.key}
@@ -721,7 +721,7 @@ export default function SetupPage() {
           if (!o) setSelectedPlatform(null);
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[80vh]">
+        <DialogContent className="sm:max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>{selectedPlatform?.name} Integration</DialogTitle>
             <DialogDescription>
