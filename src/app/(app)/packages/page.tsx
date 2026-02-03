@@ -15,9 +15,7 @@ import {
   Copy,
   Check,
   ExternalLink,
-  GitBranch,
   ArrowDownToLine,
-  Calendar,
   Tag,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -46,8 +44,6 @@ import { formatBytes as formatBytesUtil, formatDate, formatNumber } from "@/lib/
 import type {
   Package,
   PackageVersion,
-  PackageDependency,
-  PackageType,
 } from "@/types/packages";
 import type { Repository } from "@/types";
 
@@ -61,10 +57,10 @@ function formatBytes(bytes: number | undefined): string {
 function getInstallCommand(
   packageName: string,
   version: string | undefined,
-  packageType: PackageType
+  format: string
 ): string {
   const v = version || "latest";
-  switch (packageType) {
+  switch (format) {
     case "npm":
     case "yarn":
     case "pnpm":
@@ -106,7 +102,7 @@ function getInstallCommand(
   }
 }
 
-const FORMAT_OPTIONS: PackageType[] = [
+const FORMAT_OPTIONS: string[] = [
   "maven",
   "npm",
   "pypi",
@@ -121,7 +117,7 @@ const FORMAT_OPTIONS: PackageType[] = [
   "generic",
 ];
 
-type SortBy = "name" | "downloads" | "updated" | "version";
+type SortBy = "name" | "downloads" | "updated";
 type ViewMode = "list" | "grid";
 
 // ---- Package List Item ----
@@ -152,11 +148,11 @@ function PackageListItem({
             <p className="font-medium text-sm truncate">{pkg.name}</p>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="secondary" className="text-xs">
-                {pkg.package_type}
+                {pkg.format}
               </Badge>
-              {pkg.latest_version && (
+              {pkg.version && (
                 <span className="text-xs text-muted-foreground">
-                  v{pkg.latest_version}
+                  v{pkg.version}
                 </span>
               )}
             </div>
@@ -170,11 +166,7 @@ function PackageListItem({
         <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <ArrowDownToLine className="size-3" />
-            {formatNumber(pkg.total_downloads)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Tag className="size-3" />
-            {pkg.version_count} versions
+            {formatNumber(pkg.download_count)}
           </span>
         </div>
       </div>
@@ -193,23 +185,15 @@ function PackageListItem({
       <div className="flex items-center justify-between gap-2">
         <p className="font-medium text-sm truncate">{pkg.name}</p>
         <Badge variant="secondary" className="text-xs shrink-0">
-          {pkg.package_type}
+          {pkg.format}
         </Badge>
       </div>
       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-        {pkg.latest_version && <span>v{pkg.latest_version}</span>}
-        <span>{formatNumber(pkg.total_downloads)} downloads</span>
+        {pkg.version && <span>v{pkg.version}</span>}
+        <span>{formatNumber(pkg.download_count)} downloads</span>
       </div>
     </div>
   );
-}
-
-function depBadgeVariant(
-  type: string
-): "default" | "secondary" | "outline" {
-  if (type === "runtime") return "default";
-  if (type === "development") return "secondary";
-  return "outline";
 }
 
 // ---- Package Detail Panel ----
@@ -217,20 +201,18 @@ function depBadgeVariant(
 function PackageDetailPanel({
   pkg,
   versions,
-  dependencies,
   isLoadingDetail,
 }: {
   pkg: Package;
   versions: PackageVersion[];
-  dependencies: PackageDependency[];
   isLoadingDetail: boolean;
 }) {
   const [copiedInstall, setCopiedInstall] = useState(false);
 
   const installCmd = getInstallCommand(
     pkg.name,
-    pkg.latest_version,
-    pkg.package_type
+    pkg.version,
+    pkg.format
   );
 
   const handleCopyInstall = useCallback(() => {
@@ -238,6 +220,10 @@ function PackageDetailPanel({
     setCopiedInstall(true);
     setTimeout(() => setCopiedInstall(false), 2000);
   }, [installCmd]);
+
+  const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
+  const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
+  const homepageUrl = (pkg.metadata as Record<string, unknown> | undefined)?.homepage_url as string | undefined;
 
   return (
     <div className="h-full flex flex-col">
@@ -247,11 +233,11 @@ function PackageDetailPanel({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold truncate">{pkg.name}</h2>
-              <Badge variant="secondary">{pkg.package_type}</Badge>
+              <Badge variant="secondary">{pkg.format}</Badge>
             </div>
-            {pkg.latest_version && (
+            {pkg.version && (
               <p className="text-sm text-muted-foreground mt-0.5">
-                Latest: v{pkg.latest_version}
+                Latest: v{pkg.version}
               </p>
             )}
             {pkg.description && (
@@ -260,10 +246,10 @@ function PackageDetailPanel({
               </p>
             )}
           </div>
-          {pkg.homepage_url && (
+          {homepageUrl && (
             <Button variant="outline" size="sm" asChild>
               <a
-                href={pkg.homepage_url}
+                href={homepageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="gap-1.5"
@@ -283,9 +269,8 @@ function PackageDetailPanel({
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="versions">
-                Versions ({pkg.version_count})
+                Versions{versions.length > 0 ? ` (${versions.length})` : ""}
               </TabsTrigger>
-              <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
             </TabsList>
           </div>
 
@@ -318,25 +303,21 @@ function PackageDetailPanel({
               <div>
                 <h3 className="text-sm font-medium mb-2">Details</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <MetadataItem label="Format" value={pkg.package_type} />
+                  <MetadataItem label="Format" value={pkg.format} />
                   <MetadataItem label="Repository" value={pkg.repository_key} />
                   <MetadataItem
-                    label="Versions"
-                    value={String(pkg.version_count)}
-                  />
-                  <MetadataItem
-                    label="Total Size"
-                    value={formatBytes(pkg.total_size_bytes)}
+                    label="Size"
+                    value={formatBytes(pkg.size_bytes)}
                   />
                   <MetadataItem
                     label="Downloads"
-                    value={formatNumber(pkg.total_downloads)}
+                    value={formatNumber(pkg.download_count)}
                   />
-                  {pkg.license && (
-                    <MetadataItem label="License" value={pkg.license} />
+                  {license && (
+                    <MetadataItem label="License" value={license} />
                   )}
-                  {pkg.author && (
-                    <MetadataItem label="Author" value={pkg.author} />
+                  {author && (
+                    <MetadataItem label="Author" value={author} />
                   )}
                   <MetadataItem
                     label="Created"
@@ -380,23 +361,11 @@ function PackageDetailPanel({
                 </TableHeader>
                 <TableBody>
                   {versions.map((v) => (
-                    <TableRow key={v.id}>
+                    <TableRow key={v.version}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium font-mono text-xs">
-                            {v.version}
-                          </span>
-                          {v.is_latest && (
-                            <Badge variant="default" className="text-xs">
-                              latest
-                            </Badge>
-                          )}
-                          {v.is_prerelease && (
-                            <Badge variant="outline" className="text-xs">
-                              pre
-                            </Badge>
-                          )}
-                        </div>
+                        <span className="font-medium font-mono text-xs">
+                          {v.version}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {formatBytes(v.size_bytes)}
@@ -416,57 +385,6 @@ function PackageDetailPanel({
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </TabsContent>
-
-          {/* Dependencies Tab */}
-          <TabsContent
-            value="dependencies"
-            className="flex-1 overflow-auto px-6 py-4"
-          >
-            {isLoadingDetail ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : dependencies.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <GitBranch className="size-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  No dependency information available
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {dependencies.map((dep, i) => (
-                  <div
-                    key={`${dep.name}-${i}`}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <PackageIcon className="size-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium truncate">
-                        {dep.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono">
-                        {dep.version_constraint}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge
-                        variant={depBadgeVariant(dep.dependency_type)}
-                        className="text-xs"
-                      >
-                        {dep.dependency_type}
-                      </Badge>
-                      {!dep.is_direct && (
-                        <Badge variant="outline" className="text-xs">
-                          transitive
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
           </TabsContent>
         </Tabs>
@@ -585,13 +503,11 @@ function PackagesContent() {
       case "name":
         return a.name.localeCompare(b.name);
       case "downloads":
-        return b.total_downloads - a.total_downloads;
+        return b.download_count - a.download_count;
       case "updated":
         return (
           new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         );
-      case "version":
-        return b.version_count - a.version_count;
       default:
         return 0;
     }
@@ -685,7 +601,6 @@ function PackagesContent() {
                 <SelectItem value="downloads">Downloads</SelectItem>
                 <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="updated">Updated</SelectItem>
-                <SelectItem value="version">Versions</SelectItem>
               </SelectContent>
             </Select>
 
@@ -784,7 +699,6 @@ function PackagesContent() {
             <PackageDetailPanel
               pkg={detailPkg}
               versions={packageVersions ?? []}
-              dependencies={[]}
               isLoadingDetail={detailLoading || versionsLoading}
             />
           </div>
@@ -814,7 +728,6 @@ function PackagesContent() {
             <PackageDetailPanel
               pkg={detailPkg}
               versions={packageVersions ?? []}
-              dependencies={[]}
               isLoadingDetail={detailLoading || versionsLoading}
             />
           </div>

@@ -15,22 +15,18 @@ import {
   Package,
   ArrowRightLeft,
   X,
-  ChevronDown,
-  ChevronUp,
   FileText,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   Timer,
   CircleDashed,
   Ban,
-  AlertCircle,
   CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
@@ -58,7 +54,6 @@ import { formatBytes } from "@/lib/utils";
 import type {
   Build,
   BuildStatus,
-  BuildDetail,
   BuildDiff,
   BuildModule,
 } from "@/types/builds";
@@ -98,12 +93,9 @@ function statusIcon(status: BuildStatus) {
     case "running":
       return <Loader2 className="size-4 text-blue-500 animate-spin" />;
     case "pending":
-    case "queued":
       return <CircleDashed className="size-4 text-yellow-500" />;
     case "cancelled":
       return <Ban className="size-4 text-muted-foreground" />;
-    case "unstable":
-      return <AlertCircle className="size-4 text-orange-500" />;
   }
 }
 
@@ -117,7 +109,6 @@ function statusBadgeVariant(
       return "destructive";
     case "running":
     case "pending":
-    case "queued":
       return "secondary";
     default:
       return "outline";
@@ -130,17 +121,7 @@ const STATUS_OPTIONS: { value: BuildStatus; label: string }[] = [
   { value: "running", label: "Running" },
   { value: "pending", label: "Pending" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "unstable", label: "Unstable" },
 ];
-
-function diffStatusVariant(
-  status: string
-): "default" | "destructive" | "secondary" | "outline" {
-  if (status === "added") return "default";
-  if (status === "removed") return "destructive";
-  if (status === "modified") return "secondary";
-  return "outline";
-}
 
 // ---- Build Detail Dialog ----
 
@@ -150,7 +131,7 @@ function BuildDetailDialog({
   onOpenChange,
   onCompare,
 }: {
-  build: BuildDetail | null;
+  build: Build | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCompare: () => void;
@@ -163,7 +144,7 @@ function BuildDetailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {statusIcon(build.status)}
-            {build.project_name} #{build.build_number}
+            {build.name} #{build.number}
           </DialogTitle>
         </DialogHeader>
 
@@ -173,7 +154,6 @@ function BuildDetailDialog({
             <TabsTrigger value="modules">
               Modules ({build.modules?.length ?? 0})
             </TabsTrigger>
-            <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
           </TabsList>
 
           {/* Overview */}
@@ -202,25 +182,25 @@ function BuildDetailDialog({
                 </InfoItem>
                 <InfoItem
                   icon={<CalendarDays className="size-3.5" />}
-                  label="Completed"
+                  label="Finished"
                 >
-                  {formatDateTime(build.completed_at)}
+                  {formatDateTime(build.finished_at)}
                 </InfoItem>
-                {build.branch && (
+                {build.vcs_branch && (
                   <InfoItem
                     icon={<GitBranch className="size-3.5" />}
                     label="Branch"
                   >
-                    {build.branch}
+                    {build.vcs_branch}
                   </InfoItem>
                 )}
-                {build.commit_sha && (
+                {build.vcs_revision && (
                   <InfoItem
                     icon={<GitCommit className="size-3.5" />}
                     label="Commit"
                   >
                     <code className="text-xs">
-                      {build.commit_sha.slice(0, 8)}
+                      {build.vcs_revision.slice(0, 8)}
                     </code>
                   </InfoItem>
                 )}
@@ -228,24 +208,29 @@ function BuildDetailDialog({
                   icon={<Layers className="size-3.5" />}
                   label="Modules"
                 >
-                  {build.module_count}
+                  {build.modules?.length ?? 0}
                 </InfoItem>
                 <InfoItem
                   icon={<Package className="size-3.5" />}
                   label="Artifacts"
                 >
-                  {build.artifact_count} ({formatBytes(build.artifact_size_bytes)}
-                  )
+                  {build.artifact_count ?? 0}
                 </InfoItem>
               </div>
 
-              {build.triggered_by && (
+              {build.vcs_message && (
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Commit:</span>{" "}
+                  {build.vcs_message}
+                </div>
+              )}
+
+              {build.agent && (
                 <div className="text-sm text-muted-foreground">
                   Triggered by{" "}
                   <span className="font-medium text-foreground">
-                    {build.triggered_by}
+                    {build.agent}
                   </span>
-                  {build.trigger_source && ` via ${build.trigger_source}`}
                 </div>
               )}
 
@@ -280,54 +265,6 @@ function BuildDetailDialog({
               )}
             </div>
           </TabsContent>
-
-          {/* Artifacts */}
-          <TabsContent value="artifacts" className="flex-1 overflow-auto">
-            <div className="py-4">
-              {(!build.modules ||
-                build.modules.every((m) => m.artifacts.length === 0)) ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Package className="size-8 text-muted-foreground/40 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    No artifacts produced
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Module</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Size</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {build.modules?.flatMap((mod) =>
-                      mod.artifacts.map((art) => (
-                        <TableRow key={art.id}>
-                          <TableCell className="font-medium font-mono text-xs max-w-[200px] truncate">
-                            {art.name}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {mod.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {art.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatBytes(art.size_bytes)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -356,73 +293,17 @@ function InfoItem({
 
 
 function ModuleCard({ module }: { module: BuildModule }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <div className="rounded-lg border">
-      <div
-        className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <div className="flex items-center justify-between p-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Layers className="size-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-sm truncate">{module.name}</span>
-          {module.version && (
-            <span className="text-xs text-muted-foreground">
-              v{module.version}
-            </span>
-          )}
-          <Badge variant="outline" className="text-xs">
-            {module.module_type}
-          </Badge>
+          <FileText className="size-4 text-muted-foreground shrink-0" />
+          <span className="font-medium text-sm truncate">{module.module_name || module.name}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {module.artifacts.length} artifacts
-          </span>
-          {expanded ? (
-            <ChevronUp className="size-4" />
-          ) : (
-            <ChevronDown className="size-4" />
-          )}
-        </div>
+        <span className="text-xs text-muted-foreground">
+          {formatBytes(module.size_bytes)}
+        </span>
       </div>
-      {expanded && (
-        <div className="border-t px-3 py-2 space-y-1">
-          {module.artifacts.map((art) => (
-            <div
-              key={art.id}
-              className="flex items-center justify-between text-sm py-1"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="size-3.5 text-muted-foreground shrink-0" />
-                <span className="font-mono text-xs truncate">{art.name}</span>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {formatBytes(art.size_bytes)}
-              </span>
-            </div>
-          ))}
-          {module.issues.length > 0 && (
-            <div className="border-t pt-2 mt-2">
-              {module.issues.map((issue) => (
-                <div
-                  key={issue.id}
-                  className="flex items-start gap-2 text-sm py-1"
-                >
-                  <AlertTriangle className="size-3.5 text-yellow-500 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium">{issue.title}</span>
-                    <p className="text-xs text-muted-foreground">
-                      {issue.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -462,90 +343,93 @@ function BuildDiffDialog({
           </div>
         ) : (
           <div className="flex-1 overflow-auto space-y-6 py-4">
-            {/* Build summaries */}
+            {/* Build IDs */}
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-lg border p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  {statusIcon(diff.from_build.status)}
-                  <span className="font-medium text-sm">
-                    {diff.from_build.project_name} #
-                    {diff.from_build.build_number}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatDateTime(diff.from_build.completed_at)}
-                </p>
+                <p className="text-xs text-muted-foreground mb-1">Build A</p>
+                <code className="text-xs">{diff.build_a.slice(0, 8)}</code>
               </div>
               <div className="rounded-lg border p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  {statusIcon(diff.to_build.status)}
-                  <span className="font-medium text-sm">
-                    {diff.to_build.project_name} #{diff.to_build.build_number}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatDateTime(diff.to_build.completed_at)}
-                </p>
+                <p className="text-xs text-muted-foreground mb-1">Build B</p>
+                <code className="text-xs">{diff.build_b.slice(0, 8)}</code>
               </div>
             </div>
 
-            {/* Module diffs */}
-            {diff.module_diffs.length > 0 && (
+            {/* Added artifacts */}
+            {diff.added.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-2">Module Changes</h3>
+                <h3 className="text-sm font-medium mb-2">
+                  Added ({diff.added.length})
+                </h3>
                 <div className="space-y-1">
-                  {diff.module_diffs.map((md) => (
+                  {diff.added.map((art) => (
                     <div
-                      key={md.module_name}
-                      className="flex items-center justify-between rounded-lg border px-3 py-2"
+                      key={art.path}
+                      className="flex items-center justify-between text-sm rounded-lg bg-green-50 dark:bg-green-950/20 px-3 py-1.5"
                     >
-                      <span className="text-sm font-medium">
-                        {md.module_name}
-                      </span>
                       <div className="flex items-center gap-2">
-                        {md.version_from && md.version_to && (
-                          <span className="text-xs text-muted-foreground">
-                            {md.version_from} &rarr; {md.version_to}
-                          </span>
-                        )}
-                        <Badge
-                          variant={diffStatusVariant(md.status)}
-                          className="text-xs"
-                        >
-                          {md.status}
-                        </Badge>
+                        <span className="text-green-600 dark:text-green-400">+</span>
+                        <span className="font-mono text-xs">{art.name}</span>
                       </div>
+                      <span className="text-xs text-muted-foreground">
+                        {formatBytes(art.size_bytes)}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Dependency changes */}
-            {diff.changed_dependencies.length > 0 && (
+            {/* Removed artifacts */}
+            {diff.removed.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Dependency Changes
+                  Removed ({diff.removed.length})
+                </h3>
+                <div className="space-y-1">
+                  {diff.removed.map((art) => (
+                    <div
+                      key={art.path}
+                      className="flex items-center justify-between text-sm rounded-lg bg-red-50 dark:bg-red-950/20 px-3 py-1.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-600 dark:text-red-400">-</span>
+                        <span className="font-mono text-xs">{art.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {formatBytes(art.size_bytes)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modified artifacts */}
+            {diff.modified.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium mb-2">
+                  Modified ({diff.modified.length})
                 </h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Dependency</TableHead>
-                      <TableHead>From</TableHead>
-                      <TableHead>To</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="text-right">Old Size</TableHead>
+                      <TableHead className="text-right">New Size</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {diff.changed_dependencies.map((dep) => (
-                      <TableRow key={dep.identifier}>
-                        <TableCell className="font-medium text-xs">
-                          {dep.name}
+                    {diff.modified.map((art) => (
+                      <TableRow key={art.path}>
+                        <TableCell className="font-mono text-xs">
+                          {art.name}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {dep.version_from}
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {formatBytes(art.old_size_bytes)}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {dep.version_to}
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {formatBytes(art.new_size_bytes)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -554,50 +438,11 @@ function BuildDiffDialog({
               </div>
             )}
 
-            {/* Added/removed deps */}
-            {diff.added_dependencies.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Added Dependencies ({diff.added_dependencies.length})
-                </h3>
-                <div className="space-y-1">
-                  {diff.added_dependencies.map((dep) => (
-                    <div
-                      key={dep.id}
-                      className="flex items-center gap-2 text-sm rounded-lg bg-green-50 dark:bg-green-950/20 px-3 py-1.5"
-                    >
-                      <span className="text-green-600 dark:text-green-400">
-                        +
-                      </span>
-                      <span>{dep.name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">
-                        {dep.version}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {diff.removed_dependencies.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Removed Dependencies ({diff.removed_dependencies.length})
-                </h3>
-                <div className="space-y-1">
-                  {diff.removed_dependencies.map((dep) => (
-                    <div
-                      key={dep.id}
-                      className="flex items-center gap-2 text-sm rounded-lg bg-red-50 dark:bg-red-950/20 px-3 py-1.5"
-                    >
-                      <span className="text-red-600 dark:text-red-400">-</span>
-                      <span>{dep.name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">
-                        {dep.version}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+            {diff.added.length === 0 && diff.removed.length === 0 && diff.modified.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No differences found between these builds
+                </p>
               </div>
             )}
           </div>
@@ -646,7 +491,7 @@ export default function BuildsPage() {
   const totalBuilds = buildsData?.pagination?.total ?? 0;
 
   // Fetch build detail
-  const { data: buildDetail, isLoading: detailLoading } = useQuery({
+  const { data: buildDetail } = useQuery({
     queryKey: ["build-detail", selectedBuildId],
     queryFn: () => (selectedBuildId ? buildsApi.get(selectedBuildId) : null),
     enabled: !!selectedBuildId,
@@ -847,15 +692,15 @@ export default function BuildsPage() {
                       <TableCell>
                         <div>
                           <span className="font-medium">
-                            {build.project_name}
+                            {build.name}
                           </span>
                           <span className="text-muted-foreground ml-1">
-                            #{build.build_number}
+                            #{build.number}
                           </span>
                         </div>
-                        {build.triggered_by && (
+                        {build.agent && (
                           <p className="text-xs text-muted-foreground">
-                            by {build.triggered_by}
+                            by {build.agent}
                           </p>
                         )}
                       </TableCell>
@@ -874,18 +719,18 @@ export default function BuildsPage() {
                         {formatDuration(build.duration_ms)}
                       </TableCell>
                       <TableCell>
-                        {build.branch && (
+                        {build.vcs_branch && (
                           <div className="flex items-center gap-1 text-muted-foreground">
                             <GitBranch className="size-3" />
-                            <span className="text-xs">{build.branch}</span>
+                            <span className="text-xs">{build.vcs_branch}</span>
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {build.module_count}
+                        {build.modules?.length ?? 0}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {build.artifact_count}
+                        {build.artifact_count ?? 0}
                       </TableCell>
                     </TableRow>
                   );

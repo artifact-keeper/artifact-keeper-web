@@ -2,10 +2,8 @@ import apiClient from '@/lib/api-client';
 import type { PaginatedResponse } from '@/types';
 
 // Re-export types from the canonical types/ module
-export type { BuildStatus, Build, BuildModule, BuildDiff, BuildDetail, BuildModuleArtifact, ArtifactChange } from '@/types/builds';
-// Re-export for backward compat
-export type { BuildModuleArtifact as BuildArtifact, ArtifactChange as BuildArtifactDiff } from '@/types/builds';
-import type { Build, BuildDetail, BuildStatus, BuildDiff } from '@/types/builds';
+export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
+import type { Build, BuildStatus, BuildDiff } from '@/types/builds';
 
 export interface ListBuildsParams {
   page?: number;
@@ -24,8 +22,18 @@ export const buildsApi = {
     return response.data;
   },
 
-  get: async (buildId: string): Promise<BuildDetail> => {
-    const response = await apiClient.get<BuildDetail>(`/api/v1/builds/${buildId}`);
+  get: async (buildId: string): Promise<Build> => {
+    const response = await apiClient.get<Build>(`/api/v1/builds/${buildId}`);
+    return response.data;
+  },
+
+  create: async (data: { name: string; build_number: number; agent?: string; started_at?: string; vcs_url?: string; vcs_revision?: string; vcs_branch?: string; vcs_message?: string; metadata?: Record<string, unknown> }): Promise<Build> => {
+    const response = await apiClient.post<Build>('/api/v1/builds', data);
+    return response.data;
+  },
+
+  updateStatus: async (buildId: string, data: { status: string; finished_at?: string }): Promise<Build> => {
+    const response = await apiClient.put<Build>(`/api/v1/builds/${buildId}/status`, data);
     return response.data;
   },
 
