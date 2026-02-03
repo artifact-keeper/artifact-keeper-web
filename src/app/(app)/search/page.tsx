@@ -41,6 +41,7 @@ import {
 import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 
 // ---- Types ----
 
@@ -76,19 +77,7 @@ interface ChecksumSearchValues {
 
 function formatBytes(bytes: number | undefined): string {
   if (!bytes) return "--";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatBytesUtil(bytes);
 }
 
 const FORMAT_OPTIONS = [

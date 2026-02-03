@@ -18,6 +18,7 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
+import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 
@@ -59,22 +60,6 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { FileUpload } from "@/components/common/file-upload";
-
-// -- helpers --
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  local: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  remote: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  virtual: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-};
 
 // -- page --
 
@@ -419,7 +404,7 @@ export default function RepositoryDetailPage() {
             {repository.format.toUpperCase()}
           </Badge>
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[repository.repo_type] ?? ""}`}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${REPO_TYPE_COLORS[repository.repo_type] ?? ""}`}
           >
             {repository.repo_type}
           </span>

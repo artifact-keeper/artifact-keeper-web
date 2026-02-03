@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance } from "@/lib/api/replication";
+import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,14 +53,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 
 // -- helpers --
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 function cachePercent(peer: PeerInstance): number {
   if (peer.cache_size_bytes === 0) return 0;

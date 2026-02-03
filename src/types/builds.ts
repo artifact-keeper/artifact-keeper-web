@@ -1,8 +1,3 @@
-// Build-related types for build information and analysis
-
-/**
- * Status of a build
- */
 export type BuildStatus =
   | 'pending'
   | 'queued'
@@ -12,9 +7,6 @@ export type BuildStatus =
   | 'cancelled'
   | 'unstable';
 
-/**
- * Summary of a build
- */
 export interface Build {
   id: string;
   /** Build number or identifier */
@@ -50,9 +42,6 @@ export interface Build {
   created_at: string;
 }
 
-/**
- * A module within a build (e.g., Maven module, npm workspace package)
- */
 export interface BuildModule {
   id: string;
   build_id: string;
@@ -72,9 +61,6 @@ export interface BuildModule {
   properties?: Record<string, string>;
 }
 
-/**
- * An artifact produced by a build module
- */
 export interface BuildModuleArtifact {
   id: string;
   /** Artifact path in the build */
@@ -91,9 +77,6 @@ export interface BuildModuleArtifact {
   published_to?: string;
 }
 
-/**
- * A dependency used in a build
- */
 export interface BuildDependency {
   id: string;
   /** Dependency identifier (group:artifact:version, package@version, etc.) */
@@ -114,9 +97,6 @@ export interface BuildDependency {
   license?: string;
 }
 
-/**
- * An issue found during build analysis
- */
 export interface BuildIssue {
   id: string;
   /** Issue severity */
@@ -137,9 +117,6 @@ export interface BuildIssue {
   documentation_url?: string;
 }
 
-/**
- * Detailed view of a build
- */
 export interface BuildDetail extends Build {
   /** All modules in this build */
   modules: BuildModule[];
@@ -155,9 +132,6 @@ export interface BuildDetail extends Build {
   config?: Record<string, unknown>;
 }
 
-/**
- * Build environment information
- */
 export interface BuildEnvironment {
   /** Operating system */
   os?: string;
@@ -175,9 +149,6 @@ export interface BuildEnvironment {
   variables?: Record<string, string>;
 }
 
-/**
- * History of releases for a project
- */
 export interface ReleaseHistory {
   project_name: string;
   repository_key: string;
@@ -187,9 +158,6 @@ export interface ReleaseHistory {
   total_releases: number;
 }
 
-/**
- * Information about a single release
- */
 export interface ReleaseInfo {
   /** Version of the release */
   version: string;
@@ -208,9 +176,6 @@ export interface ReleaseInfo {
   is_prerelease: boolean;
 }
 
-/**
- * Comparison between two builds
- */
 export interface BuildDiff {
   /** Source build */
   from_build: BuildSummary;
@@ -230,9 +195,6 @@ export interface BuildDiff {
   resolved_issues: BuildIssue[];
 }
 
-/**
- * Summary of a build for diff display
- */
 export interface BuildSummary {
   id: string;
   build_number: string;
@@ -243,9 +205,6 @@ export interface BuildSummary {
   branch?: string;
 }
 
-/**
- * Difference between modules in two builds
- */
 export interface ModuleDiff {
   module_name: string;
   /** Status of the module in the diff */
@@ -257,9 +216,6 @@ export interface ModuleDiff {
   artifact_changes: ArtifactChange[];
 }
 
-/**
- * Change to an artifact between builds
- */
 export interface ArtifactChange {
   artifact_name: string;
   status: 'added' | 'removed' | 'modified' | 'unchanged';
@@ -269,9 +225,6 @@ export interface ArtifactChange {
   checksum_to?: string;
 }
 
-/**
- * Change to a dependency between builds
- */
 export interface DependencyChange {
   identifier: string;
   name: string;
@@ -280,9 +233,6 @@ export interface DependencyChange {
   license_changed: boolean;
 }
 
-/**
- * Request to search builds
- */
 export interface BuildSearchRequest {
   project_name?: string;
   repository_id?: string;

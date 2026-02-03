@@ -1,19 +1,7 @@
-// Permission-related types for access control
-
-/**
- * Target entity for permission assignment
- */
 export type PermissionTarget = 'user' | 'group';
 
-/**
- * Actions that can be granted on repositories
- * Based on data-model.md Permission Enum
- */
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
 
-/**
- * Pattern-based repository permission matching
- */
 export interface RepositoryPattern {
   /** Glob pattern for matching repository keys (e.g., "npm-*", "docker-prod-*") */
   pattern: string;
@@ -21,9 +9,6 @@ export interface RepositoryPattern {
   include_nested?: boolean;
 }
 
-/**
- * A permission assignment linking a target (user/group) to repository access
- */
 export interface PermissionAssignment {
   id: string;
   /** Type of target receiving the permission */
@@ -50,9 +35,6 @@ export interface PermissionAssignment {
   granted_by?: string;
 }
 
-/**
- * Summary of effective permissions for a user or repository
- */
 export interface PermissionSummary {
   /** Entity this summary is for */
   entity_type: 'user' | 'repository';
@@ -68,9 +50,6 @@ export interface PermissionSummary {
   is_admin: boolean;
 }
 
-/**
- * Request to create a new permission assignment
- */
 export interface CreatePermissionRequest {
   target_type: PermissionTarget;
   target_id: string;
@@ -79,25 +58,16 @@ export interface CreatePermissionRequest {
   actions: PermissionAction[];
 }
 
-/**
- * Request to update an existing permission assignment
- */
 export interface UpdatePermissionRequest {
   actions: PermissionAction[];
 }
 
-/**
- * Request to check if a user has specific permissions
- */
 export interface PermissionCheckRequest {
   user_id: string;
   repository_id: string;
   actions: PermissionAction[];
 }
 
-/**
- * Response for permission check
- */
 export interface PermissionCheckResponse {
   allowed: boolean;
   granted_actions: PermissionAction[];

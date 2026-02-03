@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
@@ -44,14 +45,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 function healthIcon(status: string | undefined) {
   if (!status) return <XCircle className="size-4 text-muted-foreground" />;

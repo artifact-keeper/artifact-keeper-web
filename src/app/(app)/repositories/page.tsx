@@ -18,6 +18,7 @@ import type {
   RepositoryFormat,
   RepositoryType,
 } from "@/types";
+import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import { Button } from "@/components/ui/button";
@@ -126,26 +127,6 @@ const TYPE_OPTIONS: { value: RepositoryType; label: string }[] = [
   { value: "remote", label: "Remote" },
   { value: "virtual", label: "Virtual" },
 ];
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
-function formatBadgeVariant(
-  type: string
-): "default" | "secondary" | "outline" | "destructive" {
-  return "secondary";
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  local: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  remote: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  virtual: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-};
 
 // -- page --
 
@@ -316,7 +297,7 @@ export default function RepositoriesPage() {
       accessor: (r) => r.repo_type,
       cell: (r) => (
         <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[r.repo_type] ?? ""}`}
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${REPO_TYPE_COLORS[r.repo_type] ?? ""}`}
         >
           {r.repo_type}
         </span>

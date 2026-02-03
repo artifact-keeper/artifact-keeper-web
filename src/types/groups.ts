@@ -1,5 +1,3 @@
-// Group-related types for user group management
-
 export interface Group {
   id: string;
   name: string;

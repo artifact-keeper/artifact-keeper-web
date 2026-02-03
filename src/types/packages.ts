@@ -1,9 +1,3 @@
-// Package-related types for artifact package management
-
-/**
- * Supported package formats
- * Based on data-model.md Format Enum (FR-007 through FR-020)
- */
 export type PackageType =
   | 'maven'
   | 'gradle'
@@ -55,9 +49,6 @@ export type PackageType =
   | 'p2'
   | 'bazel';
 
-/**
- * A package in the artifact registry
- */
 export interface Package {
   id: string;
   /** Repository containing this package */
@@ -89,9 +80,6 @@ export interface Package {
   updated_at: string;
 }
 
-/**
- * A specific version of a package
- */
 export interface PackageVersion {
   id: string;
   package_id: string;
@@ -117,9 +105,6 @@ export interface PackageVersion {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * A dependency of a package
- */
 export interface PackageDependency {
   /** Dependency package name */
   name: string;
@@ -135,9 +120,6 @@ export interface PackageDependency {
   resolved_version?: string;
 }
 
-/**
- * Detailed view of a package including versions and dependencies
- */
 export interface PackageDetail extends Package {
   /** All available versions */
   versions: PackageVersion[];
@@ -149,9 +131,6 @@ export interface PackageDetail extends Package {
   format_metadata: PackageFormatMetadata;
 }
 
-/**
- * Format-specific metadata union type
- */
 export type PackageFormatMetadata =
   | MavenMetadata
   | NpmMetadata
@@ -234,9 +213,6 @@ export interface GenericMetadata {
   custom_properties?: Record<string, unknown>;
 }
 
-/**
- * Installation instructions for a package version
- */
 export interface InstallationInstruction {
   /** Package manager or tool name */
   tool: string;
@@ -252,9 +228,6 @@ export interface InstallationInstruction {
   notes?: string;
 }
 
-/**
- * Request to search packages
- */
 export interface PackageSearchRequest {
   query?: string;
   package_type?: PackageType;

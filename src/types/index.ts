@@ -1,6 +1,3 @@
-// API Response types
-
-// Re-export all type modules
 export * from './groups';
 export * from './migration';
 export * from './permissions';
@@ -14,7 +11,6 @@ export * from './lifecycle';
 export * from './telemetry';
 export * from './monitoring';
 
-// Re-export peer mesh types from API module for convenience
 export type {
   PeerInstance,
   PeerIdentity,

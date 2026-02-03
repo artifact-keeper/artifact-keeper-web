@@ -1,5 +1,3 @@
-// Migration types for Artifactory to Artifact Keeper migration
-
 export type AuthType = 'api_token' | 'basic_auth';
 
 export type MigrationJobStatus =

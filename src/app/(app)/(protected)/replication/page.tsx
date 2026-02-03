@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
+import { formatBytes } from "@/lib/utils";
 import { repositoriesApi } from "@/lib/api/repositories";
 import type { Repository } from "@/types";
 
@@ -50,14 +51,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 
 // -- helpers --
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 function formatBandwidth(bps: number): string {
   if (bps === 0) return "0 bps";

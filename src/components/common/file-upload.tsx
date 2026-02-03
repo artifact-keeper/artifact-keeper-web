@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 
 interface FileUploadProps {
   onUpload: (file: File, path?: string) => Promise<void>;
@@ -132,7 +132,7 @@ export function FileUpload({
             <div className="text-sm">
               <p className="font-medium">{file.name}</p>
               <p className="text-muted-foreground">
-                {formatFileSize(file.size)}
+                {formatBytes(file.size)}
               </p>
             </div>
             {!uploading && (
@@ -186,10 +186,3 @@ export function FileUpload({
   );
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   SearchIcon,
@@ -54,13 +54,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildsApi } from "@/lib/api/builds";
+import { formatBytes } from "@/lib/utils";
 import type {
   Build,
   BuildStatus,
   BuildDetail,
   BuildDiff,
   BuildModule,
-  BuildSummary,
 } from "@/types/builds";
 
 // ---- Helpers ----
@@ -78,7 +78,7 @@ function formatDuration(ms: number | undefined): string {
   return `${hours}h ${remainingMinutes}m`;
 }
 
-function formatDate(dateStr: string | undefined): string {
+function formatDateTime(dateStr: string | undefined): string {
   if (!dateStr) return "--";
   return new Date(dateStr).toLocaleDateString("en-US", {
     year: "numeric",
@@ -87,14 +87,6 @@ function formatDate(dateStr: string | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function statusIcon(status: BuildStatus) {
@@ -140,6 +132,15 @@ const STATUS_OPTIONS: { value: BuildStatus; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
   { value: "unstable", label: "Unstable" },
 ];
+
+function diffStatusVariant(
+  status: string
+): "default" | "destructive" | "secondary" | "outline" {
+  if (status === "added") return "default";
+  if (status === "removed") return "destructive";
+  if (status === "modified") return "secondary";
+  return "outline";
+}
 
 // ---- Build Detail Dialog ----
 
@@ -197,13 +198,13 @@ function BuildDetailDialog({
                   icon={<CalendarDays className="size-3.5" />}
                   label="Started"
                 >
-                  {formatDate(build.started_at)}
+                  {formatDateTime(build.started_at)}
                 </InfoItem>
                 <InfoItem
                   icon={<CalendarDays className="size-3.5" />}
                   label="Completed"
                 >
-                  {formatDate(build.completed_at)}
+                  {formatDateTime(build.completed_at)}
                 </InfoItem>
                 {build.branch && (
                   <InfoItem
@@ -472,7 +473,7 @@ function BuildDiffDialog({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(diff.from_build.completed_at)}
+                  {formatDateTime(diff.from_build.completed_at)}
                 </p>
               </div>
               <div className="rounded-lg border p-3">
@@ -483,7 +484,7 @@ function BuildDiffDialog({
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(diff.to_build.completed_at)}
+                  {formatDateTime(diff.to_build.completed_at)}
                 </p>
               </div>
             </div>
@@ -508,15 +509,7 @@ function BuildDiffDialog({
                           </span>
                         )}
                         <Badge
-                          variant={
-                            md.status === "added"
-                              ? "default"
-                              : md.status === "removed"
-                              ? "destructive"
-                              : md.status === "modified"
-                              ? "secondary"
-                              : "outline"
-                          }
+                          variant={diffStatusVariant(md.status)}
                           className="text-xs"
                         >
                           {md.status}
@@ -875,7 +868,7 @@ export default function BuildsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {formatDate(build.started_at)}
+                        {formatDateTime(build.started_at)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDuration(build.duration_ms)}

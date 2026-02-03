@@ -1,11 +1,6 @@
-// Search-related types for quick and advanced search functionality
-
 import type { PackageType } from './packages';
 import type { RepositoryFormat, RepositoryType } from './index';
 
-/**
- * Request for quick search across all entity types
- */
 export interface QuickSearchRequest {
   /** Search query string */
   query: string;
@@ -15,14 +10,8 @@ export interface QuickSearchRequest {
   types?: QuickSearchType[];
 }
 
-/**
- * Entity types available for quick search
- */
 export type QuickSearchType = 'artifact' | 'package' | 'repository' | 'build';
 
-/**
- * Response from quick search
- */
 export interface QuickSearchResult {
   /** Total matches found */
   total_count: number;
@@ -36,9 +25,6 @@ export interface QuickSearchResult {
   took_ms: number;
 }
 
-/**
- * An artifact match from search
- */
 export interface ArtifactSearchHit {
   id: string;
   /** Repository containing this artifact */
@@ -66,9 +52,6 @@ export interface ArtifactSearchHit {
   score: number;
 }
 
-/**
- * A package match from search
- */
 export interface PackageSearchHit {
   id: string;
   /** Repository containing this package */
@@ -94,9 +77,6 @@ export interface PackageSearchHit {
   score: number;
 }
 
-/**
- * A repository match from search
- */
 export interface RepositorySearchHit {
   id: string;
   /** Repository key */
@@ -125,14 +105,8 @@ export interface RepositorySearchHit {
   score: number;
 }
 
-/**
- * Types available for advanced search
- */
 export type AdvancedSearchType = 'artifact' | 'package' | 'repository' | 'build' | 'user';
 
-/**
- * Request for advanced search with filters
- */
 export interface AdvancedSearchRequest {
   /** Primary search query */
   query?: string;
@@ -152,9 +126,6 @@ export interface AdvancedSearchRequest {
   include_facets?: boolean;
 }
 
-/**
- * Type-specific search parameters
- */
 export interface AdvancedSearchParams {
   /** For artifacts: repository to search in */
   repository_id?: string;
@@ -192,9 +163,6 @@ export interface AdvancedSearchParams {
   checksum_sha256?: string;
 }
 
-/**
- * A property filter for advanced search
- */
 export interface PropertyFilter {
   /** Property key (e.g., "metadata.author", "properties.env") */
   key: string;
@@ -204,9 +172,6 @@ export interface PropertyFilter {
   value: string | number | boolean | string[];
 }
 
-/**
- * Operators for property filtering
- */
 export type PropertyFilterOperator =
   | 'eq'      // Equals
   | 'ne'      // Not equals
@@ -222,9 +187,6 @@ export type PropertyFilterOperator =
   | 'exists'  // Property exists
   | 'not_exists'; // Property does not exist
 
-/**
- * Response from advanced search
- */
 export interface AdvancedSearchResponse<T> {
   /** Search results */
   items: T[];
@@ -242,9 +204,6 @@ export interface AdvancedSearchResponse<T> {
   took_ms: number;
 }
 
-/**
- * Facets for search result filtering
- */
 export interface SearchFacets {
   /** Facets by repository */
   by_repository?: FacetValue[];
@@ -262,9 +221,6 @@ export interface SearchFacets {
   by_property?: Record<string, FacetValue[]>;
 }
 
-/**
- * A single facet value with count
- */
 export interface FacetValue {
   /** Facet value */
   value: string;
@@ -276,9 +232,6 @@ export interface FacetValue {
   selected?: boolean;
 }
 
-/**
- * Saved search configuration
- */
 export interface SavedSearch {
   id: string;
   /** User who saved this search */
@@ -297,9 +250,6 @@ export interface SavedSearch {
   last_used_at?: string;
 }
 
-/**
- * Request to create a saved search
- */
 export interface CreateSavedSearchRequest {
   name: string;
   description?: string;

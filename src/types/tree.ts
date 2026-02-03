@@ -1,8 +1,3 @@
-// Tree-related types for hierarchical navigation of artifacts
-
-/**
- * Types of nodes in the artifact tree
- */
 export type TreeNodeType =
   | 'root'           // Root of the tree
   | 'repository'     // Repository container
@@ -12,9 +7,6 @@ export type TreeNodeType =
   | 'artifact'       // Actual artifact file
   | 'metadata';      // Metadata file (pom.xml, package.json, etc.)
 
-/**
- * A node in the artifact tree hierarchy
- */
 export interface TreeNode {
   /** Unique identifier for this node */
   id: string;
@@ -46,9 +38,6 @@ export interface TreeNode {
   is_selected?: boolean;
 }
 
-/**
- * Metadata associated with a tree node
- */
 export interface TreeNodeMetadata {
   /** For repository nodes */
   repository?: TreeRepositoryMetadata;
@@ -62,9 +51,6 @@ export interface TreeNodeMetadata {
   folder?: TreeFolderMetadata;
 }
 
-/**
- * Metadata for repository nodes
- */
 export interface TreeRepositoryMetadata {
   repository_id: string;
   key: string;
@@ -75,9 +61,6 @@ export interface TreeRepositoryMetadata {
   storage_used_bytes: number;
 }
 
-/**
- * Metadata for package nodes
- */
 export interface TreePackageMetadata {
   package_id: string;
   package_type: string;
@@ -86,9 +69,6 @@ export interface TreePackageMetadata {
   total_downloads: number;
 }
 
-/**
- * Metadata for version nodes
- */
 export interface TreeVersionMetadata {
   version: string;
   is_latest: boolean;
@@ -98,9 +78,6 @@ export interface TreeVersionMetadata {
   created_at: string;
 }
 
-/**
- * Metadata for artifact nodes
- */
 export interface TreeArtifactMetadata {
   artifact_id: string;
   size_bytes: number;
@@ -112,9 +89,6 @@ export interface TreeArtifactMetadata {
   download_url?: string;
 }
 
-/**
- * Metadata for folder nodes
- */
 export interface TreeFolderMetadata {
   /** Number of files in this folder (not recursive) */
   file_count: number;
@@ -124,9 +98,6 @@ export interface TreeFolderMetadata {
   total_size_bytes?: number;
 }
 
-/**
- * Request to load tree children
- */
 export interface TreeLoadRequest {
   /** Parent node ID (null for root) */
   parent_id?: string;
@@ -145,9 +116,6 @@ export interface TreeLoadRequest {
   sort_order?: 'asc' | 'desc';
 }
 
-/**
- * Response from tree load
- */
 export interface TreeLoadResponse {
   /** Parent node (if requested) */
   parent?: TreeNode;
@@ -159,9 +127,6 @@ export interface TreeLoadResponse {
   next_cursor?: string;
 }
 
-/**
- * Breadcrumb item for tree navigation
- */
 export interface TreeBreadcrumb {
   /** Node ID */
   id: string;
@@ -173,9 +138,6 @@ export interface TreeBreadcrumb {
   path: string;
 }
 
-/**
- * Full path information for tree navigation
- */
 export interface TreePath {
   /** Repository key */
   repository_key: string;
@@ -187,9 +149,6 @@ export interface TreePath {
   current: TreeNode;
 }
 
-/**
- * Options for tree display configuration
- */
 export interface TreeDisplayOptions {
   /** Show hidden files (starting with .) */
   show_hidden: boolean;

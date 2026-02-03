@@ -1,5 +1,3 @@
-// Security scanning types
-
 export interface DashboardSummary {
   repos_with_scanning: number;
   total_scans: number;

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import lifecycleApi from "@/lib/api/lifecycle";
+import { formatBytes } from "@/lib/utils";
 import type {
   LifecyclePolicy,
   CreateLifecyclePolicyRequest,
@@ -64,15 +65,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function formatDate(dateStr: string): string {
+function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -271,7 +264,7 @@ export default function LifecyclePage() {
             label="Last Execution"
             value={
               lastRunPolicy?.last_run_at
-                ? formatDate(lastRunPolicy.last_run_at)
+                ? formatDateTime(lastRunPolicy.last_run_at)
                 : "Never"
             }
             color="purple"
@@ -344,7 +337,7 @@ export default function LifecyclePage() {
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
                       {policy.last_run_at
-                        ? formatDate(policy.last_run_at)
+                        ? formatDateTime(policy.last_run_at)
                         : "Never"}
                     </TableCell>
                     <TableCell className="text-right">

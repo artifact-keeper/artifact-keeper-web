@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/table";
 import { packagesApi } from "@/lib/api/packages";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { formatBytes as formatBytesUtil, formatDate, formatNumber } from "@/lib/utils";
 import type {
   Package,
   PackageVersion,
@@ -54,25 +55,7 @@ import type { Repository } from "@/types";
 
 function formatBytes(bytes: number | undefined): string {
   if (!bytes) return "--";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
+  return formatBytesUtil(bytes);
 }
 
 function getInstallCommand(
@@ -219,6 +202,14 @@ function PackageListItem({
       </div>
     </div>
   );
+}
+
+function depBadgeVariant(
+  type: string
+): "default" | "secondary" | "outline" {
+  if (type === "runtime") return "default";
+  if (type === "development") return "secondary";
+  return "outline";
 }
 
 // ---- Package Detail Panel ----
@@ -462,13 +453,7 @@ function PackageDetailPanel({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Badge
-                        variant={
-                          dep.dependency_type === "runtime"
-                            ? "default"
-                            : dep.dependency_type === "development"
-                            ? "secondary"
-                            : "outline"
-                        }
+                        variant={depBadgeVariant(dep.dependency_type)}
                         className="text-xs"
                       >
                         {dep.dependency_type}
