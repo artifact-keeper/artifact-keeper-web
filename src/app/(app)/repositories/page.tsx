@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
+import { searchApi } from "@/lib/api/search";
 import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -138,13 +139,37 @@ export default function RepositoriesPage() {
     setDeleteOpen(true);
   }, []);
 
-  // filter locally by search
+  // Debounce the search query for artifact search API calls
+  const deferredSearch = useDeferredValue(searchQuery);
+
+  // Search artifacts via backend when query is non-empty
+  const { data: artifactSearchResults } = useQuery({
+    queryKey: ["repo-artifact-search", deferredSearch],
+    queryFn: () => searchApi.quickSearch({ query: deferredSearch, limit: 50 }),
+    enabled: deferredSearch.length >= 2,
+    staleTime: 30_000,
+  });
+
+  // Build a map of repo keys -> artifact match count from search results
+  const artifactMatchMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!artifactSearchResults) return map;
+    for (const result of artifactSearchResults) {
+      if (result.repository_key) {
+        map.set(result.repository_key, (map.get(result.repository_key) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [artifactSearchResults]);
+
+  // Filter repos: match by name/key OR by containing matching artifacts
   const items = data?.items ?? [];
   const filtered = searchQuery
     ? items.filter(
         (r) =>
           r.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.name.toLowerCase().includes(searchQuery.toLowerCase())
+          r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          artifactMatchMap.has(r.key)
       )
     : items;
 
@@ -241,6 +266,7 @@ export default function RepositoriesPage() {
                 onSelect={handleSelect}
                 onEdit={isAdmin ? handleEdit : undefined}
                 onDelete={isAdmin ? handleDelete : undefined}
+                artifactMatchCount={searchQuery ? artifactMatchMap.get(repo.key) : undefined}
               />
             ))}
           </div>

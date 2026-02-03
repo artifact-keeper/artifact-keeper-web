@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, MoreHorizontal, Pencil, Trash2, Package } from "lucide-react";
+import { Lock, MoreHorizontal, Pencil, Trash2, Package, Search } from "lucide-react";
 import type { Repository } from "@/types";
 import { formatBytes, REPO_TYPE_COLORS, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,10 @@ interface RepoListItemProps {
   onSelect: (repo: Repository) => void;
   onEdit?: (repo: Repository) => void;
   onDelete?: (repo: Repository) => void;
+  artifactMatchCount?: number;
 }
 
-export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete }: RepoListItemProps) {
+export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount }: RepoListItemProps) {
   return (
     <button
       type="button"
@@ -57,6 +58,14 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete }: R
                 {formatBytes(repo.storage_used_bytes)}
               </span>
             </div>
+            {artifactMatchCount && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <Search className="size-2.5 text-blue-500" />
+                <span className="text-[11px] text-blue-500">
+                  {artifactMatchCount} artifact{artifactMatchCount > 1 ? "s" : ""} match
+                </span>
+              </div>
+            )}
           </div>
         </div>
         {(onEdit || onDelete) && (
