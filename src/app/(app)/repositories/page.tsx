@@ -162,16 +162,45 @@ export default function RepositoriesPage() {
     return map;
   }, [artifactSearchResults]);
 
-  // Filter repos: match by name/key OR by containing matching artifacts
+  // Fetch full repo data for artifact-matched repos not on the current page
   const items = data?.items ?? [];
-  const filtered = searchQuery
-    ? items.filter(
-        (r) =>
-          r.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          artifactMatchMap.has(r.key)
-      )
-    : items;
+  const currentPageKeys = useMemo(() => new Set(items.map((r) => r.key)), [items]);
+  const missingRepoKeys = useMemo(() => {
+    if (!searchQuery) return [];
+    return [...artifactMatchMap.keys()].filter((key) => !currentPageKeys.has(key));
+  }, [searchQuery, artifactMatchMap, currentPageKeys]);
+
+  const { data: extraRepos } = useQuery({
+    queryKey: ["repo-artifact-extras", missingRepoKeys],
+    queryFn: () => Promise.all(missingRepoKeys.map((key) => repositoriesApi.get(key))),
+    enabled: missingRepoKeys.length > 0,
+    staleTime: 30_000,
+  });
+
+  // Filter and sort: artifact-matched repos first, then name-matched repos
+  const filtered = useMemo(() => {
+    if (!searchQuery) return items;
+    const q = searchQuery.toLowerCase();
+
+    // Repos from current page that match by name/key or artifact
+    const nameMatched = items.filter(
+      (r) =>
+        r.key.toLowerCase().includes(q) ||
+        r.name.toLowerCase().includes(q)
+    );
+    const artifactOnlyMatched = items.filter(
+      (r) =>
+        artifactMatchMap.has(r.key) &&
+        !r.key.toLowerCase().includes(q) &&
+        !r.name.toLowerCase().includes(q)
+    );
+
+    // Extra repos fetched from other pages (only artifact-matched)
+    const extras = extraRepos ?? [];
+
+    // Artifact-matched repos first, then name-matched
+    return [...artifactOnlyMatched, ...extras, ...nameMatched];
+  }, [searchQuery, items, artifactMatchMap, extraRepos]);
 
   // Auto-select first repo on desktop when none selected
   useEffect(() => {
