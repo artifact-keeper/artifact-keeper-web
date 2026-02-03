@@ -242,7 +242,6 @@ function SearchContent() {
     enabled: searchTriggered,
   });
 
-  const results: SearchResult[] = (searchResults?.items ?? []) as SearchResult[];
   const totalResults = searchResults?.pagination?.total ?? 0;
   const totalPages = searchResults?.pagination?.total_pages ?? 0;
 
@@ -303,7 +302,8 @@ function SearchContent() {
 
   // Sort the results client-side as a fallback
   const sortedResults = useMemo(() => {
-    const copy = [...results];
+    const items: SearchResult[] = (searchResults?.items ?? []) as SearchResult[];
+    const copy = [...items];
     copy.sort((a, b) => {
       if (sortField === "name") return a.name.localeCompare(b.name);
       if (sortField === "size_bytes")
@@ -313,7 +313,7 @@ function SearchContent() {
       );
     });
     return copy;
-  }, [results, sortField]);
+  }, [searchResults?.items, sortField]);
 
   return (
     <div className="space-y-6">

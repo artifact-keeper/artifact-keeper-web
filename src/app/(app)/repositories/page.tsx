@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useDeferredValue, useMemo } from "react";
+import { useState, useCallback, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package } from "lucide-react";
@@ -163,7 +163,7 @@ export default function RepositoriesPage() {
   }, [artifactSearchResults]);
 
   // Fetch full repo data for artifact-matched repos not on the current page
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
   const currentPageKeys = useMemo(() => new Set(items.map((r) => r.key)), [items]);
   const missingRepoKeys = useMemo(() => {
     if (!searchQuery) return [];
@@ -203,11 +203,10 @@ export default function RepositoriesPage() {
   }, [searchQuery, items, artifactMatchMap, extraRepos]);
 
   // Auto-select first repo on desktop when none selected
-  useEffect(() => {
-    if (!isMobile && !selectedKey && filtered.length > 0 && !isLoading) {
-      setSelectedKey(filtered[0].key);
-    }
-  }, [isMobile, selectedKey, filtered, isLoading]);
+  const autoSelectedKey = !isMobile && !selectedKey && filtered.length > 0 && !isLoading
+    ? filtered[0].key
+    : null;
+  const effectiveSelectedKey = selectedKey ?? autoSelectedKey;
 
   const isAdmin = isAuthenticated && user?.is_admin;
   const totalPages = data?.pagination?.total_pages ?? 1;
@@ -291,7 +290,7 @@ export default function RepositoriesPage() {
               <RepoListItem
                 key={repo.id}
                 repo={repo}
-                isSelected={selectedKey === repo.key}
+                isSelected={effectiveSelectedKey === repo.key}
                 onSelect={handleSelect}
                 onEdit={isAdmin ? handleEdit : undefined}
                 onDelete={isAdmin ? handleDelete : undefined}
@@ -383,8 +382,8 @@ export default function RepositoriesPage() {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={70} minSize={55}>
-            {selectedKey ? (
-              <RepoDetailPanel repoKey={selectedKey} />
+            {effectiveSelectedKey ? (
+              <RepoDetailPanel repoKey={effectiveSelectedKey} />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Package className="size-12 mb-3 opacity-30" />

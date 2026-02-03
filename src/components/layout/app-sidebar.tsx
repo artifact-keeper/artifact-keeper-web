@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Database,
-  Package,
   Boxes,
   Hammer,
   Globe,
