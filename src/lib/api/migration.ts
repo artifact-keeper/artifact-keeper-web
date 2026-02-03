@@ -184,7 +184,7 @@ export const migrationApi = {
 
   // SSE Stream for progress
   createProgressStream: (jobId: string): EventSource => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('access_token');
     const url = new URL(`/api/v1/migrations/${jobId}/stream`, window.location.origin);
     if (token) {
       url.searchParams.set('token', token);

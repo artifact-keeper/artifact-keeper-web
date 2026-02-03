@@ -182,6 +182,19 @@ export const ssoApi = {
   disableSaml: async (id: string): Promise<void> => {
     await apiClient.post(`/api/v1/admin/sso/saml/${id}/disable`);
   },
+
+  // --- Exchange Code ---
+
+  exchangeCode: async (
+    code: string
+  ): Promise<{ access_token: string; refresh_token: string }> => {
+    const { data } = await apiClient.post<{
+      access_token: string;
+      refresh_token: string;
+      token_type: string;
+    }>("/api/v1/auth/sso/exchange", { code });
+    return data;
+  },
 };
 
 export default ssoApi;

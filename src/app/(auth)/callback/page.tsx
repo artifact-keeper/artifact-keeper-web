@@ -1,31 +1,76 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
+function getSsoErrorMessage(errorCode: string | null): string {
+  const messages: Record<string, string> = {
+    access_denied: "Access was denied by the identity provider.",
+    invalid_request: "The authentication request was invalid.",
+    server_error: "The identity provider encountered an error.",
+    temporarily_unavailable: "The identity provider is temporarily unavailable.",
+    expired: "The authentication session has expired. Please try again.",
+    invalid_code: "The authentication code is invalid or has expired.",
+  };
+  if (!errorCode) return "Authentication failed. Please try again.";
+  return messages[errorCode] || "Authentication failed. Please try again.";
+}
+
 function CallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [error, setError] = useState<string | null>(null);
 
-  const token = searchParams.get("token");
-  const refreshToken = searchParams.get("refresh_token");
-  const hasTokens = token && refreshToken;
-  const error = hasTokens
-    ? null
-    : searchParams.get("error") ||
-      "Authentication failed. No tokens received from the identity provider.";
+  const code = searchParams.get("code");
+  const urlError = searchParams.get("error");
 
   useEffect(() => {
-    if (hasTokens) {
-      localStorage.setItem("access_token", token);
-      localStorage.setItem("refresh_token", refreshToken);
-      router.replace("/");
+    if (urlError) {
+      setError(getSsoErrorMessage(urlError));
+      return;
     }
-  }, [hasTokens, token, refreshToken, router]);
+
+    if (!code) {
+      setError(
+        "Authentication failed. No authorization code received from the identity provider."
+      );
+      return;
+    }
+
+    // Exchange the single-use code for tokens via a secure POST request
+    const exchangeCode = async () => {
+      try {
+        const response = await fetch("/api/v1/auth/sso/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code }),
+        });
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          const message =
+            body?.message ||
+            body?.error ||
+            "Failed to exchange authorization code. It may have expired.";
+          setError(message);
+          return;
+        }
+
+        const data = await response.json();
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("refresh_token", data.refresh_token);
+        router.replace("/");
+      } catch {
+        setError("Failed to complete sign-in. Please try again.");
+      }
+    };
+
+    exchangeCode();
+  }, [code, urlError, router]);
 
   if (error) {
     return (

@@ -241,7 +241,9 @@ export default function LoginPage() {
                   variant="outline"
                   className="w-full"
                   onClick={() => {
-                    window.location.href = provider.login_url;
+                    if (provider.login_url.startsWith('/')) {
+                      window.location.href = provider.login_url;
+                    }
                   }}
                 >
                   <LogIn className="size-4 mr-2" />
