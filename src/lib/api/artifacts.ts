@@ -4,15 +4,20 @@ import type { Artifact, PaginatedResponse } from '@/types';
 export interface ListArtifactsParams {
   page?: number;
   per_page?: number;
-  path?: string;
+  path_prefix?: string;
+  q?: string;
+  /** @deprecated Use `q` instead */
   search?: string;
 }
 
 export const artifactsApi = {
   list: async (repoKey: string, params: ListArtifactsParams = {}): Promise<PaginatedResponse<Artifact>> => {
+    // Map 'search' to 'q' for backwards compat
+    const { search, ...rest } = params;
+    const query = { ...rest, q: params.q || search || undefined };
     const response = await apiClient.get<PaginatedResponse<Artifact>>(
       `/api/v1/repositories/${repoKey}/artifacts`,
-      { params }
+      { params: query }
     );
     return response.data;
   },

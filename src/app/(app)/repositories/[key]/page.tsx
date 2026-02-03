@@ -19,6 +19,7 @@ import securityApi from "@/lib/api/security";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { useAuth } from "@/providers/auth-provider";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +108,7 @@ export default function RepositoryDetailPage() {
     queryKey: ["artifacts", repoKey, searchQuery, page, pageSize],
     queryFn: () =>
       artifactsApi.list(repoKey, {
-        search: searchQuery || undefined,
+        q: searchQuery || undefined,
         per_page: pageSize,
         page,
       }),
@@ -138,6 +139,10 @@ export default function RepositoryDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
       setDetailOpen(false);
       setSelectedArtifact(null);
+      toast.success("Artifact deleted");
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to delete artifact: ${err.message}`);
     },
   });
 
@@ -146,6 +151,11 @@ export default function RepositoryDetailPage() {
       securityApi.updateRepoSecurity(repoKey, values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository-security", repoKey] });
+      setSecForm(null); // reset to refetched defaults
+      toast.success("Security settings saved");
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to save security settings: ${err.message}`);
     },
   });
 

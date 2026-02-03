@@ -64,7 +64,7 @@ export default function ArtifactsPage() {
     queryFn: async (): Promise<PaginatedResponse<Artifact>> => {
       if (activeRepoKey) {
         return artifactsApi.list(activeRepoKey, {
-          search: searchQuery || undefined,
+          q: searchQuery || undefined,
           per_page: pageSize,
           page,
         });
@@ -79,7 +79,7 @@ export default function ArtifactsPage() {
       const results = await Promise.all(
         repoKeys.map((key) =>
           artifactsApi.list(key, {
-            search: searchQuery || undefined,
+            q: searchQuery || undefined,
             per_page: 50,
             page: 1,
           })
