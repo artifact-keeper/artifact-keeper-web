@@ -10,13 +10,11 @@ import {
   Shield,
   ToggleLeft,
   ToggleRight,
-  KeyRound,
   Globe,
   Server,
   FileKey,
   Loader2,
   CheckCircle,
-  XCircle,
   Plug,
 } from "lucide-react";
 
@@ -26,11 +24,8 @@ import type {
   OidcConfig,
   LdapConfig,
   SamlConfig,
-  CreateOidcConfigRequest,
   UpdateOidcConfigRequest,
-  CreateLdapConfigRequest,
   UpdateLdapConfigRequest,
-  CreateSamlConfigRequest,
   UpdateSamlConfigRequest,
 } from "@/types/sso";
 
@@ -83,7 +78,6 @@ function OidcTab() {
   const [editTarget, setEditTarget] = useState<OidcConfig | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OidcConfig | null>(null);
 
-  // Form state
   const [name, setName] = useState("");
   const [issuerUrl, setIssuerUrl] = useState("");
   const [clientId, setClientId] = useState("");
@@ -102,7 +96,7 @@ function OidcTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateOidcConfigRequest) => ssoApi.createOidc(data),
+    mutationFn: ssoApi.createOidc,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("OIDC provider created successfully");
@@ -123,7 +117,7 @@ function OidcTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => ssoApi.deleteOidc(id),
+    mutationFn: ssoApi.deleteOidc,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("OIDC provider deleted");
@@ -520,7 +514,6 @@ function LdapTab() {
   const [deleteTarget, setDeleteTarget] = useState<LdapConfig | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
 
-  // Form state
   const [name, setName] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [bindDn, setBindDn] = useState("");
@@ -543,7 +536,7 @@ function LdapTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateLdapConfigRequest) => ssoApi.createLdap(data),
+    mutationFn: ssoApi.createLdap,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("LDAP provider created successfully");
@@ -564,7 +557,7 @@ function LdapTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => ssoApi.deleteLdap(id),
+    mutationFn: ssoApi.deleteLdap,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("LDAP provider deleted");
@@ -584,7 +577,7 @@ function LdapTab() {
   });
 
   const testMutation = useMutation({
-    mutationFn: (id: string) => ssoApi.testLdap(id),
+    mutationFn: ssoApi.testLdap,
     onMutate: (id) => setTestingId(id),
     onSuccess: (result) => {
       if (result.success) {
@@ -1053,7 +1046,6 @@ function SamlTab() {
   const [editTarget, setEditTarget] = useState<SamlConfig | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SamlConfig | null>(null);
 
-  // Form state
   const [name, setName] = useState("");
   const [entityId, setEntityId] = useState("");
   const [ssoUrl, setSsoUrl] = useState("");
@@ -1075,7 +1067,7 @@ function SamlTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateSamlConfigRequest) => ssoApi.createSaml(data),
+    mutationFn: ssoApi.createSaml,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("SAML provider created successfully");
@@ -1096,7 +1088,7 @@ function SamlTab() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => ssoApi.deleteSaml(id),
+    mutationFn: ssoApi.deleteSaml,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("SAML provider deleted");
@@ -1593,7 +1585,6 @@ export default function SsoSettingsPage() {
         description="Configure single sign-on authentication providers."
       />
 
-      {/* Stat Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={Shield}
@@ -1627,7 +1618,6 @@ export default function SsoSettingsPage() {
         />
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="oidc">
         <TabsList>
           <TabsTrigger value="oidc">

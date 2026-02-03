@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,18 +13,19 @@ function CallbackHandler() {
 
   const token = searchParams.get("token");
   const refreshToken = searchParams.get("refresh_token");
-  const error = !token || !refreshToken
-    ? searchParams.get("error") ||
-      "Authentication failed. No tokens received from the identity provider."
-    : null;
+  const hasTokens = token && refreshToken;
+  const error = hasTokens
+    ? null
+    : searchParams.get("error") ||
+      "Authentication failed. No tokens received from the identity provider.";
 
   useEffect(() => {
-    if (token && refreshToken) {
+    if (hasTokens) {
       localStorage.setItem("access_token", token);
       localStorage.setItem("refresh_token", refreshToken);
       router.replace("/");
     }
-  }, [token, refreshToken, router]);
+  }, [hasTokens, token, refreshToken, router]);
 
   if (error) {
     return (
