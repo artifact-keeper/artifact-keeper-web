@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -137,9 +138,13 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md text-sm font-bold">
-                  AK
-                </div>
+                <Image
+                  src="/logo-48.png"
+                  alt="Artifact Keeper"
+                  width={32}
+                  height={32}
+                  className="rounded-md"
+                />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
                   <span className="text-xs text-muted-foreground">v1.0.0</span>

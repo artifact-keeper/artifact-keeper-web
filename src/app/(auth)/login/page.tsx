@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Shield, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,8 +71,8 @@ export default function LoginPage() {
   return (
     <Card className="border-0 shadow-lg">
       <CardHeader className="text-center pb-2">
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-          <Shield className="size-7 text-primary" />
+        <div className="mx-auto mb-4 flex size-14 items-center justify-center">
+          <Image src="/logo-48.png" alt="Artifact Keeper" width={48} height={48} />
         </div>
         <CardTitle className="text-xl">Artifact Keeper</CardTitle>
         <CardDescription>Sign in to your account</CardDescription>
