@@ -146,6 +146,28 @@ export default function RepositoryDetailPage() {
     },
   });
 
+  const scanArtifactMutation = useMutation({
+    mutationFn: (artifactId: string) =>
+      securityApi.triggerScan({ artifact_id: artifactId }),
+    onSuccess: (res) => {
+      toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to trigger scan: ${err.message}`);
+    },
+  });
+
+  const scanRepoMutation = useMutation({
+    mutationFn: () =>
+      securityApi.triggerScan({ repository_id: repository?.id }),
+    onSuccess: (res) => {
+      toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to trigger scan: ${err.message}`);
+    },
+  });
+
   const updateSecurityMutation = useMutation({
     mutationFn: (values: UpsertScanConfigRequest) =>
       securityApi.updateRepoSecurity(repoKey, values),
@@ -296,6 +318,21 @@ export default function RepositoryDetailPage() {
             </TooltipTrigger>
             <TooltipContent>Download</TooltipContent>
           </Tooltip>
+          {user?.is_admin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => scanArtifactMutation.mutate(a.id)}
+                  disabled={scanArtifactMutation.isPending}
+                >
+                  <Shield className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Scan</TooltipContent>
+            </Tooltip>
+          )}
           {isAuthenticated && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -419,17 +456,30 @@ export default function RepositoryDetailPage() {
 
         {/* --- Artifacts Tab --- */}
         <TabsContent value="artifacts" className="mt-4 space-y-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search artifacts..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search artifacts..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            {user?.is_admin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => scanRepoMutation.mutate()}
+                disabled={scanRepoMutation.isPending}
+              >
+                <Shield className="size-4" />
+                {scanRepoMutation.isPending ? "Scanning..." : "Scan All"}
+              </Button>
+            )}
           </div>
 
           <DataTable
@@ -621,6 +671,16 @@ export default function RepositoryDetailPage() {
             </Button>
             {selectedArtifact && (
               <>
+                {user?.is_admin && (
+                  <Button
+                    variant="outline"
+                    onClick={() => scanArtifactMutation.mutate(selectedArtifact.id)}
+                    disabled={scanArtifactMutation.isPending}
+                  >
+                    <Shield className="size-4" />
+                    {scanArtifactMutation.isPending ? "Scanning..." : "Scan"}
+                  </Button>
+                )}
                 <Button
                   variant="destructive"
                   onClick={() => {

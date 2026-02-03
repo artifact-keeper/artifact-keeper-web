@@ -7,6 +7,7 @@ import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
+import { artifactsApi } from "@/lib/api/artifacts";
 import apiClient from "@/lib/api-client";
 import type { ScanResult } from "@/types/security";
 
@@ -94,7 +95,11 @@ export default function SecurityScansPage() {
 
   // -- trigger scan dialog --
   const [triggerOpen, setTriggerOpen] = useState(false);
+  const [scanMode, setScanMode] = useState<"repo" | "artifact">("repo");
   const [selectedRepoId, setSelectedRepoId] = useState<string | undefined>(
+    undefined
+  );
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>(
     undefined
   );
 
@@ -139,12 +144,27 @@ export default function SecurityScansPage() {
     enabled: triggerOpen,
   });
 
+  // Find the repo key from repo id for the artifact list API call
+  const selectedRepoKey = selectedRepoId
+    ? ((repos as Array<{ id: string; key: string }>) ?? []).find(
+        (r) => r.id === selectedRepoId
+      )?.key
+    : undefined;
+
+  const { data: artifactsList, isLoading: artifactsLoading } = useQuery({
+    queryKey: ["artifacts-for-scan", selectedRepoKey],
+    queryFn: () => artifactsApi.list(selectedRepoKey!, { per_page: 100 }),
+    enabled: scanMode === "artifact" && !!selectedRepoKey,
+  });
+
   const triggerScanMutation = useMutation({
     mutationFn: securityApi.triggerScan,
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["security", "scans"] });
       setTriggerOpen(false);
       setSelectedRepoId(undefined);
+      setSelectedArtifactId(undefined);
+      setScanMode("repo");
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
   });
@@ -341,22 +361,65 @@ export default function SecurityScansPage() {
         open={triggerOpen}
         onOpenChange={(o) => {
           setTriggerOpen(o);
-          if (!o) setSelectedRepoId(undefined);
+          if (!o) {
+            setSelectedRepoId(undefined);
+            setSelectedArtifactId(undefined);
+            setScanMode("repo");
+          }
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Trigger Security Scan</DialogTitle>
             <DialogDescription>
-              Select a repository to scan all its artifacts for vulnerabilities.
+              {scanMode === "repo"
+                ? "Select a repository to scan all its artifacts for vulnerabilities."
+                : "Select a specific artifact to scan for vulnerabilities."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Scan Mode Toggle */}
+            <div className="space-y-2">
+              <Label>Scan Mode</Label>
+              <div className="flex rounded-lg border p-1 gap-1">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    scanMode === "repo"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => {
+                    setScanMode("repo");
+                    setSelectedArtifactId(undefined);
+                  }}
+                >
+                  Entire Repository
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    scanMode === "artifact"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => {
+                    setScanMode("artifact");
+                  }}
+                >
+                  Specific Artifact
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Repository</Label>
               <Select
                 value={selectedRepoId ?? ""}
-                onValueChange={(v) => setSelectedRepoId(v || undefined)}
+                onValueChange={(v) => {
+                  setSelectedRepoId(v || undefined);
+                  setSelectedArtifactId(undefined);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a repository..." />
@@ -385,6 +448,40 @@ export default function SecurityScansPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Artifact selector (only in artifact mode) */}
+            {scanMode === "artifact" && selectedRepoId && (
+              <div className="space-y-2">
+                <Label>Artifact</Label>
+                <Select
+                  value={selectedArtifactId ?? ""}
+                  onValueChange={(v) => setSelectedArtifactId(v || undefined)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue
+                      placeholder={
+                        artifactsLoading
+                          ? "Loading artifacts..."
+                          : "Select an artifact..."
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(artifactsList?.items ?? []).map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name} ({a.path})
+                      </SelectItem>
+                    ))}
+                    {!artifactsLoading &&
+                      (artifactsList?.items ?? []).length === 0 && (
+                        <SelectItem value="__none__" disabled>
+                          No artifacts found
+                        </SelectItem>
+                      )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -392,16 +489,25 @@ export default function SecurityScansPage() {
               onClick={() => {
                 setTriggerOpen(false);
                 setSelectedRepoId(undefined);
+                setSelectedArtifactId(undefined);
+                setScanMode("repo");
               }}
             >
               Cancel
             </Button>
             <Button
-              disabled={!selectedRepoId || triggerScanMutation.isPending}
+              disabled={
+                triggerScanMutation.isPending ||
+                (scanMode === "repo" ? !selectedRepoId : !selectedArtifactId)
+              }
               onClick={() => {
-                if (selectedRepoId) {
+                if (scanMode === "repo" && selectedRepoId) {
                   triggerScanMutation.mutate({
                     repository_id: selectedRepoId,
+                  });
+                } else if (scanMode === "artifact" && selectedArtifactId) {
+                  triggerScanMutation.mutate({
+                    artifact_id: selectedArtifactId,
                   });
                 }
               }}
