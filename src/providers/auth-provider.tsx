@@ -16,6 +16,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   mustChangePassword: boolean;
+  setupRequired: boolean;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
 
   const isAuthenticated = !!user;
 
@@ -95,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       setMustChangePassword(false);
+      setSetupRequired(false);
     },
     [user]
   );
@@ -106,6 +109,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check for existing token on mount, auto-login in demo mode
   useEffect(() => {
     async function initAuth(): Promise<void> {
+      // Check if first-boot setup is required
+      try {
+        const { data: setupStatus } = await apiClient.get<{ setup_required: boolean }>("/api/v1/setup/status");
+        if (setupStatus.setup_required) {
+          setSetupRequired(true);
+        }
+      } catch {
+        // Setup endpoint not available, continue normally
+      }
+
       // Try to authenticate via httpOnly cookies (sent automatically by browser).
       // refreshUser will set user state if a valid session cookie exists.
       try {
@@ -162,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         mustChangePassword,
+        setupRequired,
         login,
         logout,
         refreshUser,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Lock, Loader2 } from "lucide-react";
+import { Lock, Shield, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,7 @@ type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
 
 export default function ChangePasswordPage() {
   const router = useRouter();
-  const { changePassword, logout } = useAuth();
+  const { changePassword, logout, setupRequired } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<ChangePasswordValues>({
@@ -76,14 +76,25 @@ export default function ChangePasswordPage() {
   return (
     <Card className="border-0 shadow-lg">
       <CardHeader className="text-center pb-2">
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-amber-100 dark:bg-amber-950/30">
-          <Lock className="size-7 text-amber-600 dark:text-amber-400" />
+        <div className={`mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl ${setupRequired ? "bg-blue-100 dark:bg-blue-950/30" : "bg-amber-100 dark:bg-amber-950/30"}`}>
+          {setupRequired ? (
+            <Shield className="size-7 text-blue-600 dark:text-blue-400" />
+          ) : (
+            <Lock className="size-7 text-amber-600 dark:text-amber-400" />
+          )}
         </div>
-        <CardTitle className="text-xl">Change Password</CardTitle>
+        <CardTitle className="text-xl">{setupRequired ? "Complete Setup" : "Change Password"}</CardTitle>
         <CardDescription>
-          Your password was auto-generated or has been reset. Please set a new
-          password to continue.
+          {setupRequired
+            ? "Set a secure admin password to unlock the API and complete first-time setup."
+            : "Your password was auto-generated or has been reset. Please set a new password to continue."}
         </CardDescription>
+        {setupRequired && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2 text-left text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
+            <span>All API endpoints are locked until this step is completed.</span>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         <Form {...form}>

@@ -6,12 +6,13 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2, LogIn, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { ssoApi } from "@/lib/api/sso";
 import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import {
   Card,
@@ -42,7 +43,7 @@ type SelectedProvider =
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, refreshUser } = useAuth();
+  const { login, refreshUser, setupRequired } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
@@ -111,7 +112,23 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="border-0 shadow-lg">
+    <>
+      {setupRequired && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+          <Terminal className="size-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">First-Time Setup</AlertTitle>
+          <AlertDescription>
+            <p>A random admin password was generated. Retrieve it from the server:</p>
+            <code className="mt-1.5 block rounded bg-amber-100 px-2 py-1.5 font-mono text-xs dark:bg-amber-950/50">
+              docker exec artifact-keeper-backend cat /data/storage/admin.password
+            </code>
+            <p className="mt-1.5">
+              Log in with username <strong>admin</strong> and the password from the file.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+      <Card className="border-0 shadow-lg">
       <CardHeader className="text-center pb-2">
         <div className="mx-auto mb-4 flex size-14 items-center justify-center">
           <Image
@@ -122,7 +139,7 @@ export default function LoginPage() {
           />
         </div>
         <CardTitle className="text-xl">Artifact Keeper</CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+        <CardDescription>{setupRequired ? "Complete first-time setup" : "Sign in to your account"}</CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
@@ -254,5 +271,6 @@ export default function LoginPage() {
         )}
       </CardContent>
     </Card>
+    </>
   );
 }

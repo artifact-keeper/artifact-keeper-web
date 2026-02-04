@@ -136,6 +136,18 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Handle SETUP_REQUIRED: redirect to login so the user sees the setup banner
+    if (
+      error.response?.status === 403 &&
+      (error.response?.data as unknown as Record<string, unknown>)?.error === 'SETUP_REQUIRED' &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login') &&
+      !window.location.pathname.startsWith('/change-password')
+    ) {
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
     return Promise.reject(error);
   }
 );
