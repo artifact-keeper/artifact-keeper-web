@@ -4,6 +4,8 @@ import { useState, useCallback, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package } from "lucide-react";
+import { toast } from "sonner";
+import { AxiosError } from "axios";
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
@@ -38,6 +40,16 @@ import { FORMAT_GROUPS, TYPE_OPTIONS } from "./_lib/constants";
 import { RepoListItem } from "./_components/repo-list-item";
 import { RepoDetailPanel } from "./_components/repo-detail-panel";
 import { RepoDialogs } from "./_components/repo-dialogs";
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof AxiosError && err.response?.data?.error) {
+    return err.response.data.error;
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return fallback;
+}
 
 export default function RepositoriesPage() {
   const router = useRouter();
@@ -90,6 +102,10 @@ export default function RepositoriesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setCreateOpen(false);
+      toast.success("Repository created");
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err, "Failed to create repository"));
     },
   });
 
@@ -100,6 +116,10 @@ export default function RepositoriesPage() {
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setEditOpen(false);
       setDialogRepo(null);
+      toast.success("Repository updated");
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err, "Failed to update repository"));
     },
   });
 
@@ -110,6 +130,10 @@ export default function RepositoriesPage() {
       setDeleteOpen(false);
       setDialogRepo(null);
       if (selectedKey === deletedKey) setSelectedKey(null);
+      toast.success("Repository deleted");
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err, "Failed to delete repository"));
     },
   });
 
