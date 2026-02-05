@@ -15,8 +15,11 @@ import {
   Info,
 } from "lucide-react";
 import { toast } from "sonner";
+import QRCode from "react-qr-code";
 
 import { profileApi } from "@/lib/api/profile";
+import { totpApi } from "@/lib/api/totp";
+import type { TotpSetupResponse } from "@/lib/api/totp";
 import type {
   ApiKey,
   AccessToken,
@@ -123,6 +126,17 @@ export default function ProfilePage() {
   const [tokenExpiry, setTokenExpiry] = useState("90");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["read"]);
   const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(null);
+
+  // -- TOTP 2FA state --
+  const [showTotpSetup, setShowTotpSetup] = useState(false);
+  const [totpSetupData, setTotpSetupData] = useState<TotpSetupResponse | null>(null);
+  const [totpVerifyCode, setTotpVerifyCode] = useState("");
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[] | null>(null);
+  const [totpIsLoading, setTotpIsLoading] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [showTotpDisable, setShowTotpDisable] = useState(false);
+  const [totpDisablePassword, setTotpDisablePassword] = useState("");
+  const [totpDisableCode, setTotpDisableCode] = useState("");
 
   // -- Revoke confirm --
   const [revokeKeyId, setRevokeKeyId] = useState<string | null>(null);
@@ -624,6 +638,193 @@ export default function ProfilePage() {
                     : "Change Password"}
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="size-5" />
+                Two-Factor Authentication
+              </CardTitle>
+              <CardDescription>
+                Add an extra layer of security with a TOTP authenticator app.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {user?.totp_enabled ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default" className="bg-green-600">Enabled</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      Two-factor authentication is active
+                    </span>
+                  </div>
+                  {!showTotpDisable ? (
+                    <Button variant="destructive" size="sm" onClick={() => setShowTotpDisable(true)}>
+                      Disable 2FA
+                    </Button>
+                  ) : (
+                    <form
+                      className="space-y-3 rounded-lg border p-4"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setTotpIsLoading(true);
+                        setTotpError(null);
+                        try {
+                          await totpApi.disable(totpDisablePassword, totpDisableCode);
+                          await refreshUser();
+                          setShowTotpDisable(false);
+                          setTotpDisablePassword("");
+                          setTotpDisableCode("");
+                          toast.success("Two-factor authentication disabled");
+                        } catch (err) {
+                          setTotpError(err instanceof Error ? err.message : "Failed to disable 2FA");
+                        } finally {
+                          setTotpIsLoading(false);
+                        }
+                      }}
+                    >
+                      <p className="text-sm font-medium">Confirm disable 2FA</p>
+                      {totpError && <p className="text-sm text-destructive">{totpError}</p>}
+                      <div className="space-y-2">
+                        <Label>Password</Label>
+                        <Input
+                          type="password"
+                          value={totpDisablePassword}
+                          onChange={(e) => setTotpDisablePassword(e.target.value)}
+                          placeholder="Your password"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>TOTP Code</Label>
+                        <Input
+                          value={totpDisableCode}
+                          onChange={(e) => setTotpDisableCode(e.target.value)}
+                          placeholder="6-digit code"
+                          maxLength={6}
+                          required
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="submit" variant="destructive" size="sm" disabled={totpIsLoading}>
+                          {totpIsLoading ? "Disabling..." : "Confirm Disable"}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => {
+                          setShowTotpDisable(false);
+                          setTotpError(null);
+                        }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ) : totpBackupCodes ? (
+                <div className="space-y-4">
+                  <Alert>
+                    <AlertTriangle className="size-4" />
+                    <AlertTitle>Save your backup codes</AlertTitle>
+                    <AlertDescription>
+                      Store these codes in a safe place. Each can be used once if you lose access to your authenticator app.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted p-4">
+                    {totpBackupCodes.map((code, i) => (
+                      <code key={i} className="text-sm font-mono">{code}</code>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <CopyButton value={totpBackupCodes.join("\n")} />
+                    <Button onClick={() => {
+                      setTotpBackupCodes(null);
+                      setShowTotpSetup(false);
+                      setTotpSetupData(null);
+                      setTotpVerifyCode("");
+                    }}>
+                      I&apos;ve saved these codes
+                    </Button>
+                  </div>
+                </div>
+              ) : showTotpSetup && totpSetupData ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                  </p>
+                  <div className="flex justify-center rounded-lg border bg-white p-4">
+                    <QRCode value={totpSetupData.qr_code_url} size={200} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Manual entry key</Label>
+                    <div className="flex items-center gap-2 rounded border bg-muted px-3 py-2">
+                      <code className="flex-1 break-all text-xs">{totpSetupData.secret}</code>
+                      <CopyButton value={totpSetupData.secret} />
+                    </div>
+                  </div>
+                  <form
+                    className="space-y-3"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setTotpIsLoading(true);
+                      setTotpError(null);
+                      try {
+                        const result = await totpApi.enable(totpVerifyCode);
+                        setTotpBackupCodes(result.backup_codes);
+                        await refreshUser();
+                        toast.success("Two-factor authentication enabled");
+                      } catch (err) {
+                        setTotpError(err instanceof Error ? err.message : "Invalid code");
+                      } finally {
+                        setTotpIsLoading(false);
+                      }
+                    }}
+                  >
+                    {totpError && <p className="text-sm text-destructive">{totpError}</p>}
+                    <div className="space-y-2">
+                      <Label>Verification Code</Label>
+                      <Input
+                        value={totpVerifyCode}
+                        onChange={(e) => setTotpVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="Enter 6-digit code"
+                        className="w-48 font-mono text-lg tracking-widest"
+                        maxLength={6}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={totpIsLoading || totpVerifyCode.length < 6}>
+                        {totpIsLoading ? "Verifying..." : "Enable 2FA"}
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => {
+                        setShowTotpSetup(false);
+                        setTotpSetupData(null);
+                        setTotpVerifyCode("");
+                        setTotpError(null);
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <Button
+                  onClick={async () => {
+                    setTotpIsLoading(true);
+                    try {
+                      const data = await totpApi.setup();
+                      setTotpSetupData(data);
+                      setShowTotpSetup(true);
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to start 2FA setup");
+                    } finally {
+                      setTotpIsLoading(false);
+                    }
+                  }}
+                  disabled={totpIsLoading}
+                >
+                  {totpIsLoading ? "Setting up..." : "Enable Two-Factor Authentication"}
+                </Button>
+              )}
             </CardContent>
           </Card>
 

@@ -28,6 +28,7 @@ export interface User {
   is_admin: boolean;
   is_active?: boolean;
   must_change_password?: boolean;
+  totp_enabled?: boolean;
 }
 
 export interface LoginResponse {
@@ -36,6 +37,8 @@ export interface LoginResponse {
   expires_in: number;
   token_type: string;
   must_change_password: boolean;
+  totp_required?: boolean;
+  totp_token?: string;
 }
 
 export interface CreateUserResponse {

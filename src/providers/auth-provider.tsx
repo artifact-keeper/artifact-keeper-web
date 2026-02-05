@@ -17,11 +17,15 @@ interface AuthContextType {
   isLoading: boolean;
   mustChangePassword: boolean;
   setupRequired: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  totpRequired: boolean;
+  totpToken: string | null;
+  login: (username: string, password: string) => Promise<boolean | "totp">;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
+  verifyTotp: (code: string) => Promise<void>;
+  clearTotpRequired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [totpToken, setTotpToken] = useState<string | null>(null);
 
   const isAuthenticated = !!user;
 
@@ -58,11 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (username: string, password: string): Promise<boolean> => {
+    async (username: string, password: string): Promise<boolean | "totp"> => {
       const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/login", {
         username,
         password,
       });
+
+      if (data.totp_required && data.totp_token) {
+        setTotpRequired(true);
+        setTotpToken(data.totp_token);
+        return "totp"; // Don't redirect yet
+      }
+
       storeTokens(data);
       await refreshUser();
 
@@ -74,6 +87,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [refreshUser]
   );
+
+  const verifyTotp = useCallback(
+    async (code: string) => {
+      if (!totpToken) throw new Error("No TOTP token");
+      const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/totp/verify", {
+        totp_token: totpToken,
+        code,
+      });
+      storeTokens(data);
+      setTotpRequired(false);
+      setTotpToken(null);
+      await refreshUser();
+      if (data.must_change_password) {
+        setMustChangePassword(true);
+      }
+    },
+    [totpToken, refreshUser]
+  );
+
+  const clearTotpRequired = useCallback(() => {
+    setTotpRequired(false);
+    setTotpToken(null);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -176,11 +212,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         mustChangePassword,
         setupRequired,
+        totpRequired,
+        totpToken,
         login,
         logout,
         refreshUser,
         changePassword,
         clearMustChangePassword,
+        verifyTotp,
+        clearTotpRequired,
       }}
     >
       {children}
