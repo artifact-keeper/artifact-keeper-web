@@ -119,7 +119,7 @@ export default function LoginPage() {
           <AlertTitle className="text-amber-800 dark:text-amber-200">First-Time Setup</AlertTitle>
           <AlertDescription>
             <p>A random admin password was generated. Retrieve it from the server:</p>
-            <code className="mt-1.5 block rounded bg-amber-100 px-2 py-1.5 font-mono text-xs dark:bg-amber-950/50">
+            <code className="mt-1.5 block overflow-x-auto whitespace-nowrap rounded bg-amber-100 px-2 py-1.5 font-mono text-xs dark:bg-amber-950/50">
               docker exec artifact-keeper-backend cat /data/storage/admin.password
             </code>
             <p className="mt-1.5">
