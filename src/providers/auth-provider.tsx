@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/login", {
           username: "admin",
-          password: "demo",
+          password: "demo-password-readonly",
         });
         storeTokens(data);
         await refreshUser();
