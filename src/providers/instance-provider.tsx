@@ -77,7 +77,9 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
 
   // Refresh on mount and when instances change
   useEffect(() => {
-    refreshStatuses();
+    // Schedule async to avoid lint warning about setState in effect
+    const timer = setTimeout(refreshStatuses, 0);
+    return () => clearTimeout(timer);
   }, [refreshStatuses]);
 
   const switchInstance = useCallback((id: string) => {

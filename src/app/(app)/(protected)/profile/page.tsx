@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   User,
@@ -9,8 +9,6 @@ import {
   Lock,
   Plus,
   Trash2,
-  Copy,
-  Check,
   AlertTriangle,
   Info,
 } from "lucide-react";

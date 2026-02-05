@@ -9,7 +9,6 @@ import {
   Search,
   Filter,
 } from "lucide-react";
-import { toast } from "sonner";
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import type { Repository } from "@/types";

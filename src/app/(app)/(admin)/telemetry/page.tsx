@@ -10,7 +10,6 @@ import {
   Shield,
   AlertTriangle,
   Bug,
-  Info,
   Loader2,
   RefreshCw,
 } from "lucide-react";
