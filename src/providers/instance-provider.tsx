@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import apiClient from "@/lib/api-client";
 
 export interface InstanceConfig {
@@ -15,6 +15,8 @@ interface InstanceContextValue {
   switchInstance: (id: string) => void;
   addInstance: (config: { name: string; url: string; apiKey: string }) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
+  instanceStatuses: Record<string, boolean>;
+  refreshStatuses: () => void;
 }
 
 const STORAGE_KEY = "ak_instances";
@@ -54,6 +56,29 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
     const remote = all.filter((i) => i.id !== "local");
     localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
   }, []);
+
+  const [instanceStatuses, setInstanceStatuses] = useState<Record<string, boolean>>({});
+
+  const refreshStatuses = useCallback(() => {
+    const remote = instances.filter((i) => i.id !== "local");
+    for (const inst of remote) {
+      const url = inst.url.endsWith("/") ? `${inst.url}health` : `${inst.url}/health`;
+      fetch(url, { method: "GET", signal: AbortSignal.timeout(5000) })
+        .then((res) => {
+          setInstanceStatuses((prev) => ({ ...prev, [inst.id]: res.ok }));
+        })
+        .catch(() => {
+          setInstanceStatuses((prev) => ({ ...prev, [inst.id]: false }));
+        });
+    }
+    // Local is always considered online
+    setInstanceStatuses((prev) => ({ ...prev, local: true }));
+  }, [instances]);
+
+  // Refresh on mount and when instances change
+  useEffect(() => {
+    refreshStatuses();
+  }, [refreshStatuses]);
 
   const switchInstance = useCallback((id: string) => {
     setActiveId(id);
@@ -114,7 +139,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
 
   return (
     <InstanceContext.Provider
-      value={{ instances, activeInstance, switchInstance, addInstance, removeInstance }}
+      value={{ instances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses }}
     >
       {children}
     </InstanceContext.Provider>

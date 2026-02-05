@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function InstanceSwitcher() {
-  const { instances, activeInstance, switchInstance, addInstance, removeInstance } = useInstance();
+  const { instances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses } = useInstance();
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -53,7 +53,7 @@ export function InstanceSwitcher() {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(open) => { if (open) refreshStatuses(); }}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="gap-2">
             <Globe className="size-4" />
@@ -72,6 +72,7 @@ export function InstanceSwitcher() {
               <div className="flex items-center gap-2 min-w-0">
                 {inst.id === activeInstance.id && <Check className="size-4 text-green-500 shrink-0" />}
                 {inst.id !== activeInstance.id && <div className="size-4 shrink-0" />}
+                <span className={`size-2 rounded-full shrink-0 ${instanceStatuses[inst.id] === true ? "bg-green-500" : instanceStatuses[inst.id] === false ? "bg-red-400" : "bg-gray-400"}`} />
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{inst.name}</div>
                   {inst.url && (
