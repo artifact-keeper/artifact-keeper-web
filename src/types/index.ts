@@ -11,6 +11,7 @@ export * from './lifecycle';
 export * from './telemetry';
 export * from './monitoring';
 export * from './sbom';
+export * from './promotion';
 
 export type {
   PeerInstance,
@@ -112,7 +113,7 @@ export type RepositoryFormat =
   | 'p2'
   | 'bazel';
 
-export type RepositoryType = 'local' | 'remote' | 'virtual';
+export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
 
 export interface CreateRepositoryRequest {
   key: string;
