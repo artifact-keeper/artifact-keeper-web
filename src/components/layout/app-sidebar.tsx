@@ -27,6 +27,7 @@ import {
   Recycle,
   Radio,
   Activity,
+  Scale,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -71,6 +72,7 @@ const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
+  { title: "License Policies", href: "/license-policies", icon: Scale },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
 

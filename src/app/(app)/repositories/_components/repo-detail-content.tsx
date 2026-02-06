@@ -19,6 +19,7 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
+import { SbomTabContent } from "./sbom-tab-content";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -647,62 +648,81 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
       {/* --- Artifact Detail Dialog --- */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileIcon className="size-4" />
-              Artifact Details
+              {selectedArtifact?.name ?? "Artifact Details"}
             </DialogTitle>
           </DialogHeader>
           {selectedArtifact && (
-            <div className="space-y-3 text-sm">
-              <DetailRow label="Name" value={selectedArtifact.name} />
-              <DetailRow label="Path" value={selectedArtifact.path} copy />
-              {selectedArtifact.version && (
-                <DetailRow label="Version" value={selectedArtifact.version} />
-              )}
-              <DetailRow
-                label="Size"
-                value={`${formatBytes(selectedArtifact.size_bytes)} (${selectedArtifact.size_bytes.toLocaleString()} bytes)`}
-              />
-              <DetailRow
-                label="Content Type"
-                value={selectedArtifact.content_type}
-              />
-              <DetailRow
-                label="Downloads"
-                value={selectedArtifact.download_count.toLocaleString()}
-              />
-              <DetailRow
-                label="Created"
-                value={new Date(selectedArtifact.created_at).toLocaleString()}
-              />
-              <DetailRow
-                label="SHA-256"
-                value={selectedArtifact.checksum_sha256}
-                copy
-                mono
-              />
-              <DetailRow
-                label="Download URL"
-                value={artifactsApi.getDownloadUrl(repoKey, selectedArtifact.path)}
-                copy
-                mono
-              />
-              {selectedArtifact.metadata &&
-                Object.keys(selectedArtifact.metadata).length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Metadata
-                    </p>
-                    <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-40">
-                      {JSON.stringify(selectedArtifact.metadata, null, 2)}
-                    </pre>
-                  </div>
-                )}
-            </div>
+            <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
+              <TabsList variant="line" className="shrink-0">
+                <TabsTrigger value="details">
+                  <Info className="size-3.5 mr-1" />
+                  Details
+                </TabsTrigger>
+                <TabsTrigger value="sbom">
+                  <FileIcon className="size-3.5 mr-1" />
+                  SBOM
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="details" className="flex-1 overflow-y-auto mt-4">
+                <div className="space-y-3 text-sm">
+                  <DetailRow label="Name" value={selectedArtifact.name} />
+                  <DetailRow label="Path" value={selectedArtifact.path} copy />
+                  {selectedArtifact.version && (
+                    <DetailRow label="Version" value={selectedArtifact.version} />
+                  )}
+                  <DetailRow
+                    label="Size"
+                    value={`${formatBytes(selectedArtifact.size_bytes)} (${selectedArtifact.size_bytes.toLocaleString()} bytes)`}
+                  />
+                  <DetailRow
+                    label="Content Type"
+                    value={selectedArtifact.content_type}
+                  />
+                  <DetailRow
+                    label="Downloads"
+                    value={selectedArtifact.download_count.toLocaleString()}
+                  />
+                  <DetailRow
+                    label="Created"
+                    value={new Date(selectedArtifact.created_at).toLocaleString()}
+                  />
+                  <DetailRow
+                    label="SHA-256"
+                    value={selectedArtifact.checksum_sha256}
+                    copy
+                    mono
+                  />
+                  <DetailRow
+                    label="Download URL"
+                    value={artifactsApi.getDownloadUrl(repoKey, selectedArtifact.path)}
+                    copy
+                    mono
+                  />
+                  {selectedArtifact.metadata &&
+                    Object.keys(selectedArtifact.metadata).length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
+                          Metadata
+                        </p>
+                        <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-40">
+                          {JSON.stringify(selectedArtifact.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="sbom" className="flex-1 overflow-y-auto mt-4">
+                <SbomTabContent artifact={selectedArtifact} />
+              </TabsContent>
+            </Tabs>
           )}
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button
               variant="outline"
               onClick={() => setDetailOpen(false)}

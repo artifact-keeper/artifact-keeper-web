@@ -13,6 +13,7 @@ export { default as treeApi } from './tree';
 export { default as profileApi } from './profile';
 export { default as webhooksApi } from './webhooks';
 export { default as securityApi } from './security';
+export { default as sbomApi } from './sbom';
 export { default as peersApi } from './replication';
 export { default as analyticsApi } from './analytics';
 export { default as lifecycleApi } from './lifecycle';

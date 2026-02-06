@@ -13,10 +13,15 @@ import {
   RefreshCw,
   Package,
   ArrowRight,
+  Shield,
+  ShieldAlert,
+  ShieldX,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
+import sbomApi from "@/lib/api/sbom";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
 import { PageHeader } from "@/components/common/page-header";
@@ -199,12 +204,23 @@ export default function DashboardPage() {
     queryFn: () => repositoriesApi.list({ per_page: 5 }),
   });
 
-  const isRefreshing = healthFetching || statsFetching || reposFetching;
+  const {
+    data: cveTrends,
+    isLoading: cveTrendsLoading,
+    isFetching: cveTrendsFetching,
+  } = useQuery({
+    queryKey: ["cve-trends"],
+    queryFn: () => sbomApi.getCveTrends(),
+    enabled: !!user?.is_admin,
+  });
+
+  const isRefreshing = healthFetching || statsFetching || reposFetching || cveTrendsFetching;
 
   function handleRefresh() {
     queryClient.invalidateQueries({ queryKey: ["health"] });
     queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
+    queryClient.invalidateQueries({ queryKey: ["cve-trends"] });
   }
 
   const greeting = user?.display_name || user?.username;
@@ -305,6 +321,49 @@ export default function DashboardPage() {
           ) : (
             <div className="rounded-lg border bg-destructive/5 px-4 py-3 text-sm text-destructive">
               Failed to load admin statistics.
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Security Overview (Admin only) */}
+      {user?.is_admin && (
+        <section>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            Security Overview
+          </h2>
+          {cveTrendsLoading ? (
+            <StatsSkeleton />
+          ) : cveTrends ? (
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatCard
+                icon={Shield}
+                label="Total CVEs"
+                value={cveTrends.total_cves}
+                color="blue"
+              />
+              <StatCard
+                icon={ShieldAlert}
+                label="Open CVEs"
+                value={cveTrends.open_cves}
+                color="yellow"
+              />
+              <StatCard
+                icon={ShieldX}
+                label="Critical"
+                value={cveTrends.critical_count}
+                color="red"
+              />
+              <StatCard
+                icon={ShieldCheck}
+                label="Fixed"
+                value={cveTrends.fixed_cves}
+                color="green"
+              />
+            </div>
+          ) : (
+            <div className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              No CVE data available yet. Generate SBOMs and run security scans to track vulnerabilities.
             </div>
           )}
         </section>

@@ -10,6 +10,7 @@ export * from './analytics';
 export * from './lifecycle';
 export * from './telemetry';
 export * from './monitoring';
+export * from './sbom';
 
 export type {
   PeerInstance,
