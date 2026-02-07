@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert,
@@ -11,16 +11,26 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
+  Link2,
+  Link2Off,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
+import dtApi from "@/lib/api/dependency-track";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
+import type {
+  DtFinding,
+  DtProjectMetrics,
+  DtProject,
+} from "@/types/dependency-track";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,9 +39,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
 interface SecurityTabContentProps {
   artifact: Artifact;
 }
+
+// ---------------------------------------------------------------------------
+// Constants & helpers
+// ---------------------------------------------------------------------------
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0,
@@ -61,9 +79,50 @@ const STATUS_CONFIG: Record<string, { icon: typeof ShieldAlert; color: string; l
   false_positive: { icon: XCircle, color: "text-muted-foreground", label: "False Positive" },
 };
 
+/** DT analysis states for triage dropdown */
+const DT_ANALYSIS_STATES = [
+  { state: "NOT_AFFECTED", label: "Not Affected", icon: XCircle, color: "text-muted-foreground" },
+  { state: "EXPLOITABLE", label: "Exploitable", icon: ShieldAlert, color: "text-red-500" },
+  { state: "IN_TRIAGE", label: "In Triage", icon: Eye, color: "text-yellow-500" },
+  { state: "RESOLVED", label: "Resolved", icon: CheckCircle2, color: "text-green-500" },
+  { state: "FALSE_POSITIVE", label: "False Positive", icon: XCircle, color: "text-muted-foreground" },
+  { state: "NOT_SET", label: "Not Set", icon: AlertTriangle, color: "text-muted-foreground" },
+] as const;
+
+/**
+ * Attempt to resolve a Dependency-Track project UUID for an artifact.
+ * Priority: explicit metadata field > name+version match from DT project list.
+ */
+function resolveDtProjectUuid(
+  artifact: Artifact,
+  dtProjects: DtProject[] | undefined,
+): string | null {
+  // Check explicit metadata link
+  const fromMeta = artifact.metadata?.dt_project_uuid;
+  if (typeof fromMeta === "string" && fromMeta.length > 0) return fromMeta;
+
+  // Fallback: match by artifact name & version against DT projects
+  if (!dtProjects) return null;
+  const match = dtProjects.find(
+    (p) =>
+      p.name === artifact.name &&
+      (p.version === (artifact.version ?? null)),
+  );
+  return match?.uuid ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const [dtFindingsPage, setDtFindingsPage] = useState(1);
+
+  // -------------------------------------------------------------------------
+  // Existing CVE history query
+  // -------------------------------------------------------------------------
 
   const { data: cveHistory, isLoading } = useQuery({
     queryKey: ["cve-history", artifact.id],
@@ -82,7 +141,69 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
   });
 
-  // Compute severity breakdown
+  // -------------------------------------------------------------------------
+  // Dependency-Track integration queries
+  // -------------------------------------------------------------------------
+
+  const { data: dtStatus } = useQuery({
+    queryKey: ["dt-status"],
+    queryFn: () => dtApi.getStatus(),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const dtEnabled = dtStatus?.enabled === true && dtStatus?.healthy === true;
+
+  // Only fetch DT projects when DT is enabled (needed for UUID resolution)
+  const { data: dtProjects } = useQuery({
+    queryKey: ["dt-projects"],
+    queryFn: () => dtApi.listProjects(),
+    enabled: dtEnabled,
+    staleTime: 120_000,
+  });
+
+  const dtProjectUuid = useMemo(
+    () => resolveDtProjectUuid(artifact, dtProjects),
+    [artifact, dtProjects],
+  );
+
+  // DT project metrics
+  const { data: dtMetrics, isLoading: dtMetricsLoading } = useQuery({
+    queryKey: ["dt-project-metrics", dtProjectUuid],
+    queryFn: () => dtApi.getProjectMetrics(dtProjectUuid!),
+    enabled: dtEnabled && dtProjectUuid != null,
+  });
+
+  // DT project findings
+  const { data: dtFindings, isLoading: dtFindingsLoading } = useQuery({
+    queryKey: ["dt-project-findings", dtProjectUuid],
+    queryFn: () => dtApi.getProjectFindings(dtProjectUuid!),
+    enabled: dtEnabled && dtProjectUuid != null,
+  });
+
+  // DT triage mutation
+  const dtTriageMutation = useMutation({
+    mutationFn: (params: { componentUuid: string; vulnerabilityUuid: string; state: string }) =>
+      dtApi.updateAnalysis({
+        project_uuid: dtProjectUuid!,
+        component_uuid: params.componentUuid,
+        vulnerability_uuid: params.vulnerabilityUuid,
+        state: params.state,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dt-project-findings", dtProjectUuid] });
+      queryClient.invalidateQueries({ queryKey: ["dt-project-metrics", dtProjectUuid] });
+      toast.success("Dependency-Track analysis updated");
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update analysis: ${err.message}`);
+    },
+  });
+
+  // -------------------------------------------------------------------------
+  // CVE severity breakdown (existing logic)
+  // -------------------------------------------------------------------------
+
   const breakdown = (cveHistory ?? []).reduce(
     (acc, cve) => {
       const sev = (cve.severity?.toLowerCase() ?? "low") as keyof typeof acc.severity;
@@ -106,6 +227,23 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     if (sevA !== sevB) return sevA - sevB;
     return new Date(b.first_detected_at).getTime() - new Date(a.first_detected_at).getTime();
   });
+
+  // -------------------------------------------------------------------------
+  // Sort DT findings by severity
+  // -------------------------------------------------------------------------
+
+  const sortedDtFindings = useMemo(() => {
+    if (!dtFindings) return [];
+    return [...dtFindings].sort((a, b) => {
+      const sevA = SEVERITY_ORDER[a.vulnerability.severity?.toLowerCase() ?? "low"] ?? 3;
+      const sevB = SEVERITY_ORDER[b.vulnerability.severity?.toLowerCase() ?? "low"] ?? 3;
+      return sevA - sevB;
+    });
+  }, [dtFindings]);
+
+  // -------------------------------------------------------------------------
+  // CVE table columns (existing)
+  // -------------------------------------------------------------------------
 
   const columns: DataTableColumn<CveHistoryEntry>[] = [
     {
@@ -224,6 +362,124 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
   ];
 
+  // -------------------------------------------------------------------------
+  // DT findings table columns
+  // -------------------------------------------------------------------------
+
+  const dtFindingsColumns: DataTableColumn<DtFinding>[] = [
+    {
+      id: "vulnId",
+      header: "Vuln ID",
+      accessor: (f) => f.vulnerability.vulnId,
+      sortable: true,
+      cell: (f) => (
+        <div>
+          <span className="font-medium text-sm font-mono">{f.vulnerability.vulnId}</span>
+          <span className="ml-1.5 text-xs text-muted-foreground">{f.vulnerability.source}</span>
+        </div>
+      ),
+    },
+    {
+      id: "severity",
+      header: "Severity",
+      accessor: (f) => SEVERITY_ORDER[f.vulnerability.severity?.toLowerCase() ?? "low"] ?? 3,
+      sortable: true,
+      cell: (f) => {
+        const sev = f.vulnerability.severity?.toLowerCase() ?? "";
+        return (
+          <Badge variant="outline" className={`text-xs uppercase ${SEVERITY_BADGE[sev] ?? ""}`}>
+            {f.vulnerability.severity ?? "Unknown"}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "component",
+      header: "Component",
+      accessor: (f) => f.component.name,
+      cell: (f) => (
+        <div className="max-w-[180px]">
+          <span className="text-sm truncate block">{f.component.name}</span>
+          {f.component.version && (
+            <span className="text-xs text-muted-foreground">@ {f.component.version}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "cvss",
+      header: "CVSS",
+      accessor: (f) => f.vulnerability.cvssV3BaseScore ?? 0,
+      sortable: true,
+      cell: (f) =>
+        f.vulnerability.cvssV3BaseScore != null ? (
+          <span className="text-sm font-medium tabular-nums">{f.vulnerability.cvssV3BaseScore.toFixed(1)}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "analysisState",
+      header: "Analysis",
+      accessor: (f) => f.analysis?.state ?? "NOT_SET",
+      cell: (f) => {
+        const state = f.analysis?.state ?? "NOT_SET";
+        const matched = DT_ANALYSIS_STATES.find((s) => s.state === state);
+        const label = matched?.label ?? state;
+        const color = matched?.color ?? "text-muted-foreground";
+        return <span className={`text-xs ${color}`}>{label}</span>;
+      },
+    },
+    {
+      id: "cwe",
+      header: "CWE",
+      accessor: (f) => f.vulnerability.cwe?.cweId ?? 0,
+      cell: (f) =>
+        f.vulnerability.cwe ? (
+          <span className="text-xs text-muted-foreground">
+            CWE-{f.vulnerability.cwe.cweId}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (f) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 px-2" disabled={dtTriageMutation.isPending}>
+              <ChevronDown className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {DT_ANALYSIS_STATES.map(({ state, label, icon: StateIcon, color }) => (
+              <DropdownMenuItem
+                key={state}
+                onClick={() =>
+                  dtTriageMutation.mutate({
+                    componentUuid: f.component.uuid,
+                    vulnerabilityUuid: f.vulnerability.uuid,
+                    state,
+                  })
+                }
+                disabled={f.analysis?.state === state}
+              >
+                <StateIcon className={`size-4 mr-2 ${color}`} />
+                {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
+  // -------------------------------------------------------------------------
+  // Loading state
+  // -------------------------------------------------------------------------
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -234,9 +490,27 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
+
   return (
     <div className="space-y-6">
+      {/* ----------------------------------------------------------------- */}
+      {/* Dependency-Track Integration Status */}
+      {/* ----------------------------------------------------------------- */}
+      {dtStatus && (
+        <DtIntegrationStatusBar
+          enabled={dtStatus.enabled}
+          healthy={dtStatus.healthy}
+          url={dtStatus.url}
+          projectLinked={dtProjectUuid != null}
+        />
+      )}
+
+      {/* ----------------------------------------------------------------- */}
       {/* Header */}
+      {/* ----------------------------------------------------------------- */}
       <div className="flex items-center gap-3">
         <ShieldAlert className="size-5 text-muted-foreground" />
         <h3 className="text-sm font-medium">Security Vulnerabilities</h3>
@@ -317,6 +591,185 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
           />
         </>
       )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Dependency-Track Findings Section */}
+      {/* ----------------------------------------------------------------- */}
+      {dtEnabled && dtProjectUuid != null && (
+        <>
+          <Separator />
+
+          <div className="space-y-6">
+            {/* DT section header */}
+            <div className="flex items-center gap-3">
+              <Activity className="size-5 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Dependency-Track Findings</h3>
+              {dtFindings && dtFindings.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {dtFindings.length} findings
+                </Badge>
+              )}
+            </div>
+
+            {/* DT project metrics summary */}
+            {dtMetricsLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : dtMetrics ? (
+              <DtMetricsSummary metrics={dtMetrics} />
+            ) : null}
+
+            {/* DT findings table */}
+            {dtFindingsLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : sortedDtFindings.length > 0 ? (
+              <DataTable
+                columns={dtFindingsColumns}
+                data={sortedDtFindings}
+                page={dtFindingsPage}
+                pageSize={10}
+                total={sortedDtFindings.length}
+                onPageChange={setDtFindingsPage}
+                emptyMessage="No Dependency-Track findings"
+                rowKey={(f) => `${f.component.uuid}-${f.vulnerability.uuid}`}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <ShieldCheck className="size-10 text-green-500/50 mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  No findings reported by Dependency-Track for this project.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+/**
+ * Status bar showing whether the Dependency-Track integration is connected.
+ */
+function DtIntegrationStatusBar({
+  enabled,
+  healthy,
+  url,
+  projectLinked,
+}: {
+  enabled: boolean;
+  healthy: boolean;
+  url: string | null;
+  projectLinked: boolean;
+}) {
+  if (!enabled) return null;
+
+  const connected = enabled && healthy;
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
+      {connected ? (
+        <Link2 className="size-4 text-green-500 shrink-0" />
+      ) : (
+        <Link2Off className="size-4 text-red-500 shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Dependency-Track</span>
+          <Badge
+            variant="outline"
+            className={`text-xs ${connected ? "text-green-600 bg-green-100 dark:bg-green-950/40" : "text-red-600 bg-red-100 dark:bg-red-950/40"}`}
+          >
+            {connected ? "Connected" : "Unhealthy"}
+          </Badge>
+          {projectLinked && (
+            <Badge variant="outline" className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-950/40">
+              Project Linked
+            </Badge>
+          )}
+        </div>
+        {url && (
+          <p className="text-xs text-muted-foreground truncate mt-0.5">{url}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Metrics summary cards for a Dependency-Track project.
+ */
+function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
+  const severityCounts = [
+    { label: "Critical", count: metrics.critical, color: SEVERITY_COLORS.critical, badgeColor: SEVERITY_BADGE.critical },
+    { label: "High", count: metrics.high, color: SEVERITY_COLORS.high, badgeColor: SEVERITY_BADGE.high },
+    { label: "Medium", count: metrics.medium, color: SEVERITY_COLORS.medium, badgeColor: SEVERITY_BADGE.medium },
+    { label: "Low", count: metrics.low, color: SEVERITY_COLORS.low, badgeColor: SEVERITY_BADGE.low },
+  ];
+
+  const totalViolations = metrics.policyViolationsTotal;
+
+  return (
+    <div className="space-y-3">
+      {/* Severity breakdown bar for DT */}
+      {metrics.findingsTotal > 0 && (
+        <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+          {severityCounts.map(({ label, count, color }) => {
+            if (count === 0) return null;
+            const pct = (count / metrics.findingsTotal) * 100;
+            return (
+              <div
+                key={label}
+                className={`${color} transition-all`}
+                style={{ width: `${pct}%` }}
+                title={`${label}: ${count}`}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {severityCounts.map(({ label, count, color }) => (
+          <div key={label} className="flex items-center gap-2 rounded-lg border bg-card p-3">
+            <div className={`size-3 rounded-full ${color}`} />
+            <div>
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-lg font-semibold">{count}</p>
+            </div>
+          </div>
+        ))}
+
+        {/* Policy violations card */}
+        <div className="flex items-center gap-2 rounded-lg border bg-card p-3">
+          <AlertTriangle className="size-4 text-yellow-500" />
+          <div>
+            <p className="text-xs text-muted-foreground">Policy Violations</p>
+            <p className="text-lg font-semibold">{totalViolations}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Audit progress */}
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span>
+          Audited: {metrics.findingsAudited} / {metrics.findingsTotal}
+        </span>
+        <span>
+          Suppressed: {metrics.suppressions}
+        </span>
+        <span>
+          Risk Score: {metrics.inheritedRiskScore.toFixed(0)}
+        </span>
+      </div>
     </div>
   );
 }
