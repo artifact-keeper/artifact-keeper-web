@@ -24,6 +24,7 @@ import { repositoriesApi } from "@/lib/api/repositories";
 import sbomApi from "@/lib/api/sbom";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
+import type { CveTrends } from "@/types/sbom";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -165,6 +166,72 @@ function RepoRow({ repo }: { repo: Repository }) {
         {formatBytes(repo.storage_used_bytes)}
       </TableCell>
     </TableRow>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Severity breakdown for CVE trends
+// ---------------------------------------------------------------------------
+
+const SEVERITY_LEVELS = ["critical", "high", "medium", "low"] as const;
+
+const SEVERITY_BAR_COLORS: Record<string, string> = {
+  critical: "bg-red-500",
+  high: "bg-orange-500",
+  medium: "bg-amber-400",
+  low: "bg-blue-400",
+};
+
+const SEVERITY_TEXT_COLORS: Record<string, string> = {
+  critical: "text-red-600 dark:text-red-400",
+  high: "text-orange-600 dark:text-orange-400",
+  medium: "text-amber-600 dark:text-amber-400",
+  low: "text-blue-600 dark:text-blue-400",
+};
+
+function SeverityBreakdown({ trends }: { trends: CveTrends }) {
+  const counts = {
+    critical: trends.critical_count,
+    high: trends.high_count,
+    medium: trends.medium_count,
+    low: trends.low_count,
+  };
+  const max = Math.max(...Object.values(counts), 1);
+
+  return (
+    <div className="space-y-4">
+      {/* Horizontal bar chart */}
+      <div className="space-y-3">
+        {SEVERITY_LEVELS.map((sev) => {
+          const count = counts[sev];
+          const pct = (count / max) * 100;
+          return (
+            <div key={sev} className="flex items-center gap-3">
+              <span className={`text-xs font-medium capitalize w-16 ${SEVERITY_TEXT_COLORS[sev]}`}>
+                {sev}
+              </span>
+              <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${SEVERITY_BAR_COLORS[sev]}`}
+                  style={{ width: `${pct}%`, minWidth: count > 0 ? "8px" : "0" }}
+                />
+              </div>
+              <span className="text-sm font-medium tabular-nums w-8 text-right">{count}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Status summary row */}
+      <div className="flex items-center gap-6 pt-2 border-t text-xs text-muted-foreground">
+        <span>Open: <strong className="text-foreground">{trends.open_cves}</strong></span>
+        <span>Fixed: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
+        <span>Acknowledged: <strong className="text-foreground">{trends.acknowledged_cves}</strong></span>
+        {trends.avg_days_to_fix != null && (
+          <span>Avg fix time: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -335,31 +402,45 @@ export default function DashboardPage() {
           {cveTrendsLoading ? (
             <StatsSkeleton />
           ) : cveTrends ? (
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <StatCard
-                icon={Shield}
-                label="Total CVEs"
-                value={cveTrends.total_cves}
-                color="blue"
-              />
-              <StatCard
-                icon={ShieldAlert}
-                label="Open CVEs"
-                value={cveTrends.open_cves}
-                color="yellow"
-              />
-              <StatCard
-                icon={ShieldX}
-                label="Critical"
-                value={cveTrends.critical_count}
-                color="red"
-              />
-              <StatCard
-                icon={ShieldCheck}
-                label="Fixed"
-                value={cveTrends.fixed_cves}
-                color="green"
-              />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <StatCard
+                  icon={Shield}
+                  label="Total CVEs"
+                  value={cveTrends.total_cves}
+                  color="blue"
+                />
+                <StatCard
+                  icon={ShieldAlert}
+                  label="Open CVEs"
+                  value={cveTrends.open_cves}
+                  color="yellow"
+                />
+                <StatCard
+                  icon={ShieldX}
+                  label="Critical"
+                  value={cveTrends.critical_count}
+                  color="red"
+                />
+                <StatCard
+                  icon={ShieldCheck}
+                  label="Fixed"
+                  value={cveTrends.fixed_cves}
+                  color="green"
+                />
+              </div>
+
+              {/* Severity Breakdown */}
+              {cveTrends.total_cves > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Severity Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <SeverityBreakdown trends={cveTrends} />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : (
             <div className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">

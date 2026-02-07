@@ -22,11 +22,13 @@ interface RepoListItemProps {
 
 export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount }: RepoListItemProps) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(repo)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(repo); }}
       className={cn(
-        "group w-full text-left px-3 py-2.5 border-l-2 border-transparent hover:bg-accent/50 transition-colors",
+        "group w-full text-left px-3 py-2.5 border-l-2 border-transparent hover:bg-accent/50 transition-colors cursor-pointer",
         isSelected && "bg-accent border-l-primary"
       )}
     >
@@ -92,6 +94,6 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
           </DropdownMenu>
         )}
       </div>
-    </button>
+    </div>
   );
 }

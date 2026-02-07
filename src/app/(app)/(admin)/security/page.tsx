@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 
 import securityApi from "@/lib/api/security";
+import dtApi from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
 import apiClient from "@/lib/api-client";
 import type { RepoSecurityScore } from "@/types/security";
+import type { DtPortfolioMetrics } from "@/types/dependency-track";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +116,20 @@ export default function SecurityDashboardPage() {
   const { data: scores, isLoading: scoresLoading } = useQuery({
     queryKey: ["security", "scores"],
     queryFn: securityApi.getAllScores,
+  });
+
+  // Dependency-Track integration
+  const { data: dtStatus } = useQuery({
+    queryKey: ["dt", "status"],
+    queryFn: dtApi.getStatus,
+  });
+
+  const dtEnabled = dtStatus?.enabled && dtStatus?.healthy;
+
+  const { data: dtPortfolio } = useQuery({
+    queryKey: ["dt", "portfolio-metrics"],
+    queryFn: dtApi.getPortfolioMetrics,
+    enabled: !!dtEnabled,
   });
 
   const { data: repos } = useQuery({
@@ -330,6 +346,55 @@ export default function SecurityDashboardPage() {
               className="h-24 rounded-lg border bg-muted/30 animate-pulse"
             />
           ))}
+        </div>
+      )}
+
+      {/* Dependency-Track Portfolio Summary */}
+      {dtEnabled && dtPortfolio && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Dependency-Track Portfolio
+          </h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <StatCard
+              icon={AlertCircle}
+              label="DT Critical"
+              value={dtPortfolio.critical}
+              color={dtPortfolio.critical > 0 ? "red" : "green"}
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="DT High"
+              value={dtPortfolio.high}
+              color={dtPortfolio.high > 0 ? "yellow" : "green"}
+            />
+            <StatCard
+              icon={Bug}
+              label="DT Findings"
+              value={dtPortfolio.findingsTotal}
+              color={dtPortfolio.findingsTotal > 0 ? "yellow" : "green"}
+            />
+            <StatCard
+              icon={ShieldBan}
+              label="DT Violations"
+              value={dtPortfolio.policyViolationsTotal}
+              color={dtPortfolio.policyViolationsTotal > 0 ? "red" : "green"}
+            />
+            <StatCard
+              icon={ShieldCheck}
+              label="DT Projects"
+              value={dtPortfolio.projects}
+              color="blue"
+            />
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>
+              Audited: {dtPortfolio.findingsAudited} / {dtPortfolio.findingsTotal}
+            </span>
+            <span>
+              Risk Score: {dtPortfolio.inheritedRiskScore.toFixed(0)}
+            </span>
+          </div>
         </div>
       )}
 
