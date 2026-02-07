@@ -443,6 +443,7 @@ export default function RepositoriesPage() {
         deleteRepo={dialogRepo}
         onDeleteConfirm={(key) => deleteMutation.mutate(key)}
         deletePending={deleteMutation.isPending}
+        availableRepos={items}
       />
     </div>
   );

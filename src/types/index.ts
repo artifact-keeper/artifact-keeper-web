@@ -58,6 +58,10 @@ export interface Repository {
   is_public: boolean;
   storage_used_bytes: number;
   quota_bytes?: number;
+  // For remote repositories
+  upstream_url?: string;
+  // For virtual repositories
+  member_repos?: VirtualRepoMember[];
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +127,28 @@ export interface CreateRepositoryRequest {
   repo_type: RepositoryType;
   is_public?: boolean;
   quota_bytes?: number;
+  // For remote repositories
+  upstream_url?: string;
+  // For virtual repositories - array of member repo keys with priorities
+  member_repos?: VirtualRepoMemberInput[];
+}
+
+export interface VirtualRepoMemberInput {
+  repo_key: string;
+  priority: number;
+}
+
+export interface VirtualRepoMember {
+  id: string;
+  virtual_repo_id: string;
+  member_repo_id: string;
+  member_repo_key: string;
+  priority: number;
+  created_at: string;
+}
+
+export interface VirtualMembersResponse {
+  members: VirtualRepoMember[];
 }
 
 export interface Artifact {

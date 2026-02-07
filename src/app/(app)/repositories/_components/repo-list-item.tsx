@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, MoreHorizontal, Pencil, Trash2, Package, Search } from "lucide-react";
+import { Lock, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
 import type { Repository } from "@/types";
 import { formatBytes, REPO_TYPE_COLORS, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,11 +22,13 @@ interface RepoListItemProps {
 
 export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount }: RepoListItemProps) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(repo)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(repo); }}
       className={cn(
-        "group w-full text-left px-3 py-2.5 border-l-2 border-transparent hover:bg-accent/50 transition-colors",
+        "group w-full text-left px-3 py-2.5 border-l-2 border-transparent hover:bg-accent/50 transition-colors cursor-pointer",
         isSelected && "bg-accent border-l-primary"
       )}
     >
@@ -71,8 +73,8 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
         {(onEdit || onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon-xs" className="shrink-0 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100">
-                <MoreHorizontal className="size-3.5" />
+              <Button variant="ghost" size="icon-xs" className="shrink-0 text-muted-foreground hover:text-foreground">
+                <Settings className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -92,6 +94,6 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
           </DropdownMenu>
         )}
       </div>
-    </button>
+    </div>
   );
 }

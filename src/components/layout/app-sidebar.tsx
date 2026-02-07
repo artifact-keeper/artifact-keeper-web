@@ -14,6 +14,7 @@ import {
   Webhook,
   ArrowRightLeft,
   BookOpen,
+  GitPullRequestArrow,
   Shield,
   Search,
   FileCheck,
@@ -28,6 +29,7 @@ import {
   Radio,
   Activity,
   Scale,
+  FolderSearch,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -57,6 +59,7 @@ const artifactItems: NavItem[] = [
   { title: "Repositories", href: "/repositories", icon: Database },
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
+  { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
   { title: "Set Me Up", href: "/setup", icon: BookOpen },
 ];
 
@@ -71,6 +74,7 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "License Policies", href: "/license-policies", icon: Scale },
   { title: "Permissions", href: "/permissions", icon: Lock },

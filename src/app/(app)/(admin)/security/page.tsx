@@ -13,15 +13,29 @@ import {
   ShieldBan,
   RefreshCw,
   Zap,
+  FolderSearch,
+  Scale,
+  XCircle,
 } from "lucide-react";
 
 import securityApi from "@/lib/api/security";
+import dtApi from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
 import apiClient from "@/lib/api-client";
 import type { RepoSecurityScore } from "@/types/security";
+import type { DtProjectMetrics } from "@/types/dependency-track";
+import {
+  Sparkline,
+  SeverityBar,
+  RiskGauge,
+  ProgressRow,
+  TrendChart,
+} from "@/components/dt";
+import { aggregateHistories } from "@/lib/dt-utils";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +106,12 @@ function SeverityPill({
   );
 }
 
+const VIOLATION_STATE_BADGE: Record<string, string> = {
+  FAIL: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+  WARN: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+  INFO: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+};
+
 export default function SecurityDashboardPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -114,6 +134,54 @@ export default function SecurityDashboardPage() {
   const { data: scores, isLoading: scoresLoading } = useQuery({
     queryKey: ["security", "scores"],
     queryFn: securityApi.getAllScores,
+  });
+
+  // Dependency-Track integration
+  const { data: dtStatus } = useQuery({
+    queryKey: ["dt", "status"],
+    queryFn: dtApi.getStatus,
+  });
+
+  const dtEnabled = dtStatus?.enabled && dtStatus?.healthy;
+
+  const { data: dtPortfolio } = useQuery({
+    queryKey: ["dt", "portfolio-metrics"],
+    queryFn: dtApi.getPortfolioMetrics,
+    enabled: !!dtEnabled,
+  });
+
+  const { data: dtProjects } = useQuery({
+    queryKey: ["dt", "projects"],
+    queryFn: dtApi.listProjects,
+    enabled: !!dtEnabled,
+  });
+
+  const { data: dtHistory } = useQuery({
+    queryKey: ["dt", "history", dtProjects?.map((p) => p.uuid).join(",")],
+    queryFn: async () => {
+      const projects = dtProjects!;
+      const historyMap: Record<string, DtProjectMetrics[]> = {};
+      await Promise.all(
+        projects.slice(0, 20).map(async (p) => {
+          try {
+            historyMap[p.uuid] = await dtApi.getProjectMetricsHistory(
+              p.uuid,
+              30
+            );
+          } catch {
+            // skip projects whose history is unavailable
+          }
+        })
+      );
+      return aggregateHistories(historyMap);
+    },
+    enabled: !!dtEnabled && !!dtProjects && dtProjects.length > 0,
+  });
+
+  const { data: dtViolations, isLoading: dtViolationsLoading } = useQuery({
+    queryKey: ["dt", "portfolio-violations", dtProjects?.map((p) => p.uuid).join(",")],
+    queryFn: () => dtApi.getAllViolations(dtProjects!),
+    enabled: !!dtEnabled && !!dtProjects && dtProjects.length > 0,
   });
 
   const { data: repos } = useQuery({
@@ -331,6 +399,276 @@ export default function SecurityDashboardPage() {
             />
           ))}
         </div>
+      )}
+
+      {/* Dependency-Track Dashboard */}
+      {dtStatus && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-lg font-semibold tracking-tight">
+              Dependency-Track
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {dtEnabled && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push("/security/dt-projects")}
+                >
+                  <FolderSearch className="size-4" />
+                  View DT Projects
+                </Button>
+              )}
+              {dtEnabled ? (
+                <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                  Connected
+                </Badge>
+              ) : (
+                <Badge variant="secondary">Disconnected</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {!dtEnabled && (
+              <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
+                <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+                    Dependency-Track is unavailable
+                  </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+                    Portfolio metrics, findings, and policy violations are temporarily offline.
+                    The service will reconnect automatically when the container recovers.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {dtEnabled && dtPortfolio && (
+              <>
+                {/* Summary cards with sparklines */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Critical</span>
+                      <Sparkline
+                        data={dtHistory?.map((d) => d.critical) ?? []}
+                        color="#ef4444"
+                      />
+                    </div>
+                    <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                      {dtPortfolio.critical}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">High</span>
+                      <Sparkline
+                        data={dtHistory?.map((d) => d.high) ?? []}
+                        color="#f97316"
+                      />
+                    </div>
+                    <p className="text-2xl font-semibold text-orange-600 dark:text-orange-400">
+                      {dtPortfolio.high}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Medium</span>
+                      <Sparkline
+                        data={dtHistory?.map((d) => d.medium) ?? []}
+                        color="#f59e0b"
+                      />
+                    </div>
+                    <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
+                      {dtPortfolio.medium}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Low</span>
+                      <Sparkline
+                        data={dtHistory?.map((d) => d.low) ?? []}
+                        color="#3b82f6"
+                      />
+                    </div>
+                    <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
+                      {dtPortfolio.low}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Severity distribution bar */}
+                <div>
+                  <h3 className="text-sm font-medium mb-2">
+                    Vulnerability Distribution
+                  </h3>
+                  <SeverityBar
+                    critical={dtPortfolio.critical}
+                    high={dtPortfolio.high}
+                    medium={dtPortfolio.medium}
+                    low={dtPortfolio.low}
+                  />
+                </div>
+
+                {/* Progress rows + Risk gauge side by side */}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-4">
+                    <ProgressRow
+                      label="Findings Audited"
+                      current={dtPortfolio.findingsAudited}
+                      total={dtPortfolio.findingsTotal}
+                      color="bg-green-500"
+                    />
+                    <ProgressRow
+                      label="Policy Violations"
+                      current={
+                        dtPortfolio.policyViolationsFail +
+                        dtPortfolio.policyViolationsWarn
+                      }
+                      total={dtPortfolio.policyViolationsTotal}
+                      color="bg-orange-500"
+                    />
+                    <ProgressRow
+                      label="Projects Tracked"
+                      current={dtPortfolio.projects}
+                      total={dtPortfolio.projects}
+                      color="bg-blue-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <RiskGauge score={dtPortfolio.inheritedRiskScore} />
+                  </div>
+                </div>
+
+                {/* Trend chart */}
+                {dtHistory && dtHistory.length > 1 && (
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">
+                      Vulnerability Trend (30 days)
+                    </h3>
+                    <TrendChart data={dtHistory} />
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Policy Violations Dashboard */}
+      {dtEnabled && dtPortfolio && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-lg font-semibold tracking-tight">
+              Policy Violations
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Scale className="size-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                {dtPortfolio.policyViolationsTotal} total
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Violation count cards by type */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <XCircle className="size-4 text-red-600 dark:text-red-400" />
+                  <span className="text-sm font-medium text-red-700 dark:text-red-400">Fail</span>
+                </div>
+                <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                  {dtPortfolio.policyViolationsFail}
+                </p>
+              </div>
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Warn</span>
+                </div>
+                <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
+                  {dtPortfolio.policyViolationsWarn}
+                </p>
+              </div>
+              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="size-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Info</span>
+                </div>
+                <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
+                  {dtPortfolio.policyViolationsInfo}
+                </p>
+              </div>
+            </div>
+
+            {/* Violations table */}
+            {dtViolationsLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-10 rounded-lg bg-muted/30 animate-pulse" />
+                ))}
+              </div>
+            ) : dtViolations && dtViolations.length > 0 ? (
+              <div className="rounded-md border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Component</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Policy</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">State</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dtViolations.slice(0, 20).map((v) => (
+                      <tr key={v.uuid} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-2.5">
+                          <div className="min-w-0 max-w-[200px]">
+                            <p className="text-sm truncate">
+                              {v.component.group
+                                ? `${v.component.group}/${v.component.name}`
+                                : v.component.name}
+                            </p>
+                            {v.component.version && (
+                              <p className="text-xs text-muted-foreground">{v.component.version}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className="text-sm font-medium">{v.policyCondition.policy.name}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge
+                            variant="outline"
+                            className={`border font-semibold uppercase text-xs ${VIOLATION_STATE_BADGE[v.policyCondition.policy.violationState] ?? ""}`}
+                          >
+                            {v.policyCondition.policy.violationState}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="secondary" className="text-xs font-normal">
+                            {v.type}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {dtViolations.length > 20 && (
+                  <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/30">
+                    Showing 20 of {dtViolations.length} violations.
+                    View individual projects for the full list.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                No policy violations found across tracked projects.
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Repository Security Scores table */}
