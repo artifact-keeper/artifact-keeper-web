@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType } from "@/types";
+import { useState, useMemo, useEffect } from "react";
+import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
 import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ interface RepoDialogsProps {
   deleteRepo: Repository | null;
   onDeleteConfirm: (key: string) => void;
   deletePending: boolean;
+  // Available repos for virtual repo member selection
+  availableRepos?: Repository[];
 }
 
 export function RepoDialogs({
@@ -59,6 +61,7 @@ export function RepoDialogs({
   deleteRepo,
   onDeleteConfirm,
   deletePending,
+  availableRepos = [],
 }: RepoDialogsProps) {
   // Create form state
   const [createForm, setCreateForm] = useState<CreateRepositoryRequest>({
@@ -68,7 +71,36 @@ export function RepoDialogs({
     format: "generic",
     repo_type: "local",
     is_public: true,
+    upstream_url: "",
+    member_repos: [],
   });
+
+  // For virtual repos: selected member repo keys
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  // Key validation - check if key is already taken
+  const [keyTaken, setKeyTaken] = useState(false);
+
+  useEffect(() => {
+    if (!createForm.key || createForm.key.length < 2) {
+      setKeyTaken(false);
+      return;
+    }
+
+    // Check if key exists in availableRepos
+    const exists = availableRepos.some(
+      (r) => r.key.toLowerCase() === createForm.key.toLowerCase()
+    );
+    setKeyTaken(exists);
+  }, [createForm.key, availableRepos]);
+
+  // Filter repos that can be members (local and remote, same format)
+  const eligibleMembers = useMemo(() => {
+    return availableRepos.filter(
+      (r) => (r.repo_type === "local" || r.repo_type === "remote") &&
+             r.format === createForm.format
+    );
+  }, [availableRepos, createForm.format]);
 
   // Edit form state — derived from editRepo, with local overrides
   const editFormDefaults = useMemo(() => ({
@@ -91,7 +123,18 @@ export function RepoDialogs({
       format: "generic",
       repo_type: "local",
       is_public: true,
+      upstream_url: "",
+      member_repos: [],
     });
+    setSelectedMembers([]);
+  };
+
+  // Build member_repos array from selected keys
+  const buildMemberRepos = (): VirtualRepoMemberInput[] => {
+    return selectedMembers.map((key, idx) => ({
+      repo_key: key,
+      priority: idx + 1,
+    }));
   };
 
   const handleCreateClose = (open: boolean) => {
@@ -116,7 +159,12 @@ export function RepoDialogs({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              onCreateSubmit(createForm);
+              const submitData: CreateRepositoryRequest = {
+                ...createForm,
+                upstream_url: createForm.repo_type === "remote" ? createForm.upstream_url : undefined,
+                member_repos: createForm.repo_type === "virtual" ? buildMemberRepos() : undefined,
+              };
+              onCreateSubmit(submitData);
             }}
           >
             <div className="space-y-2">
@@ -129,7 +177,13 @@ export function RepoDialogs({
                   setCreateForm((f) => ({ ...f, key: e.target.value }))
                 }
                 required
+                className={keyTaken ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {keyTaken && (
+                <p className="text-sm text-red-500">
+                  Repository key "{createForm.key}" is already taken. Please choose a different key.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-name">Name</Label>
@@ -203,6 +257,64 @@ export function RepoDialogs({
                 </Select>
               </div>
             </div>
+            {/* Remote repository: upstream URL */}
+            {createForm.repo_type === "remote" && (
+              <div className="space-y-2">
+                <Label htmlFor="create-upstream">Upstream URL</Label>
+                <Input
+                  id="create-upstream"
+                  placeholder="https://registry.npmjs.org"
+                  value={createForm.upstream_url || ""}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, upstream_url: e.target.value }))
+                  }
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  The upstream registry URL to proxy requests to.
+                </p>
+              </div>
+            )}
+
+            {/* Virtual repository: member selection */}
+            {createForm.repo_type === "virtual" && (
+              <div className="space-y-2">
+                <Label>Member Repositories</Label>
+                {eligibleMembers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No {createForm.format} local or remote repositories available. Create some first.
+                  </p>
+                ) : (
+                  <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
+                    {eligibleMembers.map((repo) => (
+                      <label
+                        key={repo.key}
+                        className="flex items-center gap-2 p-1 hover:bg-muted rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMembers.includes(repo.key)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMembers((m) => [...m, repo.key]);
+                            } else {
+                              setSelectedMembers((m) => m.filter((k) => k !== repo.key));
+                            }
+                          }}
+                          className="rounded"
+                        />
+                        <span className="text-sm">{repo.name}</span>
+                        <span className="text-xs text-muted-foreground">({repo.repo_type})</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Select repositories to aggregate. Order determines priority.
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
               <Switch
                 id="create-public"
@@ -221,7 +333,7 @@ export function RepoDialogs({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createPending}>
+              <Button type="submit" disabled={createPending || keyTaken}>
                 {createPending ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>

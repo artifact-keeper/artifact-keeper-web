@@ -12,6 +12,7 @@ import {
   Info,
   Shield,
   ExternalLink,
+  Layers,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -21,6 +22,7 @@ import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
+import { VirtualMembersPanel } from "./virtual-members-panel";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -488,6 +490,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         <TabsList variant="line">
           <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
           {isAuthenticated && <TabsTrigger value="upload">Upload</TabsTrigger>}
+          {repository.repo_type === "virtual" && (
+            <TabsTrigger value="members">
+              <Layers className="size-3.5 mr-1" />
+              Members
+            </TabsTrigger>
+          )}
           {user?.is_admin && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
@@ -551,6 +559,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </h3>
               <FileUpload onUpload={handleUpload} showPathInput />
             </div>
+          </TabsContent>
+        )}
+
+        {/* --- Members Tab (Virtual Repos) --- */}
+        {repository.repo_type === "virtual" && (
+          <TabsContent value="members" className="mt-4">
+            <VirtualMembersPanel repository={repository} />
           </TabsContent>
         )}
 
