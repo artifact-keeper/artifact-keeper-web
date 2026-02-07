@@ -66,6 +66,22 @@ const dtApi = {
     const { data } = await apiClient.get(`${BASE}/policies`);
     return data;
   },
+
+  /** Aggregate violations across the top N projects */
+  getAllViolations: async (projects: { uuid: string }[], limit = 20): Promise<DtPolicyViolation[]> => {
+    const all: DtPolicyViolation[] = [];
+    await Promise.all(
+      projects.slice(0, limit).map(async (p) => {
+        try {
+          const violations = await dtApi.getProjectViolations(p.uuid);
+          all.push(...violations);
+        } catch {
+          // skip projects whose violations are unavailable
+        }
+      })
+    );
+    return all;
+  },
 };
 
 export default dtApi;

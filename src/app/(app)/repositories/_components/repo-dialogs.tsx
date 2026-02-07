@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
 import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
 
@@ -79,19 +79,13 @@ export function RepoDialogs({
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   // Key validation - check if key is already taken
-  const [keyTaken, setKeyTaken] = useState(false);
-
-  useEffect(() => {
+  const keyTaken = useMemo(() => {
     if (!createForm.key || createForm.key.length < 2) {
-      setKeyTaken(false);
-      return;
+      return false;
     }
-
-    // Check if key exists in availableRepos
-    const exists = availableRepos.some(
+    return availableRepos.some(
       (r) => r.key.toLowerCase() === createForm.key.toLowerCase()
     );
-    setKeyTaken(exists);
   }, [createForm.key, availableRepos]);
 
   // Filter repos that can be members (local and remote, same format)
@@ -181,7 +175,7 @@ export function RepoDialogs({
               />
               {keyTaken && (
                 <p className="text-sm text-red-500">
-                  Repository key "{createForm.key}" is already taken. Please choose a different key.
+                  Repository key &quot;{createForm.key}&quot; is already taken. Please choose a different key.
                 </p>
               )}
             </div>

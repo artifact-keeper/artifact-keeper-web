@@ -595,7 +595,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Findings Section */}
       {/* ----------------------------------------------------------------- */}
-      {dtEnabled && dtProjectUuid != null && (
+      {dtStatus && (
         <>
           <Separator />
 
@@ -604,45 +604,78 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
             <div className="flex items-center gap-3">
               <Activity className="size-5 text-muted-foreground" />
               <h3 className="text-sm font-medium">Dependency-Track Findings</h3>
-              {dtFindings && dtFindings.length > 0 && (
+              {dtEnabled && dtFindings && dtFindings.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {dtFindings.length} findings
                 </Badge>
               )}
             </div>
 
-            {/* DT project metrics summary */}
-            {dtMetricsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
+            {/* Warning banner when DT is unavailable */}
+            {!dtEnabled && (
+              <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
+                <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+                    Dependency-Track is unavailable
+                  </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+                    Real-time vulnerability scanning, findings, and triage are temporarily offline.
+                    The service will reconnect automatically when the container recovers.
+                  </p>
+                </div>
               </div>
-            ) : dtMetrics ? (
-              <DtMetricsSummary metrics={dtMetrics} />
-            ) : null}
+            )}
 
-            {/* DT findings table */}
-            {dtFindingsLoading ? (
-              <Skeleton className="h-32 w-full" />
-            ) : sortedDtFindings.length > 0 ? (
-              <DataTable
-                columns={dtFindingsColumns}
-                data={sortedDtFindings}
-                page={dtFindingsPage}
-                pageSize={10}
-                total={sortedDtFindings.length}
-                onPageChange={setDtFindingsPage}
-                emptyMessage="No Dependency-Track findings"
-                rowKey={(f) => `${f.component.uuid}-${f.vulnerability.uuid}`}
-              />
-            ) : (
+            {/* Warning when DT is healthy but no project linked */}
+            {dtEnabled && dtProjectUuid == null && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <ShieldCheck className="size-10 text-green-500/50 mb-3" />
+                <Activity className="size-10 text-muted-foreground/50 mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  No findings reported by Dependency-Track for this project.
+                  No Dependency-Track project linked to this artifact.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Set a <code className="text-xs">dt_project_uuid</code> in the artifact metadata or ensure a matching project exists in Dependency-Track.
                 </p>
               </div>
+            )}
+
+            {/* DT project metrics summary */}
+            {dtEnabled && dtProjectUuid != null && (
+              <>
+                {dtMetricsLoading ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : dtMetrics ? (
+                  <DtMetricsSummary metrics={dtMetrics} />
+                ) : null}
+
+                {/* DT findings table */}
+                {dtFindingsLoading ? (
+                  <Skeleton className="h-32 w-full" />
+                ) : sortedDtFindings.length > 0 ? (
+                  <DataTable
+                    columns={dtFindingsColumns}
+                    data={sortedDtFindings}
+                    page={dtFindingsPage}
+                    pageSize={10}
+                    total={sortedDtFindings.length}
+                    onPageChange={setDtFindingsPage}
+                    emptyMessage="No Dependency-Track findings"
+                    rowKey={(f) => `${f.component.uuid}-${f.vulnerability.uuid}`}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <ShieldCheck className="size-10 text-green-500/50 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      No findings reported by Dependency-Track for this project.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </>
@@ -669,8 +702,6 @@ function DtIntegrationStatusBar({
   url: string | null;
   projectLinked: boolean;
 }) {
-  if (!enabled) return null;
-
   const connected = enabled && healthy;
 
   return (
@@ -687,7 +718,7 @@ function DtIntegrationStatusBar({
             variant="outline"
             className={`text-xs ${connected ? "text-green-600 bg-green-100 dark:bg-green-950/40" : "text-red-600 bg-red-100 dark:bg-red-950/40"}`}
           >
-            {connected ? "Connected" : "Unhealthy"}
+            {connected ? "Connected" : !enabled ? "Disabled" : "Unhealthy"}
           </Badge>
           {projectLinked && (
             <Badge variant="outline" className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-950/40">
