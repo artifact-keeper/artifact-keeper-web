@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0-rc.1] - 2026-02-03
 
 ### Added
-- Set Me Up page with repo-specific instructions and format filter
+- Setup Guide page with repo-specific instructions and format filter
 - Search artifacts inside repositories, not just repo names
 - Redesigned repository browser with master-detail split-pane layout
 - Multi-platform Docker builds (amd64 + arm64)
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Align packages and builds pages with actual backend API
 - Remove standalone artifacts page, redirect to repositories
-- Make Set Me Up page accessible without authentication
+- Make Setup Guide page accessible without authentication
 
 ### Fixed
 - Pass BACKEND_URL at build time for Next.js rewrites

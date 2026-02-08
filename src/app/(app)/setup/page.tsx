@@ -527,7 +527,7 @@ export default function SetupPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Set Me Up"
+        title="Setup Guide"
         description="Configure your build tools and CI/CD pipelines to work with Artifact Keeper."
       />
 

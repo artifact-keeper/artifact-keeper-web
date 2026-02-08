@@ -60,7 +60,7 @@ const artifactItems: NavItem[] = [
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
   { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
-  { title: "Set Me Up", href: "/setup", icon: BookOpen },
+  { title: "Setup Guide", href: "/setup", icon: BookOpen },
 ];
 
 const integrationItems: NavItem[] = [
