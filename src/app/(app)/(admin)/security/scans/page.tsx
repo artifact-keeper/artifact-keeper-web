@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -6,9 +7,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
+import "@/lib/sdk-client";
+import {
+  listRepositories,
+  listScanConfigs,
+} from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
 import { artifactsApi } from "@/lib/api/artifacts";
-import apiClient from "@/lib/api-client";
 import type { ScanResult } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -123,10 +128,11 @@ export default function SecurityScansPage() {
   const { data: repos } = useQuery({
     queryKey: ["repositories-for-scan"],
     queryFn: async () => {
-      const { data } = await apiClient.get("/api/v1/repositories", {
-        params: { per_page: 100 },
+      const { data, error } = await listRepositories({
+        query: { per_page: 100 },
       });
-      return data?.items ?? data ?? [];
+      if (error) throw error;
+      return (data as any)?.items ?? data ?? [];
     },
     enabled: triggerOpen,
   });
@@ -134,7 +140,8 @@ export default function SecurityScansPage() {
   const { data: scanConfigs } = useQuery({
     queryKey: ["security", "scan-configs"],
     queryFn: async () => {
-      const { data } = await apiClient.get("/api/v1/security/configs");
+      const { data, error } = await listScanConfigs();
+      if (error) throw error;
       return new Set(
         ((data as Array<{ repository_id: string }>) ?? []).map(
           (c) => c.repository_id

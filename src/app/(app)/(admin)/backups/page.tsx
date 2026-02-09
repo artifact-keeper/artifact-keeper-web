@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useCallback } from "react";
@@ -19,7 +20,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import apiClient from "@/lib/api-client";
+import "@/lib/sdk-client";
+import {
+  listBackups,
+  createBackup,
+  executeBackup,
+  cancelBackup,
+  restoreBackup,
+  deleteBackup,
+} from "@artifact-keeper/sdk";
 import { useAuth } from "@/providers/auth-provider";
 import { formatBytes } from "@/lib/utils";
 
@@ -131,13 +140,14 @@ export default function BackupsPage() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["backups", statusFilter],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      params.append("per_page", "100");
-      if (statusFilter !== "__all__") params.append("status", statusFilter);
-      const response = await apiClient.get<BackupsResponse>(
-        `/api/v1/admin/backups?${params}`
-      );
-      return response.data;
+      const { data, error } = await listBackups({
+        query: {
+          per_page: 100,
+          status: statusFilter !== "__all__" ? statusFilter : undefined,
+        },
+      });
+      if (error) throw error;
+      return data as any as BackupsResponse;
     },
     enabled: !!user?.is_admin,
     refetchInterval: 10000,
@@ -158,10 +168,11 @@ export default function BackupsPage() {
   // -- mutations --
   const createMutation = useMutation({
     mutationFn: async (type: string) => {
-      const response = await apiClient.post<Backup>("/api/v1/admin/backups", {
-        type,
+      const { data, error } = await createBackup({
+        body: { type },
       });
-      return response.data;
+      if (error) throw error;
+      return data as any as Backup;
     },
     onSuccess: () => {
       toast.success("Backup created successfully");
@@ -174,7 +185,8 @@ export default function BackupsPage() {
 
   const executeMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/api/v1/admin/backups/${id}/execute`);
+      const { error } = await executeBackup({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Backup started");
@@ -185,7 +197,8 @@ export default function BackupsPage() {
 
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/api/v1/admin/backups/${id}/cancel`);
+      const { error } = await cancelBackup({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Backup cancelled");
@@ -196,7 +209,11 @@ export default function BackupsPage() {
 
   const restoreMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/api/v1/admin/backups/${id}/restore`);
+      const { error } = await restoreBackup({
+        path: { id },
+        body: {} as any,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Restore started");
@@ -209,7 +226,8 @@ export default function BackupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.delete(`/api/v1/admin/backups/${id}`);
+      const { error } = await deleteBackup({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Backup deleted");

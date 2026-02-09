@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Patch @artifact-keeper/sdk to add the ./client subpath export.
  * The published 1.1.0-dev.1 is missing this export; it's fixed in the

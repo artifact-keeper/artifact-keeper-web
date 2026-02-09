@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package } from "lucide-react";
 import { toast } from "sonner";
-import { AxiosError } from "axios";
-
 import { repositoriesApi } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
 import type { Repository, CreateRepositoryRequest } from "@/types";
@@ -42,8 +40,8 @@ import { RepoDetailPanel } from "./_components/repo-detail-panel";
 import { RepoDialogs } from "./_components/repo-dialogs";
 
 function getErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof AxiosError && err.response?.data?.error) {
-    return err.response.data.error;
+  if (err && typeof err === 'object' && 'error' in err && typeof (err as Record<string, unknown>).error === 'string') {
+    return (err as Record<string, unknown>).error as string;
   }
   if (err instanceof Error) {
     return err.message;
