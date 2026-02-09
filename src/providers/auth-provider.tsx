@@ -8,7 +8,15 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import apiClient from "@/lib/api-client";
+import '@/lib/sdk-client';
+import {
+  login as sdkLogin,
+  logout as sdkLogout,
+  getCurrentUser as sdkGetCurrentUser,
+  verifyTotp as sdkVerifyTotp,
+  changePassword as sdkChangePassword,
+  setupStatus as sdkSetupStatus,
+} from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
 
 interface AuthContextType {
@@ -55,8 +63,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const { data } = await apiClient.get<User>("/api/v1/auth/me");
-      setUser(data);
+      const { data, error } = await sdkGetCurrentUser();
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setUser(data as any);
     } catch {
       setUser(null);
       clearTokens();
@@ -65,21 +75,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
-      const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/login", {
-        username,
-        password,
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await sdkLogin({ body: { username, password } as any });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const loginData = data as any;
 
-      if (data.totp_required && data.totp_token) {
+      if (loginData.totp_required && loginData.totp_token) {
         setTotpRequired(true);
-        setTotpToken(data.totp_token);
+        setTotpToken(loginData.totp_token);
         return "totp"; // Don't redirect yet
       }
 
-      storeTokens(data);
+      storeTokens(loginData);
       await refreshUser();
 
-      if (data.must_change_password) {
+      if (loginData.must_change_password) {
         setMustChangePassword(true);
         return true;
       }
@@ -91,15 +102,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyTotp = useCallback(
     async (code: string) => {
       if (!totpToken) throw new Error("No TOTP token");
-      const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/totp/verify", {
-        totp_token: totpToken,
-        code,
-      });
-      storeTokens(data);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await sdkVerifyTotp({ body: { totp_token: totpToken, code } as any });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tokenData = data as any;
+      storeTokens(tokenData);
       setTotpRequired(false);
       setTotpToken(null);
       await refreshUser();
-      if (data.must_change_password) {
+      if (tokenData.must_change_password) {
         setMustChangePassword(true);
       }
     },
@@ -113,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiClient.post("/api/v1/auth/logout");
+      await sdkLogout();
     } catch {
       // Ignore logout errors
     } finally {
@@ -127,10 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (currentPassword: string, newPassword: string) => {
       if (!user) throw new Error("Not authenticated");
 
-      await apiClient.post(`/api/v1/users/${user.id}/password`, {
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await sdkChangePassword({ path: { id: user.id }, body: { current_password: currentPassword, new_password: newPassword } as any });
+      if (error) throw error;
 
       setMustChangePassword(false);
       setSetupRequired(false);
@@ -147,8 +158,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function initAuth(): Promise<void> {
       // Check if first-boot setup is required
       try {
-        const { data: setupStatus } = await apiClient.get<{ setup_required: boolean }>("/api/v1/setup/status");
-        if (setupStatus.setup_required) {
+        const { data: setupData } = await sdkSetupStatus();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((setupData as any)?.setup_required) {
           setSetupRequired(true);
         }
       } catch {
@@ -158,9 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Try to authenticate via httpOnly cookies (sent automatically by browser).
       // refreshUser will set user state if a valid session cookie exists.
       try {
-        const { data } = await apiClient.get<User>("/api/v1/auth/me");
-        if (data) {
-          setUser(data);
+        const { data, error } = await sdkGetCurrentUser();
+        if (!error && data) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setUser(data as any);
           setIsLoading(false);
           return;
         }
@@ -190,11 +203,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const health = await healthRes.json();
         if (health.demo_mode !== true) return;
 
-        const { data } = await apiClient.post<LoginResponse>("/api/v1/auth/login", {
-          username: "admin",
-          password: "demo-password-readonly",
-        });
-        storeTokens(data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await sdkLogin({ body: { username: "admin", password: "demo-password-readonly" } as any });
+        if (error) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        storeTokens(data as any);
         await refreshUser();
       } catch {
         // Health check or demo auto-login failed, continue as anonymous

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -16,7 +17,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import apiClient from "@/lib/api-client";
+import "@/lib/sdk-client";
+import {
+  listPlugins,
+  getPluginConfig,
+  enablePlugin,
+  disablePlugin,
+  uninstallPlugin,
+  updatePluginConfig,
+} from "@artifact-keeper/sdk";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,23 +146,24 @@ export default function PluginsPage() {
       statusFilter === "__all__" ? undefined : statusFilter,
     ],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      params.append("per_page", "100");
-      if (statusFilter !== "__all__") params.append("status", statusFilter);
-      const response = await apiClient.get<PluginsResponse>(
-        `/api/v1/plugins?${params}`
-      );
-      return response.data;
+      const { data, error } = await listPlugins({
+        query: {
+          status: statusFilter !== "__all__" ? statusFilter : undefined,
+        },
+      });
+      if (error) throw error;
+      return data as any as PluginsResponse;
     },
   });
 
   const { data: pluginConfig } = useQuery({
     queryKey: ["plugin-config", configPlugin?.id],
     queryFn: async () => {
-      const response = await apiClient.get<{ items: PluginConfig[] }>(
-        `/api/v1/plugins/${configPlugin?.id}/config`
-      );
-      return response.data.items;
+      const { data, error } = await getPluginConfig({
+        path: { id: configPlugin!.id },
+      });
+      if (error) throw error;
+      return (data as any).items as PluginConfig[];
     },
     enabled: !!configPlugin,
   });
@@ -165,7 +175,8 @@ export default function PluginsPage() {
   // -- mutations --
   const enableMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/api/v1/plugins/${id}/enable`);
+      const { error } = await enablePlugin({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -176,7 +187,8 @@ export default function PluginsPage() {
 
   const disableMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.post(`/api/v1/plugins/${id}/disable`);
+      const { error } = await disablePlugin({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -187,7 +199,8 @@ export default function PluginsPage() {
 
   const uninstallMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.delete(`/api/v1/plugins/${id}`);
+      const { error } = await uninstallPlugin({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -207,7 +220,11 @@ export default function PluginsPage() {
       id: string;
       config: Record<string, string>;
     }) => {
-      await apiClient.post(`/api/v1/plugins/${id}/config`, config);
+      const { error } = await updatePluginConfig({
+        path: { id },
+        body: { config } as any,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugin-config"] });

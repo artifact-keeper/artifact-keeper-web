@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -18,10 +19,11 @@ import {
   XCircle,
 } from "lucide-react";
 
+import "@/lib/sdk-client";
+import { listRepositories } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
 import dtApi from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
-import apiClient from "@/lib/api-client";
 import type { RepoSecurityScore } from "@/types/security";
 import type { DtProjectMetrics } from "@/types/dependency-track";
 import {
@@ -187,10 +189,11 @@ export default function SecurityDashboardPage() {
   const { data: repos } = useQuery({
     queryKey: ["repositories-for-scan"],
     queryFn: async () => {
-      const { data } = await apiClient.get("/api/v1/repositories", {
-        params: { per_page: 100 },
+      const { data, error } = await listRepositories({
+        query: { per_page: 100 },
       });
-      return data?.items ?? data ?? [];
+      if (error) throw error;
+      return (data as any)?.items ?? data ?? [];
     },
     enabled: triggerOpen,
   });

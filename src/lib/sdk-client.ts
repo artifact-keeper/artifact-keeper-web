@@ -14,7 +14,7 @@
 import { client } from '@artifact-keeper/sdk/client';
 
 // ---------------------------------------------------------------------------
-// Remote instance helpers (same logic as api-client.ts)
+// Remote instance helpers
 // ---------------------------------------------------------------------------
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
@@ -72,7 +72,7 @@ client.interceptors.request.use((request) => {
 });
 
 // ---------------------------------------------------------------------------
-// Token refresh mutex (mirrors api-client.ts logic)
+// Token refresh mutex
 // ---------------------------------------------------------------------------
 
 let isRefreshing = false;

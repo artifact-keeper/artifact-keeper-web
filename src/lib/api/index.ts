@@ -1,4 +1,3 @@
-export { default as apiClient } from '@/lib/api-client';
 export { default as authApi } from './auth';
 export { default as repositoriesApi } from './repositories';
 export { default as artifactsApi } from './artifacts';

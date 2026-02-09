@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
-import apiClient from "@/lib/api-client";
+import '@/lib/sdk-client';
+import {
+  createInstance as sdkCreateInstance,
+  deleteInstance as sdkDeleteInstance,
+} from '@artifact-keeper/sdk';
 
 export interface InstanceConfig {
   id: string;
@@ -91,21 +95,16 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
 
   const addInstance = useCallback(
     async (config: { name: string; url: string; apiKey: string }) => {
-      // Store API key securely on the backend; only metadata comes back
-      const { data } = await apiClient.post<{
-        id: string;
-        name: string;
-        url: string;
-      }>("/api/v1/instances", {
-        name: config.name,
-        url: config.url,
-        api_key: config.apiKey,
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await sdkCreateInstance({ body: { name: config.name, url: config.url, api_key: config.apiKey } as any });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = data as any;
 
       const newInstance: InstanceConfig = {
-        id: data.id,
-        name: data.name,
-        url: data.url,
+        id: result.id,
+        name: result.name,
+        url: result.url,
       };
       setInstances((prev) => {
         const next = [...prev, newInstance];
@@ -120,7 +119,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       if (id === "local") return;
       try {
-        await apiClient.delete(`/api/v1/instances/${id}`);
+        await sdkDeleteInstance({ path: { id } });
       } catch {
         // Ignore backend errors - remove locally anyway
       }

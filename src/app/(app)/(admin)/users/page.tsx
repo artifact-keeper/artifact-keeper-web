@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useCallback } from "react";
@@ -15,7 +16,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import apiClient from "@/lib/api-client";
+import "@/lib/sdk-client";
+import {
+  createUser as sdkCreateUser,
+  updateUser as sdkUpdateUser,
+  resetPassword as sdkResetPassword,
+  deleteUser as sdkDeleteUser,
+} from "@artifact-keeper/sdk";
 import { adminApi } from "@/lib/api/admin";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, CreateUserResponse } from "@/types";
@@ -127,11 +134,11 @@ export default function UsersPage() {
       if (!form.auto_generate && form.password) {
         payload.password = form.password;
       }
-      const response = await apiClient.post<CreateUserResponse>(
-        "/api/v1/users",
-        payload
-      );
-      return response.data;
+      const { data, error } = await sdkCreateUser({
+        body: payload as any,
+      });
+      if (error) throw error;
+      return data as any as CreateUserResponse;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -152,14 +159,18 @@ export default function UsersPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: EditUserForm }) => {
-      const response = await apiClient.patch(`/api/v1/users/${id}`, {
-        email: data.email,
-        display_name: data.display_name,
-        is_admin: data.is_admin,
-        is_active: data.is_active,
+    mutationFn: async ({ id, data: formData }: { id: string; data: EditUserForm }) => {
+      const { data, error } = await sdkUpdateUser({
+        path: { id },
+        body: {
+          email: formData.email,
+          display_name: formData.display_name,
+          is_admin: formData.is_admin,
+          is_active: formData.is_active,
+        },
       });
-      return response.data;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast.success("User updated successfully");
@@ -174,7 +185,11 @@ export default function UsersPage() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      await apiClient.patch(`/api/v1/users/${id}`, { is_active });
+      const { error } = await sdkUpdateUser({
+        path: { id },
+        body: { is_active },
+      });
+      if (error) throw error;
     },
     onSuccess: (_, vars) => {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
@@ -187,10 +202,11 @@ export default function UsersPage() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiClient.post<{ temporary_password: string }>(
-        `/api/v1/users/${id}/password/reset`
-      );
-      return response.data;
+      const { data, error } = await sdkResetPassword({
+        path: { id },
+      });
+      if (error) throw error;
+      return data as any as { temporary_password: string };
     },
     onSuccess: (data, userId) => {
       const u = users?.find((x) => x.id === userId);
@@ -206,7 +222,8 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiClient.delete(`/api/v1/users/${id}`);
+      const { error } = await sdkDeleteUser({ path: { id } });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("User deleted successfully");
