@@ -1,4 +1,11 @@
-import apiClient from "@/lib/api-client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  setupTotp as sdkSetupTotp,
+  enableTotp as sdkEnableTotp,
+  verifyTotp as sdkVerifyTotp,
+  disableTotp as sdkDisableTotp,
+} from '@artifact-keeper/sdk';
 
 export interface TotpSetupResponse {
   secret: string;
@@ -10,15 +17,27 @@ export interface TotpEnableResponse {
 }
 
 export const totpApi = {
-  setup: () =>
-    apiClient.post<TotpSetupResponse>("/api/v1/auth/totp/setup").then((r) => r.data),
+  setup: async () => {
+    const { data, error } = await sdkSetupTotp();
+    if (error) throw error;
+    return data as any;
+  },
 
-  enable: (code: string) =>
-    apiClient.post<TotpEnableResponse>("/api/v1/auth/totp/enable", { code }).then((r) => r.data),
+  enable: async (code: string) => {
+    const { data, error } = await sdkEnableTotp({ body: { code } as any });
+    if (error) throw error;
+    return data as any;
+  },
 
-  verify: (totpToken: string, code: string) =>
-    apiClient.post("/api/v1/auth/totp/verify", { totp_token: totpToken, code }).then((r) => r.data),
+  verify: async (totpToken: string, code: string) => {
+    const { data, error } = await sdkVerifyTotp({ body: { totp_token: totpToken, code } as any });
+    if (error) throw error;
+    return data as any;
+  },
 
-  disable: (password: string, code: string) =>
-    apiClient.post("/api/v1/auth/totp/disable", { password, code }).then((r) => r.data),
+  disable: async (password: string, code: string) => {
+    const { data, error } = await sdkDisableTotp({ body: { password, code } as any });
+    if (error) throw error;
+    return data as any;
+  },
 };

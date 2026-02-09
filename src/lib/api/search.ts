@@ -1,4 +1,6 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import { quickSearch, advancedSearch, checksumSearch } from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
 
 export interface SearchResult {
@@ -44,34 +46,34 @@ export interface ChecksumSearchParams {
 
 export const searchApi = {
   quickSearch: async (params: QuickSearchParams): Promise<SearchResult[]> => {
-    const response = await apiClient.get<{ results: SearchResult[] }>('/api/v1/search/quick', {
-      params: {
+    const { data, error } = await quickSearch({
+      query: {
         q: params.query,
         limit: params.limit,
         types: params.types?.join(','),
-      },
+      } as any,
     });
-    return response.data.results;
+    if (error) throw error;
+    return (data as any).results as SearchResult[];
   },
 
   advancedSearch: async (
     params: AdvancedSearchParams
   ): Promise<PaginatedResponse<SearchResult>> => {
-    const response = await apiClient.get<PaginatedResponse<SearchResult>>(
-      '/api/v1/search/advanced',
-      { params }
-    );
-    return response.data;
+    const { data, error } = await advancedSearch({ query: params as any });
+    if (error) throw error;
+    return data as any as PaginatedResponse<SearchResult>;
   },
 
   checksumSearch: async (params: ChecksumSearchParams): Promise<Artifact[]> => {
-    const response = await apiClient.get<{ artifacts: Artifact[] }>('/api/v1/search/checksum', {
-      params: {
+    const { data, error } = await checksumSearch({
+      query: {
         checksum: params.checksum,
         algorithm: params.algorithm || 'sha256',
-      },
+      } as any,
     });
-    return response.data.artifacts;
+    if (error) throw error;
+    return (data as any).artifacts as Artifact[];
   },
 };
 

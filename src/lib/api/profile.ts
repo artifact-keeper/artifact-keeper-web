@@ -1,4 +1,12 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  getCurrentUser as sdkGetCurrentUser,
+  updateUser as sdkUpdateUser,
+  listUserTokens as sdkListUserTokens,
+  createApiToken as sdkCreateApiToken,
+  revokeApiToken as sdkRevokeApiToken,
+} from '@artifact-keeper/sdk';
 import type { User } from '@/types';
 
 export interface UpdateProfileRequest {
@@ -52,53 +60,63 @@ export interface CreateAccessTokenResponse {
 
 export const profileApi = {
   get: async (): Promise<User> => {
-    const response = await apiClient.get<User>('/api/v1/profile');
-    return response.data;
+    const { data, error } = await sdkGetCurrentUser();
+    if (error) throw error;
+    return data as any;
   },
 
-  update: async (data: UpdateProfileRequest): Promise<User> => {
-    const response = await apiClient.put<User>('/api/v1/profile', data);
-    return response.data;
+  update: async (reqData: UpdateProfileRequest): Promise<User> => {
+    // getCurrentUser to get the user id, then updateUser
+    const { data: me, error: meError } = await sdkGetCurrentUser();
+    if (meError) throw meError;
+    const userId = (me as any).id;
+    const { data, error } = await sdkUpdateUser({ path: { id: userId }, body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   // API Keys
   listApiKeys: async (): Promise<ApiKey[]> => {
-    const response = await apiClient.get<{ api_keys: ApiKey[] }>('/api/v1/profile/api-keys');
-    return response.data.api_keys;
+    const { data: me, error: meError } = await sdkGetCurrentUser();
+    if (meError) throw meError;
+    const userId = (me as any).id;
+    const { data, error } = await sdkListUserTokens({ path: { id: userId } });
+    if (error) throw error;
+    return (data as any)?.api_keys ?? (data as any);
   },
 
-  createApiKey: async (data: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
-    const response = await apiClient.post<CreateApiKeyResponse>(
-      '/api/v1/profile/api-keys',
-      data
-    );
-    return response.data;
+  createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
+    const { data, error } = await sdkCreateApiToken({ body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   deleteApiKey: async (keyId: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/profile/api-keys/${keyId}`);
+    const { error } = await sdkRevokeApiToken({ path: { token_id: keyId } });
+    if (error) throw error;
   },
 
   // Access Tokens
   listAccessTokens: async (): Promise<AccessToken[]> => {
-    const response = await apiClient.get<{ access_tokens: AccessToken[] }>(
-      '/api/v1/profile/access-tokens'
-    );
-    return response.data.access_tokens;
+    const { data: me, error: meError } = await sdkGetCurrentUser();
+    if (meError) throw meError;
+    const userId = (me as any).id;
+    const { data, error } = await sdkListUserTokens({ path: { id: userId } });
+    if (error) throw error;
+    return (data as any)?.access_tokens ?? (data as any);
   },
 
   createAccessToken: async (
-    data: CreateAccessTokenRequest
+    reqData: CreateAccessTokenRequest
   ): Promise<CreateAccessTokenResponse> => {
-    const response = await apiClient.post<CreateAccessTokenResponse>(
-      '/api/v1/profile/access-tokens',
-      data
-    );
-    return response.data;
+    const { data, error } = await sdkCreateApiToken({ body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   deleteAccessToken: async (tokenId: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/profile/access-tokens/${tokenId}`);
+    const { error } = await sdkRevokeApiToken({ path: { token_id: tokenId } });
+    if (error) throw error;
   },
 };
 

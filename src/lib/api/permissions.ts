@@ -1,4 +1,12 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  listPermissions,
+  getPermission,
+  createPermission,
+  updatePermission,
+  deletePermission,
+} from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
@@ -37,35 +45,38 @@ export interface ListPermissionsParams {
 
 export const permissionsApi = {
   list: async (params: ListPermissionsParams = {}): Promise<PaginatedResponse<Permission>> => {
-    const response = await apiClient.get<PaginatedResponse<Permission>>('/api/v1/permissions', {
-      params,
-    });
-    return response.data;
+    const { data, error } = await listPermissions({ query: params as any });
+    if (error) throw error;
+    return data as any as PaginatedResponse<Permission>;
   },
 
   get: async (permissionId: string): Promise<Permission> => {
-    const response = await apiClient.get<Permission>(`/api/v1/permissions/${permissionId}`);
-    return response.data;
+    const { data, error } = await getPermission({ path: { id: permissionId } });
+    if (error) throw error;
+    return data as any as Permission;
   },
 
   create: async (data: CreatePermissionRequest): Promise<Permission> => {
-    const response = await apiClient.post<Permission>('/api/v1/permissions', data);
-    return response.data;
+    const { data: result, error } = await createPermission({ body: data as any });
+    if (error) throw error;
+    return result as any as Permission;
   },
 
   update: async (
     permissionId: string,
     data: Partial<CreatePermissionRequest>
   ): Promise<Permission> => {
-    const response = await apiClient.put<Permission>(
-      `/api/v1/permissions/${permissionId}`,
-      data
-    );
-    return response.data;
+    const { data: result, error } = await updatePermission({
+      path: { id: permissionId },
+      body: data as any,
+    });
+    if (error) throw error;
+    return result as any as Permission;
   },
 
   delete: async (permissionId: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/permissions/${permissionId}`);
+    const { error } = await deletePermission({ path: { id: permissionId } });
+    if (error) throw error;
   },
 };
 

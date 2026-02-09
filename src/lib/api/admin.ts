@@ -1,20 +1,25 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import { getSystemStats, listUsers, healthCheck } from '@artifact-keeper/sdk';
 import type { AdminStats, User, HealthResponse } from '@/types';
 
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
-    const response = await apiClient.get<AdminStats>('/api/v1/admin/stats');
-    return response.data;
+    const { data, error } = await getSystemStats();
+    if (error) throw error;
+    return data as any as AdminStats;
   },
 
   listUsers: async (): Promise<User[]> => {
-    const response = await apiClient.get<{ items: User[] }>('/api/v1/users');
-    return response.data.items;
+    const { data, error } = await listUsers();
+    if (error) throw error;
+    return (data as any).items as User[];
   },
 
   getHealth: async (): Promise<HealthResponse> => {
-    const response = await apiClient.get<HealthResponse>('/health');
-    return response.data;
+    const { data, error } = await healthCheck();
+    if (error) throw error;
+    return data as any as HealthResponse;
   },
 };
 

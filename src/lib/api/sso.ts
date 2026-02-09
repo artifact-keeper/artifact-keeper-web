@@ -1,4 +1,29 @@
-import apiClient from "@/lib/api-client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  listProviders as sdkListProviders,
+  listOidc as sdkListOidc,
+  getOidc as sdkGetOidc,
+  createOidc as sdkCreateOidc,
+  updateOidc as sdkUpdateOidc,
+  deleteOidc as sdkDeleteOidc,
+  toggleOidc as sdkToggleOidc,
+  listLdap as sdkListLdap,
+  getLdap as sdkGetLdap,
+  createLdap as sdkCreateLdap,
+  updateLdap as sdkUpdateLdap,
+  deleteLdap as sdkDeleteLdap,
+  toggleLdap as sdkToggleLdap,
+  testLdap as sdkTestLdap,
+  ldapLogin as sdkLdapLogin,
+  listSaml as sdkListSaml,
+  getSaml as sdkGetSaml,
+  createSaml as sdkCreateSaml,
+  updateSaml as sdkUpdateSaml,
+  deleteSaml as sdkDeleteSaml,
+  toggleSaml as sdkToggleSaml,
+  exchangeCode as sdkExchangeCode,
+} from '@artifact-keeper/sdk';
 import type {
   SsoProvider,
   OidcConfig,
@@ -17,104 +42,97 @@ export const ssoApi = {
   // --- Providers (public) ---
 
   listProviders: async (): Promise<SsoProvider[]> => {
-    const response = await apiClient.get<SsoProvider[]>(
-      "/api/v1/auth/sso/providers"
-    );
-    return response.data;
+    const { data, error } = await sdkListProviders();
+    if (error) throw error;
+    return data as any;
   },
 
   // --- OIDC ---
 
   listOidc: async (): Promise<OidcConfig[]> => {
-    const response = await apiClient.get<OidcConfig[]>(
-      "/api/v1/admin/sso/oidc"
-    );
-    return response.data;
+    const { data, error } = await sdkListOidc();
+    if (error) throw error;
+    return data as any;
   },
 
   getOidc: async (id: string): Promise<OidcConfig> => {
-    const response = await apiClient.get<OidcConfig>(
-      `/api/v1/admin/sso/oidc/${id}`
-    );
-    return response.data;
+    const { data, error } = await sdkGetOidc({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
-  createOidc: async (data: CreateOidcConfigRequest): Promise<OidcConfig> => {
-    const response = await apiClient.post<OidcConfig>(
-      "/api/v1/admin/sso/oidc",
-      data
-    );
-    return response.data;
+  createOidc: async (reqData: CreateOidcConfigRequest): Promise<OidcConfig> => {
+    const { data, error } = await sdkCreateOidc({ body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   updateOidc: async (
     id: string,
-    data: UpdateOidcConfigRequest
+    reqData: UpdateOidcConfigRequest
   ): Promise<OidcConfig> => {
-    const response = await apiClient.put<OidcConfig>(
-      `/api/v1/admin/sso/oidc/${id}`,
-      data
-    );
-    return response.data;
+    const { data, error } = await sdkUpdateOidc({ path: { id }, body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   deleteOidc: async (id: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/admin/sso/oidc/${id}`);
+    const { error } = await sdkDeleteOidc({ path: { id } });
+    if (error) throw error;
   },
 
   enableOidc: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/oidc/${id}/enable`);
+    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: true } as any });
+    if (error) throw error;
   },
 
   disableOidc: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/oidc/${id}/disable`);
+    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: false } as any });
+    if (error) throw error;
   },
 
   // --- LDAP ---
 
   listLdap: async (): Promise<LdapConfig[]> => {
-    const response = await apiClient.get<LdapConfig[]>(
-      "/api/v1/admin/sso/ldap"
-    );
-    return response.data;
+    const { data, error } = await sdkListLdap();
+    if (error) throw error;
+    return data as any;
   },
 
   getLdap: async (id: string): Promise<LdapConfig> => {
-    const response = await apiClient.get<LdapConfig>(
-      `/api/v1/admin/sso/ldap/${id}`
-    );
-    return response.data;
+    const { data, error } = await sdkGetLdap({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
-  createLdap: async (data: CreateLdapConfigRequest): Promise<LdapConfig> => {
-    const response = await apiClient.post<LdapConfig>(
-      "/api/v1/admin/sso/ldap",
-      data
-    );
-    return response.data;
+  createLdap: async (reqData: CreateLdapConfigRequest): Promise<LdapConfig> => {
+    const { data, error } = await sdkCreateLdap({ body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   updateLdap: async (
     id: string,
-    data: UpdateLdapConfigRequest
+    reqData: UpdateLdapConfigRequest
   ): Promise<LdapConfig> => {
-    const response = await apiClient.put<LdapConfig>(
-      `/api/v1/admin/sso/ldap/${id}`,
-      data
-    );
-    return response.data;
+    const { data, error } = await sdkUpdateLdap({ path: { id }, body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   deleteLdap: async (id: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/admin/sso/ldap/${id}`);
+    const { error } = await sdkDeleteLdap({ path: { id } });
+    if (error) throw error;
   },
 
   enableLdap: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/ldap/${id}/enable`);
+    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: true } as any });
+    if (error) throw error;
   },
 
   disableLdap: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/ldap/${id}/disable`);
+    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: false } as any });
+    if (error) throw error;
   },
 
   ldapLogin: async (
@@ -122,65 +140,62 @@ export const ssoApi = {
     username: string,
     password: string
   ): Promise<{ access_token: string; refresh_token: string }> => {
-    const response = await apiClient.post<{
-      access_token: string;
-      refresh_token: string;
-    }>(`/api/v1/auth/sso/ldap/${providerId}/login`, { username, password });
-    return response.data;
+    const { data, error } = await sdkLdapLogin({
+      path: { id: providerId },
+      body: { username, password } as any,
+    });
+    if (error) throw error;
+    return data as any;
   },
 
   testLdap: async (id: string): Promise<LdapTestResult> => {
-    const response = await apiClient.post<LdapTestResult>(
-      `/api/v1/admin/sso/ldap/${id}/test`
-    );
-    return response.data;
+    const { data, error } = await sdkTestLdap({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
   // --- SAML ---
 
   listSaml: async (): Promise<SamlConfig[]> => {
-    const response = await apiClient.get<SamlConfig[]>(
-      "/api/v1/admin/sso/saml"
-    );
-    return response.data;
+    const { data, error } = await sdkListSaml();
+    if (error) throw error;
+    return data as any;
   },
 
   getSaml: async (id: string): Promise<SamlConfig> => {
-    const response = await apiClient.get<SamlConfig>(
-      `/api/v1/admin/sso/saml/${id}`
-    );
-    return response.data;
+    const { data, error } = await sdkGetSaml({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
-  createSaml: async (data: CreateSamlConfigRequest): Promise<SamlConfig> => {
-    const response = await apiClient.post<SamlConfig>(
-      "/api/v1/admin/sso/saml",
-      data
-    );
-    return response.data;
+  createSaml: async (reqData: CreateSamlConfigRequest): Promise<SamlConfig> => {
+    const { data, error } = await sdkCreateSaml({ body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   updateSaml: async (
     id: string,
-    data: UpdateSamlConfigRequest
+    reqData: UpdateSamlConfigRequest
   ): Promise<SamlConfig> => {
-    const response = await apiClient.put<SamlConfig>(
-      `/api/v1/admin/sso/saml/${id}`,
-      data
-    );
-    return response.data;
+    const { data, error } = await sdkUpdateSaml({ path: { id }, body: reqData as any });
+    if (error) throw error;
+    return data as any;
   },
 
   deleteSaml: async (id: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/admin/sso/saml/${id}`);
+    const { error } = await sdkDeleteSaml({ path: { id } });
+    if (error) throw error;
   },
 
   enableSaml: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/saml/${id}/enable`);
+    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: true } as any });
+    if (error) throw error;
   },
 
   disableSaml: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/sso/saml/${id}/disable`);
+    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: false } as any });
+    if (error) throw error;
   },
 
   // --- Exchange Code ---
@@ -188,12 +203,9 @@ export const ssoApi = {
   exchangeCode: async (
     code: string
   ): Promise<{ access_token: string; refresh_token: string }> => {
-    const { data } = await apiClient.post<{
-      access_token: string;
-      refresh_token: string;
-      token_type: string;
-    }>("/api/v1/auth/sso/exchange", { code });
-    return data;
+    const { data, error } = await sdkExchangeCode({ body: { code } as any });
+    if (error) throw error;
+    return data as any;
   },
 };
 

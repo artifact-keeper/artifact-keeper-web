@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
+    "@artifact-keeper/sdk": "^1.1.0-dev.1",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.20",
     "axios": "^1.13.4",

@@ -5,6 +5,7 @@ const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
 const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
+  transpilePackages: ["@artifact-keeper/sdk"],
   async headers() {
     return [
       {

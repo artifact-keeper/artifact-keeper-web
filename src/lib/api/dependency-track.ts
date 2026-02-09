@@ -1,4 +1,18 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  dtStatus as sdkDtStatus,
+  listProjects as sdkListProjects,
+
+  getProjectFindings as sdkGetProjectFindings,
+  getProjectComponents as sdkGetProjectComponents,
+  getProjectMetrics as sdkGetProjectMetrics,
+  getProjectMetricsHistory as sdkGetProjectMetricsHistory,
+  getProjectViolations as sdkGetProjectViolations,
+  getPortfolioMetrics as sdkGetPortfolioMetrics,
+  updateAnalysis as sdkUpdateAnalysis,
+  listDependencyTrackPolicies as sdkListDependencyTrackPolicies,
+} from '@artifact-keeper/sdk';
 import type {
   DtStatus,
   DtProject,
@@ -12,59 +26,68 @@ import type {
   UpdateAnalysisRequest,
 } from '@/types/dependency-track';
 
-const BASE = '/api/v1/dependency-track';
-
 const dtApi = {
   getStatus: async (): Promise<DtStatus> => {
-    const { data } = await apiClient.get(`${BASE}/status`);
-    return data;
+    const { data, error } = await sdkDtStatus();
+    if (error) throw error;
+    return data as any;
   },
 
   listProjects: async (): Promise<DtProject[]> => {
-    const { data } = await apiClient.get(`${BASE}/projects`);
-    return data;
+    const { data, error } = await sdkListProjects();
+    if (error) throw error;
+    return data as any;
   },
 
   getProjectFindings: async (projectUuid: string): Promise<DtFinding[]> => {
-    const { data } = await apiClient.get(`${BASE}/projects/${projectUuid}/findings`);
-    return data;
+    const { data, error } = await sdkGetProjectFindings({ path: { project_uuid: projectUuid } });
+    if (error) throw error;
+    return data as any;
   },
 
   getProjectComponents: async (projectUuid: string): Promise<DtComponentFull[]> => {
-    const { data } = await apiClient.get(`${BASE}/projects/${projectUuid}/components`);
-    return data;
+    const { data, error } = await sdkGetProjectComponents({ path: { project_uuid: projectUuid } });
+    if (error) throw error;
+    return data as any;
   },
 
   getProjectMetrics: async (projectUuid: string): Promise<DtProjectMetrics> => {
-    const { data } = await apiClient.get(`${BASE}/projects/${projectUuid}/metrics`);
-    return data;
+    const { data, error } = await sdkGetProjectMetrics({ path: { project_uuid: projectUuid } });
+    if (error) throw error;
+    return data as any;
   },
 
   getProjectMetricsHistory: async (projectUuid: string, days?: number): Promise<DtProjectMetrics[]> => {
-    const { data } = await apiClient.get(`${BASE}/projects/${projectUuid}/metrics/history`, {
-      params: days !== undefined ? { days } : undefined,
+    const { data, error } = await sdkGetProjectMetricsHistory({
+      path: { project_uuid: projectUuid },
+      query: days !== undefined ? { days } as any : undefined,
     });
-    return data;
+    if (error) throw error;
+    return data as any;
   },
 
   getPortfolioMetrics: async (): Promise<DtPortfolioMetrics> => {
-    const { data } = await apiClient.get(`${BASE}/metrics/portfolio`);
-    return data;
+    const { data, error } = await sdkGetPortfolioMetrics();
+    if (error) throw error;
+    return data as any;
   },
 
   getProjectViolations: async (projectUuid: string): Promise<DtPolicyViolation[]> => {
-    const { data } = await apiClient.get(`${BASE}/projects/${projectUuid}/violations`);
-    return data;
+    const { data, error } = await sdkGetProjectViolations({ path: { project_uuid: projectUuid } });
+    if (error) throw error;
+    return data as any;
   },
 
   updateAnalysis: async (req: UpdateAnalysisRequest): Promise<DtAnalysisResponse> => {
-    const { data } = await apiClient.put(`${BASE}/analysis`, req);
-    return data;
+    const { data, error } = await sdkUpdateAnalysis({ body: req as any });
+    if (error) throw error;
+    return data as any;
   },
 
   listPolicies: async (): Promise<DtPolicyFull[]> => {
-    const { data } = await apiClient.get(`${BASE}/policies`);
-    return data;
+    const { data, error } = await sdkListDependencyTrackPolicies();
+    if (error) throw error;
+    return data as any;
   },
 
   /** Aggregate violations across the top N projects */
