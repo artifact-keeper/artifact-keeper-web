@@ -1,4 +1,12 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  listRepositories as sdkListRepositories,
+  listArtifacts as sdkListArtifacts,
+  promoteArtifact as sdkPromoteArtifact,
+  promoteArtifactsBulk as sdkPromoteArtifactsBulk,
+  promotionHistory as sdkPromotionHistory,
+} from '@artifact-keeper/sdk';
 import type {
   PromoteArtifactRequest,
   BulkPromoteRequest,
@@ -17,13 +25,14 @@ export const promotionApi = {
     per_page?: number;
     format?: string;
   }): Promise<PaginatedResponse<Repository>> => {
-    const { data } = await apiClient.get<PaginatedResponse<Repository>>('/api/v1/repositories', {
-      params: {
+    const { data, error } = await sdkListRepositories({
+      query: {
         ...params,
         repo_type: 'staging',
-      },
+      } as any,
     });
-    return data;
+    if (error) throw error;
+    return data as any;
   },
 
   /**
@@ -37,11 +46,12 @@ export const promotionApi = {
       path_prefix?: string;
     }
   ): Promise<PaginatedResponse<Artifact>> => {
-    const { data } = await apiClient.get<PaginatedResponse<Artifact>>(
-      `/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts`,
-      { params }
-    );
-    return data;
+    const { data, error } = await sdkListArtifacts({
+      path: { key: repoKey },
+      query: params as any,
+    });
+    if (error) throw error;
+    return data as any;
   },
 
   /**
@@ -50,14 +60,15 @@ export const promotionApi = {
   listReleaseRepos: async (params?: {
     format?: string;
   }): Promise<PaginatedResponse<Repository>> => {
-    const { data } = await apiClient.get<PaginatedResponse<Repository>>('/api/v1/repositories', {
-      params: {
+    const { data, error } = await sdkListRepositories({
+      query: {
         ...params,
         repo_type: 'local',
         per_page: 100,
-      },
+      } as any,
     });
-    return data;
+    if (error) throw error;
+    return data as any;
   },
 
   /**
@@ -68,11 +79,12 @@ export const promotionApi = {
     artifactId: string,
     request: PromoteArtifactRequest
   ): Promise<PromotionResponse> => {
-    const { data } = await apiClient.post<PromotionResponse>(
-      `/api/v1/promotion/repositories/${encodeURIComponent(repoKey)}/artifacts/${artifactId}/promote`,
-      request
-    );
-    return data;
+    const { data, error } = await sdkPromoteArtifact({
+      path: { key: repoKey, artifact_id: artifactId },
+      body: request as any,
+    });
+    if (error) throw error;
+    return data as any;
   },
 
   /**
@@ -82,11 +94,12 @@ export const promotionApi = {
     repoKey: string,
     request: BulkPromoteRequest
   ): Promise<BulkPromotionResponse> => {
-    const { data } = await apiClient.post<BulkPromotionResponse>(
-      `/api/v1/promotion/repositories/${encodeURIComponent(repoKey)}/promote`,
-      request
-    );
-    return data;
+    const { data, error } = await sdkPromoteArtifactsBulk({
+      path: { key: repoKey },
+      body: request as any,
+    });
+    if (error) throw error;
+    return data as any;
   },
 
   /**
@@ -100,10 +113,11 @@ export const promotionApi = {
       artifact_id?: string;
     }
   ): Promise<PromotionHistoryResponse> => {
-    const { data } = await apiClient.get<PromotionHistoryResponse>(
-      `/api/v1/promotion/repositories/${encodeURIComponent(repoKey)}/promotion-history`,
-      { params }
-    );
-    return data;
+    const { data, error } = await sdkPromotionHistory({
+      path: { key: repoKey },
+      query: params as any,
+    });
+    if (error) throw error;
+    return data as any;
   },
 };

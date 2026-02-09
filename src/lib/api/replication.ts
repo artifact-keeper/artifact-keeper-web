@@ -1,4 +1,18 @@
-import apiClient from "@/lib/api-client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  getIdentity as sdkGetIdentity,
+  listPeers as sdkListPeers,
+  getPeer as sdkGetPeer,
+  registerPeer as sdkRegisterPeer,
+  unregisterPeer as sdkUnregisterPeer,
+  heartbeat as sdkHeartbeat,
+  triggerSync as sdkTriggerSync,
+  getAssignedRepos as sdkGetAssignedRepos,
+  assignRepo as sdkAssignRepo,
+  unassignRepo as sdkUnassignRepo,
+  listPeerConnections as sdkListPeerConnections,
+} from '@artifact-keeper/sdk';
 
 export interface PeerInstance {
   id: string;
@@ -56,8 +70,9 @@ export interface AssignRepoRequest {
 export const peersApi = {
   /** Get this instance's identity */
   getIdentity: async (): Promise<PeerIdentity> => {
-    const { data } = await apiClient.get("/api/v1/peers/identity");
-    return data;
+    const { data, error } = await sdkGetIdentity();
+    if (error) throw error;
+    return data as any;
   },
 
   /** List all peer instances */
@@ -69,25 +84,29 @@ export const peersApi = {
       per_page?: number;
     }
   ): Promise<{ items: PeerInstance[]; total: number }> => {
-    const { data } = await apiClient.get("/api/v1/peers", { params });
-    return data;
+    const { data, error } = await sdkListPeers({ query: params as any });
+    if (error) throw error;
+    return data as any;
   },
 
   /** Get a single peer */
   get: async (id: string): Promise<PeerInstance> => {
-    const { data } = await apiClient.get(`/api/v1/peers/${id}`);
-    return data;
+    const { data, error } = await sdkGetPeer({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
   /** Register a new peer */
   register: async (req: RegisterPeerRequest): Promise<PeerInstance> => {
-    const { data } = await apiClient.post("/api/v1/peers", req);
-    return data;
+    const { data, error } = await sdkRegisterPeer({ body: req as any });
+    if (error) throw error;
+    return data as any;
   },
 
   /** Unregister a peer */
   unregister: async (id: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/peers/${id}`);
+    const { error } = await sdkUnregisterPeer({ path: { id } });
+    if (error) throw error;
   },
 
   /** Send heartbeat */
@@ -95,18 +114,21 @@ export const peersApi = {
     id: string,
     req: { cache_used_bytes: number; status?: string }
   ): Promise<void> => {
-    await apiClient.post(`/api/v1/peers/${id}/heartbeat`, req);
+    const { error } = await sdkHeartbeat({ path: { id }, body: req as any });
+    if (error) throw error;
   },
 
   /** Trigger sync for a peer */
   triggerSync: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/peers/${id}/sync`);
+    const { error } = await sdkTriggerSync({ path: { id } });
+    if (error) throw error;
   },
 
   /** Get repositories assigned to a peer */
   getRepositories: async (id: string): Promise<string[]> => {
-    const { data } = await apiClient.get(`/api/v1/peers/${id}/repositories`);
-    return data;
+    const { data, error } = await sdkGetAssignedRepos({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
   /** Assign a repository to a peer */
@@ -114,7 +136,8 @@ export const peersApi = {
     peerId: string,
     req: AssignRepoRequest
   ): Promise<void> => {
-    await apiClient.post(`/api/v1/peers/${peerId}/repositories`, req);
+    const { error } = await sdkAssignRepo({ path: { id: peerId }, body: req as any });
+    if (error) throw error;
   },
 
   /** Unassign a repository from a peer */
@@ -122,7 +145,8 @@ export const peersApi = {
     peerId: string,
     repoId: string
   ): Promise<void> => {
-    await apiClient.delete(`/api/v1/peers/${peerId}/repositories/${repoId}`);
+    const { error } = await sdkUnassignRepo({ path: { id: peerId, repo_id: repoId } });
+    if (error) throw error;
   },
 
   /** Get peer connections */
@@ -130,10 +154,9 @@ export const peersApi = {
     id: string,
     params?: { status?: string }
   ): Promise<PeerConnection[]> => {
-    const { data } = await apiClient.get(`/api/v1/peers/${id}/connections`, {
-      params,
-    });
-    return data;
+    const { data, error } = await sdkListPeerConnections({ path: { id }, query: params as any });
+    if (error) throw error;
+    return data as any;
   },
 };
 

@@ -1,4 +1,6 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import { listPackages, getPackage, getPackageVersions } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
 
 // Re-export types from the canonical types/ module
@@ -15,22 +17,21 @@ export interface ListPackagesParams {
 
 export const packagesApi = {
   list: async (params: ListPackagesParams = {}): Promise<PaginatedResponse<Package>> => {
-    const response = await apiClient.get<PaginatedResponse<Package>>('/api/v1/packages', {
-      params,
-    });
-    return response.data;
+    const { data, error } = await listPackages({ query: params as any });
+    if (error) throw error;
+    return data as any as PaginatedResponse<Package>;
   },
 
   get: async (packageId: string): Promise<Package> => {
-    const response = await apiClient.get<Package>(`/api/v1/packages/${packageId}`);
-    return response.data;
+    const { data, error } = await getPackage({ path: { id: packageId } });
+    if (error) throw error;
+    return data as any as Package;
   },
 
   getVersions: async (packageId: string): Promise<PackageVersion[]> => {
-    const response = await apiClient.get<{ versions: PackageVersion[] }>(
-      `/api/v1/packages/${packageId}/versions`
-    );
-    return response.data.versions;
+    const { data, error } = await getPackageVersions({ path: { id: packageId } });
+    if (error) throw error;
+    return (data as any).versions as PackageVersion[];
   },
 };
 

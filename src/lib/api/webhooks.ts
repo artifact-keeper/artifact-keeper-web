@@ -1,4 +1,16 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  listWebhooks as sdkListWebhooks,
+  getWebhook as sdkGetWebhook,
+  createWebhook as sdkCreateWebhook,
+  deleteWebhook as sdkDeleteWebhook,
+  enableWebhook as sdkEnableWebhook,
+  disableWebhook as sdkDisableWebhook,
+  testWebhook as sdkTestWebhook,
+  listDeliveries as sdkListDeliveries,
+  redeliver as sdkRedeliver,
+} from '@artifact-keeper/sdk';
 
 export interface WebhookListResponse<T> {
   items: T[];
@@ -72,50 +84,54 @@ export interface ListDeliveriesParams {
 
 export const webhooksApi = {
   list: async (params: ListWebhooksParams = {}): Promise<WebhookListResponse<Webhook>> => {
-    const response = await apiClient.get<WebhookListResponse<Webhook>>('/api/v1/webhooks', { params });
-    return response.data;
+    const { data, error } = await sdkListWebhooks({ query: params as any });
+    if (error) throw error;
+    return data as any;
   },
 
   get: async (id: string): Promise<Webhook> => {
-    const response = await apiClient.get<Webhook>(`/api/v1/webhooks/${id}`);
-    return response.data;
+    const { data, error } = await sdkGetWebhook({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
   create: async (data: CreateWebhookRequest): Promise<Webhook> => {
-    const response = await apiClient.post<Webhook>('/api/v1/webhooks', data);
-    return response.data;
+    const { data: result, error } = await sdkCreateWebhook({ body: data as any });
+    if (error) throw error;
+    return result as any;
   },
 
   delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/webhooks/${id}`);
+    const { error } = await sdkDeleteWebhook({ path: { id } });
+    if (error) throw error;
   },
 
   enable: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/webhooks/${id}/enable`);
+    const { error } = await sdkEnableWebhook({ path: { id } });
+    if (error) throw error;
   },
 
   disable: async (id: string): Promise<void> => {
-    await apiClient.post(`/api/v1/webhooks/${id}/disable`);
+    const { error } = await sdkDisableWebhook({ path: { id } });
+    if (error) throw error;
   },
 
   test: async (id: string): Promise<WebhookTestResult> => {
-    const response = await apiClient.post<WebhookTestResult>(`/api/v1/webhooks/${id}/test`);
-    return response.data;
+    const { data, error } = await sdkTestWebhook({ path: { id } });
+    if (error) throw error;
+    return data as any;
   },
 
   listDeliveries: async (id: string, params: ListDeliveriesParams = {}): Promise<WebhookListResponse<WebhookDelivery>> => {
-    const response = await apiClient.get<WebhookListResponse<WebhookDelivery>>(
-      `/api/v1/webhooks/${id}/deliveries`,
-      { params },
-    );
-    return response.data;
+    const { data, error } = await sdkListDeliveries({ path: { id }, query: params as any });
+    if (error) throw error;
+    return data as any;
   },
 
   redeliver: async (webhookId: string, deliveryId: string): Promise<WebhookDelivery> => {
-    const response = await apiClient.post<WebhookDelivery>(
-      `/api/v1/webhooks/${webhookId}/deliveries/${deliveryId}/redeliver`,
-    );
-    return response.data;
+    const { data, error } = await sdkRedeliver({ path: { id: webhookId, delivery_id: deliveryId } });
+    if (error) throw error;
+    return data as any;
   },
 };
 

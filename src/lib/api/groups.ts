@@ -1,4 +1,14 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  listGroups,
+  getGroup,
+  createGroup,
+  updateGroup,
+  deleteGroup,
+  addMembers,
+  removeMembers,
+} from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
 
 // Re-export types from the canonical types/ module
@@ -13,39 +23,48 @@ export interface ListGroupsParams {
 
 export const groupsApi = {
   list: async (params: ListGroupsParams = {}): Promise<PaginatedResponse<Group>> => {
-    const response = await apiClient.get<PaginatedResponse<Group>>('/api/v1/groups', {
-      params,
-    });
-    return response.data;
+    const { data, error } = await listGroups({ query: params as any });
+    if (error) throw error;
+    return data as any as PaginatedResponse<Group>;
   },
 
   get: async (groupId: string): Promise<Group> => {
-    const response = await apiClient.get<Group>(`/api/v1/groups/${groupId}`);
-    return response.data;
+    const { data, error } = await getGroup({ path: { id: groupId } });
+    if (error) throw error;
+    return data as any as Group;
   },
 
   create: async (data: CreateGroupRequest): Promise<Group> => {
-    const response = await apiClient.post<Group>('/api/v1/groups', data);
-    return response.data;
+    const { data: result, error } = await createGroup({ body: data as any });
+    if (error) throw error;
+    return result as any as Group;
   },
 
   update: async (groupId: string, data: Partial<CreateGroupRequest>): Promise<Group> => {
-    const response = await apiClient.put<Group>(`/api/v1/groups/${groupId}`, data);
-    return response.data;
+    const { data: result, error } = await updateGroup({ path: { id: groupId }, body: data as any });
+    if (error) throw error;
+    return result as any as Group;
   },
 
   delete: async (groupId: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/groups/${groupId}`);
+    const { error } = await deleteGroup({ path: { id: groupId } });
+    if (error) throw error;
   },
 
   addMembers: async (groupId: string, userIds: string[]): Promise<void> => {
-    await apiClient.post(`/api/v1/groups/${groupId}/members`, { user_ids: userIds });
+    const { error } = await addMembers({
+      path: { id: groupId },
+      body: { user_ids: userIds } as any,
+    });
+    if (error) throw error;
   },
 
   removeMembers: async (groupId: string, userIds: string[]): Promise<void> => {
-    await apiClient.delete(`/api/v1/groups/${groupId}/members`, {
-      data: { user_ids: userIds },
+    const { error } = await removeMembers({
+      path: { id: groupId },
+      body: { user_ids: userIds } as any,
     });
+    if (error) throw error;
   },
 };
 

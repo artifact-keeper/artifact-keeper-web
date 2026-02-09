@@ -1,4 +1,11 @@
-import apiClient from "@/lib/api-client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import {
+  getHealthLog as sdkGetHealthLog,
+  getAlertStates as sdkGetAlertStates,
+  suppressAlert as sdkSuppressAlert,
+  runHealthCheck as sdkRunHealthCheck,
+} from '@artifact-keeper/sdk';
 import type {
   ServiceHealthEntry,
   AlertState,
@@ -10,25 +17,26 @@ const monitoringApi = {
   getHealthLog: async (
     params?: HealthLogQuery
   ): Promise<ServiceHealthEntry[]> => {
-    const { data } = await apiClient.get(
-      "/api/v1/admin/monitoring/health-log",
-      { params }
-    );
-    return data;
+    const { data, error } = await sdkGetHealthLog({ query: params as any });
+    if (error) throw error;
+    return data as any;
   },
 
   getAlerts: async (): Promise<AlertState[]> => {
-    const { data } = await apiClient.get("/api/v1/admin/monitoring/alerts");
-    return data;
+    const { data, error } = await sdkGetAlertStates();
+    if (error) throw error;
+    return data as any;
   },
 
   suppressAlert: async (req: SuppressRequest): Promise<void> => {
-    await apiClient.post("/api/v1/admin/monitoring/alerts/suppress", req);
+    const { error } = await sdkSuppressAlert({ body: req as any });
+    if (error) throw error;
   },
 
   triggerCheck: async (): Promise<ServiceHealthEntry[]> => {
-    const { data } = await apiClient.post("/api/v1/admin/monitoring/check");
-    return data;
+    const { data, error } = await sdkRunHealthCheck();
+    if (error) throw error;
+    return data as any;
   },
 };
 

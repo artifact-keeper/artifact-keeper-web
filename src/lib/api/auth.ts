@@ -1,4 +1,6 @@
-import apiClient from '@/lib/api-client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import '@/lib/sdk-client';
+import { login as sdkLogin, logout as sdkLogout, refreshToken as sdkRefreshToken, getCurrentUser as sdkGetCurrentUser } from '@artifact-keeper/sdk';
 import type { LoginResponse, User } from '@/types';
 
 export interface LoginCredentials {
@@ -8,24 +10,28 @@ export interface LoginCredentials {
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
-    const response = await apiClient.post<LoginResponse>('/api/v1/auth/login', credentials);
-    return response.data;
+    const { data, error } = await sdkLogin({ body: credentials as any });
+    if (error) throw error;
+    return data as any as LoginResponse;
   },
 
   logout: async (): Promise<void> => {
-    await apiClient.post('/api/v1/auth/logout');
+    const { error } = await sdkLogout();
+    if (error) throw error;
   },
 
   refreshToken: async (refreshToken: string): Promise<LoginResponse> => {
-    const response = await apiClient.post<LoginResponse>('/api/v1/auth/refresh', {
-      refresh_token: refreshToken,
+    const { data, error } = await sdkRefreshToken({
+      body: { refresh_token: refreshToken } as any,
     });
-    return response.data;
+    if (error) throw error;
+    return data as any as LoginResponse;
   },
 
   getCurrentUser: async (): Promise<User> => {
-    const response = await apiClient.get<User>('/api/v1/auth/me');
-    return response.data;
+    const { data, error } = await sdkGetCurrentUser();
+    if (error) throw error;
+    return data as any as User;
   },
 };
 
