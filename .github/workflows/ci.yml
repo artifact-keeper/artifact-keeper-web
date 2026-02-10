@@ -41,6 +41,35 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  e2e:
+    name: E2E Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+      - name: Run E2E tests
+        run: npx playwright test --reporter=github
+        env:
+          PLAYWRIGHT_BASE_URL: https://artifactkeeper.possum-fujita.ts.net
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   docker:
     name: Docker (${{ matrix.platform }})
     needs: build
