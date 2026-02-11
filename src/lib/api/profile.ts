@@ -82,7 +82,7 @@ export const profileApi = {
     const userId = (me as any).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.api_keys ?? (data as any);
+    return (data as any)?.api_keys ?? [];
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
@@ -103,7 +103,7 @@ export const profileApi = {
     const userId = (me as any).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.access_tokens ?? (data as any);
+    return (data as any)?.access_tokens ?? [];
   },
 
   createAccessToken: async (
