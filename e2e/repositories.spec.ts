@@ -13,12 +13,12 @@ test.describe('Repositories', () => {
 
   test('shows create repository button', async ({ page }) => {
     await page.goto('/repositories');
-    await expect(page.getByRole('button', { name: /create/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: /create repository/i }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('can open create repository dialog', async ({ page }) => {
     await page.goto('/repositories');
-    await page.getByRole('button', { name: /create/i }).click();
+    await page.getByRole('button', { name: /create repository/i }).first().click();
     // Dialog should appear
     await expect(page.getByRole('dialog').or(page.locator('[role="dialog"]'))).toBeVisible({ timeout: 5000 });
   });
