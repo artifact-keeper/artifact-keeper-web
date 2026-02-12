@@ -35,7 +35,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { name: string; description: string; is_public: boolean }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean }) => void;
   editPending: boolean;
   deleteOpen: boolean;
   onDeleteOpenChange: (open: boolean) => void;
@@ -98,16 +98,19 @@ export function RepoDialogs({
 
   // Edit form state — derived from editRepo, with local overrides
   const editFormDefaults = useMemo(() => ({
+    key: editRepo?.key ?? "",
     name: editRepo?.name ?? "",
     description: editRepo?.description ?? "",
     is_public: editRepo?.is_public ?? true,
   }), [editRepo]);
   const [editFormOverrides, setEditFormOverrides] = useState<{
+    key?: string;
     name?: string;
     description?: string;
     is_public?: boolean;
   }>({});
   const editForm = { ...editFormDefaults, ...editFormOverrides };
+  const editKeyChanged = editRepo ? editForm.key !== editRepo.key : false;
 
   const resetCreateForm = () => {
     setCreateForm({
@@ -349,10 +352,30 @@ export function RepoDialogs({
             onSubmit={(e) => {
               e.preventDefault();
               if (editRepo) {
-                onEditSubmit(editRepo.key, editForm);
+                const { key: formKey, ...rest } = editForm;
+                onEditSubmit(editRepo.key, {
+                  ...rest,
+                  ...(editKeyChanged ? { key: formKey } : {}),
+                });
               }
             }}
           >
+            <div className="space-y-2">
+              <Label htmlFor="edit-key">Key (URL slug)</Label>
+              <Input
+                id="edit-key"
+                value={editForm.key}
+                onChange={(e) =>
+                  setEditFormOverrides((f) => ({ ...f, key: e.target.value.toLowerCase() }))
+                }
+                required
+              />
+              {editKeyChanged && (
+                <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                  Changing the key will update all URLs for this repository.
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-name">Name</Label>
               <Input

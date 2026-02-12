@@ -110,10 +110,17 @@ export default function RepositoriesPage() {
   const updateMutation = useMutation({
     mutationFn: ({ key, data: d }: { key: string; data: Partial<CreateRepositoryRequest> }) =>
       repositoriesApi.update(key, d),
-    onSuccess: () => {
+    onSuccess: (updatedRepo, { key: originalKey }) => {
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setEditOpen(false);
       setDialogRepo(null);
+      // If the key was renamed, update the selected key and URL
+      if (updatedRepo.key !== originalKey && selectedKey === originalKey) {
+        setSelectedKey(updatedRepo.key);
+        const url = new URL(window.location.href);
+        url.searchParams.set("selected", updatedRepo.key);
+        window.history.replaceState(null, "", url.toString());
+      }
       toast.success("Repository updated");
     },
     onError: (err) => {
