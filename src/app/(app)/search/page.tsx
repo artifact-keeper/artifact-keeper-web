@@ -92,6 +92,7 @@ const FORMAT_OPTIONS = [
   "rubygems",
   "debian",
   "rpm",
+  "protobuf",
   "generic",
 ] as const;
 

@@ -114,6 +114,7 @@ const FORMAT_OPTIONS: string[] = [
   "rubygems",
   "debian",
   "rpm",
+  "protobuf",
   "generic",
 ];
 
