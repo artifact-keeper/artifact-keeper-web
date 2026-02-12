@@ -58,6 +58,7 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   { value: "gitlfs", label: "Git LFS", group: "Other" },
   { value: "bazel", label: "Bazel", group: "Other" },
   { value: "p2", label: "P2 (Eclipse)", group: "Other" },
+  { value: "protobuf", label: "Protobuf (BSR)", group: "Other" },
 ];
 
 export const FORMAT_GROUPS = Array.from(

@@ -302,6 +302,36 @@ gpgcheck=0`,
           code: `apk add <package-name>`,
         },
       ];
+    case "protobuf":
+      return [
+        {
+          title: "Configure buf.yaml",
+          description: "Set the registry in your module's buf.yaml:",
+          code: `# buf.yaml
+version: v2
+modules:
+  - path: proto
+    name: ${REGISTRY_HOST}/proto/${repoKey}/myorg/mymodule`,
+        },
+        {
+          title: "Authenticate with buf CLI",
+          code: `buf registry login ${REGISTRY_HOST} --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
+        },
+        {
+          title: "Push a module",
+          code: `buf push --registry ${REGISTRY_URL}/proto/${repoKey}`,
+        },
+        {
+          title: "Add a dependency",
+          description: "In buf.yaml, add deps and run update:",
+          code: `# buf.yaml
+deps:
+  - ${REGISTRY_HOST}/proto/${repoKey}/owner/module
+
+# Then resolve:
+buf dep update`,
+        },
+      ];
     default:
       return [
         {
@@ -453,6 +483,11 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
     key: "infra",
     label: "Infrastructure",
     formats: ["terraform", "opentofu", "chef", "puppet", "ansible", "vagrant"],
+  },
+  {
+    key: "other",
+    label: "Other",
+    formats: ["generic", "gitlfs", "bazel", "p2", "protobuf", "huggingface", "mlmodel", "vscode", "jetbrains"],
   },
 ];
 

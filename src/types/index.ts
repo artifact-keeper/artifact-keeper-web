@@ -115,7 +115,8 @@ export type RepositoryFormat =
   | 'vagrant'
   | 'opkg'
   | 'p2'
-  | 'bazel';
+  | 'bazel'
+  | 'protobuf';
 
 export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
 
