@@ -204,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (health.demo_mode !== true) return;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await sdkLogin({ body: { username: "admin", password: "demo-password-readonly" } as any });
+        const { data, error } = await sdkLogin({ body: { username: "admin", password: "demo" } as any });
         if (error) return;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         storeTokens(data as any);
