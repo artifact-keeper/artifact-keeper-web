@@ -1,6 +1,8 @@
 "use client";
 
 import { useAuth } from "@/providers/auth-provider";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/lib/api/admin";
 import { Server, HardDrive, Lock, Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -39,6 +41,10 @@ function SettingRow({
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+  });
 
   if (!user?.is_admin) {
     return (
@@ -107,7 +113,7 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Version"
-                value="1.0.0"
+                value={health?.version ?? "..."}
                 description="Current Artifact Keeper server version."
               />
               <Separator />
