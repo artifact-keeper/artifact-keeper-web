@@ -78,8 +78,8 @@ function getRepoSetupSteps(repo: Repository): SetupStep[] {
         {
           title: "Configure registry",
           description: "Add to your .npmrc file or run:",
-          code: `npm config set @${repoKey}:registry ${REGISTRY_URL}/api/v1/repositories/${repoKey}/npm/
-npm config set //${REGISTRY_HOST}/api/v1/repositories/${repoKey}/npm/:_authToken YOUR_TOKEN`,
+          code: `npm config set @${repoKey}:registry ${REGISTRY_URL}/npm/${repoKey}/
+npm config set //${REGISTRY_HOST}/npm/${repoKey}/:_authToken YOUR_TOKEN`,
         },
         {
           title: "Install a package",
@@ -87,7 +87,7 @@ npm config set //${REGISTRY_HOST}/api/v1/repositories/${repoKey}/npm/:_authToken
         },
         {
           title: "Publish a package",
-          code: `npm publish --registry ${REGISTRY_URL}/api/v1/repositories/${repoKey}/npm/`,
+          code: `npm publish --registry ${REGISTRY_URL}/npm/${repoKey}/`,
         },
       ];
     case "pypi":
@@ -98,16 +98,16 @@ npm config set //${REGISTRY_HOST}/api/v1/repositories/${repoKey}/npm/:_authToken
           title: "Configure pip",
           description: "Add to ~/.pip/pip.conf or ~/.config/pip/pip.conf:",
           code: `[global]
-index-url = ${REGISTRY_URL}/api/v1/repositories/${repoKey}/pypi/simple/
+index-url = ${REGISTRY_URL}/pypi/${repoKey}/simple/
 trusted-host = ${REGISTRY_HOST}`,
         },
         {
           title: "Install a package",
-          code: `pip install --index-url ${REGISTRY_URL}/api/v1/repositories/${repoKey}/pypi/simple/ <package-name>`,
+          code: `pip install --index-url ${REGISTRY_URL}/pypi/${repoKey}/simple/ <package-name>`,
         },
         {
           title: "Upload with twine",
-          code: `twine upload --repository-url ${REGISTRY_URL}/api/v1/repositories/${repoKey}/pypi/ dist/*`,
+          code: `twine upload --repository-url ${REGISTRY_URL}/pypi/${repoKey}/ dist/*`,
         },
       ];
     case "maven":
@@ -132,7 +132,7 @@ trusted-host = ${REGISTRY_HOST}`,
           code: `<repositories>
   <repository>
     <id>${repoKey}</id>
-    <url>${REGISTRY_URL}/api/v1/repositories/${repoKey}/maven/</url>
+    <url>${REGISTRY_URL}/maven/${repoKey}/</url>
   </repository>
 </repositories>`,
         },
@@ -166,7 +166,7 @@ trusted-host = ${REGISTRY_HOST}`,
           title: "Configure Cargo",
           description: "Add to ~/.cargo/config.toml:",
           code: `[registries.${repoKey}]
-index = "${REGISTRY_URL}/api/v1/repositories/${repoKey}/cargo/index"
+index = "${REGISTRY_URL}/cargo/${repoKey}/index"
 token = "YOUR_TOKEN"`,
         },
         {
@@ -185,7 +185,7 @@ my-crate = { version = "0.1", registry = "${repoKey}" }`,
       return [
         {
           title: "Add Helm repository",
-          code: `helm repo add ${repoKey} ${REGISTRY_URL}/api/v1/repositories/${repoKey}/helm/
+          code: `helm repo add ${repoKey} ${REGISTRY_URL}/helm/${repoKey}/
 helm repo update`,
         },
         {
@@ -201,7 +201,7 @@ helm repo update`,
       return [
         {
           title: "Add NuGet source",
-          code: `dotnet nuget add source ${REGISTRY_URL}/api/v1/repositories/${repoKey}/nuget/v3/index.json \\
+          code: `dotnet nuget add source ${REGISTRY_URL}/nuget/${repoKey}/v3/index.json \\
   --name ${repoKey} --username YOUR_USERNAME --password YOUR_TOKEN`,
         },
         {
@@ -217,7 +217,7 @@ helm repo update`,
       return [
         {
           title: "Configure Go proxy",
-          code: `export GOPROXY=${REGISTRY_URL}/api/v1/repositories/${repoKey}/go,direct
+          code: `export GOPROXY=${REGISTRY_URL}/go/${repoKey},direct
 export GONOSUMCHECK=*`,
         },
         {
@@ -230,11 +230,11 @@ export GONOSUMCHECK=*`,
         {
           title: "Configure Bundler",
           description: "In your Gemfile:",
-          code: `source "${REGISTRY_URL}/api/v1/repositories/${repoKey}/rubygems/"`,
+          code: `source "${REGISTRY_URL}/gems/${repoKey}/"`,
         },
         {
           title: "Push a gem",
-          code: `gem push my-gem-0.1.0.gem --host ${REGISTRY_URL}/api/v1/repositories/${repoKey}/rubygems/`,
+          code: `gem push my-gem-0.1.0.gem --host ${REGISTRY_URL}/gems/${repoKey}/`,
         },
       ];
     case "debian":
@@ -242,7 +242,7 @@ export GONOSUMCHECK=*`,
         {
           title: "Add APT repository",
           description: "Add to /etc/apt/sources.list.d/artifact-keeper.list:",
-          code: `deb ${REGISTRY_URL}/api/v1/repositories/${repoKey}/debian/ stable main`,
+          code: `deb ${REGISTRY_URL}/debian/${repoKey}/ stable main`,
         },
         {
           title: "Update and install",
@@ -257,7 +257,7 @@ sudo apt install <package-name>`,
           description: "Create /etc/yum.repos.d/artifact-keeper.repo:",
           code: `[${repoKey}]
 name=Artifact Keeper - ${repo.name}
-baseurl=${REGISTRY_URL}/api/v1/repositories/${repoKey}/rpm/
+baseurl=${REGISTRY_URL}/rpm/${repoKey}/
 enabled=1
 gpgcheck=0`,
         },
@@ -274,7 +274,7 @@ gpgcheck=0`,
           description: "In ~/.terraformrc:",
           code: `provider_installation {
   network_mirror {
-    url = "${REGISTRY_URL}/api/v1/repositories/${repoKey}/terraform/"
+    url = "${REGISTRY_URL}/terraform/${repoKey}/"
   }
 }`,
         },
@@ -283,7 +283,7 @@ gpgcheck=0`,
       return [
         {
           title: "Add Composer repository",
-          code: `composer config repositories.${repoKey} composer ${REGISTRY_URL}/api/v1/repositories/${repoKey}/composer/`,
+          code: `composer config repositories.${repoKey} composer ${REGISTRY_URL}/composer/${repoKey}/`,
         },
         {
           title: "Require a package",
@@ -295,7 +295,7 @@ gpgcheck=0`,
         {
           title: "Add APK repository",
           description: "Add to /etc/apk/repositories:",
-          code: `${REGISTRY_URL}/api/v1/repositories/${repoKey}/alpine/`,
+          code: `${REGISTRY_URL}/alpine/${repoKey}/`,
         },
         {
           title: "Install a package",

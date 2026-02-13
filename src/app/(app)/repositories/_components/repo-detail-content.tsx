@@ -13,6 +13,7 @@ import {
   Shield,
   ExternalLink,
   Layers,
+  Package as PackageIcon,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -23,6 +24,7 @@ import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
+import { PackagesTabContent } from "./packages-tab-content";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -489,6 +491,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       <Tabs defaultValue="artifacts">
         <TabsList variant="line">
           <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
+          <TabsTrigger value="packages">
+            <PackageIcon className="size-3.5 mr-1" />
+            Packages
+          </TabsTrigger>
           {isAuthenticated && <TabsTrigger value="upload">Upload</TabsTrigger>}
           {repository.repo_type === "virtual" && (
             <TabsTrigger value="members">
@@ -547,6 +553,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             emptyMessage="No artifacts in this repository."
             rowKey={(a) => a.id}
             onRowClick={showDetail}
+          />
+        </TabsContent>
+
+        {/* --- Packages Tab --- */}
+        <TabsContent value="packages" className="mt-4">
+          <PackagesTabContent
+            repositoryKey={repoKey}
+            repositoryFormat={repository.format}
           />
         </TabsContent>
 
