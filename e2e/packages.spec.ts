@@ -21,10 +21,9 @@ test.describe('Packages Page', () => {
   });
 
   test('filter controls are present', async ({ page }) => {
-    // Page should have some filter controls (format, repository, or other)
-    const filters = page.locator('select, [role="combobox"], button').filter({ hasText: /format|repository|all|filter/i });
-    const hasFilters = await filters.first().isVisible({ timeout: 10000 }).catch(() => false);
-    expect(hasFilters).toBeTruthy();
+    // Format and repository filter dropdowns should be present
+    await expect(page.getByRole('combobox').filter({ hasText: /all formats/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('combobox').filter({ hasText: /all repos/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('sort dropdown works', async ({ page }) => {
