@@ -44,7 +44,7 @@ jobs:
   e2e:
     name: E2E Tests
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ak-e2e-runners
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,15 +53,11 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install Playwright Chromium
-        run: npx playwright install chromium
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
+        run: npx playwright install --with-deps chromium
       - name: Run E2E tests
         run: npx playwright test --reporter=github
         env:
-          PLAYWRIGHT_BASE_URL: https://artifactkeeper.possum-fujita.ts.net
+          PLAYWRIGHT_BASE_URL: http://web.artifactkeeper-1.svc.cluster.local:3000
       - name: Upload test report
         uses: actions/upload-artifact@v4
         if: always()
