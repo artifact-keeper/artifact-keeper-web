@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Package Detail Page', () => {
   let packageId: string | null = null;
-  let packageName: string | null = null;
 
   // Helper to fetch a package ID via API
   async function fetchPackageId(page: import('@playwright/test').Page) {
@@ -13,7 +12,6 @@ test.describe('Package Detail Page', () => {
       const packages = body.items || body.packages || body.data || body;
       if (Array.isArray(packages) && packages.length > 0) {
         packageId = packages[0].id;
-        packageName = packages[0].name;
       }
     }
   }
@@ -142,14 +140,7 @@ test.describe('Package Detail Page', () => {
     await filesTab.click();
     await page.waitForTimeout(1000);
 
-    // Should show file tree items or empty/loading state
-    const hasTreeItems = await page.locator('[class*="tree"], [role="treeitem"], [data-testid*="tree"]').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-    const hasFolderOrFile = await page.locator('svg').filter({ hasText: '' }).first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
-    const hasEmptyState = await page.getByText(/no files/i).isVisible({ timeout: 3000 }).catch(() => false);
-
-    // Page should not crash
+    // Page should not crash — files tab may show tree, empty state, or loading
     const pageContent = await page.textContent('body');
     expect(pageContent).not.toContain('Application error');
   });
