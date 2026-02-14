@@ -9,7 +9,6 @@ import { promotionApi } from "@/lib/api/promotion";
 import type { StagingArtifact, BulkPromoteRequest, PolicyViolation } from "@/types/promotion";
 import type { Repository } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
-import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,6 +32,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { SEVERITY_COLORS } from "@/types/promotion";
+
+import { ArtifactListPreview } from "./artifact-list-preview";
 
 interface PromotionDialogProps {
   open: boolean;
@@ -161,42 +162,17 @@ export function PromotionDialog({
           </div>
 
           {/* Selected Artifacts Summary */}
-          <div className="space-y-2">
-            <Label>Selected Artifacts</Label>
-            <ScrollArea className="h-32 rounded-md border">
-              <div className="p-2 space-y-1">
-                {selectedArtifacts.map((artifact) => (
-                  <div
-                    key={artifact.id}
-                    className="flex items-center justify-between text-sm py-1"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="truncate font-medium">{artifact.name}</span>
-                      {artifact.version && (
-                        <Badge variant="outline" className="text-[10px] font-normal shrink-0">
-                          {artifact.version}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-muted-foreground">
-                        {formatBytes(artifact.size_bytes)}
-                      </span>
-                      {artifact.policy_status === "passing" && (
-                        <CheckCircle className="size-3.5 text-green-500" />
-                      )}
-                      {artifact.policy_status === "failing" && (
-                        <XCircle className="size-3.5 text-red-500" />
-                      )}
-                      {artifact.policy_status === "warning" && (
-                        <AlertTriangle className="size-3.5 text-yellow-500" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
+          <ArtifactListPreview
+            artifacts={selectedArtifacts}
+            renderTrailing={(artifact) => {
+              const icons: Record<string, React.ReactNode> = {
+                passing: <CheckCircle className="size-3.5 text-green-500" />,
+                failing: <XCircle className="size-3.5 text-red-500" />,
+                warning: <AlertTriangle className="size-3.5 text-yellow-500" />,
+              };
+              return artifact.policy_status ? icons[artifact.policy_status] : null;
+            }}
+          />
 
           {/* Policy Violations Warning */}
           {allViolations.length > 0 && (

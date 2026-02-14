@@ -152,14 +152,18 @@ export default function ApprovalsPage() {
 
   // -- mutations --
 
+  function resetActionDialog() {
+    setActionDialog(null);
+    setActionNotes("");
+  }
+
   const approveMutation = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
       approvalsApi.approve(id, notes),
     onSuccess: () => {
       toast.success("Approval request approved");
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
-      setActionDialog(null);
-      setActionNotes("");
+      resetActionDialog();
     },
     onError: () => toast.error("Failed to approve request"),
   });
@@ -170,8 +174,7 @@ export default function ApprovalsPage() {
     onSuccess: () => {
       toast.success("Approval request rejected");
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
-      setActionDialog(null);
-      setActionNotes("");
+      resetActionDialog();
     },
     onError: () => toast.error("Failed to reject request"),
   });
@@ -204,31 +207,37 @@ export default function ApprovalsPage() {
     );
   }
 
+  // -- shared column definitions --
+
+  const artifactColumn: DataTableColumn<ApprovalRequest> = {
+    id: "artifact",
+    header: "Artifact",
+    accessor: (r) => r.artifact_id,
+    cell: (r) => (
+      <span className="text-sm font-medium font-mono truncate max-w-[200px] block">
+        {r.artifact_id}
+      </span>
+    ),
+  };
+
+  const promotionPathColumn: DataTableColumn<ApprovalRequest> = {
+    id: "promotion_path",
+    header: "Promotion Path",
+    accessor: (r) => r.source_repository,
+    cell: (r) => (
+      <div className="flex items-center gap-1.5 text-sm">
+        <span className="font-medium">{r.source_repository}</span>
+        <ArrowRight className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="font-medium">{r.target_repository}</span>
+      </div>
+    ),
+  };
+
   // -- pending table columns --
 
   const pendingColumns: DataTableColumn<ApprovalRequest>[] = [
-    {
-      id: "artifact",
-      header: "Artifact",
-      accessor: (r) => r.artifact_id,
-      cell: (r) => (
-        <span className="text-sm font-medium font-mono truncate max-w-[200px] block">
-          {r.artifact_id}
-        </span>
-      ),
-    },
-    {
-      id: "promotion_path",
-      header: "Promotion Path",
-      accessor: (r) => r.source_repository,
-      cell: (r) => (
-        <div className="flex items-center gap-1.5 text-sm">
-          <span className="font-medium">{r.source_repository}</span>
-          <ArrowRight className="size-3.5 text-muted-foreground shrink-0" />
-          <span className="font-medium">{r.target_repository}</span>
-        </div>
-      ),
-    },
+    artifactColumn,
+    promotionPathColumn,
     {
       id: "requested_by",
       header: "Requested By",
@@ -291,28 +300,8 @@ export default function ApprovalsPage() {
   // -- history table columns --
 
   const historyColumns: DataTableColumn<ApprovalRequest>[] = [
-    {
-      id: "artifact",
-      header: "Artifact",
-      accessor: (r) => r.artifact_id,
-      cell: (r) => (
-        <span className="text-sm font-medium font-mono truncate max-w-[200px] block">
-          {r.artifact_id}
-        </span>
-      ),
-    },
-    {
-      id: "promotion_path",
-      header: "Promotion Path",
-      accessor: (r) => r.source_repository,
-      cell: (r) => (
-        <div className="flex items-center gap-1.5 text-sm">
-          <span className="font-medium">{r.source_repository}</span>
-          <ArrowRight className="size-3.5 text-muted-foreground shrink-0" />
-          <span className="font-medium">{r.target_repository}</span>
-        </div>
-      ),
-    },
+    artifactColumn,
+    promotionPathColumn,
     {
       id: "status",
       header: "Status",
@@ -513,10 +502,7 @@ export default function ApprovalsPage() {
       <Dialog
         open={!!actionDialog}
         onOpenChange={(open) => {
-          if (!open) {
-            setActionDialog(null);
-            setActionNotes("");
-          }
+          if (!open) resetActionDialog();
         }}
       >
         <DialogContent>
@@ -580,10 +566,7 @@ export default function ApprovalsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setActionDialog(null);
-                setActionNotes("");
-              }}
+              onClick={resetActionDialog}
               disabled={isActioning}
             >
               Cancel

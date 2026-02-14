@@ -7,13 +7,10 @@ import { toast } from "sonner";
 
 import { promotionApi } from "@/lib/api/promotion";
 import type { StagingArtifact } from "@/types/promotion";
-import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +19,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+
+import { ArtifactListPreview } from "./artifact-list-preview";
 
 interface RejectionDialogProps {
   open: boolean;
@@ -102,37 +101,7 @@ export function RejectionDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Selected Artifacts Summary */}
-          <div className="space-y-2">
-            <Label>Selected Artifacts</Label>
-            <ScrollArea className="h-32 rounded-md border">
-              <div className="p-2 space-y-1">
-                {selectedArtifacts.map((artifact) => (
-                  <div
-                    key={artifact.id}
-                    className="flex items-center justify-between text-sm py-1"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="truncate font-medium">
-                        {artifact.name}
-                      </span>
-                      {artifact.version && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] font-normal shrink-0"
-                        >
-                          {artifact.version}
-                        </Badge>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {formatBytes(artifact.size_bytes)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
+          <ArtifactListPreview artifacts={selectedArtifacts} />
 
           {/* Reason (required) */}
           <div className="space-y-2">

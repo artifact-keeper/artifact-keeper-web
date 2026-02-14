@@ -192,9 +192,7 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
   const [expanded, setExpanded] = useState(false);
   const hasViolations = (entry.policy_result?.violations?.length ?? 0) > 0;
 
-  // Determine status, falling back based on policy result for backward compatibility
-  const status: PromotionHistoryStatus =
-    entry.status ?? (entry.policy_result?.passed !== false ? "promoted" : "promoted");
+  const status: PromotionHistoryStatus = entry.status ?? "promoted";
 
   const statusMeta = STATUS_ICON[status] ?? STATUS_ICON.promoted;
   const StatusIcon = statusMeta.icon;
