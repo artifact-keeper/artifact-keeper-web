@@ -9,6 +9,9 @@ import {
   Loader2,
   Tag,
   ArrowDownToLine,
+  FolderTree,
+  GitBranch,
+  FileJson,
 } from "lucide-react";
 
 import { packagesApi } from "@/lib/api/packages";
@@ -30,6 +33,9 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
+import { FileTree } from "@/components/package/file-tree";
+import { PackageDependencies } from "./package-dependencies";
+import { PackageMetadataViewer } from "./package-metadata-viewer";
 
 interface PackagesTabContentProps {
   repositoryKey: string;
@@ -90,6 +96,7 @@ export function PackagesTabContent({
         pkg={selectedPkg}
         versions={packageVersions ?? []}
         versionsLoading={versionsLoading}
+        repositoryKey={repositoryKey}
         repositoryFormat={repositoryFormat}
         onBack={handleBack}
       />
@@ -208,18 +215,21 @@ function PackageDetailView({
   pkg,
   versions,
   versionsLoading,
+  repositoryKey,
   repositoryFormat,
   onBack,
 }: {
   pkg: Package;
   versions: PackageVersion[];
   versionsLoading: boolean;
+  repositoryKey: string;
   repositoryFormat: string;
   onBack: () => void;
 }) {
   const installCmd = getInstallCommand(pkg.name, pkg.version, repositoryFormat);
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
+  const meta = pkg.metadata as Record<string, unknown> | undefined;
 
   return (
     <div className="space-y-6">
@@ -248,12 +258,24 @@ function PackageDetailView({
         <p className="text-sm text-muted-foreground">{pkg.description}</p>
       )}
 
-      {/* Sub-tabs: Overview + Versions */}
+      {/* Sub-tabs */}
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="versions">
             Versions{versions.length > 0 ? ` (${versions.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-1">
+            <FolderTree className="size-3.5" />
+            Files
+          </TabsTrigger>
+          <TabsTrigger value="dependencies" className="gap-1">
+            <GitBranch className="size-3.5" />
+            Dependencies
+          </TabsTrigger>
+          <TabsTrigger value="metadata" className="gap-1">
+            <FileJson className="size-3.5" />
+            Metadata
           </TabsTrigger>
         </TabsList>
 
@@ -346,6 +368,30 @@ function PackageDetailView({
               </TableBody>
             </Table>
           )}
+        </TabsContent>
+
+        {/* Files */}
+        <TabsContent value="files" className="mt-4">
+          <FileTree
+            repositoryKey={repositoryKey}
+            rootPath={pkg.name}
+          />
+        </TabsContent>
+
+        {/* Dependencies */}
+        <TabsContent value="dependencies" className="mt-4">
+          <PackageDependencies
+            format={repositoryFormat}
+            metadata={meta}
+          />
+        </TabsContent>
+
+        {/* Metadata */}
+        <TabsContent value="metadata" className="mt-4">
+          <PackageMetadataViewer
+            format={repositoryFormat}
+            metadata={meta}
+          />
         </TabsContent>
       </Tabs>
     </div>
