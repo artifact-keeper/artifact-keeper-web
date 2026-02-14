@@ -131,17 +131,7 @@ function OverallHealthScore({
             strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={`${score * 2.64} ${264 - score * 2.64}`}
-            className={
-              score >= 90
-                ? "stroke-emerald-500"
-                : score >= 80
-                  ? "stroke-blue-500"
-                  : score >= 70
-                    ? "stroke-amber-500"
-                    : score >= 60
-                      ? "stroke-orange-500"
-                      : "stroke-red-500"
-            }
+            className={scoreToStrokeClass(score)}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -161,7 +151,7 @@ function OverallHealthScore({
   );
 }
 
-// -- Score-to-grade helper --
+// -- Score helpers --
 
 function scoreToGrade(score: number): string {
   if (score >= 90) return "A";
@@ -169,6 +159,14 @@ function scoreToGrade(score: number): string {
   if (score >= 70) return "C";
   if (score >= 60) return "D";
   return "F";
+}
+
+function scoreToStrokeClass(score: number): string {
+  if (score >= 90) return "stroke-emerald-500";
+  if (score >= 80) return "stroke-blue-500";
+  if (score >= 70) return "stroke-amber-500";
+  if (score >= 60) return "stroke-orange-500";
+  return "stroke-red-500";
 }
 
 // -- Main page --
@@ -211,6 +209,17 @@ export default function HealthDashboardPage() {
       0
     ) ?? 0;
 
+  function OptionalScore({ value }: { value: number | null | undefined }) {
+    if (value != null) {
+      return (
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {Math.round(value)}
+        </span>
+      );
+    }
+    return <span className="text-sm text-muted-foreground">-</span>;
+  }
+
   // -- table columns --
   const columns: DataTableColumn<RepoHealth>[] = [
     {
@@ -247,56 +256,28 @@ export default function HealthDashboardPage() {
       header: "Security",
       accessor: (r) => r.avg_security_score ?? 0,
       sortable: true,
-      cell: (r) =>
-        r.avg_security_score != null ? (
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(r.avg_security_score)}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        ),
+      cell: (r) => <OptionalScore value={r.avg_security_score} />,
     },
     {
       id: "quality",
       header: "Quality",
       accessor: (r) => r.avg_quality_score ?? 0,
       sortable: true,
-      cell: (r) =>
-        r.avg_quality_score != null ? (
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(r.avg_quality_score)}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        ),
+      cell: (r) => <OptionalScore value={r.avg_quality_score} />,
     },
     {
       id: "license",
       header: "License",
       accessor: (r) => r.avg_license_score ?? 0,
       sortable: true,
-      cell: (r) =>
-        r.avg_license_score != null ? (
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(r.avg_license_score)}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        ),
+      cell: (r) => <OptionalScore value={r.avg_license_score} />,
     },
     {
       id: "metadata",
       header: "Metadata",
       accessor: (r) => r.avg_metadata_score ?? 0,
       sortable: true,
-      cell: (r) =>
-        r.avg_metadata_score != null ? (
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {Math.round(r.avg_metadata_score)}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        ),
+      cell: (r) => <OptionalScore value={r.avg_metadata_score} />,
     },
     {
       id: "artifacts",

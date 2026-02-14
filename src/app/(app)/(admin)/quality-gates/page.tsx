@@ -102,17 +102,27 @@ const emptyForm: GateFormState = {
   action: "warn",
 };
 
+/** Convert a nullable number to a form string ("" when null). */
+function numToStr(value: number | null | undefined): string {
+  return value != null ? String(value) : "";
+}
+
+/** Convert a form string to a number, returning the fallback when empty. */
+function strToNum<T>(value: string, fallback: T): number | T {
+  return value ? Number(value) : fallback;
+}
+
 function gateToForm(gate: QualityGate): GateFormState {
   return {
     name: gate.name,
     description: gate.description ?? "",
-    min_health_score: gate.min_health_score != null ? String(gate.min_health_score) : "",
-    min_security_score: gate.min_security_score != null ? String(gate.min_security_score) : "",
-    min_quality_score: gate.min_quality_score != null ? String(gate.min_quality_score) : "",
-    min_metadata_score: gate.min_metadata_score != null ? String(gate.min_metadata_score) : "",
-    max_critical_issues: gate.max_critical_issues != null ? String(gate.max_critical_issues) : "",
-    max_high_issues: gate.max_high_issues != null ? String(gate.max_high_issues) : "",
-    max_medium_issues: gate.max_medium_issues != null ? String(gate.max_medium_issues) : "",
+    min_health_score: numToStr(gate.min_health_score),
+    min_security_score: numToStr(gate.min_security_score),
+    min_quality_score: numToStr(gate.min_quality_score),
+    min_metadata_score: numToStr(gate.min_metadata_score),
+    max_critical_issues: numToStr(gate.max_critical_issues),
+    max_high_issues: numToStr(gate.max_high_issues),
+    max_medium_issues: numToStr(gate.max_medium_issues),
     required_checks: gate.required_checks ?? [],
     enforce_on_promotion: gate.enforce_on_promotion,
     enforce_on_download: gate.enforce_on_download,
@@ -124,13 +134,13 @@ function formToCreateRequest(form: GateFormState): CreateQualityGateRequest {
   return {
     name: form.name,
     description: form.description || undefined,
-    min_health_score: form.min_health_score ? Number(form.min_health_score) : undefined,
-    min_security_score: form.min_security_score ? Number(form.min_security_score) : undefined,
-    min_quality_score: form.min_quality_score ? Number(form.min_quality_score) : undefined,
-    min_metadata_score: form.min_metadata_score ? Number(form.min_metadata_score) : undefined,
-    max_critical_issues: form.max_critical_issues ? Number(form.max_critical_issues) : undefined,
-    max_high_issues: form.max_high_issues ? Number(form.max_high_issues) : undefined,
-    max_medium_issues: form.max_medium_issues ? Number(form.max_medium_issues) : undefined,
+    min_health_score: strToNum(form.min_health_score, undefined),
+    min_security_score: strToNum(form.min_security_score, undefined),
+    min_quality_score: strToNum(form.min_quality_score, undefined),
+    min_metadata_score: strToNum(form.min_metadata_score, undefined),
+    max_critical_issues: strToNum(form.max_critical_issues, undefined),
+    max_high_issues: strToNum(form.max_high_issues, undefined),
+    max_medium_issues: strToNum(form.max_medium_issues, undefined),
     required_checks: form.required_checks.length > 0 ? form.required_checks : undefined,
     enforce_on_promotion: form.enforce_on_promotion,
     enforce_on_download: form.enforce_on_download,
@@ -142,13 +152,13 @@ function formToUpdateRequest(form: GateFormState): UpdateQualityGateRequest {
   return {
     name: form.name,
     description: form.description || undefined,
-    min_health_score: form.min_health_score ? Number(form.min_health_score) : null,
-    min_security_score: form.min_security_score ? Number(form.min_security_score) : null,
-    min_quality_score: form.min_quality_score ? Number(form.min_quality_score) : null,
-    min_metadata_score: form.min_metadata_score ? Number(form.min_metadata_score) : null,
-    max_critical_issues: form.max_critical_issues ? Number(form.max_critical_issues) : null,
-    max_high_issues: form.max_high_issues ? Number(form.max_high_issues) : null,
-    max_medium_issues: form.max_medium_issues ? Number(form.max_medium_issues) : null,
+    min_health_score: strToNum(form.min_health_score, null),
+    min_security_score: strToNum(form.min_security_score, null),
+    min_quality_score: strToNum(form.min_quality_score, null),
+    min_metadata_score: strToNum(form.min_metadata_score, null),
+    max_critical_issues: strToNum(form.max_critical_issues, null),
+    max_high_issues: strToNum(form.max_high_issues, null),
+    max_medium_issues: strToNum(form.max_medium_issues, null),
     required_checks: form.required_checks,
     enforce_on_promotion: form.enforce_on_promotion,
     enforce_on_download: form.enforce_on_download,

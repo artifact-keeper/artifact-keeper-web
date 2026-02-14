@@ -58,6 +58,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+import { POLICY_STATUS_LABELS } from "../_lib/constants";
 import { PromotionDialog } from "./promotion-dialog";
 import { RejectionDialog } from "./rejection-dialog";
 import { PromotionHistory } from "./promotion-history";
@@ -133,6 +134,18 @@ export function StagingDetailContent({
   const someSelected = selectedIds.size > 0 && selectedIds.size < artifacts.length;
 
   // --- handlers ---
+  function toggleSetItem(setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
   const handleSelectAll = useCallback(() => {
     if (allSelected) {
       setSelectedIds(new Set());
@@ -141,35 +154,17 @@ export function StagingDetailContent({
     }
   }, [allSelected, artifacts]);
 
-  const handleSelectOne = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
+  const handleSelectOne = useCallback(
+    (id: string) => toggleSetItem(setSelectedIds, id),
+    []
+  );
 
-  const toggleExpanded = useCallback((id: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
+  const toggleExpanded = useCallback(
+    (id: string) => toggleSetItem(setExpandedRows, id),
+    []
+  );
 
-  const handlePromotionSuccess = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
-
-  const handleRejectionSuccess = useCallback(() => {
+  const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
@@ -202,12 +197,35 @@ export function StagingDetailContent({
   const totalPages = artifactsData?.pagination?.total_pages ?? 1;
   const total = artifactsData?.pagination?.total ?? 0;
 
+  const repoMetaBadges = (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" className="text-xs">
+          {repository.format.toUpperCase()}
+        </Badge>
+        <Badge
+          variant="outline"
+          className="text-xs font-normal bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800"
+        >
+          staging
+        </Badge>
+        <span className="text-sm text-muted-foreground ml-2">
+          {formatBytes(repository.storage_used_bytes)} used
+        </span>
+      </div>
+      {repository.description && (
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          {repository.description}
+        </p>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header - conditional on standalone */}
       {standalone ? (
         <>
-          {/* Breadcrumb */}
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
@@ -220,7 +238,6 @@ export function StagingDetailContent({
             </BreadcrumbList>
           </Breadcrumb>
 
-          {/* Repo metadata header */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Button
@@ -234,27 +251,7 @@ export function StagingDetailContent({
                 {repository.name}
               </h1>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {repository.format.toUpperCase()}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="text-xs font-normal bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800"
-              >
-                staging
-              </Badge>
-              <span className="text-sm text-muted-foreground ml-2">
-                {formatBytes(repository.storage_used_bytes)} used
-              </span>
-            </div>
-
-            {repository.description && (
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                {repository.description}
-              </p>
-            )}
+            {repoMetaBadges}
           </div>
         </>
       ) : (
@@ -276,25 +273,7 @@ export function StagingDetailContent({
               <TooltipContent>Open in new tab</TooltipContent>
             </Tooltip>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {repository.format.toUpperCase()}
-            </Badge>
-            <Badge
-              variant="outline"
-              className="text-xs font-normal bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800"
-            >
-              staging
-            </Badge>
-            <span className="text-sm text-muted-foreground ml-2">
-              {formatBytes(repository.storage_used_bytes)} used
-            </span>
-          </div>
-          {repository.description && (
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              {repository.description}
-            </p>
-          )}
+          {repoMetaBadges}
         </div>
       )}
 
@@ -438,7 +417,7 @@ export function StagingDetailContent({
         sourceRepoKey={repoKey}
         sourceRepoFormat={repository.format}
         selectedArtifacts={selectedArtifacts}
-        onSuccess={handlePromotionSuccess}
+        onSuccess={clearSelection}
       />
 
       {/* Rejection Dialog */}
@@ -447,7 +426,7 @@ export function StagingDetailContent({
         onOpenChange={setRejectionOpen}
         sourceRepoKey={repoKey}
         selectedArtifacts={selectedArtifacts}
-        onSuccess={handleRejectionSuccess}
+        onSuccess={clearSelection}
       />
     </div>
   );
@@ -475,13 +454,6 @@ function ArtifactRow({
     failing: <XCircle className="size-3.5 text-red-500" />,
     warning: <AlertTriangle className="size-3.5 text-yellow-500" />,
     pending: <Clock className="size-3.5 text-gray-500" />,
-  };
-
-  const statusLabel = {
-    passing: "Passing",
-    failing: "Failing",
-    warning: "Warning",
-    pending: "Pending",
   };
 
   return (
@@ -533,7 +505,7 @@ function ArtifactRow({
             >
               {statusIcon[artifact.policy_status ?? "pending"]}
               <span className="ml-1">
-                {statusLabel[artifact.policy_status ?? "pending"]}
+                {POLICY_STATUS_LABELS[artifact.policy_status ?? "pending"]}
               </span>
             </Badge>
           </TableCell>
