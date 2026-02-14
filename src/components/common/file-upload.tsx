@@ -115,6 +115,12 @@ export function FileUpload({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={!file ? handleBrowse : undefined}
+        onKeyDown={!file ? (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleBrowse();
+          }
+        } : undefined}
         role={!file ? "button" : undefined}
         tabIndex={!file ? 0 : undefined}
       >

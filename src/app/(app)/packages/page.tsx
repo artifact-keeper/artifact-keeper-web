@@ -80,7 +80,15 @@ function PackageListItem({
             ? "border-primary bg-primary/5 ring-1 ring-primary/20"
             : "hover:bg-muted/50"
         }`}
+        role="button"
+        tabIndex={0}
         onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -125,7 +133,15 @@ function PackageListItem({
           ? "bg-primary/5 border-l-2 border-primary"
           : "hover:bg-muted/50 border-l-2 border-transparent"
       }`}
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <div className="flex items-center justify-between gap-2">
         <Link
