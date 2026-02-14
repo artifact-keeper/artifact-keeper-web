@@ -743,11 +743,23 @@ function SearchContent() {
                   <div
                     key={result.id}
                     className="group cursor-pointer rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       if (result.repository_key && result.path) {
                         router.push(
                           `/repositories/${result.repository_key}?path=${encodeURIComponent(result.path)}`
                         );
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (result.repository_key && result.path) {
+                          router.push(
+                            `/repositories/${result.repository_key}?path=${encodeURIComponent(result.path)}`
+                          );
+                        }
                       }
                     }}
                   >

@@ -156,7 +156,7 @@ export default function MonitoringPage() {
       ...(alerts?.map((a) => a.service_name) ?? []),
       ...(healthLog?.map((e) => e.service_name) ?? []),
     ]),
-  ].sort();
+  ].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-6">
