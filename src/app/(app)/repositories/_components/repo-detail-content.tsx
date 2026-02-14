@@ -12,6 +12,7 @@ import {
   Info,
   Shield,
   ExternalLink,
+  HeartPulse,
   Layers,
   Package as PackageIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
+import { HealthTabContent } from "./health-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
@@ -700,6 +702,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Shield className="size-3.5 mr-1" />
                   Security
                 </TabsTrigger>
+                <TabsTrigger value="health">
+                  <HeartPulse className="size-3.5 mr-1" />
+                  Health
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="flex-1 overflow-y-auto mt-4">
@@ -757,6 +763,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
               <TabsContent value="security" className="flex-1 overflow-y-auto mt-4">
                 <SecurityTabContent artifact={selectedArtifact} />
+              </TabsContent>
+
+              <TabsContent value="health" className="flex-1 overflow-y-auto mt-4">
+                <HealthTabContent artifact={selectedArtifact} />
               </TabsContent>
             </Tabs>
           )}

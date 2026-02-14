@@ -12,6 +12,7 @@ export * from './telemetry';
 export * from './monitoring';
 export * from './sbom';
 export * from './promotion';
+export * from './quality-gates';
 
 export type {
   PeerInstance,

@@ -28,6 +28,7 @@ import {
   Recycle,
   Radio,
   Activity,
+  HeartPulse,
   Scale,
   FolderSearch,
 } from "lucide-react";
@@ -82,6 +83,7 @@ const securityItems: NavItem[] = [
 
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Health", href: "/health", icon: HeartPulse },
   { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
   { title: "Monitoring", href: "/monitoring", icon: Activity },
   { title: "Telemetry", href: "/telemetry", icon: Radio },
