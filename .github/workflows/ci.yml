@@ -66,6 +66,44 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  build-container:
+    name: 🐳 Container Build Test
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: artifact-keeper-web:pr-test
+          cache-from: type=gha,scope=build-linux/amd64
+          cache-to: type=gha,scope=web-pr-test,mode=max
+
+      - name: Verify image starts
+        run: |
+          docker run --rm -d --name web-test -p 3000:3000 \
+            artifact-keeper-web:pr-test || true
+          sleep 3
+          docker logs web-test 2>&1 | head -20 || true
+          docker rm -f web-test 2>/dev/null || true
+
+      - name: Image size
+        run: |
+          echo "## Container Image Size" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep pr-test >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
   docker:
     name: Docker (${{ matrix.platform }})
     needs: build
