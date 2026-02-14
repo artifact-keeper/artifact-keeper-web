@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/collapsible";
 
 import { PromotionDialog } from "./promotion-dialog";
+import { RejectionDialog } from "./rejection-dialog";
 import { PromotionHistory } from "./promotion-history";
 
 interface StagingDetailContentProps {
@@ -96,6 +97,9 @@ export function StagingDetailContent({
 
   // promotion dialog
   const [promotionOpen, setPromotionOpen] = useState(false);
+
+  // rejection dialog
+  const [rejectionOpen, setRejectionOpen] = useState(false);
 
   // --- queries ---
   const { data: repository, isLoading: repoLoading } = useQuery({
@@ -162,6 +166,10 @@ export function StagingDetailContent({
   }, []);
 
   const handlePromotionSuccess = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleRejectionSuccess = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
 
@@ -314,13 +322,23 @@ export function StagingDetailContent({
               />
             </div>
             {isAuthenticated && (
-              <Button
-                onClick={() => setPromotionOpen(true)}
-                disabled={selectedIds.size === 0}
-              >
-                <ArrowUpRight className="size-4" />
-                Promote Selected ({selectedIds.size})
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={() => setRejectionOpen(true)}
+                  disabled={selectedIds.size === 0}
+                >
+                  <XCircle className="size-4" />
+                  Reject ({selectedIds.size})
+                </Button>
+                <Button
+                  onClick={() => setPromotionOpen(true)}
+                  disabled={selectedIds.size === 0}
+                >
+                  <ArrowUpRight className="size-4" />
+                  Promote ({selectedIds.size})
+                </Button>
+              </div>
             )}
           </div>
 
@@ -421,6 +439,15 @@ export function StagingDetailContent({
         sourceRepoFormat={repository.format}
         selectedArtifacts={selectedArtifacts}
         onSuccess={handlePromotionSuccess}
+      />
+
+      {/* Rejection Dialog */}
+      <RejectionDialog
+        open={rejectionOpen}
+        onOpenChange={setRejectionOpen}
+        sourceRepoKey={repoKey}
+        selectedArtifacts={selectedArtifacts}
+        onSuccess={handleRejectionSuccess}
       />
     </div>
   );

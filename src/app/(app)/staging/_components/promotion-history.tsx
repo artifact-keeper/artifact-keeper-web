@@ -8,19 +8,33 @@ import {
   ChevronRight,
   CheckCircle,
   XCircle,
-  AlertTriangle,
+  Clock,
   User,
   Calendar,
 } from "lucide-react";
 
 import { promotionApi } from "@/lib/api/promotion";
-import type { PromotionHistoryEntry, PolicyViolation } from "@/types/promotion";
-import { SEVERITY_COLORS } from "@/types/promotion";
+import type {
+  PromotionHistoryEntry,
+  PromotionHistoryStatus,
+  PolicyViolation,
+} from "@/types/promotion";
+import {
+  SEVERITY_COLORS,
+  PROMOTION_HISTORY_STATUS_COLORS,
+} from "@/types/promotion";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
@@ -31,14 +45,29 @@ interface PromotionHistoryProps {
   repoKey: string;
 }
 
+const STATUS_OPTIONS: Array<{
+  value: string;
+  label: string;
+}> = [
+  { value: "__all__", label: "All statuses" },
+  { value: "promoted", label: "Promoted" },
+  { value: "rejected", label: "Rejected" },
+  { value: "pending_approval", label: "Pending Approval" },
+];
+
 export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("__all__");
   const pageSize = 20;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["promotion-history", repoKey, page, pageSize],
+    queryKey: ["promotion-history", repoKey, page, pageSize, statusFilter],
     queryFn: () =>
-      promotionApi.getPromotionHistory(repoKey, { page, per_page: pageSize }),
+      promotionApi.getPromotionHistory(repoKey, {
+        page,
+        per_page: pageSize,
+        status: statusFilter === "__all__" ? undefined : statusFilter,
+      }),
   });
 
   if (isLoading) {
@@ -60,27 +89,47 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
   const entries = data?.items ?? [];
   const totalPages = data?.pagination?.total_pages ?? 1;
 
-  if (entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <ArrowRight className="size-8 mb-2 opacity-50" />
-        <p className="text-sm">No promotion history yet.</p>
-        <p className="text-xs mt-1">
-          Promotions from this staging repository will appear here.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      <ScrollArea className="h-[400px]">
-        <div className="space-y-1 pr-4">
-          {entries.map((entry) => (
-            <PromotionHistoryItem key={entry.id} entry={entry} />
-          ))}
+      {/* Status filter */}
+      <div className="flex items-center gap-2">
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="h-8 w-[180px] text-xs">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <ArrowRight className="size-8 mb-2 opacity-50" />
+          <p className="text-sm">No promotion history yet.</p>
+          <p className="text-xs mt-1">
+            Promotions from this staging repository will appear here.
+          </p>
         </div>
-      </ScrollArea>
+      ) : (
+        <ScrollArea className="h-[400px]">
+          <div className="space-y-1 pr-4">
+            {entries.map((entry) => (
+              <PromotionHistoryItem key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </ScrollArea>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -112,10 +161,43 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
   );
 }
 
+const STATUS_ICON: Record<
+  PromotionHistoryStatus,
+  { icon: typeof CheckCircle; className: string; bgClassName: string }
+> = {
+  promoted: {
+    icon: CheckCircle,
+    className: "text-green-600 dark:text-green-400",
+    bgClassName: "bg-green-100 dark:bg-green-900/30",
+  },
+  rejected: {
+    icon: XCircle,
+    className: "text-red-600 dark:text-red-400",
+    bgClassName: "bg-red-100 dark:bg-red-900/30",
+  },
+  pending_approval: {
+    icon: Clock,
+    className: "text-yellow-600 dark:text-yellow-400",
+    bgClassName: "bg-yellow-100 dark:bg-yellow-900/30",
+  },
+};
+
+const STATUS_LABEL: Record<PromotionHistoryStatus, string> = {
+  promoted: "Promoted",
+  rejected: "Rejected",
+  pending_approval: "Pending Approval",
+};
+
 function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
   const [expanded, setExpanded] = useState(false);
   const hasViolations = (entry.policy_result?.violations?.length ?? 0) > 0;
-  const policyPassed = entry.policy_result?.passed ?? true;
+
+  // Determine status, falling back based on policy result for backward compatibility
+  const status: PromotionHistoryStatus =
+    entry.status ?? (entry.policy_result?.passed !== false ? "promoted" : "promoted");
+
+  const statusMeta = STATUS_ICON[status] ?? STATUS_ICON.promoted;
+  const StatusIcon = statusMeta.icon;
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
@@ -126,17 +208,9 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
               {/* Timeline indicator */}
               <div className="flex flex-col items-center">
                 <div
-                  className={`size-8 rounded-full flex items-center justify-center ${
-                    policyPassed
-                      ? "bg-green-100 dark:bg-green-900/30"
-                      : "bg-yellow-100 dark:bg-yellow-900/30"
-                  }`}
+                  className={`size-8 rounded-full flex items-center justify-center ${statusMeta.bgClassName}`}
                 >
-                  {policyPassed ? (
-                    <CheckCircle className="size-4 text-green-600 dark:text-green-400" />
-                  ) : (
-                    <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400" />
-                  )}
+                  <StatusIcon className={`size-4 ${statusMeta.className}`} />
                 </div>
               </div>
 
@@ -146,6 +220,12 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
                   <span className="font-medium text-sm truncate">
                     {entry.artifact_path}
                   </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-medium ${PROMOTION_HISTORY_STATUS_COLORS[status]}`}
+                  >
+                    {STATUS_LABEL[status]}
+                  </Badge>
                   {expanded ? (
                     <ChevronDown className="size-4 text-muted-foreground" />
                   ) : (
@@ -190,6 +270,16 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
 
         <CollapsibleContent>
           <div className="px-3 pb-3 pt-0 ml-11 space-y-3 border-t">
+            {/* Rejection reason */}
+            {status === "rejected" && entry.rejection_reason && (
+              <div className="pt-3">
+                <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
+                  Rejection Reason
+                </p>
+                <p className="text-sm">{entry.rejection_reason}</p>
+              </div>
+            )}
+
             {/* Notes */}
             {entry.notes && (
               <div className="pt-3">

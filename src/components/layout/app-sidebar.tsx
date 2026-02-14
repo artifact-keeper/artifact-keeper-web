@@ -31,6 +31,7 @@ import {
   HeartPulse,
   Scale,
   FolderSearch,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -83,6 +84,7 @@ const securityItems: NavItem[] = [
 
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
   { title: "Health", href: "/health", icon: HeartPulse },
   { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
   { title: "Monitoring", href: "/monitoring", icon: Activity },
