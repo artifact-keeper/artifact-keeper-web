@@ -56,10 +56,10 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 
-# Copy Next.js standalone output (read-only, no write permissions)
-COPY --from=build --chown=1001:0 --chmod=555 /app/public ./public
-COPY --from=build --chown=1001:0 --chmod=555 /app/.next/standalone ./
-COPY --from=build --chown=1001:0 --chmod=555 /app/.next/static ./.next/static
+# Copy Next.js standalone output (root-owned, read-only for all users)
+COPY --from=build --chown=root:root --chmod=555 /app/public ./public
+COPY --from=build --chown=root:root --chmod=555 /app/.next/standalone ./
+COPY --from=build --chown=root:root --chmod=555 /app/.next/static ./.next/static
 
 USER 1001
 
