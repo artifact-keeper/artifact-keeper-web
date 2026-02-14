@@ -152,7 +152,7 @@ test.describe('Package Detail Page', () => {
     await page.goto(`/packages/${packageId}`);
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
-    const tabs = ['Overview', 'Versions', 'Files'];
+    const tabs = ['Overview', 'Versions', 'Files', 'Dependencies', 'Metadata'];
     for (const tab of tabs) {
       const tabEl = page.locator('[role="tablist"]').getByRole('tab', { name: new RegExp(tab, 'i') });
       const tabVisible = await tabEl.isVisible({ timeout: 5000 }).catch(() => false);
@@ -238,7 +238,7 @@ test.describe('Package Detail Page', () => {
     await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
     // Navigate through all tabs
-    const tabs = ['Overview', 'Versions', 'Files'];
+    const tabs = ['Overview', 'Versions', 'Files', 'Dependencies', 'Metadata'];
     for (const tab of tabs) {
       const tabEl = page.locator('[role="tablist"]').getByRole('tab', { name: new RegExp(tab, 'i') });
       const tabVisible = await tabEl.isVisible({ timeout: 3000 }).catch(() => false);
