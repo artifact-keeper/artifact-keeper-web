@@ -7,12 +7,15 @@ import {
   promoteArtifactsBulk as sdkPromoteArtifactsBulk,
   promotionHistory as sdkPromotionHistory,
 } from '@artifact-keeper/sdk';
+import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 import type {
   PromoteArtifactRequest,
   BulkPromoteRequest,
   PromotionResponse,
   BulkPromotionResponse,
   PromotionHistoryResponse,
+  RejectArtifactRequest,
+  RejectArtifactResponse,
 } from '@/types/promotion';
 import type { Repository, PaginatedResponse, Artifact } from '@/types';
 
@@ -111,6 +114,7 @@ export const promotionApi = {
       page?: number;
       per_page?: number;
       artifact_id?: string;
+      status?: string;
     }
   ): Promise<PromotionHistoryResponse> => {
     const { data, error } = await sdkPromotionHistory({
@@ -119,5 +123,30 @@ export const promotionApi = {
     });
     if (error) throw error;
     return data as any;
+  },
+
+  /**
+   * Reject a staging artifact
+   */
+  rejectArtifact: async (
+    repoKey: string,
+    artifactId: string,
+    request: RejectArtifactRequest
+  ): Promise<RejectArtifactResponse> => {
+    const baseUrl = getActiveInstanceBaseUrl();
+    const response = await fetch(
+      `${baseUrl}/api/v1/promotion/repositories/${encodeURIComponent(repoKey)}/artifacts/${encodeURIComponent(artifactId)}/reject`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      }
+    );
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || body.error || `Rejection failed: ${response.status}`);
+    }
+    return response.json();
   },
 };

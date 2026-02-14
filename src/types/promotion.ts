@@ -59,6 +59,20 @@ export interface BulkPromotionResponse {
   results: PromotionResponse[];
 }
 
+export interface RejectArtifactRequest {
+  reason: string;
+  notes?: string;
+}
+
+export interface RejectArtifactResponse {
+  rejected: boolean;
+  artifact_id: string;
+  reason: string;
+  message?: string;
+}
+
+export type PromotionHistoryStatus = 'promoted' | 'rejected' | 'pending_approval';
+
 export interface PromotionHistoryEntry {
   id: string;
   artifact_id: string;
@@ -69,6 +83,8 @@ export interface PromotionHistoryEntry {
   promoted_by_username?: string;
   policy_result?: PolicyEvaluationResult;
   notes?: string;
+  status?: PromotionHistoryStatus;
+  rejection_reason?: string;
   created_at: string;
 }
 
@@ -114,4 +130,44 @@ export const SEVERITY_COLORS = {
   medium: 'bg-yellow-500 text-black',
   low: 'bg-blue-500 text-white',
   info: 'bg-gray-500 text-white',
+} as const;
+
+// Badge colors for promotion history status
+export const PROMOTION_HISTORY_STATUS_COLORS = {
+  promoted: 'bg-green-500/10 text-green-600 border-green-500/20 dark:text-green-400',
+  rejected: 'bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400',
+  pending_approval: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20 dark:text-yellow-400',
+} as const;
+
+// Approval request types for promotion approval workflow
+
+export interface ApprovalRequest {
+  id: string;
+  artifact_id: string;
+  source_repository: string;
+  target_repository: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requested_by: string;
+  requested_at: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  review_notes?: string;
+  policy_result?: PolicyEvaluationResult;
+  notes?: string;
+}
+
+export interface ApprovalListResponse {
+  items: ApprovalRequest[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export const APPROVAL_STATUS_COLORS = {
+  pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+  approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400 border-red-200 dark:border-red-800',
 } as const;
