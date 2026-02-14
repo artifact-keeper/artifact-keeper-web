@@ -1,5 +1,5 @@
 # ---------- Base: Node.js 22 on UBI 9 ----------
-FROM registry.access.redhat.com/ubi9/ubi AS node-base
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS node-base
 RUN dnf module enable nodejs:22 -y && \
     dnf install -y --nodocs nodejs npm && \
     dnf clean all
@@ -21,7 +21,7 @@ ENV BACKEND_URL=${BACKEND_URL}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
-FROM registry.access.redhat.com/ubi9/ubi AS rootfs-builder
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS rootfs-builder
 
 # Install only the shared libraries Node.js needs at runtime
 RUN mkdir -p /mnt/rootfs && \
@@ -42,7 +42,7 @@ RUN echo 'nextjs:x:1001:0:Next.js:/app:/sbin/nologin' >> /mnt/rootfs/etc/passwd 
     chown -R 1001:0 /mnt/rootfs/app
 
 # ---------- Stage 4: UBI 9 Micro runtime ----------
-FROM registry.access.redhat.com/ubi9/ubi-micro
+FROM registry.access.redhat.com/ubi9/ubi-micro:9.5
 
 # Copy minimal rootfs (glibc, libstdc++, openssl, ca-certs, user/group)
 COPY --from=rootfs-builder /mnt/rootfs /
@@ -56,10 +56,10 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 
-# Copy Next.js standalone output
-COPY --from=build --chown=1001:0 /app/public ./public
-COPY --from=build --chown=1001:0 /app/.next/standalone ./
-COPY --from=build --chown=1001:0 /app/.next/static ./.next/static
+# Copy Next.js standalone output (read-only, no write permissions)
+COPY --from=build --chown=1001:0 --chmod=555 /app/public ./public
+COPY --from=build --chown=1001:0 --chmod=555 /app/.next/standalone ./
+COPY --from=build --chown=1001:0 --chmod=555 /app/.next/static ./.next/static
 
 USER 1001
 
