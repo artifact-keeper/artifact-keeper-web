@@ -71,7 +71,7 @@ test.describe('API Integration', () => {
       }
     });
 
-    const pages = ['/', '/repositories', '/profile', '/admin/settings'];
+    const pages = ['/', '/repositories', '/profile', '/settings'];
     for (const url of pages) {
       await page.goto(url);
       await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
