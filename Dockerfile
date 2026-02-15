@@ -42,6 +42,43 @@ RUN echo 'nextjs:x:1001:0:Next.js:/app:/sbin/nologin' >> /mnt/rootfs/etc/passwd 
     mkdir -p /mnt/rootfs/app /mnt/rootfs/usr/local/bin && \
     chown -R 1001:0 /mnt/rootfs/app
 
+# ---------- STIG hardening (applicable subset for ubi-micro) ----------
+# Derived from DISA STIG controls applied in registry.access.redhat.com/ubi9/ubi-stig
+
+# Crypto policy: FIPS-grade defaults for OpenSSL
+RUN if [ -f /mnt/rootfs/etc/pki/tls/openssl.cnf ]; then \
+      echo -e "\n[algorithm_sect]\ndefault_properties = fips=yes" >> /mnt/rootfs/etc/pki/tls/openssl.cnf; \
+    fi
+
+# Disable core dumps (xccdf_org.ssgproject.content_rule_disable_users_coredumps)
+RUN mkdir -p /mnt/rootfs/etc/security/limits.d && \
+    echo "* hard core 0" > /mnt/rootfs/etc/security/limits.d/50-coredump.conf
+
+# Max concurrent login sessions (xccdf_org.ssgproject.content_rule_accounts_max_concurrent_login_sessions)
+RUN echo "* hard maxlogins 10" > /mnt/rootfs/etc/security/limits.d/50-maxlogins.conf
+
+# Ensure no empty passwords (xccdf_org.ssgproject.content_rule_no_empty_passwords)
+RUN sed -i 's/\bnullok\b//g' /mnt/rootfs/etc/pam.d/* 2>/dev/null || true
+
+# Restrictive umask (xccdf_org.ssgproject.content_rule_accounts_umask_etc_login_defs)
+RUN if [ -f /mnt/rootfs/etc/login.defs ]; then \
+      sed -i 's/^UMASK.*/UMASK\t\t077/' /mnt/rootfs/etc/login.defs; \
+    fi
+
+# Clean machine-id (regenerated at runtime)
+RUN rm -f /mnt/rootfs/etc/machine-id && \
+    touch /mnt/rootfs/etc/machine-id && \
+    chmod 0444 /mnt/rootfs/etc/machine-id
+
+# Ensure GPG checking for packages (xccdf_org.ssgproject.content_rule_ensure_gpgcheck_local_packages)
+RUN if [ -f /mnt/rootfs/etc/dnf/dnf.conf ]; then \
+      sed -i 's/^localpkg_gpgcheck.*/localpkg_gpgcheck=1/' /mnt/rootfs/etc/dnf/dnf.conf || \
+      echo "localpkg_gpgcheck=1" >> /mnt/rootfs/etc/dnf/dnf.conf; \
+    fi
+
+# Remove leftover cache/tmp artifacts
+RUN rm -rf /mnt/rootfs/var/cache/* /mnt/rootfs/var/log/* /mnt/rootfs/tmp/*
+
 # ---------- Stage 4: UBI 9 Micro runtime ----------
 FROM registry.access.redhat.com/ubi9/ubi-micro:9.5
 
