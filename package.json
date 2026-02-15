@@ -1,6 +1,6 @@
 {
   "name": "artifact-keeper-web",
-  "version": "1.1.0-rc.1",
+  "version": "1.1.0-rc.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,7 +13,7 @@
     "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
-    "@artifact-keeper/sdk": "^1.1.0-dev.2",
+    "@artifact-keeper/sdk": "^1.1.0-rc.2",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.21",
     "class-variance-authority": "^0.7.1",
