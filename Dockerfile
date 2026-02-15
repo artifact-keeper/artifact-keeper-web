@@ -1,5 +1,5 @@
 # ---------- Base: Node.js 22 on UBI 9 ----------
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS node-base
+FROM registry.access.redhat.com/ubi9/ubi:9.7 AS node-base
 RUN dnf module enable nodejs:22 -y && \
     dnf install -y --nodocs nodejs npm && \
     dnf clean all
@@ -21,7 +21,7 @@ ENV BACKEND_URL=${BACKEND_URL}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS rootfs-builder
+FROM registry.access.redhat.com/ubi9/ubi:9.7 AS rootfs-builder
 
 # Install only the shared libraries Node.js needs at runtime
 RUN mkdir -p /mnt/rootfs && \
