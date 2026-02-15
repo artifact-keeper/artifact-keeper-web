@@ -13,7 +13,7 @@
     "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
-    "@artifact-keeper/sdk": "^1.1.0-dev.1",
+    "@artifact-keeper/sdk": "^1.1.0-dev.2",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.20",
     "class-variance-authority": "^0.7.1",
