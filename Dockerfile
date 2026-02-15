@@ -47,8 +47,9 @@ FROM registry.access.redhat.com/ubi9/ubi-micro:9.5
 # Copy minimal rootfs (glibc, libstdc++, openssl, ca-certs, user/group)
 COPY --from=rootfs-builder /mnt/rootfs /
 
-# Copy Node.js binary from build stage (compiled against same RHEL 9 glibc)
+# Copy Node.js binary and shared library from build stage (compiled against same RHEL 9 glibc)
 COPY --from=node-base /usr/bin/node /usr/local/bin/
+COPY --from=node-base /usr/lib64/libnode.so* /usr/lib64/
 
 WORKDIR /app
 
