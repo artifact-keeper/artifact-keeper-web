@@ -32,6 +32,7 @@ RUN mkdir -p /mnt/rootfs && \
         libstdc++ \
         openssl-libs \
         zlib \
+        brotli \
     && dnf --installroot /mnt/rootfs clean all \
     && rm -rf /mnt/rootfs/var/cache/* /mnt/rootfs/var/log/* /mnt/rootfs/tmp/*
 
@@ -44,10 +45,10 @@ RUN echo 'nextjs:x:1001:0:Next.js:/app:/sbin/nologin' >> /mnt/rootfs/etc/passwd 
 # ---------- Stage 4: UBI 9 Micro runtime ----------
 FROM registry.access.redhat.com/ubi9/ubi-micro:9.5
 
-# Copy minimal rootfs (glibc, libstdc++, openssl, ca-certs, user/group)
+# Copy minimal rootfs (glibc, libstdc++, openssl, brotli, ca-certs, user/group)
 COPY --from=rootfs-builder /mnt/rootfs /
 
-# Copy Node.js binary and shared library from build stage (compiled against same RHEL 9 glibc)
+# Copy Node.js binary and shared libraries from build stage (compiled against same RHEL 9 glibc)
 COPY --from=node-base /usr/bin/node /usr/local/bin/
 COPY --from=node-base /usr/lib64/libnode.so* /usr/lib64/
 
