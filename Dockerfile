@@ -80,7 +80,7 @@ RUN if [ -f /mnt/rootfs/etc/dnf/dnf.conf ]; then \
 RUN rm -rf /mnt/rootfs/var/cache/* /mnt/rootfs/var/log/* /mnt/rootfs/tmp/*
 
 # ---------- Stage 4: UBI 9 Micro runtime ----------
-FROM registry.access.redhat.com/ubi9/ubi-micro:9.5
+FROM registry.access.redhat.com/ubi9/ubi-micro:9.7
 
 # Copy minimal rootfs (glibc, libstdc++, openssl, brotli, ca-certs, user/group)
 COPY --from=rootfs-builder /mnt/rootfs /
