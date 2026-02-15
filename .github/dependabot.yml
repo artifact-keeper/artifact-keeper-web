@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "artifact-keeper/maintainers"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "artifact-keeper/maintainers"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    reviewers:
+      - "artifact-keeper/maintainers"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore"
