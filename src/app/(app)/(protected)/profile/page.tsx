@@ -96,11 +96,116 @@ const EXPIRY_OPTIONS = [
   { value: "0", label: "Never" },
 ];
 
+// -- Shared token/key creation form --
+
+function TokenCreateForm({
+  nameId,
+  name,
+  setName,
+  namePlaceholder,
+  expiry,
+  setExpiry,
+  scopes,
+  setScopes,
+  availableScopes,
+  toggleScope,
+  isPending,
+  onSubmit,
+  onCancel,
+  submitLabel,
+}: {
+  nameId: string;
+  name: string;
+  setName: (v: string) => void;
+  namePlaceholder: string;
+  expiry: string;
+  setExpiry: (v: string) => void;
+  scopes: string[];
+  setScopes: (v: string[]) => void;
+  availableScopes: { value: string; label: string }[];
+  toggleScope: (scopes: string[], setScopes: (s: string[]) => void, scope: string) => void;
+  isPending: boolean;
+  onSubmit: () => void;
+  onCancel: () => void;
+  submitLabel: string;
+}) {
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+    >
+      <div className="space-y-2">
+        <Label htmlFor={nameId}>Name</Label>
+        <Input
+          id={nameId}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={namePlaceholder}
+          required
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Expiration</Label>
+        <Select value={expiry} onValueChange={setExpiry}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {EXPIRY_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-3">
+        <Label>Scopes</Label>
+        <div className="grid grid-cols-2 gap-3">
+          {availableScopes.map((s) => (
+            <label
+              key={s.value}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Checkbox
+                checked={scopes.includes(s.value)}
+                onCheckedChange={() =>
+                  toggleScope(scopes, setScopes, s.value)
+                }
+              />
+              {s.label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={isPending || !name}
+        >
+          {isPending ? "Creating..." : submitLabel}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 // -- Profile Page --
 
 export default function ProfilePage() {
   const { user, refreshUser, changePassword } = useAuth();
   const queryClient = useQueryClient();
+  const availableScopes = SCOPES.filter((s) => s.value !== "admin" || user?.is_admin);
 
   // -- General tab state --
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
@@ -902,78 +1007,29 @@ export default function ProfilePage() {
                   Generate a new API key for programmatic access.
                 </DialogDescription>
               </DialogHeader>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
+              <TokenCreateForm
+                nameId="key-name"
+                name={keyName}
+                setName={setKeyName}
+                namePlaceholder="e.g., CI/CD Pipeline"
+                expiry={keyExpiry}
+                setExpiry={setKeyExpiry}
+                scopes={keyScopes}
+                setScopes={setKeyScopes}
+                availableScopes={availableScopes}
+                toggleScope={toggleScope}
+                isPending={createKeyMutation.isPending}
+                onSubmit={() =>
                   createKeyMutation.mutate({
                     name: keyName,
                     expires_in_days:
                       keyExpiry === "0" ? undefined : Number(keyExpiry),
                     scopes: keyScopes,
-                  });
-                }}
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="key-name">Name</Label>
-                  <Input
-                    id="key-name"
-                    value={keyName}
-                    onChange={(e) => setKeyName(e.target.value)}
-                    placeholder="e.g., CI/CD Pipeline"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Expiration</Label>
-                  <Select value={keyExpiry} onValueChange={setKeyExpiry}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPIRY_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-3">
-                  <Label>Scopes</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {SCOPES.map((s) => (
-                      <label
-                        key={s.value}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={keyScopes.includes(s.value)}
-                          onCheckedChange={() =>
-                            toggleScope(keyScopes, setKeyScopes, s.value)
-                          }
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => setCreateKeyOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createKeyMutation.isPending || !keyName}
-                  >
-                    {createKeyMutation.isPending ? "Creating..." : "Create Key"}
-                  </Button>
-                </DialogFooter>
-              </form>
+                  })
+                }
+                onCancel={() => setCreateKeyOpen(false)}
+                submitLabel="Create Key"
+              />
             </>
           )}
         </DialogContent>
@@ -1036,80 +1092,29 @@ export default function ProfilePage() {
                   authentication.
                 </DialogDescription>
               </DialogHeader>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
+              <TokenCreateForm
+                nameId="token-name"
+                name={tokenName}
+                setName={setTokenName}
+                namePlaceholder="e.g., Local Development"
+                expiry={tokenExpiry}
+                setExpiry={setTokenExpiry}
+                scopes={tokenScopes}
+                setScopes={setTokenScopes}
+                availableScopes={availableScopes}
+                toggleScope={toggleScope}
+                isPending={createTokenMutation.isPending}
+                onSubmit={() =>
                   createTokenMutation.mutate({
                     name: tokenName,
                     expires_in_days:
                       tokenExpiry === "0" ? undefined : Number(tokenExpiry),
                     scopes: tokenScopes,
-                  });
-                }}
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="token-name">Name</Label>
-                  <Input
-                    id="token-name"
-                    value={tokenName}
-                    onChange={(e) => setTokenName(e.target.value)}
-                    placeholder="e.g., Local Development"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Expiration</Label>
-                  <Select value={tokenExpiry} onValueChange={setTokenExpiry}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPIRY_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-3">
-                  <Label>Scopes</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {SCOPES.map((s) => (
-                      <label
-                        key={s.value}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={tokenScopes.includes(s.value)}
-                          onCheckedChange={() =>
-                            toggleScope(tokenScopes, setTokenScopes, s.value)
-                          }
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => setCreateTokenOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createTokenMutation.isPending || !tokenName}
-                  >
-                    {createTokenMutation.isPending
-                      ? "Creating..."
-                      : "Create Token"}
-                  </Button>
-                </DialogFooter>
-              </form>
+                  })
+                }
+                onCancel={() => setCreateTokenOpen(false)}
+                submitLabel="Create Token"
+              />
             </>
           )}
         </DialogContent>

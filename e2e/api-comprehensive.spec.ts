@@ -243,3 +243,41 @@ test.describe('API Comprehensive - Backups', () => {
     }
   });
 });
+
+test.describe.serial('API Comprehensive - Access Tokens', () => {
+  let tokenId: string;
+
+  test('POST /api/v1/auth/tokens creates a token', async ({ request }) => {
+    const response = await request.post('/api/v1/auth/tokens', {
+      data: {
+        name: 'e2e-test-token',
+        scopes: ['read'],
+        expires_in_days: 1,
+      },
+    });
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.token).toBeTruthy();
+    expect(body.id).toBeTruthy();
+    expect(body.name).toBe('e2e-test-token');
+    tokenId = body.id;
+  });
+
+  test('DELETE /api/v1/auth/tokens/:id revokes the token', async ({ request }) => {
+    expect(tokenId).toBeTruthy();
+    const response = await request.delete(`/api/v1/auth/tokens/${tokenId}`);
+    expect(response.ok()).toBeTruthy();
+  });
+
+  test('POST /api/v1/auth/tokens rejects empty name', async ({ request }) => {
+    const response = await request.post('/api/v1/auth/tokens', {
+      data: {
+        name: '',
+        scopes: ['read'],
+      },
+    });
+    // Should fail validation (400) or reject (422), not 404 or 500
+    expect(response.status()).toBeLessThan(500);
+    expect(response.status()).toBeGreaterThanOrEqual(400);
+  });
+});
