@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
 
-const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
 const nextConfig: NextConfig = {
@@ -44,18 +43,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendUrl}/api/:path*`,
-      },
-      {
-        source: "/health",
-        destination: `${backendUrl}/health`,
-      },
-    ];
-  },
+  // API proxy is handled by src/middleware.ts at runtime (reads BACKEND_URL
+  // env var on each request) so that Docker containers can be configured
+  // without rebuilding.  See: https://github.com/artifact-keeper/artifact-keeper-web/issues/56
 };
 
 export default nextConfig;
