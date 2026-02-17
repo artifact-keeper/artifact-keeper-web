@@ -16,8 +16,6 @@ FROM node-base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ARG BACKEND_URL=http://backend:8080
-ENV BACKEND_URL=${BACKEND_URL}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
@@ -93,7 +91,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
-    PORT=3000
+    PORT=3000 \
+    BACKEND_URL=http://backend:8080
 
 # Copy Next.js standalone output (root-owned, read-only for all users)
 COPY --from=build --chown=root:root --chmod=555 /app/public ./public
