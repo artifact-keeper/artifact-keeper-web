@@ -101,6 +101,7 @@ const EXPIRY_OPTIONS = [
 export default function ProfilePage() {
   const { user, refreshUser, changePassword } = useAuth();
   const queryClient = useQueryClient();
+  const availableScopes = SCOPES.filter((s) => s.value !== "admin" || user?.is_admin);
 
   // -- General tab state --
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
@@ -942,7 +943,7 @@ export default function ProfilePage() {
                 <div className="space-y-3">
                   <Label>Scopes</Label>
                   <div className="grid grid-cols-2 gap-3">
-                    {SCOPES.filter((s) => s.value !== "admin" || user?.is_admin).map((s) => (
+                    {availableScopes.map((s) => (
                       <label
                         key={s.value}
                         className="flex items-center gap-2 text-sm"
@@ -1076,7 +1077,7 @@ export default function ProfilePage() {
                 <div className="space-y-3">
                   <Label>Scopes</Label>
                   <div className="grid grid-cols-2 gap-3">
-                    {SCOPES.filter((s) => s.value !== "admin" || user?.is_admin).map((s) => (
+                    {availableScopes.map((s) => (
                       <label
                         key={s.value}
                         className="flex items-center gap-2 text-sm"
