@@ -25,6 +25,8 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   { value: "oras", label: "ORAS", group: "Container" },
   { value: "wasm_oci", label: "WASM OCI", group: "Container" },
   { value: "helm_oci", label: "Helm OCI", group: "Container" },
+  { value: "incus", label: "Incus", group: "Container" },
+  { value: "lxc", label: "LXC", group: "Container" },
   // Linux distro packages
   { value: "debian", label: "Debian/APT", group: "Linux" },
   { value: "rpm", label: "RPM/YUM", group: "Linux" },

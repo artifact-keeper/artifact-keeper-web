@@ -117,7 +117,9 @@ export type RepositoryFormat =
   | 'opkg'
   | 'p2'
   | 'bazel'
-  | 'protobuf';
+  | 'protobuf'
+  | 'incus'
+  | 'lxc';
 
 export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
 
