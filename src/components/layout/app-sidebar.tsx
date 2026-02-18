@@ -13,8 +13,10 @@ import {
   Puzzle,
   Webhook,
   ArrowRightLeft,
+  Bot,
   BookOpen,
   GitPullRequestArrow,
+  Key,
   Shield,
   ShieldCheck,
   Search,
@@ -71,6 +73,7 @@ const integrationItems: NavItem[] = [
   { title: "Replication", href: "/replication", icon: RefreshCw },
   { title: "Plugins", href: "/plugins", icon: Puzzle },
   { title: "Webhooks", href: "/webhooks", icon: Webhook },
+  { title: "Access Tokens", href: "/access-tokens", icon: Key },
   { title: "Migration", href: "/migration", icon: ArrowRightLeft },
 ];
 
@@ -96,6 +99,7 @@ const operationsItems: NavItem[] = [
 const adminItems: NavItem[] = [
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
+  { title: "Service Accounts", href: "/service-accounts", icon: Bot },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },
@@ -166,7 +170,7 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="pb-4">
         <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
         <NavGroup label="Artifacts" items={artifactItems} pathname={pathname} />
         {isAuthenticated && (
