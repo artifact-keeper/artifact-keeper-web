@@ -8,6 +8,8 @@ import {
   dismissTokenAlert,
   assertNoAppErrors,
   switchTab,
+  isRowVisible,
+  revokeRowItem,
 } from './helpers/test-fixtures';
 
 test.describe('Access Tokens Page', () => {
@@ -91,41 +93,23 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
   test('created API key appears in table', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await page.waitForTimeout(2000);
+    test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found in table');
 
-    const keyText = page.getByText('e2e-api-key').first();
-    const visible = await keyText.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!visible, 'API key e2e-api-key not found in table');
-
-    await expect(keyText).toBeVisible();
+    await expect(page.getByText('e2e-api-key').first()).toBeVisible();
   });
 
   test('revoke the created API key', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await page.waitForTimeout(2000);
+    test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found');
 
-    const keyText = page.getByText('e2e-api-key').first();
-    const visible = await keyText.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!visible, 'API key e2e-api-key not found');
-
-    const revokeBtn = page.getByRole('row', { name: /e2e-api-key/i })
-      .getByRole('button').first();
-    await revokeBtn.click();
-
-    const confirmBtn = page.getByRole('button', { name: /revoke/i }).last();
-    const confirmVisible = await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false);
-    if (confirmVisible) {
-      await confirmBtn.click();
-    }
-
-    await page.waitForTimeout(2000);
-    await assertNoAppErrors(page);
+    await revokeRowItem(page, /e2e-api-key/i);
   });
 });
 
 test.describe.serial('Access Tokens - Personal Token CRUD', () => {
   test('create an access token', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
-
     await switchTab(page, /Access Tokens/i);
 
     const dialog = await openDialog(page, /create token/i);
@@ -141,34 +125,17 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
     await page.waitForTimeout(1000);
+    test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
-    const tokenText = page.getByText('e2e-access-token').first();
-    const visible = await tokenText.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!visible, 'Access token e2e-access-token not found');
-
-    await expect(tokenText).toBeVisible();
+    await expect(page.getByText('e2e-access-token').first()).toBeVisible();
   });
 
   test('revoke the created access token', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
     await page.waitForTimeout(1000);
+    test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
-    const tokenText = page.getByText('e2e-access-token').first();
-    const visible = await tokenText.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!visible, 'Access token e2e-access-token not found');
-
-    const revokeBtn = page.getByRole('row', { name: /e2e-access-token/i })
-      .getByRole('button').first();
-    await revokeBtn.click();
-
-    const confirmBtn = page.getByRole('button', { name: /revoke/i }).last();
-    const confirmVisible = await confirmBtn.isVisible({ timeout: 5000 }).catch(() => false);
-    if (confirmVisible) {
-      await confirmBtn.click();
-    }
-
-    await page.waitForTimeout(2000);
-    await assertNoAppErrors(page);
+    await revokeRowItem(page, /e2e-access-token/i);
   });
 });

@@ -71,7 +71,8 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
 
   const removeLabel = useCallback(
     (key: string) => {
-      const { [key]: _, ...current } = value.match_labels ?? {};
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [key]: _removed, ...current } = value.match_labels ?? {};
       onChange({
         ...value,
         match_labels: Object.keys(current).length > 0 ? current : undefined,

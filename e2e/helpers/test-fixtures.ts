@@ -169,3 +169,52 @@ export function getDisplayNameInput(page: Page): Locator {
     .getByLabel('Display Name')
     .or(page.locator('input[placeholder="Your display name"]'));
 }
+
+/** Revoke a token/key row by clicking its action button and confirming. */
+export async function revokeRowItem(
+  page: Page,
+  itemName: RegExp
+): Promise<void> {
+  const revokeBtn = page
+    .getByRole('row', { name: itemName })
+    .getByRole('button')
+    .first();
+  await revokeBtn.click();
+
+  const confirmBtn = page.getByRole('button', { name: /revoke/i }).last();
+  const confirmVisible = await confirmBtn
+    .isVisible({ timeout: 5000 })
+    .catch(() => false);
+  if (confirmVisible) {
+    await confirmBtn.click();
+  }
+
+  await page.waitForTimeout(2000);
+  await assertNoAppErrors(page);
+}
+
+/** Get action buttons for a table row matching the given name. */
+export function getRowActionButtons(page: Page, rowName: RegExp): Locator {
+  return page.getByRole('row', { name: rowName }).getByRole('button');
+}
+
+/** Click "Create Token" inside a dialog and wait for the form to appear. */
+export async function clickCreateTokenInDialog(
+  dialog: Locator,
+  waitMs = 500
+): Promise<void> {
+  await dialog.getByRole('button', { name: /create token/i }).click();
+  await dialog.page().waitForTimeout(waitMs);
+}
+
+/** Click the create/submit button in a dialog (handles "Create" or "Create Token" labels). */
+export async function submitTokenForm(
+  dialog: Locator,
+  page: Page
+): Promise<void> {
+  const createBtn = dialog
+    .getByRole('button', { name: /create$/i })
+    .or(dialog.getByRole('button', { name: /create token$/i }));
+  await createBtn.click();
+  await page.waitForTimeout(3000);
+}

@@ -9,11 +9,20 @@ import {
   assertNoAppErrors,
   isRowVisible,
   openTokenDialogForAccount,
+  getRowActionButtons,
+  clickCreateTokenInDialog,
+  submitTokenForm,
 } from './helpers/test-fixtures';
 
 const SVC_ACCOUNT = 'svc-e2e-test-bot';
 const SVC_ACCOUNT_RE = /svc-e2e-test-bot/i;
 const SKIP_MSG = `Service account ${SVC_ACCOUNT} not found`;
+
+/** Navigate to service accounts page and skip if the test account is missing. */
+async function ensureAccountExists(page: import('@playwright/test').Page) {
+  await navigateTo(page, '/service-accounts');
+  return isRowVisible(page, SVC_ACCOUNT);
+}
 
 test.describe('Service Accounts Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -89,8 +98,7 @@ test.describe.serial('Service Account CRUD', () => {
   });
 
   test('can open Manage Tokens dialog for service account', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
     await expect(dialog.getByText(SVC_ACCOUNT_RE)).toBeVisible({ timeout: 5000 });
@@ -100,28 +108,18 @@ test.describe.serial('Service Account CRUD', () => {
   });
 
   test('can create a token for the service account', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
-
-    await dialog.getByRole('button', { name: /create token/i }).click();
-    await page.waitForTimeout(1000);
-
+    await clickCreateTokenInDialog(dialog, 1000);
     await fillDialogName(dialog, 'e2e-svc-token');
-
-    const createBtn = dialog.getByRole('button', { name: /create$/i })
-      .or(dialog.getByRole('button', { name: /create token$/i }));
-    await createBtn.click();
-    await page.waitForTimeout(3000);
-
+    await submitTokenForm(dialog, page);
     await dismissTokenAlert(page);
     await assertNoAppErrors(page);
   });
 
   test('token without selector shows All repos in Repo Access column', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
 
@@ -134,13 +132,10 @@ test.describe.serial('Service Account CRUD', () => {
   });
 
   test('create token form shows Repository Access section', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
-
-    await dialog.getByRole('button', { name: /create token/i }).click();
-    await page.waitForTimeout(500);
+    await clickCreateTokenInDialog(dialog);
 
     await expect(dialog.getByText(/repository access/i)).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText('docker')).toBeVisible({ timeout: 5000 });
@@ -151,14 +146,10 @@ test.describe.serial('Service Account CRUD', () => {
   });
 
   test('can create a token with repo selector', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
-
-    await dialog.getByRole('button', { name: /create token/i }).click();
-    await page.waitForTimeout(500);
-
+    await clickCreateTokenInDialog(dialog);
     await fillDialogName(dialog, 'e2e-scoped-token');
 
     // Select docker format
@@ -168,22 +159,15 @@ test.describe.serial('Service Account CRUD', () => {
     // Set name pattern
     await dialog.getByPlaceholder('libs-*').fill('prod-*');
 
-    const createBtn = dialog.getByRole('button', { name: /create$/i })
-      .or(dialog.getByRole('button', { name: /create token$/i }));
-    await createBtn.click();
-    await page.waitForTimeout(3000);
-
+    await submitTokenForm(dialog, page);
     await dismissTokenAlert(page);
     await assertNoAppErrors(page);
   });
 
   test('can edit a service account description', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
-    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
-      .getByRole('button');
-    await actionBtns.nth(1).click();
+    await getRowActionButtons(page, SVC_ACCOUNT_RE).nth(1).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10000 });
@@ -199,30 +183,22 @@ test.describe.serial('Service Account CRUD', () => {
   });
 
   test('can toggle service account active status', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
-    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
-      .getByRole('button');
-    await actionBtns.nth(2).click();
+    await getRowActionButtons(page, SVC_ACCOUNT_RE).nth(2).click();
     await page.waitForTimeout(2000);
     await assertNoAppErrors(page);
 
     // Toggle back
     await page.waitForTimeout(1000);
-    const toggleBtnAgain = page.getByRole('row', { name: SVC_ACCOUNT_RE })
-      .getByRole('button').nth(2);
-    await toggleBtnAgain.click();
+    await getRowActionButtons(page, SVC_ACCOUNT_RE).nth(2).click();
     await page.waitForTimeout(2000);
   });
 
   test('can delete a service account', async ({ page }) => {
-    await navigateTo(page, '/service-accounts');
-    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
-    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
-      .getByRole('button');
-    await actionBtns.last().click();
+    await getRowActionButtons(page, SVC_ACCOUNT_RE).last().click();
 
     const confirmDialog = page.getByRole('dialog');
     await expect(confirmDialog).toBeVisible({ timeout: 10000 });
