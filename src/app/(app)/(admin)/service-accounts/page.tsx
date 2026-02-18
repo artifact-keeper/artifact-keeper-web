@@ -1,0 +1,800 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Bot,
+  Plus,
+  Trash2,
+  Pencil,
+  Key,
+  AlertTriangle,
+  ToggleLeft,
+  ToggleRight,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { serviceAccountsApi } from "@/lib/api/service-accounts";
+import type {
+  ServiceAccount,
+  ServiceAccountToken,
+  CreateServiceAccountRequest,
+  CreateTokenRequest,
+  CreateTokenResponse,
+} from "@/lib/api/service-accounts";
+import { useAuth } from "@/providers/auth-provider";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+} from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+
+import { PageHeader } from "@/components/common/page-header";
+import { CopyButton } from "@/components/common/copy-button";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { StatusBadge } from "@/components/common/status-badge";
+import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { EmptyState } from "@/components/common/empty-state";
+
+const SCOPES = [
+  { value: "read", label: "Read" },
+  { value: "write", label: "Write" },
+  { value: "delete", label: "Delete" },
+  { value: "admin", label: "Admin" },
+];
+
+const EXPIRY_OPTIONS = [
+  { value: "30", label: "30 days" },
+  { value: "60", label: "60 days" },
+  { value: "90", label: "90 days" },
+  { value: "180", label: "180 days" },
+  { value: "365", label: "1 year" },
+  { value: "0", label: "Never" },
+];
+
+export default function ServiceAccountsPage() {
+  const { user: currentUser } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+
+  // Edit dialog
+  const [editOpen, setEditOpen] = useState(false);
+  const [editAccount, setEditAccount] = useState<ServiceAccount | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+
+  // Delete dialog
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteAccount, setDeleteAccount] = useState<ServiceAccount | null>(
+    null
+  );
+
+  // Token management dialog
+  const [tokenAccount, setTokenAccount] = useState<ServiceAccount | null>(null);
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const [createTokenOpen, setCreateTokenOpen] = useState(false);
+  const [tokenName, setTokenName] = useState("");
+  const [tokenExpiry, setTokenExpiry] = useState("90");
+  const [tokenScopes, setTokenScopes] = useState<string[]>(["read"]);
+  const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(
+    null
+  );
+  const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
+
+  // Queries
+  const { data: accounts = [], isLoading } = useQuery({
+    queryKey: ["service-accounts"],
+    queryFn: () => serviceAccountsApi.list(),
+    enabled: !!currentUser?.is_admin,
+  });
+
+  const { data: tokens = [], isLoading: tokensLoading } = useQuery({
+    queryKey: ["service-account-tokens", tokenAccount?.id],
+    queryFn: () =>
+      tokenAccount ? serviceAccountsApi.listTokens(tokenAccount.id) : [],
+    enabled: !!tokenAccount,
+  });
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: (req: CreateServiceAccountRequest) =>
+      serviceAccountsApi.create(req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      setCreateOpen(false);
+      setCreateName("");
+      setCreateDescription("");
+      toast.success("Service account created");
+    },
+    onError: () => toast.error("Failed to create service account"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      display_name,
+      is_active,
+    }: {
+      id: string;
+      display_name?: string;
+      is_active?: boolean;
+    }) => serviceAccountsApi.update(id, { display_name, is_active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      setEditOpen(false);
+      setEditAccount(null);
+      toast.success("Service account updated");
+    },
+    onError: () => toast.error("Failed to update service account"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => serviceAccountsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      setDeleteOpen(false);
+      setDeleteAccount(null);
+      toast.success("Service account deleted");
+    },
+    onError: () => toast.error("Failed to delete service account"),
+  });
+
+  const createTokenMutation = useMutation({
+    mutationFn: ({ id, req }: { id: string; req: CreateTokenRequest }) =>
+      serviceAccountsApi.createToken(id, req),
+    onSuccess: (result: CreateTokenResponse) => {
+      queryClient.invalidateQueries({
+        queryKey: ["service-account-tokens", tokenAccount?.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      setNewlyCreatedToken(result.token);
+      setTokenName("");
+      setTokenScopes(["read"]);
+      setTokenExpiry("90");
+      toast.success("Token created");
+    },
+    onError: () => toast.error("Failed to create token"),
+  });
+
+  const revokeTokenMutation = useMutation({
+    mutationFn: ({ accountId, tokenId }: { accountId: string; tokenId: string }) =>
+      serviceAccountsApi.revokeToken(accountId, tokenId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["service-account-tokens", tokenAccount?.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
+      setRevokeTokenId(null);
+      toast.success("Token revoked");
+    },
+    onError: () => toast.error("Failed to revoke token"),
+  });
+
+  // Handlers
+  const handleEdit = useCallback((account: ServiceAccount) => {
+    setEditAccount(account);
+    setEditDisplayName(account.display_name ?? "");
+    setEditOpen(true);
+  }, []);
+
+  const handleManageTokens = useCallback((account: ServiceAccount) => {
+    setTokenAccount(account);
+    setTokenDialogOpen(true);
+  }, []);
+
+  const toggleScope = (scope: string) => {
+    setTokenScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
+    );
+  };
+
+  if (!currentUser?.is_admin) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Access Denied</AlertTitle>
+        <AlertDescription>
+          You need admin privileges to manage service accounts.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Columns
+  const columns: DataTableColumn<ServiceAccount>[] = [
+    {
+      id: "username",
+      header: "Username",
+      accessor: (a) => a.username,
+      sortable: true,
+      cell: (a) => (
+        <div className="flex items-center gap-2">
+          <Bot className="size-4 text-muted-foreground" />
+          <span className="font-medium text-sm">{a.username}</span>
+        </div>
+      ),
+    },
+    {
+      id: "display_name",
+      header: "Description",
+      cell: (a) => (
+        <span className="text-sm text-muted-foreground">
+          {a.display_name || "-"}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (a) => (
+        <StatusBadge
+          status={a.is_active ? "Active" : "Inactive"}
+          color={a.is_active ? "green" : "red"}
+        />
+      ),
+    },
+    {
+      id: "tokens",
+      header: "Tokens",
+      accessor: (a) => a.token_count,
+      cell: (a) => (
+        <Badge variant="secondary" className="text-xs">
+          {a.token_count}
+        </Badge>
+      ),
+    },
+    {
+      id: "created",
+      header: "Created",
+      accessor: (a) => a.created_at,
+      sortable: true,
+      cell: (a) => (
+        <span className="text-sm text-muted-foreground">
+          {new Date(a.created_at).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (a) => (
+        <div className="flex items-center gap-1 justify-end">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => handleManageTokens(a)}
+              >
+                <Key className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Tokens</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => handleEdit(a)}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Edit</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() =>
+                  updateMutation.mutate({
+                    id: a.id,
+                    is_active: !a.is_active,
+                  })
+                }
+              >
+                {a.is_active ? (
+                  <ToggleRight className="size-3.5" />
+                ) : (
+                  <ToggleLeft className="size-3.5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {a.is_active ? "Deactivate" : "Activate"}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  setDeleteAccount(a);
+                  setDeleteOpen(true);
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete</TooltipContent>
+          </Tooltip>
+        </div>
+      ),
+    },
+  ];
+
+  // Token columns for the manage dialog
+  const tokenColumns: DataTableColumn<ServiceAccountToken>[] = [
+    {
+      id: "name",
+      header: "Name",
+      accessor: (t) => t.name,
+      cell: (t) => (
+        <div className="flex items-center gap-2">
+          <Key className="size-3.5 text-muted-foreground" />
+          <span className="font-medium text-sm">{t.name}</span>
+          {t.is_expired && (
+            <Badge variant="destructive" className="text-xs">
+              Expired
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "prefix",
+      header: "Prefix",
+      cell: (t) => (
+        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+          {t.token_prefix}...
+        </code>
+      ),
+    },
+    {
+      id: "scopes",
+      header: "Scopes",
+      cell: (t) => (
+        <div className="flex flex-wrap gap-1">
+          {t.scopes.map((s) => (
+            <Badge key={s} variant="secondary" className="text-xs">
+              {s}
+            </Badge>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: "last_used",
+      header: "Last Used",
+      cell: (t) =>
+        t.last_used_at ? (
+          <span className="text-sm text-muted-foreground">
+            {new Date(t.last_used_at).toLocaleDateString()}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">Never</span>
+        ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (t) => (
+        <div className="flex justify-end">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setRevokeTokenId(t.id)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Revoke</TooltipContent>
+          </Tooltip>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Service Accounts"
+        description="Machine identities for CI/CD pipelines and automated systems. Each service account can have its own API tokens, independent of any human user."
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            Create Service Account
+          </Button>
+        }
+      />
+
+      {accounts.length === 0 && !isLoading ? (
+        <EmptyState
+          icon={Bot}
+          title="No service accounts"
+          description="Create a service account to give CI/CD pipelines and automated systems their own identity and API tokens."
+          action={
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              Create Service Account
+            </Button>
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={accounts}
+          loading={isLoading}
+          rowKey={(a) => a.id}
+          emptyMessage="No service accounts found."
+        />
+      )}
+
+      {/* Create Service Account Dialog */}
+      <Dialog
+        open={createOpen}
+        onOpenChange={(o) => {
+          setCreateOpen(o);
+          if (!o) {
+            setCreateName("");
+            setCreateDescription("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Service Account</DialogTitle>
+            <DialogDescription>
+              Service accounts are machine identities. The username will be
+              prefixed with &quot;svc-&quot; automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMutation.mutate({
+                name: createName,
+                description: createDescription || undefined,
+              });
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="svc-name">Name</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">svc-</span>
+                <Input
+                  id="svc-name"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="deploy-pipeline"
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Alphanumeric characters and hyphens only.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="svc-description">Description</Label>
+              <Input
+                id="svc-description"
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                placeholder="Production deployment pipeline"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setCreateOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || !createName}
+              >
+                {createMutation.isPending ? "Creating..." : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Service Account Dialog */}
+      <Dialog
+        open={editOpen}
+        onOpenChange={(o) => {
+          setEditOpen(o);
+          if (!o) setEditAccount(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Edit: {editAccount?.username}
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (editAccount) {
+                updateMutation.mutate({
+                  id: editAccount.id,
+                  display_name: editDisplayName || undefined,
+                });
+              }
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-display-name">Description</Label>
+              <Input
+                id="edit-display-name"
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+                placeholder="Description for this service account"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setEditOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Tokens Dialog */}
+      <Dialog
+        open={tokenDialogOpen}
+        onOpenChange={(o) => {
+          setTokenDialogOpen(o);
+          if (!o) {
+            setTokenAccount(null);
+            setCreateTokenOpen(false);
+            setNewlyCreatedToken(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Tokens: {tokenAccount?.username}
+            </DialogTitle>
+            <DialogDescription>
+              Manage API tokens for this service account.
+            </DialogDescription>
+          </DialogHeader>
+
+          {newlyCreatedToken ? (
+            <div className="space-y-4">
+              <Alert
+                variant="destructive"
+                className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
+              >
+                <AlertTriangle className="size-4" />
+                <AlertTitle>Copy this token now</AlertTitle>
+                <AlertDescription>
+                  This token will only be shown once. Store it in a secure
+                  location.
+                </AlertDescription>
+              </Alert>
+              <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
+                <code className="flex-1 break-all text-sm">
+                  {newlyCreatedToken}
+                </code>
+                <CopyButton value={newlyCreatedToken} />
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setNewlyCreatedToken(null)}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : createTokenOpen ? (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (tokenAccount) {
+                  createTokenMutation.mutate({
+                    id: tokenAccount.id,
+                    req: {
+                      name: tokenName,
+                      scopes: tokenScopes,
+                      expires_in_days:
+                        tokenExpiry === "0" ? undefined : Number(tokenExpiry),
+                    },
+                  });
+                }
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="token-name">Token Name</Label>
+                <Input
+                  id="token-name"
+                  value={tokenName}
+                  onChange={(e) => setTokenName(e.target.value)}
+                  placeholder="e.g., production-deploy"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Expiration</Label>
+                <Select value={tokenExpiry} onValueChange={setTokenExpiry}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPIRY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-3">
+                <Label>Scopes</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {SCOPES.map((s) => (
+                    <label
+                      key={s.value}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={tokenScopes.includes(s.value)}
+                        onCheckedChange={() => toggleScope(s.value)}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setCreateTokenOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createTokenMutation.isPending || !tokenName}
+                >
+                  {createTokenMutation.isPending
+                    ? "Creating..."
+                    : "Create Token"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => setCreateTokenOpen(true)}
+                >
+                  <Plus className="size-4" />
+                  Create Token
+                </Button>
+              </div>
+
+              {tokens.length === 0 && !tokensLoading ? (
+                <EmptyState
+                  icon={Key}
+                  title="No tokens"
+                  description="Create a token for this service account."
+                  action={
+                    <Button
+                      size="sm"
+                      onClick={() => setCreateTokenOpen(true)}
+                    >
+                      <Plus className="size-4" />
+                      Create Token
+                    </Button>
+                  }
+                />
+              ) : (
+                <DataTable
+                  columns={tokenColumns}
+                  data={tokens}
+                  loading={tokensLoading}
+                  rowKey={(t) => t.id}
+                  emptyMessage="No tokens found."
+                />
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Service Account Confirm */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeleteOpen(false);
+            setDeleteAccount(null);
+          }
+        }}
+        title="Delete Service Account"
+        description={`This will permanently delete "${deleteAccount?.username}" and revoke all its tokens. Any pipelines using those tokens will lose access immediately.`}
+        confirmText="Delete"
+        typeToConfirm={deleteAccount?.username}
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteAccount) deleteMutation.mutate(deleteAccount.id);
+        }}
+      />
+
+      {/* Revoke Token Confirm */}
+      <ConfirmDialog
+        open={!!revokeTokenId}
+        onOpenChange={(o) => {
+          if (!o) setRevokeTokenId(null);
+        }}
+        title="Revoke Token"
+        description="This will permanently invalidate this token. Any systems using it will lose access immediately."
+        confirmText="Revoke"
+        danger
+        loading={revokeTokenMutation.isPending}
+        onConfirm={() => {
+          if (revokeTokenId && tokenAccount) {
+            revokeTokenMutation.mutate({
+              accountId: tokenAccount.id,
+              tokenId: revokeTokenId,
+            });
+          }
+        }}
+      />
+    </div>
+  );
+}
