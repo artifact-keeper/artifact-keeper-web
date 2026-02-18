@@ -286,12 +286,6 @@ export default function AccessTokensPage() {
               icon={Key}
               title="No API keys"
               description="Create an API key for programmatic access to the registry."
-              action={
-                <Button onClick={() => setCreateKeyOpen(true)}>
-                  <Plus className="size-4" />
-                  Create API Key
-                </Button>
-              }
             />
           ) : (
             <DataTable
@@ -324,12 +318,6 @@ export default function AccessTokensPage() {
               icon={Shield}
               title="No access tokens"
               description="Create a personal access token for CLI or CI/CD authentication."
-              action={
-                <Button onClick={() => setCreateTokenOpen(true)}>
-                  <Plus className="size-4" />
-                  Create Token
-                </Button>
-              }
             />
           ) : (
             <DataTable
