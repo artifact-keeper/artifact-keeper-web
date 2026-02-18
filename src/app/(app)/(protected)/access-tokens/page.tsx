@@ -7,7 +7,6 @@ import {
   Shield,
   Plus,
   Trash2,
-  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,12 +20,10 @@ import type {
   CreateAccessTokenResponse,
 } from "@/lib/api/profile";
 import { useAuth } from "@/providers/auth-provider";
+import { SCOPES } from "@/lib/constants/token";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tabs,
   TabsList,
@@ -36,23 +33,7 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import {
-  Alert,
-  AlertTitle,
-  AlertDescription,
-} from "@/components/ui/alert";
 import {
   Tooltip,
   TooltipTrigger,
@@ -60,38 +41,40 @@ import {
 } from "@/components/ui/tooltip";
 
 import { PageHeader } from "@/components/common/page-header";
-import { CopyButton } from "@/components/common/copy-button";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
+import { TokenCreatedAlert } from "@/components/common/token-created-alert";
+import { TokenCreateForm } from "@/components/common/token-create-form";
 
-const SCOPES = [
-  { value: "read", label: "Read" },
-  { value: "write", label: "Write" },
-  { value: "delete", label: "Delete" },
-  { value: "admin", label: "Admin" },
-];
-
-const EXPIRY_OPTIONS = [
-  { value: "30", label: "30 days" },
-  { value: "60", label: "60 days" },
-  { value: "90", label: "90 days" },
-  { value: "180", label: "180 days" },
-  { value: "365", label: "1 year" },
-  { value: "0", label: "Never" },
-];
-
-const toggleScope = (
-  scopes: string[],
-  setScopes: (s: string[]) => void,
-  scope: string
-) => {
-  setScopes(
-    scopes.includes(scope)
-      ? scopes.filter((s) => s !== scope)
-      : [...scopes, scope]
+function DateCell({ value }: { value?: string | null }) {
+  if (!value) return <span className="text-sm text-muted-foreground">Never</span>;
+  return (
+    <span className="text-sm text-muted-foreground">
+      {new Date(value).toLocaleDateString()}
+    </span>
   );
-};
+}
+
+function ScopeBadges({ scopes }: { scopes?: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {(scopes ?? []).map((s) => (
+        <Badge key={s} variant="secondary" className="text-xs">
+          {s}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+function TokenPrefix({ prefix }: { prefix: string }) {
+  return (
+    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+      {prefix}...
+    </code>
+  );
+}
 
 export default function AccessTokensPage() {
   const { user } = useAuth();
@@ -195,65 +178,11 @@ export default function AccessTokensPage() {
         </div>
       ),
     },
-    {
-      id: "prefix",
-      header: "Key Prefix",
-      cell: (k) => (
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-          {k.key_prefix}...
-        </code>
-      ),
-    },
-    {
-      id: "scopes",
-      header: "Scopes",
-      cell: (k) => (
-        <div className="flex flex-wrap gap-1">
-          {(k.scopes ?? []).map((s) => (
-            <Badge key={s} variant="secondary" className="text-xs">
-              {s}
-            </Badge>
-          ))}
-        </div>
-      ),
-    },
-    {
-      id: "expires",
-      header: "Expires",
-      accessor: (k) => k.expires_at ?? "",
-      cell: (k) =>
-        k.expires_at ? (
-          <span className="text-sm text-muted-foreground">
-            {new Date(k.expires_at).toLocaleDateString()}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
-        ),
-    },
-    {
-      id: "last_used",
-      header: "Last Used",
-      accessor: (k) => k.last_used_at ?? "",
-      cell: (k) =>
-        k.last_used_at ? (
-          <span className="text-sm text-muted-foreground">
-            {new Date(k.last_used_at).toLocaleDateString()}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
-        ),
-    },
-    {
-      id: "created",
-      header: "Created",
-      accessor: (k) => k.created_at,
-      sortable: true,
-      cell: (k) => (
-        <span className="text-sm text-muted-foreground">
-          {new Date(k.created_at).toLocaleDateString()}
-        </span>
-      ),
-    },
+    { id: "prefix", header: "Key Prefix", cell: (k) => <TokenPrefix prefix={k.key_prefix} /> },
+    { id: "scopes", header: "Scopes", cell: (k) => <ScopeBadges scopes={k.scopes} /> },
+    { id: "expires", header: "Expires", accessor: (k) => k.expires_at ?? "", cell: (k) => <DateCell value={k.expires_at} /> },
+    { id: "last_used", header: "Last Used", accessor: (k) => k.last_used_at ?? "", cell: (k) => <DateCell value={k.last_used_at} /> },
+    { id: "created", header: "Created", accessor: (k) => k.created_at, sortable: true, cell: (k) => <DateCell value={k.created_at} /> },
     {
       id: "actions",
       header: "",
@@ -290,65 +219,11 @@ export default function AccessTokensPage() {
         </div>
       ),
     },
-    {
-      id: "prefix",
-      header: "Token Prefix",
-      cell: (t) => (
-        <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-          {t.token_prefix}...
-        </code>
-      ),
-    },
-    {
-      id: "scopes",
-      header: "Scopes",
-      cell: (t) => (
-        <div className="flex flex-wrap gap-1">
-          {(t.scopes ?? []).map((s) => (
-            <Badge key={s} variant="secondary" className="text-xs">
-              {s}
-            </Badge>
-          ))}
-        </div>
-      ),
-    },
-    {
-      id: "expires",
-      header: "Expires",
-      accessor: (t) => t.expires_at ?? "",
-      cell: (t) =>
-        t.expires_at ? (
-          <span className="text-sm text-muted-foreground">
-            {new Date(t.expires_at).toLocaleDateString()}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
-        ),
-    },
-    {
-      id: "last_used",
-      header: "Last Used",
-      accessor: (t) => t.last_used_at ?? "",
-      cell: (t) =>
-        t.last_used_at ? (
-          <span className="text-sm text-muted-foreground">
-            {new Date(t.last_used_at).toLocaleDateString()}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
-        ),
-    },
-    {
-      id: "created",
-      header: "Created",
-      accessor: (t) => t.created_at,
-      sortable: true,
-      cell: (t) => (
-        <span className="text-sm text-muted-foreground">
-          {new Date(t.created_at).toLocaleDateString()}
-        </span>
-      ),
-    },
+    { id: "prefix", header: "Token Prefix", cell: (t) => <TokenPrefix prefix={t.token_prefix} /> },
+    { id: "scopes", header: "Scopes", cell: (t) => <ScopeBadges scopes={t.scopes} /> },
+    { id: "expires", header: "Expires", accessor: (t) => t.expires_at ?? "", cell: (t) => <DateCell value={t.expires_at} /> },
+    { id: "last_used", header: "Last Used", accessor: (t) => t.last_used_at ?? "", cell: (t) => <DateCell value={t.last_used_at} /> },
+    { id: "created", header: "Created", accessor: (t) => t.created_at, sortable: true, cell: (t) => <DateCell value={t.created_at} /> },
     {
       id: "actions",
       header: "",
@@ -483,122 +358,39 @@ export default function AccessTokensPage() {
       >
         <DialogContent className="sm:max-w-md">
           {newlyCreatedKey ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>API Key Created</DialogTitle>
-                <DialogDescription>
-                  Copy your API key now. You will not be able to see it again.
-                </DialogDescription>
-              </DialogHeader>
-              <Alert
-                variant="destructive"
-                className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
-              >
-                <AlertTriangle className="size-4" />
-                <AlertTitle>Store it safely</AlertTitle>
-                <AlertDescription>
-                  This key will only be shown once. Store it in a secure
-                  location.
-                </AlertDescription>
-              </Alert>
-              <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
-                <code className="flex-1 break-all text-sm">
-                  {newlyCreatedKey}
-                </code>
-                <CopyButton value={newlyCreatedKey} />
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    setCreateKeyOpen(false);
-                    setNewlyCreatedKey(null);
-                  }}
-                >
-                  Done
-                </Button>
-              </DialogFooter>
-            </>
+            <TokenCreatedAlert
+              title="API Key Created"
+              description="Copy your API key now. You will not be able to see it again."
+              token={newlyCreatedKey}
+              onDone={() => {
+                setCreateKeyOpen(false);
+                setNewlyCreatedKey(null);
+              }}
+            />
           ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>Create API Key</DialogTitle>
-                <DialogDescription>
-                  Generate a new API key for programmatic access.
-                </DialogDescription>
-              </DialogHeader>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  createKeyMutation.mutate({
-                    name: keyName,
-                    expires_in_days:
-                      keyExpiry === "0" ? undefined : Number(keyExpiry),
-                    scopes: keyScopes,
-                  });
-                }}
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="key-name">Name</Label>
-                  <Input
-                    id="key-name"
-                    value={keyName}
-                    onChange={(e) => setKeyName(e.target.value)}
-                    placeholder="e.g., CI/CD Pipeline"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Expiration</Label>
-                  <Select value={keyExpiry} onValueChange={setKeyExpiry}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPIRY_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-3">
-                  <Label>Scopes</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {availableScopes.map((s) => (
-                      <label
-                        key={s.value}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={keyScopes.includes(s.value)}
-                          onCheckedChange={() =>
-                            toggleScope(keyScopes, setKeyScopes, s.value)
-                          }
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => setCreateKeyOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createKeyMutation.isPending || !keyName}
-                  >
-                    {createKeyMutation.isPending ? "Creating..." : "Create Key"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </>
+            <TokenCreateForm
+              title="Create API Key"
+              description="Generate a new API key for programmatic access."
+              name={keyName}
+              onNameChange={setKeyName}
+              namePlaceholder="e.g., CI/CD Pipeline"
+              expiry={keyExpiry}
+              onExpiryChange={setKeyExpiry}
+              scopes={keyScopes}
+              onScopesChange={setKeyScopes}
+              availableScopes={availableScopes}
+              isPending={createKeyMutation.isPending}
+              onSubmit={() =>
+                createKeyMutation.mutate({
+                  name: keyName,
+                  expires_in_days:
+                    keyExpiry === "0" ? undefined : Number(keyExpiry),
+                  scopes: keyScopes,
+                })
+              }
+              onCancel={() => setCreateKeyOpen(false)}
+              submitLabel="Create Key"
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -618,126 +410,39 @@ export default function AccessTokensPage() {
       >
         <DialogContent className="sm:max-w-md">
           {newlyCreatedToken ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Access Token Created</DialogTitle>
-                <DialogDescription>
-                  Copy your access token now. You will not be able to see it
-                  again.
-                </DialogDescription>
-              </DialogHeader>
-              <Alert
-                variant="destructive"
-                className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
-              >
-                <AlertTriangle className="size-4" />
-                <AlertTitle>Store it safely</AlertTitle>
-                <AlertDescription>
-                  This token will only be shown once. Store it in a secure
-                  location.
-                </AlertDescription>
-              </Alert>
-              <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
-                <code className="flex-1 break-all text-sm">
-                  {newlyCreatedToken}
-                </code>
-                <CopyButton value={newlyCreatedToken} />
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    setCreateTokenOpen(false);
-                    setNewlyCreatedToken(null);
-                  }}
-                >
-                  Done
-                </Button>
-              </DialogFooter>
-            </>
+            <TokenCreatedAlert
+              title="Access Token Created"
+              description="Copy your access token now. You will not be able to see it again."
+              token={newlyCreatedToken}
+              onDone={() => {
+                setCreateTokenOpen(false);
+                setNewlyCreatedToken(null);
+              }}
+            />
           ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>Create Access Token</DialogTitle>
-                <DialogDescription>
-                  Generate a personal access token for CLI or CI/CD
-                  authentication.
-                </DialogDescription>
-              </DialogHeader>
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  createTokenMutation.mutate({
-                    name: tokenName,
-                    expires_in_days:
-                      tokenExpiry === "0" ? undefined : Number(tokenExpiry),
-                    scopes: tokenScopes,
-                  });
-                }}
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="token-name">Name</Label>
-                  <Input
-                    id="token-name"
-                    value={tokenName}
-                    onChange={(e) => setTokenName(e.target.value)}
-                    placeholder="e.g., Local Development"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Expiration</Label>
-                  <Select value={tokenExpiry} onValueChange={setTokenExpiry}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPIRY_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-3">
-                  <Label>Scopes</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {availableScopes.map((s) => (
-                      <label
-                        key={s.value}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={tokenScopes.includes(s.value)}
-                          onCheckedChange={() =>
-                            toggleScope(tokenScopes, setTokenScopes, s.value)
-                          }
-                        />
-                        {s.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => setCreateTokenOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createTokenMutation.isPending || !tokenName}
-                  >
-                    {createTokenMutation.isPending
-                      ? "Creating..."
-                      : "Create Token"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </>
+            <TokenCreateForm
+              title="Create Access Token"
+              description="Generate a personal access token for CLI or CI/CD authentication."
+              name={tokenName}
+              onNameChange={setTokenName}
+              namePlaceholder="e.g., Local Development"
+              expiry={tokenExpiry}
+              onExpiryChange={setTokenExpiry}
+              scopes={tokenScopes}
+              onScopesChange={setTokenScopes}
+              availableScopes={availableScopes}
+              isPending={createTokenMutation.isPending}
+              onSubmit={() =>
+                createTokenMutation.mutate({
+                  name: tokenName,
+                  expires_in_days:
+                    tokenExpiry === "0" ? undefined : Number(tokenExpiry),
+                  scopes: tokenScopes,
+                })
+              }
+              onCancel={() => setCreateTokenOpen(false)}
+              submitLabel="Create Token"
+            />
           )}
         </DialogContent>
       </Dialog>

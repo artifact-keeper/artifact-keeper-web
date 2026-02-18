@@ -8,7 +8,6 @@ import {
   Trash2,
   Pencil,
   Key,
-  AlertTriangle,
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
@@ -23,12 +22,12 @@ import type {
   CreateTokenResponse,
 } from "@/lib/api/service-accounts";
 import { useAuth } from "@/providers/auth-provider";
+import { SCOPES } from "@/lib/constants/token";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -37,13 +36,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import {
   Alert,
   AlertTitle,
@@ -56,27 +48,12 @@ import {
 } from "@/components/ui/tooltip";
 
 import { PageHeader } from "@/components/common/page-header";
-import { CopyButton } from "@/components/common/copy-button";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { StatusBadge } from "@/components/common/status-badge";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
-
-const SCOPES = [
-  { value: "read", label: "Read" },
-  { value: "write", label: "Write" },
-  { value: "delete", label: "Delete" },
-  { value: "admin", label: "Admin" },
-];
-
-const EXPIRY_OPTIONS = [
-  { value: "30", label: "30 days" },
-  { value: "60", label: "60 days" },
-  { value: "90", label: "90 days" },
-  { value: "180", label: "180 days" },
-  { value: "365", label: "1 year" },
-  { value: "0", label: "Never" },
-];
+import { TokenCreatedAlert } from "@/components/common/token-created-alert";
+import { TokenCreateForm } from "@/components/common/token-create-form";
 
 export default function ServiceAccountsPage() {
   const { user: currentUser } = useAuth();
@@ -210,12 +187,6 @@ export default function ServiceAccountsPage() {
     setTokenAccount(account);
     setTokenDialogOpen(true);
   }, []);
-
-  const toggleScope = (scope: string) => {
-    setTokenScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
-    );
-  };
 
   if (!currentUser?.is_admin) {
     return (
@@ -612,35 +583,26 @@ export default function ServiceAccountsPage() {
           </DialogHeader>
 
           {newlyCreatedToken ? (
-            <div className="space-y-4">
-              <Alert
-                variant="destructive"
-                className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
-              >
-                <AlertTriangle className="size-4" />
-                <AlertTitle>Copy this token now</AlertTitle>
-                <AlertDescription>
-                  This token will only be shown once. Store it in a secure
-                  location.
-                </AlertDescription>
-              </Alert>
-              <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
-                <code className="flex-1 break-all text-sm">
-                  {newlyCreatedToken}
-                </code>
-                <CopyButton value={newlyCreatedToken} />
-              </div>
-              <DialogFooter>
-                <Button onClick={() => setNewlyCreatedToken(null)}>
-                  Done
-                </Button>
-              </DialogFooter>
-            </div>
+            <TokenCreatedAlert
+              title="Token Created"
+              description="Copy this token now. You will not be able to see it again."
+              token={newlyCreatedToken}
+              onDone={() => setNewlyCreatedToken(null)}
+            />
           ) : createTokenOpen ? (
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
+            <TokenCreateForm
+              title="Create Token"
+              description="Generate a new API token for this service account."
+              name={tokenName}
+              onNameChange={setTokenName}
+              namePlaceholder="e.g., production-deploy"
+              expiry={tokenExpiry}
+              onExpiryChange={setTokenExpiry}
+              scopes={tokenScopes}
+              onScopesChange={setTokenScopes}
+              availableScopes={SCOPES}
+              isPending={createTokenMutation.isPending}
+              onSubmit={() => {
                 if (tokenAccount) {
                   createTokenMutation.mutate({
                     id: tokenAccount.id,
@@ -653,67 +615,9 @@ export default function ServiceAccountsPage() {
                   });
                 }
               }}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="token-name">Token Name</Label>
-                <Input
-                  id="token-name"
-                  value={tokenName}
-                  onChange={(e) => setTokenName(e.target.value)}
-                  placeholder="e.g., production-deploy"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Expiration</Label>
-                <Select value={tokenExpiry} onValueChange={setTokenExpiry}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPIRY_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-3">
-                <Label>Scopes</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {SCOPES.map((s) => (
-                    <label
-                      key={s.value}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        checked={tokenScopes.includes(s.value)}
-                        onCheckedChange={() => toggleScope(s.value)}
-                      />
-                      {s.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={() => setCreateTokenOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createTokenMutation.isPending || !tokenName}
-                >
-                  {createTokenMutation.isPending
-                    ? "Creating..."
-                    : "Create Token"}
-                </Button>
-              </DialogFooter>
-            </form>
+              onCancel={() => setCreateTokenOpen(false)}
+              submitLabel="Create Token"
+            />
           ) : (
             <div className="space-y-4">
               <div className="flex justify-end">
