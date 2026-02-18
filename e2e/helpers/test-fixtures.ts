@@ -46,6 +46,7 @@ export const test = base.extend<TestFixtures>({
         }
       }
     });
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- Playwright fixture API, not a React Hook
     await use(errors);
   },
 
@@ -59,6 +60,7 @@ export const test = base.extend<TestFixtures>({
       return page.request.fetch(url, options);
     };
 
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- Playwright fixture API, not a React Hook
     await use({
       get: (path) => makeRequest('GET', path),
       post: (path, data) => makeRequest('POST', path, data),
