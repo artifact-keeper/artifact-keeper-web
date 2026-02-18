@@ -1,4 +1,6 @@
-import { test as base, expect, type APIResponse } from '@playwright/test';
+import { test as base, type APIResponse, type Page, type Locator } from '@playwright/test';
+
+export { expect } from '@playwright/test';
 
 /**
  * Extended test fixtures for Artifact Keeper E2E tests.
@@ -66,13 +68,9 @@ export const test = base.extend<TestFixtures>({
   },
 });
 
-export { expect };
-
 // ---------------------------------------------------------------------------
 // Shared E2E helpers
 // ---------------------------------------------------------------------------
-
-import type { Page, Locator } from '@playwright/test';
 
 /** Filter console errors down to critical ones (TypeError, etc.). */
 export function filterCriticalErrors(errors: string[]): string[] {
@@ -132,4 +130,42 @@ export async function dismissTokenAlert(page: Page): Promise<void> {
 export async function assertNoAppErrors(page: Page): Promise<void> {
   const content = await page.textContent('body');
   base.expect(content).not.toContain('Application error');
+}
+
+/** Click a tab in a tablist and wait for content to load. */
+export async function switchTab(page: Page, tabName: RegExp): Promise<void> {
+  await page.locator('[role="tablist"]').getByText(tabName).click();
+  await page.waitForTimeout(1000);
+}
+
+/** Check if a text element is visible on the page. Returns visibility boolean for use with test.skip(). */
+export async function isRowVisible(
+  page: Page,
+  text: string
+): Promise<boolean> {
+  const row = page.getByText(text).first();
+  return row.isVisible({ timeout: 10000 }).catch(() => false);
+}
+
+/** Open the token management dialog for a service account row. Clicks the first button in the row. */
+export async function openTokenDialogForAccount(
+  page: Page,
+  accountName: RegExp
+): Promise<Locator> {
+  const tokenBtn = page
+    .getByRole('row', { name: accountName })
+    .getByRole('button')
+    .first();
+  await tokenBtn.click();
+  await page.waitForTimeout(1000);
+  const dialog = page.getByRole('dialog');
+  await base.expect(dialog).toBeVisible({ timeout: 10000 });
+  return dialog;
+}
+
+/** Get the display name input locator (tries label then placeholder). */
+export function getDisplayNameInput(page: Page): Locator {
+  return page
+    .getByLabel('Display Name')
+    .or(page.locator('input[placeholder="Your display name"]'));
 }

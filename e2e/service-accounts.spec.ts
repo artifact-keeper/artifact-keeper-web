@@ -7,7 +7,13 @@ import {
   fillDialogName,
   dismissTokenAlert,
   assertNoAppErrors,
+  isRowVisible,
+  openTokenDialogForAccount,
 } from './helpers/test-fixtures';
+
+const SVC_ACCOUNT = 'svc-e2e-test-bot';
+const SVC_ACCOUNT_RE = /svc-e2e-test-bot/i;
+const SKIP_MSG = `Service account ${SVC_ACCOUNT} not found`;
 
 test.describe('Service Accounts Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -79,23 +85,15 @@ test.describe.serial('Service Account CRUD', () => {
     const tableVisible = await table.isVisible({ timeout: 10000 }).catch(() => false);
     test.skip(!tableVisible, 'No table visible, service account may not have been created');
 
-    await expect(page.getByText('svc-e2e-test-bot')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SVC_ACCOUNT)).toBeVisible({ timeout: 10000 });
   });
 
   test('can open Manage Tokens dialog for service account', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
-      .getByRole('button').first();
-    await tokenBtn.click();
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
-    await expect(dialog.getByText(/svc-e2e-test-bot/i)).toBeVisible({ timeout: 5000 });
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
+    await expect(dialog.getByText(SVC_ACCOUNT_RE)).toBeVisible({ timeout: 5000 });
     await expect(
       dialog.getByRole('button', { name: /create token/i })
     ).toBeVisible({ timeout: 5000 });
@@ -103,19 +101,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('can create a token for the service account', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    // Open token dialog
-    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
-      .getByRole('button').first();
-    await tokenBtn.click();
-    await page.waitForTimeout(1000);
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
 
     await dialog.getByRole('button', { name: /create token/i }).click();
     await page.waitForTimeout(1000);
@@ -133,18 +121,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('token without selector shows All repos in Repo Access column', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
-      .getByRole('button').first();
-    await tokenBtn.click();
-    await page.waitForTimeout(1000);
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
 
     const allReposText = dialog.getByText(/all repos/i).first();
     const visible = await allReposText.isVisible({ timeout: 5000 }).catch(() => false);
@@ -156,18 +135,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('create token form shows Repository Access section', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
-      .getByRole('button').first();
-    await tokenBtn.click();
-    await page.waitForTimeout(1000);
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
 
     await dialog.getByRole('button', { name: /create token/i }).click();
     await page.waitForTimeout(500);
@@ -182,18 +152,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('can create a token with repo selector', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
-      .getByRole('button').first();
-    await tokenBtn.click();
-    await page.waitForTimeout(1000);
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
 
     await dialog.getByRole('button', { name: /create token/i }).click();
     await page.waitForTimeout(500);
@@ -218,12 +179,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('can edit a service account description', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const actionBtns = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
       .getByRole('button');
     await actionBtns.nth(1).click();
 
@@ -242,12 +200,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('can toggle service account active status', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const actionBtns = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
       .getByRole('button');
     await actionBtns.nth(2).click();
     await page.waitForTimeout(2000);
@@ -255,7 +210,7 @@ test.describe.serial('Service Account CRUD', () => {
 
     // Toggle back
     await page.waitForTimeout(1000);
-    const toggleBtnAgain = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+    const toggleBtnAgain = page.getByRole('row', { name: SVC_ACCOUNT_RE })
       .getByRole('button').nth(2);
     await toggleBtnAgain.click();
     await page.waitForTimeout(2000);
@@ -263,12 +218,9 @@ test.describe.serial('Service Account CRUD', () => {
 
   test('can delete a service account', async ({ page }) => {
     await navigateTo(page, '/service-accounts');
+    test.skip(!(await isRowVisible(page, SVC_ACCOUNT)), SKIP_MSG);
 
-    const row = page.getByText('svc-e2e-test-bot').first();
-    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
-
-    const actionBtns = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+    const actionBtns = page.getByRole('row', { name: SVC_ACCOUNT_RE })
       .getByRole('button');
     await actionBtns.last().click();
 
@@ -279,7 +231,7 @@ test.describe.serial('Service Account CRUD', () => {
       .or(confirmDialog.locator('input').first());
     const inputVisible = await confirmInput.isVisible({ timeout: 5000 }).catch(() => false);
     if (inputVisible) {
-      await confirmInput.fill('svc-e2e-test-bot');
+      await confirmInput.fill(SVC_ACCOUNT);
     }
 
     await confirmDialog.getByRole('button', { name: /delete|confirm/i }).last().click();

@@ -28,8 +28,8 @@ const COMMON_FORMATS = [
 ];
 
 interface RepoSelectorFormProps {
-  value: RepoSelector;
-  onChange: (selector: RepoSelector) => void;
+  readonly value: RepoSelector;
+  readonly onChange: (selector: RepoSelector) => void;
 }
 
 export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
@@ -71,8 +71,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
 
   const removeLabel = useCallback(
     (key: string) => {
-      const current = { ...(value.match_labels ?? {}) };
-      delete current[key];
+      const { [key]: _, ...current } = value.match_labels ?? {};
       onChange({
         ...value,
         match_labels: Object.keys(current).length > 0 ? current : undefined,

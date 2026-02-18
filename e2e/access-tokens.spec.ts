@@ -7,6 +7,7 @@ import {
   fillDialogName,
   dismissTokenAlert,
   assertNoAppErrors,
+  switchTab,
 } from './helpers/test-fixtures';
 
 test.describe('Access Tokens Page', () => {
@@ -34,8 +35,7 @@ test.describe('Access Tokens Page', () => {
   });
 
   test('can switch to Access Tokens tab', async ({ page }) => {
-    await page.locator('[role="tablist"]').getByText(/Access Tokens/i).click();
-    await page.waitForTimeout(1000);
+    await switchTab(page, /Access Tokens/i);
 
     await expect(
       page.getByRole('button', { name: /create token/i })
@@ -56,8 +56,7 @@ test.describe('Access Tokens Page', () => {
   });
 
   test('clicking Create Token opens dialog with form fields', async ({ page }) => {
-    await page.locator('[role="tablist"]').getByText(/Access Tokens/i).click();
-    await page.waitForTimeout(1000);
+    await switchTab(page, /Access Tokens/i);
 
     const dialog = await openDialog(page, /create token/i);
 
@@ -127,8 +126,7 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
   test('create an access token', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
-    await page.locator('[role="tablist"]').getByText(/Access Tokens/i).click();
-    await page.waitForTimeout(1000);
+    await switchTab(page, /Access Tokens/i);
 
     const dialog = await openDialog(page, /create token/i);
     await fillDialogName(dialog, 'e2e-access-token');
@@ -141,8 +139,8 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
 
   test('created access token appears in table', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
-    await page.locator('[role="tablist"]').getByText(/Access Tokens/i).click();
-    await page.waitForTimeout(2000);
+    await switchTab(page, /Access Tokens/i);
+    await page.waitForTimeout(1000);
 
     const tokenText = page.getByText('e2e-access-token').first();
     const visible = await tokenText.isVisible({ timeout: 10000 }).catch(() => false);
@@ -153,8 +151,8 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
 
   test('revoke the created access token', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
-    await page.locator('[role="tablist"]').getByText(/Access Tokens/i).click();
-    await page.waitForTimeout(2000);
+    await switchTab(page, /Access Tokens/i);
+    await page.waitForTimeout(1000);
 
     const tokenText = page.getByText('e2e-access-token').first();
     const visible = await tokenText.isVisible({ timeout: 10000 }).catch(() => false);

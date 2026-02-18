@@ -44,13 +44,14 @@ done
 export BACKEND_TAG E2E_WEB_PORT="$WEB_PORT"
 
 cleanup() {
-  if [ "$KEEP" = false ]; then
+  if [[ "$KEEP" = false ]]; then
     echo "Tearing down E2E stack..."
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
   else
     echo "Keeping containers running (--keep). Tear down with:"
     echo "  docker compose -f docker-compose.e2e.yml down -v"
   fi
+  return 0
 }
 trap cleanup EXIT
 

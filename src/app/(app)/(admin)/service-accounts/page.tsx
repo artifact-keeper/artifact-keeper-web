@@ -56,6 +56,37 @@ import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
 
+function renderRepoAccess(t: ServiceAccountToken) {
+  if (t.repo_selector) {
+    const parts: string[] = [];
+    if (t.repo_selector.match_formats?.length) {
+      parts.push(`${t.repo_selector.match_formats.length} format(s)`);
+    }
+    if (t.repo_selector.match_pattern) {
+      parts.push(t.repo_selector.match_pattern);
+    }
+    const labelCount = Object.keys(t.repo_selector.match_labels ?? {}).length;
+    if (labelCount > 0) {
+      parts.push(`${labelCount} label(s)`);
+    }
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {parts.join(", ") || "Selector"}
+      </Badge>
+    );
+  }
+  if (t.repository_ids?.length > 0) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {t.repository_ids.length} repo(s)
+      </Badge>
+    );
+  }
+  return (
+    <span className="text-xs text-muted-foreground">All repos</span>
+  );
+}
+
 export default function ServiceAccountsPage() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -372,36 +403,7 @@ export default function ServiceAccountsPage() {
     {
       id: "repo_access",
       header: "Repo Access",
-      cell: (t) => {
-        if (t.repo_selector) {
-          const parts: string[] = [];
-          if (t.repo_selector.match_formats?.length) {
-            parts.push(`${t.repo_selector.match_formats.length} format(s)`);
-          }
-          if (t.repo_selector.match_pattern) {
-            parts.push(t.repo_selector.match_pattern);
-          }
-          const labelCount = Object.keys(t.repo_selector.match_labels ?? {}).length;
-          if (labelCount > 0) {
-            parts.push(`${labelCount} label(s)`);
-          }
-          return (
-            <Badge variant="secondary" className="text-xs">
-              {parts.join(", ") || "Selector"}
-            </Badge>
-          );
-        }
-        if (t.repository_ids?.length > 0) {
-          return (
-            <Badge variant="secondary" className="text-xs">
-              {t.repository_ids.length} repo(s)
-            </Badge>
-          );
-        }
-        return (
-          <span className="text-xs text-muted-foreground">All repos</span>
-        );
-      },
+      cell: renderRepoAccess,
     },
     {
       id: "last_used",
