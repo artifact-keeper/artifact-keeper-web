@@ -38,6 +38,26 @@ export interface ServiceAccountToken {
   last_used_at?: string;
   created_at: string;
   is_expired: boolean;
+  repo_selector?: RepoSelector;
+  repository_ids: string[];
+}
+
+export interface RepoSelector {
+  match_labels?: Record<string, string>;
+  match_formats?: string[];
+  match_pattern?: string;
+  match_repos?: string[];
+}
+
+export interface MatchedRepository {
+  id: string;
+  key: string;
+  format: string;
+}
+
+export interface PreviewRepoSelectorResponse {
+  matched_repositories: MatchedRepository[];
+  total: number;
 }
 
 export interface CreateTokenRequest {
@@ -46,6 +66,7 @@ export interface CreateTokenRequest {
   expires_in_days?: number;
   description?: string;
   repository_ids?: string[];
+  repo_selector?: RepoSelector;
 }
 
 export interface CreateTokenResponse {
@@ -115,6 +136,18 @@ export const serviceAccountsApi = {
     await apiFetch<void>(`/api/v1/service-accounts/${id}/tokens/${tokenId}`, {
       method: 'DELETE',
     });
+  },
+
+  previewRepoSelector: async (
+    selector: RepoSelector
+  ): Promise<PreviewRepoSelectorResponse> => {
+    return apiFetch<PreviewRepoSelectorResponse>(
+      '/api/v1/service-accounts/repo-selector/preview',
+      {
+        method: 'POST',
+        body: JSON.stringify({ repo_selector: selector }),
+      }
+    );
   },
 };
 

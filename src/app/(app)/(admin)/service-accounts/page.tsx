@@ -20,6 +20,7 @@ import type {
   CreateServiceAccountRequest,
   CreateTokenRequest,
   CreateTokenResponse,
+  RepoSelector,
 } from "@/lib/api/service-accounts";
 import { useAuth } from "@/providers/auth-provider";
 import { SCOPES } from "@/lib/constants/token";
@@ -55,6 +56,37 @@ import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
 
+function renderRepoAccess(t: ServiceAccountToken) {
+  if (t.repo_selector) {
+    const parts: string[] = [];
+    if (t.repo_selector.match_formats?.length) {
+      parts.push(`${t.repo_selector.match_formats.length} format(s)`);
+    }
+    if (t.repo_selector.match_pattern) {
+      parts.push(t.repo_selector.match_pattern);
+    }
+    const labelCount = Object.keys(t.repo_selector.match_labels ?? {}).length;
+    if (labelCount > 0) {
+      parts.push(`${labelCount} label(s)`);
+    }
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {parts.join(", ") || "Selector"}
+      </Badge>
+    );
+  }
+  if (t.repository_ids?.length > 0) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {t.repository_ids.length} repo(s)
+      </Badge>
+    );
+  }
+  return (
+    <span className="text-xs text-muted-foreground">All repos</span>
+  );
+}
+
 export default function ServiceAccountsPage() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -86,6 +118,7 @@ export default function ServiceAccountsPage() {
     null
   );
   const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
+  const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
 
   // Queries
   const { data: accounts = [], isLoading } = useQuery({
@@ -157,6 +190,7 @@ export default function ServiceAccountsPage() {
       setTokenName("");
       setTokenScopes(["read"]);
       setTokenExpiry("90");
+      setTokenRepoSelector({});
       toast.success("Token created");
     },
     onError: () => toast.error("Failed to create token"),
@@ -367,6 +401,11 @@ export default function ServiceAccountsPage() {
       ),
     },
     {
+      id: "repo_access",
+      header: "Repo Access",
+      cell: renderRepoAccess,
+    },
+    {
       id: "last_used",
       header: "Last Used",
       cell: (t) =>
@@ -569,6 +608,7 @@ export default function ServiceAccountsPage() {
             setTokenAccount(null);
             setCreateTokenOpen(false);
             setNewlyCreatedToken(null);
+            setTokenRepoSelector({});
           }
         }}
       >
@@ -604,6 +644,10 @@ export default function ServiceAccountsPage() {
               isPending={createTokenMutation.isPending}
               onSubmit={() => {
                 if (tokenAccount) {
+                  const hasSelector =
+                    (tokenRepoSelector.match_formats?.length ?? 0) > 0 ||
+                    Object.keys(tokenRepoSelector.match_labels ?? {}).length > 0 ||
+                    !!tokenRepoSelector.match_pattern;
                   createTokenMutation.mutate({
                     id: tokenAccount.id,
                     req: {
@@ -611,12 +655,16 @@ export default function ServiceAccountsPage() {
                       scopes: tokenScopes,
                       expires_in_days:
                         tokenExpiry === "0" ? undefined : Number(tokenExpiry),
+                      repo_selector: hasSelector ? tokenRepoSelector : undefined,
                     },
                   });
                 }
               }}
               onCancel={() => setCreateTokenOpen(false)}
               submitLabel="Create Token"
+              showRepoSelector
+              repoSelector={tokenRepoSelector}
+              onRepoSelectorChange={setTokenRepoSelector}
             />
           ) : (
             <div className="space-y-4">

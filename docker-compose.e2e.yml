@@ -1,0 +1,100 @@
+# E2E test stack for pre-merge Playwright testing
+#
+# Spins up the full application stack using the latest published backend
+# image and builds the web frontend from the current source (PR changes).
+# Playwright runs on the host against this stack.
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml up -d --build --wait
+#   npx playwright test
+#   docker compose -f docker-compose.e2e.yml down -v
+#
+# Or use the wrapper script:
+#   ./scripts/run-e2e.sh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: registry
+      POSTGRES_PASSWORD: registry
+      POSTGRES_DB: artifact_registry
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry -d artifact_registry"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_MASTER_KEY: e2e-test-key
+      MEILI_ENV: development
+    tmpfs:
+      - /meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e
+
+  backend:
+    image: ghcr.io/artifact-keeper/artifact-keeper-backend:${BACKEND_TAG:-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://registry:registry@postgres:5432/artifact_registry
+      STORAGE_PATH: /data/storage
+      BACKUP_PATH: /data/backups
+      PLUGINS_DIR: /data/plugins
+      JWT_SECRET: e2e-test-secret-key-32-bytes-long
+      ADMIN_PASSWORD: admin
+      RUST_LOG: info
+      HOST: 0.0.0.0
+      PORT: 8080
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_API_KEY: e2e-test-key
+      ENVIRONMENT: development
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 3s
+      timeout: 10s
+      start_period: 15s
+      retries: 15
+    networks:
+      - e2e
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://backend:8080
+      NODE_ENV: production
+      PORT: 3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      start_period: 10s
+      retries: 10
+    ports:
+      - "${E2E_WEB_PORT:-3100}:3000"
+    networks:
+      - e2e
+
+networks:
+  e2e:
+    name: ak-e2e-network
