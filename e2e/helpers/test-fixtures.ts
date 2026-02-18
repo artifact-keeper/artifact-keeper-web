@@ -67,3 +67,69 @@ export const test = base.extend<TestFixtures>({
 });
 
 export { expect };
+
+// ---------------------------------------------------------------------------
+// Shared E2E helpers
+// ---------------------------------------------------------------------------
+
+import type { Page, Locator } from '@playwright/test';
+
+/** Filter console errors down to critical ones (TypeError, etc.). */
+export function filterCriticalErrors(errors: string[]): string[] {
+  return errors.filter(
+    (e) =>
+      !e.includes('favicon') &&
+      !e.includes('net::') &&
+      !e.includes('Failed to load resource') &&
+      (e.includes('TypeError') ||
+        e.includes('is not a function') ||
+        e.includes('Cannot read'))
+  );
+}
+
+/** Navigate to a page and wait for network idle. */
+export async function navigateTo(page: Page, path: string): Promise<void> {
+  await page.goto(path);
+  await page.waitForLoadState('networkidle');
+}
+
+/** Open a dialog by clicking a button, return the dialog locator. */
+export async function openDialog(
+  page: Page,
+  buttonName: RegExp
+): Promise<Locator> {
+  await page.getByRole('button', { name: buttonName }).click();
+  const dialog = page.getByRole('dialog');
+  await base.expect(dialog).toBeVisible({ timeout: 10000 });
+  return dialog;
+}
+
+/** Fill a dialog name input (tries label first, then placeholder). */
+export async function fillDialogName(
+  dialog: Locator,
+  value: string,
+  placeholder?: RegExp
+): Promise<void> {
+  const nameInput = dialog
+    .getByLabel(/name/i)
+    .first()
+    .or(dialog.getByPlaceholder(placeholder ?? /name/i).first());
+  await nameInput.fill(value);
+}
+
+/** Dismiss a "token created" alert by clicking Done if visible. */
+export async function dismissTokenAlert(page: Page): Promise<void> {
+  const doneBtn = page.getByRole('button', { name: /done/i }).first();
+  const visible = await doneBtn
+    .isVisible({ timeout: 5000 })
+    .catch(() => false);
+  if (visible) {
+    await doneBtn.click();
+  }
+}
+
+/** Assert no application-level errors on the page. */
+export async function assertNoAppErrors(page: Page): Promise<void> {
+  const content = await page.textContent('body');
+  base.expect(content).not.toContain('Application error');
+}
