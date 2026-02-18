@@ -160,6 +160,30 @@ trusted-host = ${REGISTRY_HOST}`,
           code: `docker pull ${REGISTRY_HOST}/${repoKey}/my-image:latest`,
         },
       ];
+    case "incus":
+    case "lxc":
+      return [
+        {
+          title: "Add as SimpleStreams remote",
+          code: `incus remote add ${repoKey} ${REGISTRY_URL}/incus/${repoKey} \\
+  --protocol simplestreams --public`,
+        },
+        {
+          title: "Upload an image",
+          code: `curl -X PUT -u admin:password \\
+  -H "Content-Type: application/x-xz" \\
+  --data-binary @image.tar.xz \\
+  ${REGISTRY_URL}/incus/${repoKey}/images/ubuntu-noble/20240215/incus.tar.xz`,
+        },
+        {
+          title: "List images",
+          code: `incus image list ${repoKey}:`,
+        },
+        {
+          title: "Launch a container",
+          code: `incus launch ${repoKey}:ubuntu-noble my-container`,
+        },
+      ];
     case "cargo":
       return [
         {
@@ -467,7 +491,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
   {
     key: "container",
     label: "Container",
-    formats: ["docker", "helm", "helm_oci", "podman", "buildx", "oras", "wasm_oci"],
+    formats: ["docker", "helm", "helm_oci", "podman", "buildx", "oras", "wasm_oci", "incus", "lxc"],
   },
   {
     key: "linux",

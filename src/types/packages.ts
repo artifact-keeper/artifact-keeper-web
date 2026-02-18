@@ -47,7 +47,9 @@ export type PackageType =
   | 'vagrant'
   | 'opkg'
   | 'p2'
-  | 'bazel';
+  | 'bazel'
+  | 'incus'
+  | 'lxc';
 
 export interface Package {
   id: string;

@@ -28,6 +28,9 @@ export function getInstallCommand(
     case "podman":
     case "buildx":
       return `docker pull ${packageName}:${v}`;
+    case "incus":
+    case "lxc":
+      return `incus image copy ${packageName} local: --alias ${packageName}`;
     case "helm":
     case "helm_oci":
       return `helm install ${packageName} --version ${v}`;
@@ -148,4 +151,6 @@ export const FORMAT_OPTIONS: string[] = [
   "p2",
   "bazel",
   "protobuf",
+  "incus",
+  "lxc",
 ];
