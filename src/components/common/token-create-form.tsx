@@ -16,6 +16,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { SCOPES, EXPIRY_OPTIONS } from "@/lib/constants/token";
+import type { RepoSelector } from "@/lib/api/service-accounts";
+import { RepoSelectorForm } from "@/components/common/repo-selector-form";
 
 type ScopeOption = { value: string; label: string };
 
@@ -34,6 +36,10 @@ interface TokenCreateFormProps {
   onSubmit: () => void;
   onCancel: () => void;
   submitLabel?: string;
+  /** When true, shows the repository selector section. */
+  showRepoSelector?: boolean;
+  repoSelector?: RepoSelector;
+  onRepoSelectorChange?: (selector: RepoSelector) => void;
 }
 
 export function TokenCreateForm({
@@ -51,6 +57,9 @@ export function TokenCreateForm({
   onSubmit,
   onCancel,
   submitLabel = "Create",
+  showRepoSelector = false,
+  repoSelector,
+  onRepoSelectorChange,
 }: TokenCreateFormProps) {
   const toggleScope = (scope: string) => {
     onScopesChange(
@@ -115,6 +124,19 @@ export function TokenCreateForm({
             ))}
           </div>
         </div>
+        {showRepoSelector && repoSelector && onRepoSelectorChange && (
+          <div className="space-y-2 border-t pt-4">
+            <Label>Repository Access</Label>
+            <p className="text-xs text-muted-foreground">
+              Restrict which repositories this token can access. Leave empty for
+              unrestricted access.
+            </p>
+            <RepoSelectorForm
+              value={repoSelector}
+              onChange={onRepoSelectorChange}
+            />
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" type="button" onClick={onCancel}>
             Cancel

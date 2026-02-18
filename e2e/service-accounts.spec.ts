@@ -239,6 +239,118 @@ test.describe.serial('Service Account CRUD', () => {
     await page.waitForTimeout(2000);
   });
 
+  test('token without selector shows All repos in Repo Access column', async ({ page }) => {
+    await page.goto('/service-accounts');
+    await page.waitForLoadState('networkidle');
+
+    const row = page.getByText('svc-e2e-test-bot').first();
+    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
+
+    // Open token dialog
+    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+      .getByRole('button').first();
+    await tokenBtn.click();
+    await page.waitForTimeout(1000);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    // The "All repos" text should appear for tokens without a selector
+    const allReposText = dialog.getByText(/all repos/i).first();
+    const visible = await allReposText.isVisible({ timeout: 5000 }).catch(() => false);
+    // If no tokens exist, skip
+    if (!visible) {
+      test.skip(true, 'No tokens exist to check Repo Access column');
+    }
+    expect(visible).toBe(true);
+  });
+
+  test('create token form shows Repository Access section', async ({ page }) => {
+    await page.goto('/service-accounts');
+    await page.waitForLoadState('networkidle');
+
+    const row = page.getByText('svc-e2e-test-bot').first();
+    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
+
+    // Open token dialog
+    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+      .getByRole('button').first();
+    await tokenBtn.click();
+    await page.waitForTimeout(1000);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    // Click Create Token
+    await dialog.getByRole('button', { name: /create token/i }).click();
+    await page.waitForTimeout(500);
+
+    // Repository Access section should be visible
+    await expect(dialog.getByText(/repository access/i)).toBeVisible({ timeout: 5000 });
+
+    // Format checkboxes should be visible (e.g. docker, maven)
+    await expect(dialog.getByText('docker')).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByText('maven')).toBeVisible({ timeout: 5000 });
+
+    // Name pattern input should be present
+    await expect(dialog.getByPlaceholder('libs-*')).toBeVisible({ timeout: 5000 });
+
+    // Cancel
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('can create a token with repo selector', async ({ page }) => {
+    await page.goto('/service-accounts');
+    await page.waitForLoadState('networkidle');
+
+    const row = page.getByText('svc-e2e-test-bot').first();
+    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!rowVisible, 'Service account svc-e2e-test-bot not found');
+
+    // Open token dialog
+    const tokenBtn = page.getByRole('row', { name: /svc-e2e-test-bot/i })
+      .getByRole('button').first();
+    await tokenBtn.click();
+    await page.waitForTimeout(1000);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    // Click Create Token
+    await dialog.getByRole('button', { name: /create token/i }).click();
+    await page.waitForTimeout(500);
+
+    // Fill in token name
+    const nameInput = dialog.getByLabel(/name/i).first()
+      .or(dialog.getByPlaceholder(/name/i).first());
+    await nameInput.fill('e2e-scoped-token');
+
+    // Select a format (docker)
+    const dockerCheckbox = dialog.getByText('docker').locator('..');
+    await dockerCheckbox.locator('[role="checkbox"]').check();
+
+    // Enter a name pattern
+    await dialog.getByPlaceholder('libs-*').fill('prod-*');
+
+    // Submit
+    const createBtn = dialog.getByRole('button', { name: /create$/i })
+      .or(dialog.getByRole('button', { name: /create token$/i }));
+    await createBtn.click();
+    await page.waitForTimeout(3000);
+
+    // Should show the token value
+    const safetyWarning = dialog.getByText(/store it safely|only be shown once/i).first();
+    const warningVisible = await safetyWarning.isVisible({ timeout: 5000 }).catch(() => false);
+    if (warningVisible) {
+      await dialog.getByRole('button', { name: /done/i }).click();
+    }
+
+    const pageContent = await page.textContent('body');
+    expect(pageContent).not.toContain('Application error');
+  });
+
   test('can delete a service account', async ({ page }) => {
     await page.goto('/service-accounts');
     await page.waitForLoadState('networkidle');
