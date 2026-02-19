@@ -1,0 +1,3 @@
+* @artifact-keeper/web-ui
+e2e/ @artifact-keeper/web-ui
+src/lib/api/ @artifact-keeper/web-ui @artifact-keeper/platform-sdk

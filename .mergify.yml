@@ -26,6 +26,18 @@ pull_request_rules:
           - needs-review
           - major-update
 
+  - name: Require E2E for page changes
+    conditions:
+      - "files~=^src/app/"
+      - -draft
+    actions:
+      label:
+        add:
+          - needs-e2e
+      comment:
+        message: |
+          This PR modifies app pages. Please ensure Playwright E2E tests cover the changes.
+
   - name: Label UI component changes
     conditions:
       - "files~=^src/components/"
@@ -41,6 +53,15 @@ pull_request_rules:
       label:
         add:
           - e2e
+
+  - name: Require test checklist completion
+    conditions:
+      - "body~=\\[x\\].*[Tt]est"
+      - "#approved-reviews-by>=1"
+    actions:
+      label:
+        add:
+          - tests-verified
 
   - name: Clean up merged branches
     conditions:
