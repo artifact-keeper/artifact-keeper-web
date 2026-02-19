@@ -89,8 +89,9 @@ describe("cn", () => {
     expect(cn("foo", "bar")).toBe("foo bar");
   });
 
-  it("handles conditional classes", () => {
-    expect(cn("base", false && "hidden", "visible")).toBe("base visible");
+  it("handles falsy values by omitting them", () => {
+    const isHidden = false;
+    expect(cn("base", isHidden && "hidden", "visible")).toBe("base visible");
   });
 
   it("resolves Tailwind conflicts by keeping the last one", () => {
