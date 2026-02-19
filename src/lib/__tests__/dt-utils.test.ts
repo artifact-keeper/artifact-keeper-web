@@ -48,178 +48,98 @@ describe("aggregateHistories", () => {
   });
 
   it("aggregates a single project with one metric", () => {
-    // Jan 15, 2024 12:30 UTC
     const ts = Date.UTC(2024, 0, 15, 12, 30);
-    const input = {
+    const result = aggregateHistories({
       projectA: [
         makeMetrics({ lastOccurrence: ts, critical: 2, high: 3, medium: 1, low: 5 }),
       ],
-    };
+    });
 
-    const result = aggregateHistories(input);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe("Jan 15");
-    expect(result[0].critical).toBe(2);
-    expect(result[0].high).toBe(3);
-    expect(result[0].medium).toBe(1);
-    expect(result[0].low).toBe(5);
+    expect(result[0]).toMatchObject({ date: "Jan 15", critical: 2, high: 3, medium: 1, low: 5 });
   });
 
   it("sums metrics from multiple projects on the same day", () => {
     const day = Date.UTC(2024, 5, 10, 8, 0);
-    const daySameButDifferentHour = Date.UTC(2024, 5, 10, 20, 0);
+    const dayLater = Date.UTC(2024, 5, 10, 20, 0);
 
-    const input = {
-      projectA: [
-        makeMetrics({ lastOccurrence: day, critical: 1, high: 2, medium: 3, low: 4 }),
-      ],
-      projectB: [
-        makeMetrics({
-          lastOccurrence: daySameButDifferentHour,
-          critical: 10,
-          high: 20,
-          medium: 30,
-          low: 40,
-        }),
-      ],
-    };
+    const result = aggregateHistories({
+      projectA: [makeMetrics({ lastOccurrence: day, critical: 1, high: 2, medium: 3, low: 4 })],
+      projectB: [makeMetrics({ lastOccurrence: dayLater, critical: 10, high: 20, medium: 30, low: 40 })],
+    });
 
-    const result = aggregateHistories(input);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe("Jun 10");
-    expect(result[0].critical).toBe(11);
-    expect(result[0].high).toBe(22);
-    expect(result[0].medium).toBe(33);
-    expect(result[0].low).toBe(44);
+    expect(result[0]).toMatchObject({ date: "Jun 10", critical: 11, high: 22, medium: 33, low: 44 });
   });
 
   it("returns sorted results across multiple days", () => {
-    const day1 = Date.UTC(2024, 2, 5, 10, 0); // Mar 5
-    const day2 = Date.UTC(2024, 0, 20, 10, 0); // Jan 20
-    const day3 = Date.UTC(2024, 11, 25, 10, 0); // Dec 25
-
-    const input = {
+    const result = aggregateHistories({
       projectA: [
-        makeMetrics({ lastOccurrence: day1, critical: 1 }),
-        makeMetrics({ lastOccurrence: day2, critical: 2 }),
-        makeMetrics({ lastOccurrence: day3, critical: 3 }),
+        makeMetrics({ lastOccurrence: Date.UTC(2024, 2, 5, 10, 0), critical: 1 }),
+        makeMetrics({ lastOccurrence: Date.UTC(2024, 0, 20, 10, 0), critical: 2 }),
+        makeMetrics({ lastOccurrence: Date.UTC(2024, 11, 25, 10, 0), critical: 3 }),
       ],
-    };
+    });
 
-    const result = aggregateHistories(input);
     expect(result).toHaveLength(3);
-    // Should be sorted ascending by date
-    expect(result[0].date).toBe("Jan 20");
-    expect(result[0].critical).toBe(2);
-    expect(result[1].date).toBe("Mar 5");
-    expect(result[1].critical).toBe(1);
-    expect(result[2].date).toBe("Dec 25");
-    expect(result[2].critical).toBe(3);
+    expect(result.map((r) => r.date)).toEqual(["Jan 20", "Mar 5", "Dec 25"]);
+    expect(result.map((r) => r.critical)).toEqual([2, 1, 3]);
   });
 
   it("works with Map input", () => {
-    const ts = Date.UTC(2024, 3, 1, 6, 0); // Apr 1
     const input = new Map<string, DtProjectMetrics[]>();
-    input.set("project1", [
-      makeMetrics({ lastOccurrence: ts, critical: 5, high: 10 }),
-    ]);
+    input.set("project1", [makeMetrics({ lastOccurrence: Date.UTC(2024, 3, 1, 6, 0), critical: 5, high: 10 })]);
 
     const result = aggregateHistories(input);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe("Apr 1");
-    expect(result[0].critical).toBe(5);
-    expect(result[0].high).toBe(10);
+    expect(result[0]).toMatchObject({ date: "Apr 1", critical: 5, high: 10 });
   });
 
   it("aggregates multiple metrics within the same project on the same day", () => {
-    const morning = Date.UTC(2024, 6, 4, 6, 0);
-    const evening = Date.UTC(2024, 6, 4, 22, 0);
-
-    const input = {
+    const result = aggregateHistories({
       projectA: [
-        makeMetrics({ lastOccurrence: morning, critical: 1, high: 1 }),
-        makeMetrics({ lastOccurrence: evening, critical: 2, high: 3 }),
+        makeMetrics({ lastOccurrence: Date.UTC(2024, 6, 4, 6, 0), critical: 1, high: 1 }),
+        makeMetrics({ lastOccurrence: Date.UTC(2024, 6, 4, 22, 0), critical: 2, high: 3 }),
       ],
-    };
+    });
 
-    const result = aggregateHistories(input);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe("Jul 4");
-    expect(result[0].critical).toBe(3);
-    expect(result[0].high).toBe(4);
+    expect(result[0]).toMatchObject({ date: "Jul 4", critical: 3, high: 4 });
   });
 
   it("each result point has a dateMs field for sorting", () => {
     const ts = Date.UTC(2024, 0, 1);
-    const input = { p: [makeMetrics({ lastOccurrence: ts, critical: 1 })] };
-
-    const result = aggregateHistories(input);
-    expect(result[0].dateMs).toBe(Date.UTC(2024, 0, 1));
+    const result = aggregateHistories({ p: [makeMetrics({ lastOccurrence: ts, critical: 1 })] });
+    expect(result[0].dateMs).toBe(ts);
   });
 });
 
-describe("riskScoreColor", () => {
-  it("returns green for low scores (below 10)", () => {
-    expect(riskScoreColor(0)).toBe("text-green-500");
-    expect(riskScoreColor(5)).toBe("text-green-500");
-    expect(riskScoreColor(9)).toBe("text-green-500");
-  });
+// Shared score-to-color boundary tests for both text and background variants
+const SCORE_RANGES: [string, number[], string, string][] = [
+  ["green (0-9)", [0, 5, 9], "text-green-500", "bg-green-500"],
+  ["amber (10-39)", [10, 25, 39], "text-amber-500", "bg-amber-500"],
+  ["orange (40-69)", [40, 50, 69], "text-orange-500", "bg-orange-500"],
+  ["red (70+)", [70, 80, 100], "text-red-500", "bg-red-500"],
+];
 
-  it("returns amber for scores 10-39", () => {
-    expect(riskScoreColor(10)).toBe("text-amber-500");
-    expect(riskScoreColor(25)).toBe("text-amber-500");
-    expect(riskScoreColor(39)).toBe("text-amber-500");
-  });
-
-  it("returns orange for scores 40-69", () => {
-    expect(riskScoreColor(40)).toBe("text-orange-500");
-    expect(riskScoreColor(50)).toBe("text-orange-500");
-    expect(riskScoreColor(69)).toBe("text-orange-500");
-  });
-
-  it("returns red for scores 70+", () => {
-    expect(riskScoreColor(70)).toBe("text-red-500");
-    expect(riskScoreColor(80)).toBe("text-red-500");
-    expect(riskScoreColor(100)).toBe("text-red-500");
-  });
-});
-
-describe("riskScoreBgColor", () => {
-  it("returns green background for low scores (below 10)", () => {
-    expect(riskScoreBgColor(0)).toBe("bg-green-500");
-    expect(riskScoreBgColor(9)).toBe("bg-green-500");
-  });
-
-  it("returns amber background for scores 10-39", () => {
-    expect(riskScoreBgColor(10)).toBe("bg-amber-500");
-    expect(riskScoreBgColor(39)).toBe("bg-amber-500");
-  });
-
-  it("returns orange background for scores 40-69", () => {
-    expect(riskScoreBgColor(40)).toBe("bg-orange-500");
-    expect(riskScoreBgColor(69)).toBe("bg-orange-500");
-  });
-
-  it("returns red background for scores 70+", () => {
-    expect(riskScoreBgColor(70)).toBe("bg-red-500");
-    expect(riskScoreBgColor(100)).toBe("bg-red-500");
-  });
+describe("riskScoreColor and riskScoreBgColor", () => {
+  it.each(SCORE_RANGES)(
+    "returns %s for scores in range",
+    (_label, scores, expectedText, expectedBg) => {
+      for (const score of scores) {
+        expect(riskScoreColor(score)).toBe(expectedText);
+        expect(riskScoreBgColor(score)).toBe(expectedBg);
+      }
+    }
+  );
 });
 
 describe("SEVERITY_COLORS", () => {
-  it("has critical, high, medium, and low keys", () => {
-    expect(SEVERITY_COLORS).toHaveProperty("critical");
-    expect(SEVERITY_COLORS).toHaveProperty("high");
-    expect(SEVERITY_COLORS).toHaveProperty("medium");
-    expect(SEVERITY_COLORS).toHaveProperty("low");
-  });
+  const severities = ["critical", "high", "medium", "low"] as const;
 
-  it("each severity has text, bg, and hex properties", () => {
-    for (const severity of ["critical", "high", "medium", "low"] as const) {
+  it("has all severity keys with text, bg, and hex properties", () => {
+    for (const severity of severities) {
       const colors = SEVERITY_COLORS[severity];
-      expect(colors).toHaveProperty("text");
-      expect(colors).toHaveProperty("bg");
-      expect(colors).toHaveProperty("hex");
       expect(colors.text).toMatch(/^text-/);
       expect(colors.bg).toMatch(/^bg-/);
       expect(colors.hex).toMatch(/^#[0-9a-f]{6}$/);
