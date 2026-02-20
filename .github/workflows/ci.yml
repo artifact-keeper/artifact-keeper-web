@@ -47,6 +47,10 @@ jobs:
           name: coverage-report
           path: coverage/
           retention-days: 14
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   build:
     name: Build
