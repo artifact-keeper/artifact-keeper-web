@@ -1,0 +1,27 @@
+/* Hide dynamic content that changes between runs */
+
+/* Timestamps and dates */
+[data-testid*="timestamp"],
+[data-testid*="date"],
+time {
+  visibility: hidden !important;
+}
+
+/* Random IDs and tokens */
+[data-testid*="id"],
+[data-testid*="token-value"] {
+  visibility: hidden !important;
+}
+
+/* Animated elements */
+[data-testid*="spinner"],
+.animate-spin,
+.animate-pulse {
+  animation: none !important;
+  opacity: 0 !important;
+}
+
+/* Version numbers in footer/header */
+[data-testid="app-version"] {
+  visibility: hidden !important;
+}
