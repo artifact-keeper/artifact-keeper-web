@@ -168,8 +168,8 @@ test.describe('Setup Guide', () => {
 
     // Filter out known noise (e.g., failed API fetches are acceptable)
     const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('net::') && !err.includes('Failed to fetch') && !err.includes('NetworkError')
+      (err) => !err.includes('favicon') && !err.includes('net::') && !err.includes('Failed to load resource')
     );
-    expect(criticalErrors).toHaveLength(0);
+    expect(criticalErrors).toEqual([]);
   });
 });
