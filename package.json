@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:ci": "playwright test --reporter=github",
+    "test:e2e:docs-export": "npx tsx e2e/scripts/generate-docs-manifest.ts",
     "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
