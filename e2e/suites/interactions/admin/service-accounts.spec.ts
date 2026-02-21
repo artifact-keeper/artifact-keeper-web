@@ -199,7 +199,8 @@ test.describe.serial('Service Account CRUD', () => {
 
     await getRowActionButtons(page, SVC_ACCOUNT_RE).last().click();
 
-    const confirmDialog = page.getByRole('dialog');
+    // ConfirmDialog uses Radix AlertDialog which renders as role="alertdialog"
+    const confirmDialog = page.getByRole('alertdialog');
     await expect(confirmDialog).toBeVisible({ timeout: 10000 });
 
     const confirmInput = confirmDialog.getByRole('textbox').first();
