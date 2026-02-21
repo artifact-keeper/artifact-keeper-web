@@ -5,9 +5,7 @@ test.describe('Visual regression: components', () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    const sidebar = page.locator('[data-testid="app-sidebar"]').or(
-      page.locator('aside').first()
-    );
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
     await expect(sidebar).toHaveScreenshot('sidebar-expanded.png', { maxDiffPixelRatio: 0.01 });
   });
 

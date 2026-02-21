@@ -5,17 +5,15 @@ test.describe('Admin role access', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const sidebar = page.locator('[data-testid="app-sidebar"]').or(page.getByRole('navigation'));
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
 
-    // Admin should see all sidebar sections
-    await expect(sidebar.getByText(/dashboard/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/repositor/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/package/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/security/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/user/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/setting/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/analytic/i).first()).toBeVisible();
-    await expect(sidebar.getByText(/monitor/i).first()).toBeVisible();
+    // Admin should see all sidebar group labels
+    await expect(sidebar.getByText('Overview')).toBeVisible();
+    await expect(sidebar.getByText('Artifacts')).toBeVisible();
+    await expect(sidebar.getByText('Integration')).toBeVisible();
+    await expect(sidebar.getByText('Security')).toBeVisible();
+    await expect(sidebar.getByText('Operations')).toBeVisible();
+    await expect(sidebar.getByText('Administration')).toBeVisible();
   });
 
   test('admin pages are accessible', async ({ page }) => {

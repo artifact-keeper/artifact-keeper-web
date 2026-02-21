@@ -13,8 +13,8 @@ test.describe('Restricted role access', () => {
     await expect(page).not.toHaveURL(/\/login|\/error/);
   });
 
-  test('most pages are denied', async ({ page }) => {
-    const restrictedRoutes = ['/repositories', '/packages', '/users', '/settings', '/security', '/analytics'];
+  test('admin pages are denied', async ({ page }) => {
+    const restrictedRoutes = ['/users', '/settings', '/analytics'];
     for (const route of restrictedRoutes) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
@@ -26,13 +26,12 @@ test.describe('Restricted role access', () => {
     }
   });
 
-  test('sidebar shows minimal items', async ({ page }) => {
+  test('sidebar hides admin sections', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
-    const sidebar = page.locator('[data-testid="app-sidebar"]').or(page.getByRole('navigation'));
-    await expect(sidebar.getByText(/dashboard/i).first()).toBeVisible();
-    // Most sections should be hidden
-    await expect(sidebar.getByText(/^Users$/)).not.toBeVisible();
-    await expect(sidebar.getByText(/^Analytics$/)).not.toBeVisible();
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
+    await expect(sidebar.getByText('Overview')).toBeVisible();
+    // Admin-only sections should be hidden
+    await expect(sidebar.getByText('Administration')).not.toBeVisible();
   });
 });

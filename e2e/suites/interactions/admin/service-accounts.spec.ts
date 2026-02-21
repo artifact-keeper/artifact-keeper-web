@@ -50,14 +50,13 @@ test.describe('Service Accounts Page', () => {
   test('clicking Create opens dialog with svc- prefix', async ({ page }) => {
     const dialog = await openDialog(page, /create service account/i);
 
-    await expect(dialog.getByText('svc-')).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByText('svc-', { exact: true })).toBeVisible({ timeout: 5000 });
 
     const nameInput = dialog.getByLabel(/name/i).first()
       .or(dialog.getByPlaceholder(/deploy/i).first());
     await expect(nameInput).toBeVisible({ timeout: 5000 });
 
-    const descInput = dialog.getByLabel(/description/i).first()
-      .or(dialog.getByPlaceholder(/pipeline/i).first());
+    const descInput = dialog.getByRole('textbox', { name: /description/i });
     await expect(descInput).toBeVisible({ timeout: 5000 });
 
     await dialog.getByRole('button', { name: /cancel/i }).click();
@@ -78,8 +77,7 @@ test.describe.serial('Service Account CRUD', () => {
       .or(dialog.getByPlaceholder(/deploy/i).first());
     await nameInput.fill('e2e-test-bot');
 
-    const descInput = dialog.getByLabel(/description/i).first()
-      .or(dialog.getByPlaceholder(/pipeline/i).first());
+    const descInput = dialog.getByRole('textbox', { name: /description/i });
     await descInput.fill('E2E test service account');
 
     await dialog.getByRole('button', { name: /create$/i }).click();

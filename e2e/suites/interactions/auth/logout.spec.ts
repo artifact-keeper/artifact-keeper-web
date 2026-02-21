@@ -5,10 +5,11 @@ test.describe('Logout', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // Find and click logout (usually in user menu dropdown)
-    const userMenu = page.getByRole('button', { name: /account|user|profile|admin/i }).first();
+    // The user menu trigger is a round avatar button in the header
+    const userMenu = page.locator('header').getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).first();
     await userMenu.click();
-    await page.getByRole('menuitem', { name: /log out|sign out/i }).click();
+
+    await page.getByRole('menuitem', { name: /logout/i }).click();
 
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
