@@ -25,22 +25,18 @@ describe("QueryProvider", () => {
     expect(html).toContain("data-testid");
   });
 
-  it("configures MutationCache that invalidates dashboard on success", async () => {
-    // Import the actual module to access QueryClient internals
+  it("configures QueryClient with correct default options", async () => {
     const { QueryProvider } = await import("../query-provider");
-
-    // Render and capture the provider output
-    let capturedClient: import("@tanstack/react-query").QueryClient | null =
-      null;
-
     const { useQueryClient } = await import("@tanstack/react-query");
 
+    const clientRef = { current: null as import("@tanstack/react-query").QueryClient | null };
+
     function ClientCapture() {
-      capturedClient = useQueryClient();
+      // eslint-disable-next-line react-hooks/immutability
+      clientRef.current = useQueryClient();
       return null;
     }
 
-    // Use renderToString to trigger the component
     renderToString(
       React.createElement(
         QueryProvider,
@@ -49,15 +45,9 @@ describe("QueryProvider", () => {
       )
     );
 
-    expect(capturedClient).not.toBeNull();
+    expect(clientRef.current).not.toBeNull();
 
-    // Access the mutation cache and trigger onSuccess
-    const mutationCache = capturedClient!.getMutationCache();
-    expect(mutationCache).toBeDefined();
-
-    // The MutationCache.onSuccess is configured in the provider
-    // We verify the queryClient default options
-    const defaults = capturedClient!.getDefaultOptions();
+    const defaults = clientRef.current!.getDefaultOptions();
     expect(defaults.queries?.staleTime).toBe(2 * 60 * 1000);
     expect(defaults.queries?.retry).toBe(1);
     expect(defaults.queries?.refetchOnWindowFocus).toBe(true);
