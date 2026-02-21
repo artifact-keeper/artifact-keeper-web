@@ -142,6 +142,7 @@ export default function UsersPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
       setCreateOpen(false);
       setCreateForm(EMPTY_CREATE);
 
@@ -175,6 +176,7 @@ export default function UsersPage() {
     onSuccess: () => {
       toast.success("User updated successfully");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
       setEditOpen(false);
       setSelectedUser(null);
     },
@@ -194,6 +196,7 @@ export default function UsersPage() {
     onSuccess: (_, vars) => {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
     },
     onError: () => {
       toast.error("Failed to update user status");
@@ -228,6 +231,7 @@ export default function UsersPage() {
     onSuccess: () => {
       toast.success("User deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
       setDeleteOpen(false);
       setSelectedUser(null);
     },
