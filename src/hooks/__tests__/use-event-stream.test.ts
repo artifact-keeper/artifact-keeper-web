@@ -65,6 +65,7 @@ class MockEventSource {
 
 describe("useEventStream", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.stubGlobal("EventSource", MockEventSource);
     MockEventSource.instances = [];
     mockUser = { id: "test-user" };
@@ -73,11 +74,11 @@ describe("useEventStream", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
   async function loadHook() {
-    // Dynamic import so mocks are in place
     const mod = await import("../use-event-stream");
     mod.useEventStream();
     return effectCallback;
@@ -113,8 +114,6 @@ describe("useEventStream", () => {
     effect!();
     const es = MockEventSource.instances[0];
     es.emit("entity.changed", JSON.stringify({ type: "user.created" }));
-    // user.created maps to "users" group: admin-users + admin-groups
-    // plus dashboard group: admin-stats + recent-repositories
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-users"] });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-groups"] });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-stats"] });
@@ -151,9 +150,39 @@ describe("useEventStream", () => {
     effect!();
     const es = MockEventSource.instances[0];
     es.emit("entity.changed", JSON.stringify({ type: "unknown.event" }));
-    // Only dashboard invalidation (no keys for unknown event)
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-stats"] });
     expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["recent-repositories"] });
     expect(mockInvalidateQueries).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes and retries after error with delay", async () => {
+    const effect = await loadHook();
+    effect!();
+    const es = MockEventSource.instances[0];
+    expect(es.closed).toBe(false);
+
+    // Trigger error
+    es.onerror!();
+    expect(es.closed).toBe(true);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    // Advance past retry delay
+    vi.advanceTimersByTime(30_000);
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].closed).toBe(false);
+  });
+
+  it("does not retry after cleanup", async () => {
+    const effect = await loadHook();
+    const cleanup = effect!();
+    const es = MockEventSource.instances[0];
+
+    // Trigger error, then cleanup before retry fires
+    es.onerror!();
+    if (typeof cleanup === "function") cleanup();
+
+    vi.advanceTimersByTime(30_000);
+    // No new EventSource created - cleanup cancelled the retry
+    expect(MockEventSource.instances).toHaveLength(1);
   });
 });

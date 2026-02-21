@@ -5,10 +5,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import { getKeysForEvent, invalidateGroup } from "@/lib/query-keys";
 
+const RETRY_DELAY_MS = 30_000;
+
 /**
  * Connects to the backend SSE event stream and invalidates TanStack Query
  * caches when domain events arrive. Automatically connects when authenticated
- * and disconnects on logout or unmount.
+ * and disconnects on logout or unmount. If the endpoint is unavailable the
+ * hook closes the connection and retries after a delay instead of allowing
+ * EventSource's aggressive built-in reconnect.
  */
 export function useEventStream() {
   const queryClient = useQueryClient();
@@ -18,37 +22,54 @@ export function useEventStream() {
   useEffect(() => {
     if (!user) return;
 
-    const es = new EventSource("/api/v1/events/stream", {
-      withCredentials: true,
-    });
-    esRef.current = es;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-    es.addEventListener("entity.changed", (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data) as { type: string };
-        const keys = getKeysForEvent(data.type);
-        for (const key of keys) {
-          queryClient.invalidateQueries({ queryKey: [...key] });
+    function connect() {
+      if (cancelled) return;
+
+      const es = new EventSource("/api/v1/events/stream", {
+        withCredentials: true,
+      });
+      esRef.current = es;
+
+      es.addEventListener("entity.changed", (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data) as { type: string };
+          const keys = getKeysForEvent(data.type);
+          for (const key of keys) {
+            queryClient.invalidateQueries({ queryKey: [...key] });
+          }
+          invalidateGroup(queryClient, "dashboard");
+        } catch {
+          // Malformed event data - ignore
         }
-        // Dashboard stats can be affected by any entity change
-        invalidateGroup(queryClient, "dashboard");
-      } catch {
-        // Malformed event data - ignore
-      }
-    });
+      });
 
-    es.addEventListener("lagged", () => {
-      // Subscriber fell behind - invalidate everything for a full refresh
-      queryClient.invalidateQueries();
-    });
+      es.addEventListener("lagged", () => {
+        queryClient.invalidateQueries();
+      });
 
-    es.onerror = () => {
-      // EventSource auto-reconnects; nothing to do here
-    };
+      es.onerror = () => {
+        // Close immediately to prevent aggressive built-in reconnect.
+        // Retry after a delay so we don't spam a non-existent endpoint.
+        es.close();
+        esRef.current = null;
+        if (!cancelled) {
+          retryTimer = setTimeout(connect, RETRY_DELAY_MS);
+        }
+      };
+    }
+
+    connect();
 
     return () => {
-      es.close();
-      esRef.current = null;
+      cancelled = true;
+      clearTimeout(retryTimer);
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
     };
   }, [user, queryClient]);
 }
