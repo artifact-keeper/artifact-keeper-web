@@ -59,7 +59,7 @@ test.describe('Service Accounts Page', () => {
     const descInput = dialog.getByRole('textbox', { name: /description/i });
     await expect(descInput).toBeVisible({ timeout: 5000 });
 
-    await dialog.getByRole('button', { name: /cancel/i }).click();
+    await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible({ timeout: 5000 });
   });
 
@@ -140,7 +140,7 @@ test.describe.serial('Service Account CRUD', () => {
     await expect(dialog.getByText('maven')).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByPlaceholder('libs-*')).toBeVisible({ timeout: 5000 });
 
-    await dialog.getByRole('button', { name: /cancel/i }).click();
+    await page.keyboard.press('Escape');
   });
 
   test('can create a token with repo selector', async ({ page }) => {
