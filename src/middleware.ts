@@ -7,9 +7,17 @@ import { type NextRequest, NextResponse } from "next/server";
  * container starts rather than when the image is built.
  */
 export function middleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  // SSE event stream uses a dedicated App Router route handler for proper
+  // streaming support. Middleware rewrites gzip-compress and close the
+  // connection, which breaks long-lived SSE connections.
+  if (pathname === "/api/v1/events/stream") {
+    return NextResponse.next();
+  }
+
   // Default targets the Docker Compose internal network (plain HTTP between containers)
   const backendUrl = process.env.BACKEND_URL || "http://backend:8080"; // NOSONAR — internal service-mesh traffic
-  const { pathname, search } = request.nextUrl;
 
   return NextResponse.rewrite(new URL(`${pathname}${search}`, backendUrl));
 }
