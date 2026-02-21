@@ -24,6 +24,9 @@ e2e/.auth/
 # production
 /build
 
+# worktrees
+.worktrees/
+
 # misc
 .DS_Store
 *.pem
