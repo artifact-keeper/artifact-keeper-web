@@ -371,7 +371,7 @@ export default function PluginsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Plugins"
-        description="Manage WASM plugins for format handlers, storage backends, and more."
+        description="Manage WASM format handler plugins."
         actions={
           <div className="flex items-center gap-2">
             <Tooltip>
