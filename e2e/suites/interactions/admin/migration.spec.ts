@@ -123,7 +123,7 @@ test.describe('Migration Page', () => {
 
     // Filter out known non-critical errors (e.g., network resource loading)
     const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('favicon') && !err.includes('404')
+      (err) => !err.includes('favicon') && !err.includes('net::') && !err.includes('Failed to load resource')
     );
     expect(criticalErrors).toEqual([]);
   });

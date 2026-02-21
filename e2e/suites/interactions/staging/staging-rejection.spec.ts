@@ -160,6 +160,6 @@ test.describe('Staging Rejection Workflow', () => {
     const critical = errors.filter(
       (e) => !e.includes('favicon') && !e.includes('net::') && !e.includes('Failed to load resource')
     );
-    expect(critical).toHaveLength(0);
+    expect(critical).toEqual([]);
   });
 });
