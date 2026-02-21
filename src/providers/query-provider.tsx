@@ -6,6 +6,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { invalidateGroup } from "@/lib/query-keys";
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => {
@@ -13,14 +14,12 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       mutationCache: new MutationCache({
         onSuccess: () => {
           // Dashboard stats are aggregate counts affected by any data mutation.
-          // The cost of one extra background GET is negligible vs stale numbers.
-          client.invalidateQueries({ queryKey: ["admin-stats"] });
-          client.invalidateQueries({ queryKey: ["recent-repositories"] });
+          invalidateGroup(client, "dashboard");
         },
       }),
       defaultOptions: {
         queries: {
-          staleTime: 30_000,
+          staleTime: 2 * 60 * 1000, // 2 minutes (SSE pushes invalidation for real-time updates)
           retry: 1,
           refetchOnWindowFocus: true,
           refetchOnReconnect: true,

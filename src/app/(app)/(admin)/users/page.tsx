@@ -24,6 +24,7 @@ import {
   deleteUser as sdkDeleteUser,
 } from "@artifact-keeper/sdk";
 import { adminApi } from "@/lib/api/admin";
+import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, CreateUserResponse } from "@/types";
 
@@ -141,8 +142,7 @@ export default function UsersPage() {
       return data as any as CreateUserResponse;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "users");
       setCreateOpen(false);
       setCreateForm(EMPTY_CREATE);
 
@@ -175,8 +175,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       toast.success("User updated successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "users");
       setEditOpen(false);
       setSelectedUser(null);
     },
@@ -195,8 +194,7 @@ export default function UsersPage() {
     },
     onSuccess: (_, vars) => {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "users");
     },
     onError: () => {
       toast.error("Failed to update user status");
@@ -230,8 +228,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       toast.success("User deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "users");
       setDeleteOpen(false);
       setSelectedUser(null);
     },

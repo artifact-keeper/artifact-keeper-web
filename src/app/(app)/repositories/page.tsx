@@ -7,6 +7,7 @@ import { Plus, Search, RefreshCw, Package } from "lucide-react";
 import { toast } from "sonner";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
+import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -96,15 +97,7 @@ export default function RepositoriesPage() {
 
   // --- mutations ---
 
-  /** Invalidate all repository-related queries across the app. */
-  const invalidateAllRepoQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ["repositories"] });
-    queryClient.invalidateQueries({ queryKey: ["repositories-list"] });
-    queryClient.invalidateQueries({ queryKey: ["repositories-for-scan"] });
-    queryClient.invalidateQueries({ queryKey: ["repositories-all"] });
-    queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
-    queryClient.invalidateQueries({ queryKey: ["quality-health-dashboard"] });
-  };
+  const invalidateAllRepoQueries = () => invalidateGroup(queryClient, "repositories");
 
   const createMutation = useMutation({
     mutationFn: (d: CreateRepositoryRequest) => repositoriesApi.create(d),
