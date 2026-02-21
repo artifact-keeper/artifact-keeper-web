@@ -217,8 +217,12 @@ export async function submitTokenForm(
   const createBtn = dialog
     .getByRole('button', { name: /create$/i })
     .or(dialog.getByRole('button', { name: /create token$/i }));
-  await createBtn.first().scrollIntoViewIfNeeded();
-  await createBtn.first().click({ force: true });
+  const btn = createBtn.first();
+  await btn.scrollIntoViewIfNeeded().catch(() => {});
+  // Button may be outside viewport in dialogs with overflow; use JS click as fallback
+  await btn.click({ timeout: 5000 }).catch(async () => {
+    await btn.evaluate((el: HTMLElement) => el.click());
+  });
   await page.waitForTimeout(3000);
 }
 
