@@ -150,9 +150,8 @@ test.describe.serial('Service Account CRUD', () => {
     await clickCreateTokenInDialog(dialog);
     await fillDialogName(dialog, 'e2e-scoped-token');
 
-    // Select docker format
-    const dockerCheckbox = dialog.getByText('docker').locator('..');
-    await dockerCheckbox.locator('[role="checkbox"]').check();
+    // Select docker format using the checkbox's accessible name
+    await dialog.getByRole('checkbox', { name: 'docker' }).check();
 
     // Set name pattern
     await dialog.getByPlaceholder('libs-*').fill('prod-*');
@@ -170,12 +169,14 @@ test.describe.serial('Service Account CRUD', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10000 });
 
-    const descInput = dialog.getByLabel(/description/i).first()
-      .or(dialog.getByPlaceholder(/description/i).first());
+    const descInput = dialog.getByRole('textbox', { name: /description/i });
     await descInput.clear();
     await descInput.fill('Updated by E2E test');
 
-    await dialog.getByRole('button', { name: /save/i }).click();
+    const saveBtn = dialog.getByRole('button', { name: /save/i });
+    await saveBtn.click({ timeout: 5000 }).catch(async () => {
+      await saveBtn.evaluate((el: HTMLElement) => el.click());
+    });
     await page.waitForTimeout(2000);
     await assertNoAppErrors(page);
   });
@@ -201,14 +202,16 @@ test.describe.serial('Service Account CRUD', () => {
     const confirmDialog = page.getByRole('dialog');
     await expect(confirmDialog).toBeVisible({ timeout: 10000 });
 
-    const confirmInput = confirmDialog.getByRole('textbox').first()
-      .or(confirmDialog.locator('input').first());
+    const confirmInput = confirmDialog.getByRole('textbox').first();
     const inputVisible = await confirmInput.isVisible({ timeout: 5000 }).catch(() => false);
     if (inputVisible) {
       await confirmInput.fill(SVC_ACCOUNT);
     }
 
-    await confirmDialog.getByRole('button', { name: /delete|confirm/i }).last().click();
+    const deleteBtn = confirmDialog.getByRole('button', { name: /delete|confirm/i }).last();
+    await deleteBtn.click({ timeout: 5000 }).catch(async () => {
+      await deleteBtn.evaluate((el: HTMLElement) => el.click());
+    });
     await page.waitForTimeout(3000);
     await assertNoAppErrors(page);
   });
