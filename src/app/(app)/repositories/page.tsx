@@ -95,10 +95,21 @@ export default function RepositoriesPage() {
   });
 
   // --- mutations ---
+
+  /** Invalidate all repository-related queries across the app. */
+  const invalidateAllRepoQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["repositories"] });
+    queryClient.invalidateQueries({ queryKey: ["repositories-list"] });
+    queryClient.invalidateQueries({ queryKey: ["repositories-for-scan"] });
+    queryClient.invalidateQueries({ queryKey: ["repositories-all"] });
+    queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
+    queryClient.invalidateQueries({ queryKey: ["quality-health-dashboard"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (d: CreateRepositoryRequest) => repositoriesApi.create(d),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      invalidateAllRepoQueries();
       setCreateOpen(false);
       toast.success("Repository created");
     },
@@ -111,7 +122,7 @@ export default function RepositoriesPage() {
     mutationFn: ({ key, data: d }: { key: string; data: Partial<CreateRepositoryRequest> }) =>
       repositoriesApi.update(key, d),
     onSuccess: (updatedRepo, { key: originalKey }) => {
-      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      invalidateAllRepoQueries();
       setEditOpen(false);
       setDialogRepo(null);
       // If the key was renamed, update the selected key and URL
@@ -131,7 +142,7 @@ export default function RepositoriesPage() {
   const deleteMutation = useMutation({
     mutationFn: (key: string) => repositoriesApi.delete(key),
     onSuccess: (_, deletedKey) => {
-      queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      invalidateAllRepoQueries();
       setDeleteOpen(false);
       setDialogRepo(null);
       if (selectedKey === deletedKey) setSelectedKey(null);
