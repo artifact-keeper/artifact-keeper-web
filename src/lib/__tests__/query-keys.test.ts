@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   QUERY_KEYS,
   INVALIDATION_GROUPS,
@@ -8,28 +9,46 @@ import {
 } from "../query-keys";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function createMockQueryClient() {
+  return {
+    invalidateQueries: vi.fn(),
+  } as unknown as QueryClient;
+}
+
+// ---------------------------------------------------------------------------
 // QUERY_KEYS
 // ---------------------------------------------------------------------------
 
 describe("QUERY_KEYS", () => {
-  it("exports all expected key constants", () => {
-    expect(QUERY_KEYS.ADMIN_STATS).toEqual(["admin-stats"]);
-    expect(QUERY_KEYS.RECENT_REPOS).toEqual(["recent-repositories"]);
-    expect(QUERY_KEYS.REPOSITORIES).toEqual(["repositories"]);
-    expect(QUERY_KEYS.REPOSITORIES_LIST).toEqual(["repositories-list"]);
-    expect(QUERY_KEYS.REPOSITORIES_FOR_SCAN).toEqual(["repositories-for-scan"]);
-    expect(QUERY_KEYS.REPOSITORIES_ALL).toEqual(["repositories-all"]);
-    expect(QUERY_KEYS.QUALITY_HEALTH).toEqual(["quality-health-dashboard"]);
-    expect(QUERY_KEYS.QUALITY_GATES).toEqual(["quality-gates"]);
-    expect(QUERY_KEYS.ADMIN_USERS).toEqual(["admin-users"]);
-    expect(QUERY_KEYS.ADMIN_GROUPS).toEqual(["admin-groups"]);
-    expect(QUERY_KEYS.ADMIN_PERMISSIONS).toEqual(["admin-permissions"]);
-    expect(QUERY_KEYS.SERVICE_ACCOUNTS).toEqual(["service-accounts"]);
-  });
+  const expectedKeys: Record<string, string[]> = {
+    ADMIN_STATS: ["admin-stats"],
+    RECENT_REPOS: ["recent-repositories"],
+    REPOSITORIES: ["repositories"],
+    REPOSITORIES_LIST: ["repositories-list"],
+    REPOSITORIES_FOR_SCAN: ["repositories-for-scan"],
+    REPOSITORIES_ALL: ["repositories-all"],
+    QUALITY_HEALTH: ["quality-health-dashboard"],
+    QUALITY_GATES: ["quality-gates"],
+    ADMIN_USERS: ["admin-users"],
+    ADMIN_GROUPS: ["admin-groups"],
+    ADMIN_PERMISSIONS: ["admin-permissions"],
+    SERVICE_ACCOUNTS: ["service-accounts"],
+  };
 
   it("has 12 key constants", () => {
     expect(Object.keys(QUERY_KEYS)).toHaveLength(12);
   });
+
+  it.each(Object.entries(expectedKeys))(
+    "%s equals %j",
+    (name, expected) => {
+      const actual = QUERY_KEYS[name as keyof typeof QUERY_KEYS];
+      expect(actual).toEqual(expected);
+    },
+  );
 
   it("each key is a non-empty string array", () => {
     for (const [name, key] of Object.entries(QUERY_KEYS)) {
@@ -46,7 +65,7 @@ describe("QUERY_KEYS", () => {
 
 describe("INVALIDATION_GROUPS", () => {
   it("has all expected groups", () => {
-    expect(Object.keys(INVALIDATION_GROUPS).sort()).toEqual([
+    expect(Object.keys(INVALIDATION_GROUPS).sort((a, b) => a.localeCompare(b))).toEqual([
       "dashboard",
       "groups",
       "permissions",
@@ -57,43 +76,28 @@ describe("INVALIDATION_GROUPS", () => {
     ]);
   });
 
-  it("dashboard group contains admin-stats and recent-repositories", () => {
-    expect(INVALIDATION_GROUPS.dashboard).toContainEqual(["admin-stats"]);
-    expect(INVALIDATION_GROUPS.dashboard).toContainEqual(["recent-repositories"]);
+  it.each([
+    ["dashboard", [["admin-stats"], ["recent-repositories"]]],
+    ["users", [["admin-users"], ["admin-groups"]]],
+    ["groups", [["admin-groups"], ["admin-permissions"]]],
+    ["serviceAccounts", [["service-accounts"]]],
+    ["permissions", [["admin-permissions"]]],
+    ["qualityGates", [["quality-gates"], ["quality-health-dashboard"]]],
+  ] as const)("%s group contains expected keys", (groupName, expectedKeys) => {
+    for (const key of expectedKeys) {
+      expect(INVALIDATION_GROUPS[groupName]).toContainEqual(key);
+    }
   });
 
   it("repositories group contains all 6 repo-related keys", () => {
     const group = INVALIDATION_GROUPS.repositories;
     expect(group).toHaveLength(6);
-    expect(group).toContainEqual(["repositories"]);
-    expect(group).toContainEqual(["repositories-list"]);
-    expect(group).toContainEqual(["repositories-for-scan"]);
-    expect(group).toContainEqual(["repositories-all"]);
-    expect(group).toContainEqual(["recent-repositories"]);
-    expect(group).toContainEqual(["quality-health-dashboard"]);
-  });
-
-  it("users group includes admin-users and admin-groups", () => {
-    expect(INVALIDATION_GROUPS.users).toContainEqual(["admin-users"]);
-    expect(INVALIDATION_GROUPS.users).toContainEqual(["admin-groups"]);
-  });
-
-  it("groups group includes admin-groups and admin-permissions", () => {
-    expect(INVALIDATION_GROUPS.groups).toContainEqual(["admin-groups"]);
-    expect(INVALIDATION_GROUPS.groups).toContainEqual(["admin-permissions"]);
-  });
-
-  it("serviceAccounts group includes service-accounts", () => {
-    expect(INVALIDATION_GROUPS.serviceAccounts).toContainEqual(["service-accounts"]);
-  });
-
-  it("permissions group includes admin-permissions", () => {
-    expect(INVALIDATION_GROUPS.permissions).toContainEqual(["admin-permissions"]);
-  });
-
-  it("qualityGates group includes quality-gates and quality-health-dashboard", () => {
-    expect(INVALIDATION_GROUPS.qualityGates).toContainEqual(["quality-gates"]);
-    expect(INVALIDATION_GROUPS.qualityGates).toContainEqual(["quality-health-dashboard"]);
+    for (const key of [
+      ["repositories"], ["repositories-list"], ["repositories-for-scan"],
+      ["repositories-all"], ["recent-repositories"], ["quality-health-dashboard"],
+    ]) {
+      expect(group).toContainEqual(key);
+    }
   });
 
   it("every group value references existing QUERY_KEYS", () => {
@@ -118,42 +122,29 @@ describe("EVENT_TYPE_MAP", () => {
     expect(Object.keys(EVENT_TYPE_MAP)).toHaveLength(20);
   });
 
-  it("maps user events to users group", () => {
-    expect(EVENT_TYPE_MAP["user.created"]).toBe("users");
-    expect(EVENT_TYPE_MAP["user.updated"]).toBe("users");
-    expect(EVENT_TYPE_MAP["user.deleted"]).toBe("users");
-  });
-
-  it("maps group events to groups group", () => {
-    expect(EVENT_TYPE_MAP["group.created"]).toBe("groups");
-    expect(EVENT_TYPE_MAP["group.updated"]).toBe("groups");
-    expect(EVENT_TYPE_MAP["group.deleted"]).toBe("groups");
-    expect(EVENT_TYPE_MAP["group.member_added"]).toBe("groups");
-    expect(EVENT_TYPE_MAP["group.member_removed"]).toBe("groups");
-  });
-
-  it("maps repository events to repositories group", () => {
-    expect(EVENT_TYPE_MAP["repository.created"]).toBe("repositories");
-    expect(EVENT_TYPE_MAP["repository.updated"]).toBe("repositories");
-    expect(EVENT_TYPE_MAP["repository.deleted"]).toBe("repositories");
-  });
-
-  it("maps service account events to serviceAccounts group", () => {
-    expect(EVENT_TYPE_MAP["service_account.created"]).toBe("serviceAccounts");
-    expect(EVENT_TYPE_MAP["service_account.updated"]).toBe("serviceAccounts");
-    expect(EVENT_TYPE_MAP["service_account.deleted"]).toBe("serviceAccounts");
-  });
-
-  it("maps permission events to permissions group", () => {
-    expect(EVENT_TYPE_MAP["permission.created"]).toBe("permissions");
-    expect(EVENT_TYPE_MAP["permission.updated"]).toBe("permissions");
-    expect(EVENT_TYPE_MAP["permission.deleted"]).toBe("permissions");
-  });
-
-  it("maps quality gate events to qualityGates group", () => {
-    expect(EVENT_TYPE_MAP["quality_gate.created"]).toBe("qualityGates");
-    expect(EVENT_TYPE_MAP["quality_gate.updated"]).toBe("qualityGates");
-    expect(EVENT_TYPE_MAP["quality_gate.deleted"]).toBe("qualityGates");
+  it.each([
+    ["user.created", "users"],
+    ["user.updated", "users"],
+    ["user.deleted", "users"],
+    ["group.created", "groups"],
+    ["group.updated", "groups"],
+    ["group.deleted", "groups"],
+    ["group.member_added", "groups"],
+    ["group.member_removed", "groups"],
+    ["repository.created", "repositories"],
+    ["repository.updated", "repositories"],
+    ["repository.deleted", "repositories"],
+    ["service_account.created", "serviceAccounts"],
+    ["service_account.updated", "serviceAccounts"],
+    ["service_account.deleted", "serviceAccounts"],
+    ["permission.created", "permissions"],
+    ["permission.updated", "permissions"],
+    ["permission.deleted", "permissions"],
+    ["quality_gate.created", "qualityGates"],
+    ["quality_gate.updated", "qualityGates"],
+    ["quality_gate.deleted", "qualityGates"],
+  ])("%s maps to %s group", (eventType, expectedGroup) => {
+    expect(EVENT_TYPE_MAP[eventType]).toBe(expectedGroup);
   });
 
   it("every mapped group exists in INVALIDATION_GROUPS", () => {
@@ -185,18 +176,14 @@ describe("getKeysForEvent", () => {
     expect(keys).toContainEqual(["repositories-list"]);
   });
 
-  it("returns empty array for unknown event type", () => {
-    expect(getKeysForEvent("unknown.event")).toEqual([]);
-  });
-
-  it("returns empty array for empty string", () => {
-    expect(getKeysForEvent("")).toEqual([]);
-  });
-
   it("returns quality gate keys for quality_gate.updated", () => {
     const keys = getKeysForEvent("quality_gate.updated");
     expect(keys).toContainEqual(["quality-gates"]);
     expect(keys).toContainEqual(["quality-health-dashboard"]);
+  });
+
+  it.each(["unknown.event", ""])("returns empty array for %j", (eventType) => {
+    expect(getKeysForEvent(eventType)).toEqual([]);
   });
 });
 
@@ -205,57 +192,23 @@ describe("getKeysForEvent", () => {
 // ---------------------------------------------------------------------------
 
 describe("invalidateGroup", () => {
-  function createMockQueryClient() {
-    return {
-      invalidateQueries: vi.fn(),
-    } as unknown as import("@tanstack/react-query").QueryClient;
-  }
-
-  it("invalidates all keys in the repositories group", () => {
+  it.each([
+    ["repositories", 6, [["repositories"], ["repositories-list"], ["repositories-for-scan"], ["repositories-all"], ["recent-repositories"], ["quality-health-dashboard"]]],
+    ["dashboard", 2, [["admin-stats"], ["recent-repositories"]]],
+    ["users", 2, [["admin-users"], ["admin-groups"]]],
+    ["groups", 2, [["admin-groups"], ["admin-permissions"]]],
+  ] as const)("invalidates all keys in the %s group", (groupName, expectedCount, expectedKeys) => {
     const qc = createMockQueryClient();
-    invalidateGroup(qc, "repositories");
-    expect(qc.invalidateQueries).toHaveBeenCalledTimes(6);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["repositories"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["repositories-list"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["repositories-for-scan"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["repositories-all"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["recent-repositories"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["quality-health-dashboard"] });
+    invalidateGroup(qc, groupName);
+    expect(qc.invalidateQueries).toHaveBeenCalledTimes(expectedCount);
+    for (const key of expectedKeys) {
+      expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: key });
+    }
   });
 
-  it("invalidates all keys in the dashboard group", () => {
+  it.each(["nonexistent", ""])("does nothing for group name %j", (groupName) => {
     const qc = createMockQueryClient();
-    invalidateGroup(qc, "dashboard");
-    expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-stats"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["recent-repositories"] });
-  });
-
-  it("invalidates all keys in the users group", () => {
-    const qc = createMockQueryClient();
-    invalidateGroup(qc, "users");
-    expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-users"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-groups"] });
-  });
-
-  it("invalidates all keys in the groups group", () => {
-    const qc = createMockQueryClient();
-    invalidateGroup(qc, "groups");
-    expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-groups"] });
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["admin-permissions"] });
-  });
-
-  it("does nothing for an unknown group", () => {
-    const qc = createMockQueryClient();
-    invalidateGroup(qc, "nonexistent");
-    expect(qc.invalidateQueries).not.toHaveBeenCalled();
-  });
-
-  it("does nothing for an empty group name", () => {
-    const qc = createMockQueryClient();
-    invalidateGroup(qc, "");
+    invalidateGroup(qc, groupName);
     expect(qc.invalidateQueries).not.toHaveBeenCalled();
   });
 });
