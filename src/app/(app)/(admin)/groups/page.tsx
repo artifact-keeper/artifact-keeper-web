@@ -131,6 +131,7 @@ export default function GroupsPage() {
     onSuccess: () => {
       toast.success("Group deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
       setDeleteOpen(false);
       setSelectedGroup(null);
     },
@@ -146,6 +147,7 @@ export default function GroupsPage() {
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
       queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
       setAddUserId("");
     },
     onError: () => toast.error("Failed to add member"),
@@ -160,6 +162,7 @@ export default function GroupsPage() {
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
       queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
     },
     onError: () => toast.error("Failed to remove member"),
   });
