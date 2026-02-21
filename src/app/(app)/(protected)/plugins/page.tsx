@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   XCircle,
   ExternalLink,
+  Upload,
+  GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,6 +27,8 @@ import {
   disablePlugin,
   uninstallPlugin,
   updatePluginConfig,
+  installFromGit,
+  installFromZip,
 } from "@artifact-keeper/sdk";
 
 import { Button } from "@/components/ui/button";
@@ -134,10 +138,10 @@ export default function PluginsPage() {
   const [uninstallId, setUninstallId] = useState<string | null>(null);
 
   // install form
-  const [installForm, setInstallForm] = useState({
-    source: "registry",
-    identifier: "",
-  });
+  const [installTab, setInstallTab] = useState<"git" | "zip">("git");
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitRef, setGitRef] = useState("");
+  const [zipFile, setZipFile] = useState<File | null>(null);
 
   // -- queries --
   const { data, isLoading, isFetching } = useQuery({
@@ -232,6 +236,64 @@ export default function PluginsPage() {
     },
     onError: () => toast.error("Failed to save configuration"),
   });
+
+  const resetInstallForm = () => {
+    setGitUrl("");
+    setGitRef("");
+    setZipFile(null);
+    setInstallTab("git");
+  };
+
+  const installGitMutation = useMutation({
+    mutationFn: async ({ url, ref }: { url: string; ref?: string }) => {
+      const { data, error } = await installFromGit({
+        body: { url, ref: ref || null },
+      });
+      if (error) throw error;
+      return data as any;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      setInstallOpen(false);
+      resetInstallForm();
+      toast.success(
+        `Plugin "${data?.name ?? "unknown"}" installed successfully`,
+      );
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.detail ?? err?.message ?? "Failed to install plugin from Git",
+      );
+    },
+  });
+
+  const installZipMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data, error } = await installFromZip({
+        body: formData,
+      } as any);
+      if (error) throw error;
+      return data as any;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["plugins"] });
+      setInstallOpen(false);
+      resetInstallForm();
+      toast.success(
+        `Plugin "${data?.name ?? "unknown"}" installed successfully`,
+      );
+    },
+    onError: (err: any) => {
+      toast.error(
+        err?.detail ?? err?.message ?? "Failed to install plugin from ZIP",
+      );
+    },
+  });
+
+  const isInstalling =
+    installGitMutation.isPending || installZipMutation.isPending;
 
   // -- columns --
   const columns: DataTableColumn<Plugin>[] = [
@@ -497,69 +559,123 @@ export default function PluginsPage() {
         open={installOpen}
         onOpenChange={(o) => {
           setInstallOpen(o);
-          if (!o)
-            setInstallForm({ source: "registry", identifier: "" });
+          if (!o) resetInstallForm();
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Install Plugin</DialogTitle>
             <DialogDescription>
-              Install a plugin from the registry, a URL, or by uploading a WASM
-              file.
+              Install a format handler plugin from a Git repository or ZIP file.
             </DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              toast.info("Plugin installation is not yet implemented.");
-            }}
+          <Tabs
+            value={installTab}
+            onValueChange={(v) => setInstallTab(v as "git" | "zip")}
           >
-            <div className="space-y-2">
-              <Label>Plugin Source</Label>
-              <Select
-                value={installForm.source}
-                onValueChange={(v) =>
-                  setInstallForm((f) => ({ ...f, source: v }))
-                }
+            <TabsList className="w-full">
+              <TabsTrigger value="git" className="flex-1 gap-1.5">
+                <GitBranch className="size-3.5" />
+                Git Repository
+              </TabsTrigger>
+              <TabsTrigger value="zip" className="flex-1 gap-1.5">
+                <Upload className="size-3.5" />
+                ZIP Upload
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="git" className="mt-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!gitUrl.trim()) return;
+                  installGitMutation.mutate({
+                    url: gitUrl.trim(),
+                    ref: gitRef.trim() || undefined,
+                  });
+                }}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="registry">Plugin Registry</SelectItem>
-                  <SelectItem value="url">URL</SelectItem>
-                  <SelectItem value="upload">Upload File</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plugin-id">Plugin Identifier / URL</Label>
-              <Input
-                id="plugin-id"
-                value={installForm.identifier}
-                onChange={(e) =>
-                  setInstallForm((f) => ({
-                    ...f,
-                    identifier: e.target.value,
-                  }))
-                }
-                placeholder="e.g., webhook-notifier or https://..."
-                required
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => setInstallOpen(false)}
+                <div className="space-y-2">
+                  <Label htmlFor="git-url">Repository URL</Label>
+                  <Input
+                    id="git-url"
+                    value={gitUrl}
+                    onChange={(e) => setGitUrl(e.target.value)}
+                    placeholder="https://github.com/org/plugin-repo.git"
+                    required
+                    disabled={isInstalling}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="git-ref">
+                    Git Ref{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="git-ref"
+                    value={gitRef}
+                    onChange={(e) => setGitRef(e.target.value)}
+                    placeholder="v1.0.0, main, or commit SHA"
+                    disabled={isInstalling}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setInstallOpen(false)}
+                    disabled={isInstalling}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isInstalling || !gitUrl.trim()}>
+                    {installGitMutation.isPending ? "Installing..." : "Install"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </TabsContent>
+            <TabsContent value="zip" className="mt-4">
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!zipFile) return;
+                  installZipMutation.mutate(zipFile);
+                }}
               >
-                Cancel
-              </Button>
-              <Button type="submit">Install</Button>
-            </DialogFooter>
-          </form>
+                <div className="space-y-2">
+                  <Label htmlFor="zip-file">Plugin ZIP File</Label>
+                  <Input
+                    id="zip-file"
+                    type="file"
+                    accept=".zip"
+                    onChange={(e) => setZipFile(e.target.files?.[0] ?? null)}
+                    disabled={isInstalling}
+                  />
+                  {zipFile && (
+                    <p className="text-xs text-muted-foreground">
+                      {zipFile.name} ({(zipFile.size / 1024).toFixed(1)} KB)
+                    </p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setInstallOpen(false)}
+                    disabled={isInstalling}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isInstalling || !zipFile}>
+                    {installZipMutation.isPending ? "Uploading..." : "Upload & Install"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
