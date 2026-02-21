@@ -1,7 +1,7 @@
 import { test, expect } from '../../../fixtures/test-fixtures';
 
 test.describe('Logout', () => {
-  test('logout clears session and redirects to login', async ({ page }) => {
+  test('logout clears session and shows sign-in button', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -11,6 +11,8 @@ test.describe('Logout', () => {
 
     await page.getByRole('menuitem', { name: /logout/i }).click();
 
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    // After logout, the dashboard stays loaded (it's a public route)
+    // but the user avatar is replaced by a Sign In button
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible({ timeout: 10000 });
   });
 });

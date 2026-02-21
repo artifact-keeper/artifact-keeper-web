@@ -101,7 +101,7 @@ test.describe.serial('Service Account CRUD', () => {
     const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
     await expect(dialog.getByText(SVC_ACCOUNT_RE)).toBeVisible({ timeout: 5000 });
     await expect(
-      dialog.getByRole('button', { name: /create token/i })
+      dialog.getByRole('button', { name: /create token/i }).first()
     ).toBeVisible({ timeout: 5000 });
   });
 
