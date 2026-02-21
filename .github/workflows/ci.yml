@@ -65,8 +65,63 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-  e2e:
-    name: E2E Tests
+  e2e-interactions:
+    name: E2E Interactions (shard ${{ matrix.shard }}/3)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start E2E stack
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        env:
+          BACKEND_TAG: dev
+
+      - name: Run interaction tests
+        run: npx playwright test --project=interactions --shard=${{ matrix.shard }}/3 --reporter=github,html
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3100
+
+      - name: Upload test report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: playwright-interactions-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs --tail=100
+
+      - name: Tear down E2E stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+  e2e-roles:
+    name: E2E RBAC Roles
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -95,8 +150,8 @@ jobs:
         env:
           BACKEND_TAG: dev
 
-      - name: Run E2E tests
-        run: npx playwright test --reporter=github,html
+      - name: Run RBAC role tests
+        run: npx playwright test --project=roles-admin --project=roles-developer --project=roles-viewer --project=roles-security --project=roles-restricted --project=roles-unauthenticated --reporter=github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
 
@@ -104,7 +159,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: playwright-report
+          name: playwright-roles
           path: playwright-report/
           retention-days: 7
 
@@ -115,6 +170,91 @@ jobs:
       - name: Tear down E2E stack
         if: always()
         run: docker compose -f docker-compose.e2e.yml down -v
+
+  e2e-visual:
+    name: E2E Visual Regression
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start E2E stack
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        env:
+          BACKEND_TAG: dev
+
+      - name: Run visual regression tests
+        run: npx playwright test --project=visual --reporter=github,html
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3100
+
+      - name: Upload visual diff images on failure
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: visual-regression-diffs
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload test report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: playwright-visual
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.e2e.yml logs --tail=100
+
+      - name: Tear down E2E stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+  e2e-docs-export:
+    name: E2E Docs Screenshot Export
+    if: github.ref == 'refs/heads/main'
+    needs: e2e-visual
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate docs manifest
+        run: npm run test:e2e:docs-export
+
+      - name: Upload docs screenshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docs-screenshots
+          path: e2e/docs-export/
+          retention-days: 30
 
   docker:
     name: Docker (${{ matrix.platform }})
