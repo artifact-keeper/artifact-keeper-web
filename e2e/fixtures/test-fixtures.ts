@@ -217,7 +217,8 @@ export async function submitTokenForm(
   const createBtn = dialog
     .getByRole('button', { name: /create$/i })
     .or(dialog.getByRole('button', { name: /create token$/i }));
-  await createBtn.first().click();
+  await createBtn.first().scrollIntoViewIfNeeded();
+  await createBtn.first().click({ force: true });
   await page.waitForTimeout(3000);
 }
 

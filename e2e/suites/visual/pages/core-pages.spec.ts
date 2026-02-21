@@ -18,7 +18,7 @@ test.describe('Visual regression: core pages', () => {
       await expect(page).toHaveScreenshot(`${name}-desktop-admin.png`, {
         maxDiffPixelRatio: 0.01,
         fullPage: true,
-        stylePath: '../../../visual-mask.css',
+        stylePath: './e2e/visual-mask.css',
       });
     });
 
@@ -30,7 +30,7 @@ test.describe('Visual regression: core pages', () => {
       await expect(page).toHaveScreenshot(`${name}-mobile-admin.png`, {
         maxDiffPixelRatio: 0.01,
         fullPage: true,
-        stylePath: '../../../visual-mask.css',
+        stylePath: './e2e/visual-mask.css',
       });
     });
   }

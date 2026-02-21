@@ -25,7 +25,7 @@ test.describe('Visual regression: admin pages', () => {
       await expect(page).toHaveScreenshot(`${name}-desktop-admin.png`, {
         maxDiffPixelRatio: 0.01,
         fullPage: true,
-        stylePath: '../../../visual-mask.css',
+        stylePath: './e2e/visual-mask.css',
       });
     });
   }
