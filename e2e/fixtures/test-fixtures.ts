@@ -205,7 +205,7 @@ export async function clickCreateTokenInDialog(
   dialog: Locator,
   waitMs = 500
 ): Promise<void> {
-  await dialog.getByRole('button', { name: /create token/i }).click();
+  await dialog.getByRole('button', { name: /create token/i }).first().click();
   await dialog.page().waitForTimeout(waitMs);
 }
 
@@ -217,7 +217,7 @@ export async function submitTokenForm(
   const createBtn = dialog
     .getByRole('button', { name: /create$/i })
     .or(dialog.getByRole('button', { name: /create token$/i }));
-  await createBtn.click();
+  await createBtn.first().click();
   await page.waitForTimeout(3000);
 }
 

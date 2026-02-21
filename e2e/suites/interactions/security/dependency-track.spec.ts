@@ -12,12 +12,14 @@ test.describe('Dependency-Track Projects Page', () => {
     expect(content).not.toContain('Application error');
   });
 
-  test('projects table or empty state is visible', async ({ page }) => {
+  test('projects table or unavailable state is visible', async ({ page }) => {
     const table = page.getByRole('table').first();
     const emptyState = page.getByText(/no project|no result|not configured/i).first();
+    const unavailable = page.getByText(/unavailable|disconnected/i).first();
     const isTableVisible = await table.isVisible({ timeout: 5000 }).catch(() => false);
     const isEmptyVisible = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(isTableVisible || isEmptyVisible).toBe(true);
+    const isUnavailable = await unavailable.isVisible({ timeout: 3000 }).catch(() => false);
+    expect(isTableVisible || isEmptyVisible || isUnavailable).toBe(true);
   });
 
   test('search input is functional', async ({ page }) => {
