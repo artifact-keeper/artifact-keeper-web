@@ -2,13 +2,22 @@ import { test as setup, expect } from '@playwright/test';
 import { TEST_ROLES } from './auth-states';
 import { seedAll } from './seed-data';
 
-/** Login as a user and save their storageState */
+/** Login as a user via the UI and save their storageState */
 async function loginAndSaveState(
   page: import('@playwright/test').Page,
   username: string,
   password: string,
   storageStatePath: string,
 ) {
+  // Pre-flight: test the login API directly to verify credentials and prime cookies
+  const apiResponse = await page.request.post('/api/v1/auth/login', {
+    data: { username, password },
+  });
+  console.log(`[setup] Direct API login for ${username}: ${apiResponse.status()}`);
+  if (!apiResponse.ok()) {
+    console.log(`[setup] Login API response: ${await apiResponse.text().catch(() => 'N/A')}`);
+  }
+
   await page.goto('/login');
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
@@ -19,7 +28,14 @@ async function loginAndSaveState(
   );
 
   await page.getByRole('button', { name: 'Sign In' }).click();
-  await loginPromise.catch(() => null);
+
+  const loginResponse = await loginPromise.catch(() => null);
+  if (loginResponse) {
+    console.log(`[setup] Login response for ${username}: ${loginResponse.status()}`);
+    if (!loginResponse.ok()) {
+      console.log(`[setup] Login body: ${await loginResponse.text().catch(() => 'N/A')}`);
+    }
+  }
 
   // Wait for redirect to dashboard or change-password
   await expect(page).toHaveURL(/\/$|\/dashboard|\/change-password/, { timeout: 15000 });

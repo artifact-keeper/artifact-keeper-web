@@ -23,7 +23,7 @@ async function api(request: APIRequestContext, method: string, path: string, dat
 export async function seedUsers(request: APIRequestContext): Promise<void> {
   for (const [roleName, role] of Object.entries(TEST_ROLES)) {
     if (roleName === 'admin') continue; // admin already exists
-    await api(request, 'POST', '/admin/users', {
+    await api(request, 'POST', '/users', {
       username: role.username,
       password: role.password,
       email: role.email,
@@ -131,7 +131,7 @@ export async function cleanupAll(request: APIRequestContext): Promise<void> {
   // Users (non-admin)
   for (const [roleName, role] of Object.entries(TEST_ROLES)) {
     if (roleName === 'admin') continue;
-    await api(request, 'DELETE', `/admin/users/${role.username}`).catch(() => {});
+    await api(request, 'DELETE', `/users/${role.username}`).catch(() => {});
   }
 
   console.log('[cleanup] Done.');
