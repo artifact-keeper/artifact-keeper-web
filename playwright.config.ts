@@ -21,19 +21,6 @@ export default defineConfig({
       testMatch: /global-setup\.ts/,
     },
 
-    // --- Legacy tests (existing specs, run during migration) ---
-    {
-      name: 'legacy',
-      testDir: './e2e',
-      testMatch: '*.spec.ts',
-      testIgnore: ['**/suites/**', '**/setup/**', '**/fixtures/**', '**/helpers/**'],
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: 'e2e/.auth/admin.json',
-      },
-      dependencies: ['setup'],
-    },
-
     // --- Interaction tests ---
     {
       name: 'interactions',
