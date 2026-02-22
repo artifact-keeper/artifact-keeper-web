@@ -62,7 +62,7 @@ export async function synthesizeNarration(
       SampleRate: '24000',
       Text: ssml,
       TextType: 'ssml',
-      VoiceId: options.voice as any,
+      VoiceId: options.voice as SynthesizeSpeechCommand['input']['VoiceId'],
     });
 
     const response = await client.send(command);
@@ -88,7 +88,10 @@ export async function synthesizeNarration(
   return chunks;
 }
 
-async function streamToBuffer(stream: any): Promise<Buffer> {
+async function streamToBuffer(stream: { transformToByteArray(): Promise<Uint8Array> } | AsyncIterable<Uint8Array>): Promise<Buffer> {
+  if ('transformToByteArray' in stream) {
+    return Buffer.from(await stream.transformToByteArray());
+  }
   const chunks: Uint8Array[] = [];
   for await (const chunk of stream) {
     chunks.push(chunk);

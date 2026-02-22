@@ -7,7 +7,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const HASH_CACHE_PATH = path.join(PROJECT_ROOT, 'e2e', 'tutorials', 'output', '.content-hashes.json');
 
 // fs.globSync is available in Node 22+ but @types/node may not include it yet
-const globSync = (fs as any).globSync as (pattern: string) => string[];
+const globSync = (fs as unknown as Record<string, (...args: unknown[]) => string[]>).globSync;
 
 type HashCache = Record<string, string>;
 
