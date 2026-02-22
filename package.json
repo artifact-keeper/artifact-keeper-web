@@ -45,7 +45,7 @@
     "@aws-sdk/client-polly": "^3.995.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.30",
+    "@types/node": "^25.3.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.1.4",
