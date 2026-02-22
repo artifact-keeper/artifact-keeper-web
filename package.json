@@ -17,6 +17,7 @@
     "tutorial:record": "playwright test --config playwright-tutorials.config.ts",
     "tutorial:record:one": "playwright test --config playwright-tutorials.config.ts -g",
     "tutorial:manifest": "npx tsx e2e/tutorials/scripts/generate-manifest.ts",
+    "tutorial:generate-videos": "npx tsx e2e/tutorials/scripts/generate-videos.ts",
     "postinstall": "node scripts/patch-sdk.js"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@aws-sdk/client-polly": "^3.995.0",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20.19.30",
