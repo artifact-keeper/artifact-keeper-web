@@ -121,7 +121,7 @@ test.describe('Webhooks Page', () => {
     await page.waitForTimeout(3000);
 
     const criticalErrors = errors.filter(
-      (e) => !e.includes('favicon') && !e.includes('hydration') && !e.includes('Warning:')
+      (e) => !e.includes('favicon') && !e.includes('net::') && !e.includes('Failed to load resource')
     );
     expect(criticalErrors).toEqual([]);
   });

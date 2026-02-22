@@ -133,7 +133,7 @@ test.describe('Backups Page', () => {
 
     // Filter out known non-critical errors
     const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('favicon') && !err.includes('404')
+      (err) => !err.includes('favicon') && !err.includes('net::') && !err.includes('Failed to load resource')
     );
     expect(criticalErrors).toEqual([]);
   });

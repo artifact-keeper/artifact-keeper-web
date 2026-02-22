@@ -65,8 +65,8 @@ test.describe('API Integration', () => {
 
   test('no console errors on key pages', async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error' && !msg.text().includes('favicon')) {
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
         errors.push(msg.text());
       }
     });
@@ -77,8 +77,8 @@ test.describe('API Integration', () => {
       await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
     }
 
-    const criticalErrors = errors.filter(e =>
-      e.includes('TypeError') || e.includes('is not a function') || e.includes('Cannot read')
+    const criticalErrors = errors.filter(
+      (e) => !e.includes('favicon') && !e.includes('net::') && !e.includes('Failed to load resource')
     );
     expect(criticalErrors).toEqual([]);
   });
