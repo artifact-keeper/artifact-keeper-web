@@ -1,6 +1,5 @@
 import { test } from '@playwright/test';
 import { TutorialHelper } from './fixtures/tutorial-helper';
-import { DashboardPage } from '../fixtures/page-objects';
 
 test('Tutorial: Getting Started with Artifact Keeper', async ({ page }) => {
   const tutorial = new TutorialHelper(page, {
@@ -32,7 +31,6 @@ test('Tutorial: Getting Started with Artifact Keeper', async ({ page }) => {
 
   await tutorial.show('Dashboard', 'This is the main dashboard. It shows system health, repository statistics, and recent activity.');
 
-  const dashboard = new DashboardPage(page);
   await tutorial.pause(1500);
 
   tutorial.narrate('The health cards at the top show the status of your storage, database, and search engine.');

@@ -1,8 +1,6 @@
 import { test } from '@playwright/test';
 import { TutorialHelper } from './fixtures/tutorial-helper';
-import { seedTutorialData } from './fixtures/tutorial-seed';
-
-test('Tutorial: Creating Repositories', async ({ page, request }) => {
+test('Tutorial: Creating Repositories', async ({ page }) => {
   const tutorial = new TutorialHelper(page, {
     id: '02-create-repositories',
     title: 'Creating Repositories in Artifact Keeper',
