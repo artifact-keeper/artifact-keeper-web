@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatBytes, formatDate, formatNumber, REPO_TYPE_COLORS } from "../utils";
+import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, isValidInstanceUrl, REPO_TYPE_COLORS } from "../utils";
 
 describe("formatBytes", () => {
   it("returns '0 B' for zero bytes", () => {
@@ -136,5 +136,79 @@ describe("REPO_TYPE_COLORS", () => {
       expect(value).toMatch(/bg-/);
       expect(value).toMatch(/text-/);
     }
+  });
+});
+
+describe("isSafeUrl", () => {
+  it("accepts http URLs", () => {
+    expect(isSafeUrl("http://example.com")).toBe(true);
+    expect(isSafeUrl("http://example.com/path?q=1")).toBe(true);
+  });
+
+  it("accepts https URLs", () => {
+    expect(isSafeUrl("https://example.com")).toBe(true);
+    expect(isSafeUrl("https://artifacts.example.com:8443/api")).toBe(true);
+  });
+
+  it("rejects dangerous protocols", () => {
+    expect(isSafeUrl("javascript:alert(1)")).toBe(false);
+    expect(isSafeUrl("data:text/html,<h1>hi</h1>")).toBe(false);
+    expect(isSafeUrl("ftp://files.example.com")).toBe(false);
+    expect(isSafeUrl("file:///etc/passwd")).toBe(false);
+  });
+
+  it("returns false for invalid URLs", () => {
+    expect(isSafeUrl("not-a-url")).toBe(false);
+    expect(isSafeUrl("")).toBe(false);
+  });
+});
+
+describe("isValidInstanceUrl", () => {
+  it("accepts valid public URLs", () => {
+    expect(isValidInstanceUrl("https://artifacts.example.com")).toBe(true);
+    expect(isValidInstanceUrl("https://registry.corp.io:8443")).toBe(true);
+    expect(isValidInstanceUrl("http://artifacts.example.com")).toBe(true);
+  });
+
+  it("rejects non-HTTP protocols", () => {
+    expect(isValidInstanceUrl("ftp://example.com")).toBe(false);
+    expect(isValidInstanceUrl("javascript:alert(1)")).toBe(false);
+    expect(isValidInstanceUrl("data:text/html,test")).toBe(false);
+  });
+
+  it("rejects localhost and loopback addresses", () => {
+    expect(isValidInstanceUrl("http://localhost")).toBe(false);
+    expect(isValidInstanceUrl("http://localhost:8080")).toBe(false);
+    expect(isValidInstanceUrl("http://127.0.0.1")).toBe(false);
+    expect(isValidInstanceUrl("http://127.0.0.1:8080")).toBe(false);
+    expect(isValidInstanceUrl("http://[::1]")).toBe(false);
+    expect(isValidInstanceUrl("http://[::1]:8080")).toBe(false);
+  });
+
+  it("rejects private IP ranges", () => {
+    // 10.x.x.x
+    expect(isValidInstanceUrl("http://10.0.0.1")).toBe(false);
+    expect(isValidInstanceUrl("http://10.255.255.255")).toBe(false);
+    // 192.168.x.x
+    expect(isValidInstanceUrl("http://192.168.0.1")).toBe(false);
+    expect(isValidInstanceUrl("http://192.168.1.100")).toBe(false);
+    // 172.16-31.x.x
+    expect(isValidInstanceUrl("http://172.16.0.1")).toBe(false);
+    expect(isValidInstanceUrl("http://172.31.255.255")).toBe(false);
+  });
+
+  it("allows 172.x outside the private range", () => {
+    expect(isValidInstanceUrl("http://172.15.0.1")).toBe(true);
+    expect(isValidInstanceUrl("http://172.32.0.1")).toBe(true);
+  });
+
+  it("rejects AWS metadata endpoint", () => {
+    expect(isValidInstanceUrl("http://169.254.169.254")).toBe(false);
+    expect(isValidInstanceUrl("http://169.254.169.254/latest/meta-data")).toBe(false);
+  });
+
+  it("returns false for invalid URLs", () => {
+    expect(isValidInstanceUrl("not-a-url")).toBe(false);
+    expect(isValidInstanceUrl("")).toBe(false);
   });
 });
