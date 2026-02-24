@@ -1,0 +1,109 @@
+name: Generate Tutorial Videos
+
+on:
+  workflow_dispatch:
+    inputs:
+      tutorials:
+        description: 'Tutorial IDs (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: string
+      force:
+        description: 'Force regeneration (ignore content hash cache)'
+        required: false
+        default: false
+        type: boolean
+      voice:
+        description: 'Amazon Polly voice ID'
+        required: false
+        default: 'Matthew'
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  generate:
+    name: Record & Generate Videos
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # v4.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_POLLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start E2E stack
+        run: docker compose -f docker-compose.e2e.yml up -d --wait
+        env:
+          BACKEND_TAG: dev
+
+      - name: Record tutorials
+        run: |
+          if [ "${{ inputs.tutorials }}" = "all" ]; then
+            npx playwright test --config playwright-tutorials.config.ts
+          else
+            IFS=',' read -ra IDS <<< "${{ inputs.tutorials }}"
+            for id in "${IDS[@]}"; do
+              npx playwright test --config playwright-tutorials.config.ts -g "$(echo "$id" | sed 's/^[0-9]*-//')"
+            done
+          fi
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3100
+
+      - name: Generate videos
+        run: |
+          ARGS=""
+          if [ "${{ inputs.tutorials }}" != "all" ]; then
+            ARGS="$ARGS --tutorials ${{ inputs.tutorials }}"
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          ARGS="$ARGS --voice ${{ inputs.voice }}"
+          npx tsx e2e/tutorials/scripts/generate-videos.ts $ARGS
+
+      - name: Upload tutorial videos
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: tutorial-videos
+          path: |
+            e2e/tutorials/output/*/final.mp4
+            e2e/tutorials/output/*/youtube-metadata.json
+            e2e/tutorials/output/*/youtube-description.txt
+            e2e/tutorials/output/*/screenshots/
+            e2e/tutorials/output/manifest.json
+          retention-days: 30
+
+      - name: Tear down E2E stack
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v

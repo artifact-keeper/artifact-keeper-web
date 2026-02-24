@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { groupsApi } from "@/lib/api/groups";
 import { adminApi } from "@/lib/api/admin";
+import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { Group, GroupMember } from "@/types/groups";
 import type { User } from "@/types";
@@ -107,7 +108,7 @@ export default function GroupsPage() {
       groupsApi.create({ name: data.name, description: data.description }),
     onSuccess: () => {
       toast.success("Group created successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "groups");
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
@@ -119,7 +120,7 @@ export default function GroupsPage() {
       groupsApi.update(id, { description: data.description }),
     onSuccess: () => {
       toast.success("Group updated successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "groups");
       setEditOpen(false);
       setSelectedGroup(null);
     },
@@ -130,7 +131,7 @@ export default function GroupsPage() {
     mutationFn: (id: string) => groupsApi.delete(id),
     onSuccess: () => {
       toast.success("Group deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "groups");
       setDeleteOpen(false);
       setSelectedGroup(null);
     },
@@ -145,7 +146,7 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "groups");
       setAddUserId("");
     },
     onError: () => toast.error("Failed to add member"),
@@ -159,7 +160,7 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
-      queryClient.invalidateQueries({ queryKey: ["admin-groups"] });
+      invalidateGroup(queryClient, "groups");
     },
     onError: () => toast.error("Failed to remove member"),
   });

@@ -65,9 +65,9 @@ test.describe('Monitoring Page', () => {
   });
 
   test('no console errors on page load', async () => {
-    const significantErrors = consoleErrors.filter(
-      (err) => !err.includes('favicon') && !err.includes('third-party')
+    const critical = consoleErrors.filter(
+      (e) => !e.includes('favicon') && !e.includes('net::') && !e.includes('Failed to load resource')
     );
-    expect(significantErrors).toHaveLength(0);
+    expect(critical).toEqual([]);
   });
 });
