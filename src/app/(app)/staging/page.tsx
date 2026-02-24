@@ -244,8 +244,7 @@ export default function StagingPage() {
         <div className="border rounded-lg overflow-hidden">{masterContent}</div>
       ) : (
         <ResizablePanelGroup
-          direction="horizontal"
-          autoSaveId="staging-browser"
+          orientation="horizontal"
           className="border rounded-lg overflow-hidden"
           style={{ height: "calc(100vh - 10rem)" }}
         >

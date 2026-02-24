@@ -405,8 +405,7 @@ export default function RepositoriesPage() {
         <div className="border rounded-lg overflow-hidden">{masterContent}</div>
       ) : (
         <ResizablePanelGroup
-          direction="horizontal"
-          autoSaveId="repo-browser"
+          orientation="horizontal"
           className="border rounded-lg overflow-hidden"
           style={{ height: "calc(100vh - 10rem)" }}
         >
