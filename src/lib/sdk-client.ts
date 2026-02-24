@@ -24,7 +24,7 @@ function getActiveInstanceBaseUrl(): string {
   try {
     const activeId = localStorage.getItem('ak_active_instance') || 'local';
     if (activeId === 'local') return API_BASE_URL;
-    return `${API_BASE_URL}/api/v1/instances/${activeId}/proxy`;
+    return `${API_BASE_URL}/api/v1/instances/${encodeURIComponent(activeId)}/proxy`;
   } catch {
     return API_BASE_URL;
   }
@@ -55,18 +55,17 @@ client.setConfig({
 
 client.interceptors.request.use((request) => {
   if (typeof window === 'undefined') return request;
+  if (!isRemoteInstance()) return request;
 
   const base = getActiveInstanceBaseUrl();
   if (!base) return request;
 
-  // Rewrite the URL to use the active instance's base
+  // For remote instances, prepend the proxy path prefix to the existing URL.
+  // Only modify the pathname; never rewrite protocol or host to prevent
+  // open redirect attacks via localStorage instance poisoning.
   const url = new URL(request.url);
-  const target = new URL(base);
-  url.protocol = target.protocol;
-  url.host = target.host;
-  url.pathname = target.pathname === '/'
-    ? url.pathname
-    : target.pathname + url.pathname;
+  const target = new URL(base, window.location.origin);
+  url.pathname = target.pathname + url.pathname;
 
   return new Request(url.toString(), request);
 });
@@ -123,7 +122,7 @@ client.interceptors.response.use(async (response, request) => {
   if (isAuthEndpoint) return response;
 
   if (isRefreshing) {
-    // Another request is already refreshing — wait for it, then retry
+    // Another request is already refreshing -- wait for it, then retry
     return new Promise<Response>((resolve) => {
       addRefreshSubscriber(async () => {
         const retried = await fetch(new Request(request.url, {
@@ -157,7 +156,7 @@ client.interceptors.response.use(async (response, request) => {
     isRefreshing = false;
     onTokenRefreshed();
 
-    // Retry the original request — cookies are updated by the refresh response
+    // Retry the original request -- cookies are updated by the refresh response
     return fetch(new Request(request.url, {
       method: request.method,
       headers: request.headers,
@@ -167,9 +166,6 @@ client.interceptors.response.use(async (response, request) => {
   } catch {
     isRefreshing = false;
     refreshSubscribers = [];
-    // Clean up legacy localStorage tokens
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
     if (!window.location.pathname.startsWith('/login')) {
       window.location.href = '/login';
     }

@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { Globe, Check, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useInstance } from "@/providers/instance-provider";
+import { isValidInstanceUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,11 +35,16 @@ export function InstanceSwitcher() {
 
   const handleAdd = async () => {
     if (!name.trim() || !url.trim()) return;
+    const trimmedUrl = url.trim().replace(/\/$/, "");
+    if (!isValidInstanceUrl(trimmedUrl)) {
+      toast.error("Invalid instance URL. Private IPs, localhost, and non-HTTP protocols are not allowed.");
+      return;
+    }
     setAdding(true);
     try {
       await addInstance({
         name: name.trim(),
-        url: url.trim().replace(/\/$/, ""),
+        url: trimmedUrl,
         apiKey: apiKey.trim() || "",
       });
       setAddOpen(false);
@@ -45,7 +52,7 @@ export function InstanceSwitcher() {
       setUrl("");
       setApiKey("");
     } catch {
-      // TODO: show error toast
+      toast.error("Failed to add instance. Check the URL and try again.");
     } finally {
       setAdding(false);
     }
@@ -133,7 +140,7 @@ export function InstanceSwitcher() {
               <Label htmlFor="inst-key">API Key</Label>
               <Input
                 id="inst-key"
-                placeholder="Optional — stored encrypted on server"
+                placeholder="Optional -- stored encrypted on server"
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}

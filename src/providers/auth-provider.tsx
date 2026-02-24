@@ -181,16 +181,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Not authenticated via cookie, continue
       }
 
-      // Also check for legacy localStorage tokens (migration path)
-      const legacyToken = localStorage.getItem("access_token");
-      if (legacyToken) {
-        await refreshUser();
-        // Clean up legacy tokens since cookies are now used
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        setIsLoading(false);
-        return;
-      }
+      // Clean up any legacy localStorage tokens from older versions
+      clearTokens();
 
       // In demo mode, auto-login as admin so visitors see the full UI
       await attemptDemoAutoLogin();

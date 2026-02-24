@@ -44,3 +44,36 @@ export function formatNumber(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toString();
 }
+
+/**
+ * Validate that a URL uses a safe protocol (http or https only).
+ * Returns false for javascript:, data:, vbscript:, and other dangerous schemes.
+ */
+export function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate that a URL is safe to use as an Artifact Keeper instance endpoint.
+ * Blocks private/internal IPs, localhost, link-local addresses, and non-HTTP protocols
+ * to prevent SSRF attacks via the instance proxy.
+ */
+export function isValidInstanceUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    const hostname = parsed.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return false;
+    if (hostname.startsWith("10.") || hostname.startsWith("192.168.")) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+    if (hostname === "169.254.169.254") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
