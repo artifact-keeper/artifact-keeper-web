@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatBytes, formatDate, formatNumber, REPO_TYPE_COLORS } from "../utils";
+import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, REPO_TYPE_COLORS } from "../utils";
 
 describe("formatBytes", () => {
   it("returns '0 B' for zero bytes", () => {
@@ -136,5 +136,29 @@ describe("REPO_TYPE_COLORS", () => {
       expect(value).toMatch(/bg-/);
       expect(value).toMatch(/text-/);
     }
+  });
+});
+
+describe("isSafeUrl", () => {
+  it("accepts http URLs", () => {
+    expect(isSafeUrl("http://example.com")).toBe(true);
+    expect(isSafeUrl("http://example.com/path?q=1")).toBe(true);
+  });
+
+  it("accepts https URLs", () => {
+    expect(isSafeUrl("https://example.com")).toBe(true);
+    expect(isSafeUrl("https://artifacts.example.com:8443/api")).toBe(true);
+  });
+
+  it("rejects dangerous protocols", () => {
+    expect(isSafeUrl("javascript:alert(1)")).toBe(false);
+    expect(isSafeUrl("data:text/html,<h1>hi</h1>")).toBe(false);
+    expect(isSafeUrl("ftp://files.example.com")).toBe(false);
+    expect(isSafeUrl("file:///etc/passwd")).toBe(false);
+  });
+
+  it("returns false for invalid URLs", () => {
+    expect(isSafeUrl("not-a-url")).toBe(false);
+    expect(isSafeUrl("")).toBe(false);
   });
 });

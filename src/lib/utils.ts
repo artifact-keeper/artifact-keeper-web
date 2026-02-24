@@ -44,3 +44,17 @@ export function formatNumber(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toString();
 }
+
+/**
+ * Validate that a URL uses a safe protocol (http or https only).
+ * Returns false for javascript:, data:, vbscript:, and other dangerous schemes.
+ */
+export function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+

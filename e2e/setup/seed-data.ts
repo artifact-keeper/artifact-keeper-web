@@ -67,7 +67,7 @@ export async function seedWebhook(request: APIRequestContext): Promise<void> {
 
 /** Create a test quality gate */
 export async function seedQualityGate(request: APIRequestContext): Promise<void> {
-  await api(request, 'POST', '/quality-gates', {
+  await api(request, 'POST', '/quality/gates', {
     name: 'e2e-test-gate',
     description: 'Quality gate for E2E tests',
     max_critical_issues: 0,
@@ -79,11 +79,11 @@ export async function seedQualityGate(request: APIRequestContext): Promise<void>
 
 /** Create a test lifecycle policy */
 export async function seedLifecyclePolicy(request: APIRequestContext): Promise<void> {
-  await api(request, 'POST', '/lifecycle/policies', {
+  await api(request, 'POST', '/admin/lifecycle', {
     name: 'e2e-test-cleanup',
     description: 'Cleanup policy for E2E tests',
     policy_type: 'max_age_days',
-    config: { max_age_days: 30 },
+    config: { days: 30 },
     priority: 10,
   });
 }

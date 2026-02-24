@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronRight, ChevronDown, Copy, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, isSafeUrl } from "@/lib/utils";
 
 /** Well-known metadata fields to display prominently. */
 const HIGHLIGHTED_FIELDS: Record<string, string[]> = {
@@ -58,8 +58,8 @@ function ValueDisplay({ value }: { value: unknown }) {
         </span>
       );
     }
-    // Check if it's a URL
-    if (value.startsWith("http://") || value.startsWith("https://")) {
+    // Check if it's a safe URL
+    if (isSafeUrl(value)) {
       return (
         <a
           href={value}

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance } from "@/lib/api/replication";
-import { formatBytes } from "@/lib/utils";
+import { formatBytes, isSafeUrl } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -167,16 +167,21 @@ export default function PeersPage() {
       id: "endpoint",
       header: "Endpoint",
       accessor: (p) => p.endpoint_url,
-      cell: (p) => (
-        <a
-          href={p.endpoint_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-muted-foreground hover:text-primary truncate block max-w-[250px]"
-        >
-          {p.endpoint_url}
-        </a>
-      ),
+      cell: (p) =>
+        isSafeUrl(p.endpoint_url) ? (
+          <a
+            href={p.endpoint_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-muted-foreground hover:text-primary truncate block max-w-[250px]"
+          >
+            {p.endpoint_url}
+          </a>
+        ) : (
+          <span className="text-sm text-muted-foreground truncate block max-w-[250px]">
+            {p.endpoint_url}
+          </span>
+        ),
     },
     {
       id: "status",

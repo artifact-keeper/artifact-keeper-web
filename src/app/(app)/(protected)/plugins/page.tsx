@@ -66,6 +66,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 
+import { isSafeUrl } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -743,15 +744,21 @@ export default function PluginsPage() {
                     {configPlugin.homepage && (
                       <div>
                         <p className="text-muted-foreground">Homepage</p>
-                        <a
-                          href={configPlugin.homepage}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1"
-                        >
-                          {configPlugin.homepage}
-                          <ExternalLink className="size-3" />
-                        </a>
+                        {isSafeUrl(configPlugin.homepage) ? (
+                          <a
+                            href={configPlugin.homepage}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            {configPlugin.homepage}
+                            <ExternalLink className="size-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            {configPlugin.homepage}
+                          </span>
+                        )}
                       </div>
                     )}
                     {configPlugin.error_message && (
