@@ -39,6 +39,7 @@ import {
   formatBytes as formatBytesUtil,
   formatDate,
   formatNumber,
+  isSafeUrl,
 } from "@/lib/utils";
 import { FileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
@@ -255,7 +256,7 @@ export default function PackageDetailPage() {
             </p>
           )}
         </div>
-        {homepageUrl && (
+        {homepageUrl && isSafeUrl(homepageUrl) ? (
           <Button variant="outline" size="sm" asChild>
             <a
               href={homepageUrl}
@@ -267,7 +268,9 @@ export default function PackageDetailPage() {
               Homepage
             </a>
           </Button>
-        )}
+        ) : homepageUrl ? (
+          <span className="text-sm text-muted-foreground">{homepageUrl}</span>
+        ) : null}
       </div>
 
       {/* Tabs */}
@@ -319,15 +322,22 @@ export default function PackageDetailPage() {
           {homepageUrl && (
             <div>
               <h3 className="text-sm font-medium mb-2">Links</h3>
-              <a
-                href={homepageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-              >
-                <ExternalLink className="size-3.5" />
-                {homepageUrl}
-              </a>
+              {isSafeUrl(homepageUrl) ? (
+                <a
+                  href={homepageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                >
+                  <ExternalLink className="size-3.5" />
+                  {homepageUrl}
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <ExternalLink className="size-3.5" />
+                  {homepageUrl}
+                </span>
+              )}
             </div>
           )}
         </TabsContent>

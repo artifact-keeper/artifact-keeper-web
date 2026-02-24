@@ -42,7 +42,7 @@ import {
 import { packagesApi } from "@/lib/api/packages";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { getInstallCommand, FORMAT_OPTIONS } from "@/lib/package-utils";
-import { formatBytes as formatBytesUtil, formatDate, formatNumber } from "@/lib/utils";
+import { formatBytes as formatBytesUtil, formatDate, formatNumber, isSafeUrl } from "@/lib/utils";
 import type {
   Package,
   PackageVersion,
@@ -214,7 +214,7 @@ function PackageDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {homepageUrl && (
+            {homepageUrl && isSafeUrl(homepageUrl) ? (
               <Button variant="outline" size="sm" asChild>
                 <a
                   href={homepageUrl}
@@ -226,7 +226,9 @@ function PackageDetailPanel({
                   Homepage
                 </a>
               </Button>
-            )}
+            ) : homepageUrl ? (
+              <span className="text-sm text-muted-foreground">{homepageUrl}</span>
+            ) : null}
             <Button variant="outline" size="sm" asChild>
               <Link href={`/packages/${pkg.id}`} className="gap-1.5">
                 <ExternalLink className="size-3.5" />
