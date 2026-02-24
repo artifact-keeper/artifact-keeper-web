@@ -20,9 +20,9 @@ export const authApi = {
     if (error) throw error;
   },
 
-  refreshToken: async (refreshToken: string): Promise<LoginResponse> => {
+  refreshToken: async (): Promise<LoginResponse> => {
     const { data, error } = await sdkRefreshToken({
-      body: { refresh_token: refreshToken } as any,
+      body: {} as any,
     });
     if (error) throw error;
     return data as any as LoginResponse;

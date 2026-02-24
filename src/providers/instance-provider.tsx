@@ -6,6 +6,7 @@ import {
   createInstance as sdkCreateInstance,
   deleteInstance as sdkDeleteInstance,
 } from '@artifact-keeper/sdk';
+import { isValidInstanceUrl } from "@/lib/utils";
 
 export interface InstanceConfig {
   id: string;
@@ -66,6 +67,11 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
   const refreshStatuses = useCallback(() => {
     const remote = instances.filter((i) => i.id !== "local");
     for (const inst of remote) {
+      // Skip health checks for instances with invalid URLs to prevent SSRF
+      if (!isValidInstanceUrl(inst.url)) {
+        setInstanceStatuses((prev) => ({ ...prev, [inst.id]: false }));
+        continue;
+      }
       const url = inst.url.endsWith("/") ? `${inst.url}health` : `${inst.url}/health`;
       fetch(url, { method: "GET", signal: AbortSignal.timeout(5000) })
         .then((res) => {
