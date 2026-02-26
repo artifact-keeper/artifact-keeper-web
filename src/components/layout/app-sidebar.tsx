@@ -36,7 +36,9 @@ import {
   FolderSearch,
   ClipboardCheck,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
+import { adminApi } from "@/lib/api/admin";
 import {
   Sidebar,
   SidebarContent,
@@ -142,6 +144,13 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
 
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    enabled: isAuthenticated,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // For integration items, non-admin authenticated users don't see Migration
   const visibleIntegrationItems = isAdmin
     ? integrationItems
@@ -163,7 +172,10 @@ export function AppSidebar() {
                 />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
-                  <span className="text-xs text-muted-foreground">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Web {process.env.NEXT_PUBLIC_APP_VERSION}
+                    {health?.version ? ` / API ${health.version}` : ""}
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
