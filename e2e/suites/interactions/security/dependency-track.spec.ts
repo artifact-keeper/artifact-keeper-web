@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Dependency-Track Projects Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/security/dt-projects');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads without errors', async ({ page }) => {

@@ -13,7 +13,7 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
   tutorial.chapter('Why Use a Proxy Repository');
 
   await page.goto('/repositories');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.show('Repositories overview', 'A proxy repository sits between your builds and the public registry. It caches downloaded packages locally, so repeated installs are fast and your builds work even if the upstream goes down.');
 
   // --- Chapter 2: Create NPM Proxy ---
@@ -46,7 +46,7 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
   await tutorial.show('NPM proxy configuration', 'Set the key, format, type to remote, and the upstream URL to https://registry.npmjs.org.');
 
   await dialog.getByRole('button', { name: /create$/i }).click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('NPM proxy created');
 
@@ -55,12 +55,12 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
 
   tutorial.narrate('Click on the proxy repository to see its details.');
   await page.goto('/repositories');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1000);
 
   // Click on the proxy repo
   await page.getByText('npmjs-cache').or(page.getByText('npmjs-proxy')).first().click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.show('Proxy detail view', 'The detail panel shows repository settings, cached packages, and download statistics.');
 

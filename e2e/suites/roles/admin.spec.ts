@@ -3,7 +3,7 @@ import { test, expect } from '../../fixtures/test-fixtures';
 test.describe('Admin role access', () => {
   test('sidebar shows all sections', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const sidebar = page.locator('[data-slot="sidebar"]').first();
 
@@ -20,7 +20,7 @@ test.describe('Admin role access', () => {
     const adminPages = ['/users', '/groups', '/settings', '/analytics', '/monitoring', '/backups', '/permissions'];
     for (const route of adminPages) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       // Should NOT be redirected to login or 403
       await expect(page).not.toHaveURL(/\/login/);
       await expect(page).not.toHaveURL(/\/error\/403/);
@@ -29,11 +29,11 @@ test.describe('Admin role access', () => {
 
   test('CRUD buttons are visible on admin pages', async ({ page }) => {
     await page.goto('/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.getByRole('button', { name: /create user/i })).toBeVisible();
 
     await page.goto('/groups');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.getByRole('button', { name: /create group/i })).toBeVisible();
   });
 });

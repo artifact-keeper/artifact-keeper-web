@@ -11,7 +11,7 @@ test.describe('License Policies Page', () => {
       }
     });
     await page.goto('/license-policies');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with License heading', async ({ page }) => {

@@ -3,7 +3,7 @@ import { test, expect } from '../../../fixtures/test-fixtures';
 test.describe('Logout', () => {
   test('logout clears session and shows sign-in button', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // The user menu trigger is a round avatar button in the header
     const userMenu = page.locator('header').getByRole('button').filter({ has: page.locator('[data-slot="avatar"]') }).first();

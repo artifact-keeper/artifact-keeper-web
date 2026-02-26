@@ -11,7 +11,7 @@ test.describe('Lifecycle Page', () => {
       }
     });
     await page.goto('/lifecycle');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with Lifecycle heading', async ({ page }) => {

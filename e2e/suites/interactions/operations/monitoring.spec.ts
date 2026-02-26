@@ -11,7 +11,7 @@ test.describe('Monitoring Page', () => {
       }
     });
     await page.goto('/monitoring');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with monitoring heading', async ({ page }) => {

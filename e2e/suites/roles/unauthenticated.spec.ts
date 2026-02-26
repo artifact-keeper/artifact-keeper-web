@@ -8,7 +8,7 @@ test.describe('Unauthenticated access', () => {
     const publicRoutes = ['/', '/repositories', '/packages'];
     for (const route of publicRoutes) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       // Should NOT redirect to login
       await expect(page).not.toHaveURL(/\/login/);
     }

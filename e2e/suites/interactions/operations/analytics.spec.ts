@@ -11,7 +11,7 @@ test.describe('Analytics Page', () => {
       }
     });
     await page.goto('/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with Analytics heading', async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe('Analytics Page', () => {
     const refreshButton = page.getByRole('button', { name: /refresh/i });
     await expect(refreshButton).toBeVisible({ timeout: 10000 });
     await refreshButton.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     await expect(page.getByRole('heading', { name: /analytics/i })).toBeVisible({ timeout: 10000 });
   });

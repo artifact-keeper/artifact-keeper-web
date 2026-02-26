@@ -87,10 +87,10 @@ export function filterCriticalErrors(errors: string[]): string[] {
   );
 }
 
-/** Navigate to a page and wait for network idle. */
+/** Navigate to a page and wait for the DOM to be ready. */
 export async function navigateTo(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 }
 
 /** Open a dialog by clicking a button, return the dialog locator. */

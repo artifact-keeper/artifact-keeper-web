@@ -19,7 +19,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveURL(/\/repositories\/.+/);
   });
 
@@ -38,7 +38,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Header should contain the repo name
     await expect(page.getByText(repoKey!).first()).toBeVisible({ timeout: 10000 });
@@ -63,7 +63,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Artifacts tab should be selected by default
     const artifactsTab = page.locator('[role="tablist"]').getByText(/artifacts/i);
@@ -91,7 +91,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     const searchInput = page.getByPlaceholder(/search/i).first();
     const searchVisible = await searchInput.isVisible({ timeout: 5000 }).catch(() => false);
@@ -120,7 +120,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Click Upload tab
     await page.locator('[role="tablist"]').getByText(/upload/i).click();
@@ -149,7 +149,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Click Security tab
     const securityTab = page.locator('[role="tablist"]').getByText(/security/i);
@@ -178,7 +178,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Should show repo type (local/remote/staging) and visibility (Public/Private)
     const hasType = await page.getByText(/local|remote|staging|virtual/i).first()
@@ -203,7 +203,7 @@ test.describe('Repository Detail Page', () => {
     test.skip(!repoKey, 'No repositories available to test');
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Scan All button should be visible on the artifacts tab
     const scanBtn = page.getByRole('button', { name: /scan all/i }).first();
@@ -233,7 +233,7 @@ test.describe('Repository Detail Page', () => {
     });
 
     await page.goto(`/repositories/${repoKey}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Navigate through all tabs
     const tabs = ['Artifacts', 'Upload', 'Members', 'Security'];

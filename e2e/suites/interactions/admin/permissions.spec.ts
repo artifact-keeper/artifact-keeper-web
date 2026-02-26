@@ -11,7 +11,7 @@ test.describe('Permissions Management', () => {
       }
     });
     await page.goto('/permissions');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with Permission heading', async ({ page }) => {
