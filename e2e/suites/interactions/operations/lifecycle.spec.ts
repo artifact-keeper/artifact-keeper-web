@@ -30,11 +30,11 @@ test.describe('Lifecycle Page', () => {
   });
 
   test('stat cards display policy information or loading skeletons', async ({ page }) => {
-    // Stat cards are behind a loading gate: while the API query is in flight
-    // skeleton placeholders render instead of the actual labels. In CI (no
-    // real backend) the query may never resolve, so accept either state.
+    // Stat cards render after the API query resolves. In CI without a real
+    // backend, skeletons (data-slot="skeleton") are shown instead. Accept
+    // either the loaded stat cards or the skeleton placeholders.
     const statCard = page.getByText('Total Policies');
-    const skeleton = page.locator('.grid .h-24, [class*="skeleton"]').first();
+    const skeleton = page.locator('[data-slot="skeleton"]').first();
 
     const hasCards = await statCard.isVisible({ timeout: 10000 }).catch(() => false);
     const hasSkeletons = await skeleton.isVisible({ timeout: 3000 }).catch(() => false);
