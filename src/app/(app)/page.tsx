@@ -240,7 +240,7 @@ function SeverityBreakdown({ trends }: { trends: CveTrends }) {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
   const {
@@ -250,6 +250,7 @@ export default function DashboardPage() {
   } = useQuery({
     queryKey: ["health"],
     queryFn: () => adminApi.getHealth(),
+    enabled: isAuthenticated,
   });
 
   const {
@@ -299,53 +300,57 @@ export default function DashboardPage() {
         title={greeting ? `Welcome back, ${greeting}` : "Dashboard"}
         description="Overview of your Artifact Keeper instance."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-          >
-            <RefreshCw
-              className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </Button>
+          isAuthenticated ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              <RefreshCw
+                className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
+          ) : undefined
         }
       />
 
-      {/* System Health */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          System Health
-        </h2>
-        {healthLoading ? (
-          <HealthSkeleton />
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <HealthCard label="Overall" status={health?.status} />
-            <HealthCard
-              label="Database"
-              status={health?.checks?.database?.status}
-            />
-            <HealthCard
-              label="Storage"
-              status={health?.checks?.storage?.status}
-            />
-            {health?.checks?.security_scanner && (
+      {/* System Health (authenticated users only) */}
+      {isAuthenticated && (
+        <section>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+            System Health
+          </h2>
+          {healthLoading ? (
+            <HealthSkeleton />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <HealthCard label="Overall" status={health?.status} />
               <HealthCard
-                label="Security Scanner"
-                status={health.checks.security_scanner.status}
+                label="Database"
+                status={health?.checks?.database?.status}
               />
-            )}
-            {health?.checks?.meilisearch && (
               <HealthCard
-                label="Search Engine"
-                status={health.checks.meilisearch.status}
+                label="Storage"
+                status={health?.checks?.storage?.status}
               />
-            )}
-          </div>
-        )}
-      </section>
+              {health?.checks?.security_scanner && (
+                <HealthCard
+                  label="Security Scanner"
+                  status={health.checks.security_scanner.status}
+                />
+              )}
+              {health?.checks?.meilisearch && (
+                <HealthCard
+                  label="Search Engine"
+                  status={health.checks.meilisearch.status}
+                />
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Admin Stats */}
       {user?.is_admin && (
