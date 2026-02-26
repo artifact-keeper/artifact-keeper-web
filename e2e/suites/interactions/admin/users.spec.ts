@@ -11,7 +11,7 @@ test.describe('Users Management', () => {
       }
     });
     await page.goto('/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with User heading', async ({ page }) => {

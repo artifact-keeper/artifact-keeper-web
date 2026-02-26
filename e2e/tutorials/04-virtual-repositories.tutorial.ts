@@ -13,7 +13,7 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   tutorial.chapter('What Are Virtual Repositories');
 
   await page.goto('/repositories');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.show('Repository list', 'Virtual repositories give your teams a single URL that resolves packages from multiple sources. Local packages, proxied packages, and other virtual repos can all be combined.');
   await tutorial.pause(1500);
 
@@ -59,7 +59,7 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   await tutorial.show('Virtual repo form', 'Set the type to virtual. The form will show options for adding source repositories.');
 
   await dialog.getByRole('button', { name: /create$/i }).click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('Virtual repo created');
 
@@ -67,11 +67,11 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   tutorial.chapter('How Resolution Works');
 
   await page.goto('/repositories');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1000);
 
   await page.getByText('npm-all').or(page.getByText('npm-virtual')).first().click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
 
   await tutorial.show('Virtual repo details', 'When a package is requested, Artifact Keeper checks local sources first, then falls back to remote proxies. This means your internal packages always take priority.');

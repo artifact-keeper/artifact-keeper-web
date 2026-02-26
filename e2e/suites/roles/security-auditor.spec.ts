@@ -3,19 +3,19 @@ import { test, expect } from '../../fixtures/test-fixtures';
 test.describe('Security Auditor role access', () => {
   test('can access dashboard', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login/);
   });
 
   test('can access repositories', async ({ page }) => {
     await page.goto('/repositories');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login|\/error/);
   });
 
   test('admin-only pages are denied', async ({ page }) => {
     await page.goto('/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const url = page.url();
     const content = await page.textContent('body');
     const isBlocked = url.includes('/error/403') || url.includes('/login') ||
@@ -25,7 +25,7 @@ test.describe('Security Auditor role access', () => {
 
   test('sidebar hides admin sections', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const sidebar = page.locator('[data-slot="sidebar"]').first();
     await expect(sidebar.getByText('Overview')).toBeVisible();

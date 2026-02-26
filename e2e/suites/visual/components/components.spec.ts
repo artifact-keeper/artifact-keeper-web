@@ -4,7 +4,7 @@ test.describe('Visual regression: components', () => {
   test('sidebar - expanded', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const sidebar = page.locator('[data-slot="sidebar"]').first();
     await expect(sidebar).toHaveScreenshot('sidebar-expanded.png', { maxDiffPixelRatio: 0.01 });
   });
@@ -12,21 +12,21 @@ test.describe('Visual regression: components', () => {
   test('app header', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const header = page.locator('header').first();
     await expect(header).toHaveScreenshot('app-header.png', { maxDiffPixelRatio: 0.01 });
   });
 
   test('users table', async ({ page }) => {
     await page.goto('/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const table = page.getByRole('table').first();
     await expect(table).toHaveScreenshot('users-table.png', { maxDiffPixelRatio: 0.01 });
   });
 
   test('create user dialog', async ({ page }) => {
     await page.goto('/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.getByRole('button', { name: /create user/i }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -37,7 +37,7 @@ test.describe('Visual regression: components', () => {
   test('confirm delete dialog', async ({ page }) => {
     // Navigate to a page with delete functionality and trigger the confirm dialog
     await page.goto('/repositories');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     // This is best-effort; skip if no repos exist
     const actionButton = page.getByRole('button', { name: /delete/i }).first();
     if (await actionButton.isVisible({ timeout: 3000 }).catch(() => false)) {

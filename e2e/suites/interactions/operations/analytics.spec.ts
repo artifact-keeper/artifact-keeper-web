@@ -11,7 +11,7 @@ test.describe('Analytics Page', () => {
       }
     });
     await page.goto('/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('page loads with Analytics heading', async ({ page }) => {
@@ -19,24 +19,19 @@ test.describe('Analytics Page', () => {
   });
 
   test('stat cards are visible', async ({ page }) => {
-    // Check for stat cards - some may have different labels
+    // At least one stat card should be visible
     const storage = page.getByText(/total storage/i).first();
     const artifacts = page.getByText(/total artifacts/i).first();
     const stale = page.getByText(/stale/i).first();
 
-    const hasStorage = await storage.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasArtifacts = await artifacts.isVisible({ timeout: 5000 }).catch(() => false);
-    const hasStale = await stale.isVisible({ timeout: 5000 }).catch(() => false);
-
-    // At least some stat cards should be visible
-    expect(hasStorage || hasArtifacts || hasStale).toBeTruthy();
+    await expect(storage.or(artifacts).or(stale)).toBeVisible();
   });
 
   test('Refresh button works without error', async ({ page }) => {
     const refreshButton = page.getByRole('button', { name: /refresh/i });
     await expect(refreshButton).toBeVisible({ timeout: 10000 });
     await refreshButton.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     await expect(page.getByRole('heading', { name: /analytics/i })).toBeVisible({ timeout: 10000 });
   });

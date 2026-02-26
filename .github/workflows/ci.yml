@@ -101,7 +101,7 @@ jobs:
           BACKEND_TAG: dev
 
       - name: Run interaction tests
-        run: npx playwright test --project=interactions --shard=${{ matrix.shard }}/3 --reporter=github,html
+        run: npx playwright test --project=interactions --shard=${{ matrix.shard }}/3 --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
 
@@ -152,7 +152,7 @@ jobs:
           BACKEND_TAG: dev
 
       - name: Run RBAC role tests
-        run: npx playwright test --project=roles-admin --project=roles-developer --project=roles-viewer --project=roles-security --project=roles-restricted --project=roles-unauthenticated --reporter=github,html
+        run: npx playwright test --project=roles-admin --project=roles-developer --project=roles-viewer --project=roles-security --project=roles-restricted --project=roles-unauthenticated --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
 
@@ -203,7 +203,7 @@ jobs:
           BACKEND_TAG: dev
 
       - name: Run visual regression tests
-        run: npx playwright test --project=visual --update-snapshots --reporter=github,html
+        run: npx playwright test --project=visual --update-snapshots --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
 

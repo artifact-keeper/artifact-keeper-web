@@ -13,7 +13,7 @@ test('Tutorial: Security Scanning and Quality Gates', async ({ page }) => {
   tutorial.chapter('Security Dashboard');
 
   await page.goto('/security');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
 
   await tutorial.show('Security dashboard', 'The Security dashboard shows a summary of vulnerabilities found across all your artifacts. Artifact Keeper integrates with Trivy to scan packages automatically on upload.');
@@ -33,7 +33,7 @@ test('Tutorial: Security Scanning and Quality Gates', async ({ page }) => {
   tutorial.chapter('Quality Gates');
 
   await page.goto('/quality-gates');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
 
   await tutorial.show('Quality gates page', 'Quality gates let you define policies that block or warn when artifacts fail security checks. This prevents vulnerable packages from reaching production.');
@@ -69,7 +69,7 @@ test('Tutorial: Security Scanning and Quality Gates', async ({ page }) => {
 
   // Submit
   await dialog.getByRole('button', { name: /create|save/i }).first().click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('Quality gate created');
 

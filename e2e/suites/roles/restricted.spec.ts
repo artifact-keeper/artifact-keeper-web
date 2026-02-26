@@ -3,13 +3,13 @@ import { test, expect } from '../../fixtures/test-fixtures';
 test.describe('Restricted role access', () => {
   test('can access dashboard', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login/);
   });
 
   test('can access own profile', async ({ page }) => {
     await page.goto('/profile');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).not.toHaveURL(/\/login|\/error/);
   });
 
@@ -17,7 +17,7 @@ test.describe('Restricted role access', () => {
     const restrictedRoutes = ['/users', '/settings', '/analytics'];
     for (const route of restrictedRoutes) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       const url = page.url();
       const content = await page.textContent('body');
       const isBlocked = url.includes('/error/403') || url.includes('/login') ||
@@ -28,7 +28,7 @@ test.describe('Restricted role access', () => {
 
   test('sidebar hides admin sections', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const sidebar = page.locator('[data-slot="sidebar"]').first();
     await expect(sidebar.getByText('Overview')).toBeVisible();
     // Admin-only sections should be hidden

@@ -38,7 +38,7 @@ test.describe('Package Browser (Repo Detail → Packages Tab)', () => {
     test.skip(!key, 'No repositories available');
 
     await page.goto(`/repositories/${key}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     const packagesTab = page.locator('[role="tablist"]').getByText(/packages/i);
     await expect(packagesTab).toBeVisible({ timeout: 10000 });

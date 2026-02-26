@@ -31,7 +31,7 @@ test.describe('Package Detail Page', () => {
       await page.goto(`/packages/${packageId}`);
     } else {
       await packageLink.click();
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await page.waitForLoadState('domcontentloaded');
     }
 
     await expect(page).toHaveURL(/\/packages\/.+/);
@@ -42,7 +42,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Package name should be visible as a heading
     const heading = page.getByRole('heading').first();
@@ -59,7 +59,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Breadcrumb should contain "Packages" link
     const breadcrumbLink = page.locator('nav, [aria-label*="breadcrumb"], ol').getByText(/packages/i).first();
@@ -72,7 +72,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Overview tab should be visible and active by default
     const overviewTab = page.locator('[role="tablist"]').getByRole('tab', { name: /overview/i });
@@ -95,7 +95,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Metadata fields should be visible
     const hasFormat = await page.getByText(/^format$/i).isVisible({ timeout: 5000 }).catch(() => false);
@@ -112,7 +112,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Click Versions tab
     const versionsTab = page.locator('[role="tablist"]').getByRole('tab', { name: /versions/i });
@@ -132,7 +132,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Click Files tab
     const filesTab = page.locator('[role="tablist"]').getByRole('tab', { name: /files/i });
@@ -150,7 +150,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     const tabs = ['Overview', 'Versions', 'Files', 'Dependencies', 'Metadata'];
     for (const tab of tabs) {
@@ -173,7 +173,7 @@ test.describe('Package Detail Page', () => {
     test.skip(!packageId, 'No packages available to test');
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Try breadcrumb "Packages" link first
     const breadcrumbLink = page.locator('nav, [aria-label*="breadcrumb"], ol').getByRole('link', { name: /packages/i }).first();
@@ -181,7 +181,7 @@ test.describe('Package Detail Page', () => {
 
     if (hasBreadcrumb) {
       await breadcrumbLink.click();
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await page.waitForLoadState('domcontentloaded');
       await expect(page).toHaveURL(/\/packages$/);
       return;
     }
@@ -220,7 +220,7 @@ test.describe('Package Detail Page', () => {
 
     if (hasViewDetails) {
       await viewDetailsLink.first().click();
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await page.waitForLoadState('domcontentloaded');
       await expect(page).toHaveURL(/\/packages\/.+/);
     }
   });
@@ -235,7 +235,7 @@ test.describe('Package Detail Page', () => {
     });
 
     await page.goto(`/packages/${packageId}`);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForLoadState('domcontentloaded');
 
     // Navigate through all tabs
     const tabs = ['Overview', 'Versions', 'Files', 'Dependencies', 'Metadata'];

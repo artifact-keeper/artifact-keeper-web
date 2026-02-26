@@ -13,7 +13,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   tutorial.chapter('Creating Users');
 
   await page.goto('/users');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1500);
 
   await tutorial.show('Users page', 'The Users page lists all accounts on your instance. Artifact Keeper supports local users, LDAP, and SSO authentication.');
@@ -37,7 +37,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   await tutorial.show('User form filled', 'Fill in the username, email, display name, and an initial password.');
 
   await userDialog.getByRole('button', { name: /create$/i }).click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('User created');
 
@@ -45,7 +45,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   tutorial.chapter('Managing Groups');
 
   await page.goto('/groups');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1500);
 
   await tutorial.show('Groups page', 'Groups let you organize users into teams and assign permissions collectively instead of per-user.');
@@ -67,7 +67,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   await tutorial.show('Group form', 'Give the group a name and optional description.');
 
   await groupDialog.getByRole('button', { name: /create$/i }).click();
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('Group created');
 
@@ -75,7 +75,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   tutorial.chapter('Assigning Permissions');
 
   await page.goto('/permissions');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1500);
 
   await tutorial.show('Permissions page', 'Permission rules control who can read, write, or admin specific repositories. You can target individual users or entire groups.');
@@ -88,7 +88,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   tutorial.chapter('API Access Tokens');
 
   await page.goto('/access-tokens');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1500);
 
   await tutorial.show('Access tokens page', 'Access tokens let users authenticate API calls and CI pipelines without using passwords.');

@@ -26,7 +26,7 @@ test.describe('Visual regression: UI states', () => {
       });
     });
     await page.goto('/packages');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveScreenshot('empty-packages.png', {
       maxDiffPixelRatio: 0.01,
       fullPage: true,
@@ -39,7 +39,7 @@ test.describe('Visual regression: UI states', () => {
       await route.fulfill({ status: 500, body: 'Internal Server Error' });
     });
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     await expect(page).toHaveScreenshot('error-dashboard.png', {
       maxDiffPixelRatio: 0.02,
@@ -49,7 +49,7 @@ test.describe('Visual regression: UI states', () => {
 
   test('error state - 403 forbidden page', async ({ page }) => {
     await page.goto('/error/403');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveScreenshot('error-403.png', {
       maxDiffPixelRatio: 0.01,
       fullPage: true,
@@ -58,7 +58,7 @@ test.describe('Visual regression: UI states', () => {
 
   test('error state - 500 server error page', async ({ page }) => {
     await page.goto('/error/500');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveScreenshot('error-500.png', {
       maxDiffPixelRatio: 0.01,
       fullPage: true,
