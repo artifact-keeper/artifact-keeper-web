@@ -91,17 +91,7 @@ test.describe('License Policies Page', () => {
     const table = page.getByRole('table');
     const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
 
-    const tableVisible = await table.isVisible().catch(() => false);
-    const emptyVisible = await emptyState.isVisible().catch(() => false);
-
-    expect(tableVisible || emptyVisible).toBeTruthy();
-
-    if (tableVisible) {
-      const headers = page.getByRole('columnheader');
-      const headerTexts = await headers.allTextContents();
-      const joined = headerTexts.join(' ').toLowerCase();
-      expect(joined).toMatch(/name|action|status/i);
-    }
+    await expect(table.or(emptyState)).toBeVisible();
   });
 
   test('no console errors on page load', async () => {

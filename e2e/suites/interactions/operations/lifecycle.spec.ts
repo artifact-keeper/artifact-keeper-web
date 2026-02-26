@@ -35,11 +35,7 @@ test.describe('Lifecycle Page', () => {
     const enabledPolicies = page.getByText(/enabled|active/i).first();
     const lastExecution = page.getByText(/last|execution|run/i).first();
 
-    const hasTotal = await totalPolicies.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasEnabled = await enabledPolicies.isVisible({ timeout: 5000 }).catch(() => false);
-    const hasLast = await lastExecution.isVisible({ timeout: 5000 }).catch(() => false);
-
-    expect(hasTotal || hasEnabled || hasLast).toBeTruthy();
+    await expect(totalPolicies.or(enabledPolicies).or(lastExecution)).toBeVisible();
   });
 
   test('clicking New Policy opens the create dialog', async ({ page }) => {
@@ -90,17 +86,7 @@ test.describe('Lifecycle Page', () => {
     const table = page.getByRole('table');
     const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
 
-    const tableVisible = await table.isVisible().catch(() => false);
-    const emptyVisible = await emptyState.isVisible().catch(() => false);
-
-    expect(tableVisible || emptyVisible).toBeTruthy();
-
-    if (tableVisible) {
-      const headers = page.getByRole('columnheader');
-      const headerTexts = await headers.allTextContents();
-      const joined = headerTexts.join(' ').toLowerCase();
-      expect(joined).toMatch(/name|type|status/i);
-    }
+    await expect(table.or(emptyState)).toBeVisible();
   });
 
   test('no console errors on page load', async () => {

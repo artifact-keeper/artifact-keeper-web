@@ -15,9 +15,8 @@ test.describe('Security Scans Page', () => {
   test('scans table or empty state is visible', async ({ page }) => {
     const table = page.getByRole('table').first();
     const emptyState = page.getByText(/no scan|no result/i).first();
-    const isTableVisible = await table.isVisible({ timeout: 5000 }).catch(() => false);
-    const isEmptyVisible = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(isTableVisible || isEmptyVisible).toBe(true);
+
+    await expect(table.or(emptyState)).toBeVisible();
   });
 
   test('trigger scan button is visible', async ({ page }) => {

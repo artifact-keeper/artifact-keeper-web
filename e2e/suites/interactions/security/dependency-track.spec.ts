@@ -16,10 +16,8 @@ test.describe('Dependency-Track Projects Page', () => {
     const table = page.getByRole('table').first();
     const emptyState = page.getByText(/no project|no result|not configured/i).first();
     const unavailable = page.getByText(/unavailable|disconnected/i).first();
-    const isTableVisible = await table.isVisible({ timeout: 5000 }).catch(() => false);
-    const isEmptyVisible = await emptyState.isVisible({ timeout: 3000 }).catch(() => false);
-    const isUnavailable = await unavailable.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(isTableVisible || isEmptyVisible || isUnavailable).toBe(true);
+
+    await expect(table.or(emptyState).or(unavailable)).toBeVisible();
   });
 
   test('search input is functional', async ({ page }) => {

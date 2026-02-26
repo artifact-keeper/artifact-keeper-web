@@ -68,10 +68,7 @@ test.describe('Permissions Management', () => {
     const table = page.getByRole('table');
     const emptyState = page.getByText(/no permission/i);
 
-    const tableVisible = await table.isVisible().catch(() => false);
-    const emptyVisible = await emptyState.isVisible().catch(() => false);
-
-    expect(tableVisible || emptyVisible).toBeTruthy();
+    await expect(table.or(emptyState)).toBeVisible();
   });
 
   test('no console errors on page', async () => {

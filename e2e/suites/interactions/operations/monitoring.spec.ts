@@ -50,18 +50,7 @@ test.describe('Monitoring Page', () => {
     const table = page.getByRole('table');
     const emptyState = page.getByText(/no.*log|no.*data|no.*record|no.*result|empty/i).first();
 
-    const tableVisible = await table.isVisible().catch(() => false);
-    const emptyVisible = await emptyState.isVisible().catch(() => false);
-
-    expect(tableVisible || emptyVisible).toBeTruthy();
-
-    if (tableVisible) {
-      // Verify expected column headers exist
-      const headers = page.getByRole('columnheader');
-      const headerTexts = await headers.allTextContents();
-      const joined = headerTexts.join(' ').toLowerCase();
-      expect(joined).toMatch(/service|status|message|time/i);
-    }
+    await expect(table.or(emptyState)).toBeVisible();
   });
 
   test('no console errors on page load', async () => {

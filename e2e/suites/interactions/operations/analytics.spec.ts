@@ -19,17 +19,12 @@ test.describe('Analytics Page', () => {
   });
 
   test('stat cards are visible', async ({ page }) => {
-    // Check for stat cards - some may have different labels
+    // At least one stat card should be visible
     const storage = page.getByText(/total storage/i).first();
     const artifacts = page.getByText(/total artifacts/i).first();
     const stale = page.getByText(/stale/i).first();
 
-    const hasStorage = await storage.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasArtifacts = await artifacts.isVisible({ timeout: 5000 }).catch(() => false);
-    const hasStale = await stale.isVisible({ timeout: 5000 }).catch(() => false);
-
-    // At least some stat cards should be visible
-    expect(hasStorage || hasArtifacts || hasStale).toBeTruthy();
+    await expect(storage.or(artifacts).or(stale)).toBeVisible();
   });
 
   test('Refresh button works without error', async ({ page }) => {
