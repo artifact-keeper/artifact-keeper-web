@@ -174,7 +174,7 @@ export function AppSidebar() {
                   <span className="font-semibold">Artifact Keeper</span>
                   <span className="text-xs text-muted-foreground">
                     Web {process.env.NEXT_PUBLIC_APP_VERSION}
-                    {health?.version ? ` / API ${health.version}` : ""}
+                    {health?.version ? ` / Server ${health.version}` : ""}
                   </span>
                 </div>
               </Link>
