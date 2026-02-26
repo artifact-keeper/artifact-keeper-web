@@ -30,16 +30,13 @@ test.describe('Lifecycle Page', () => {
   });
 
   test('stat cards display policy information or loading skeletons', async ({ page }) => {
-    // Stat cards render after the API query resolves. In CI without a real
-    // backend, skeletons (data-slot="skeleton") are shown instead. Accept
-    // either the loaded stat cards or the skeleton placeholders.
+    // The stats section shows skeletons while the query is in flight, then
+    // stat cards once it resolves. Use expect().toBeVisible() which retries
+    // (unlike isVisible() which is a one-shot snapshot check).
     const statCard = page.getByText('Total Policies');
     const skeleton = page.locator('[data-slot="skeleton"]').first();
 
-    const hasCards = await statCard.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasSkeletons = await skeleton.isVisible({ timeout: 3000 }).catch(() => false);
-
-    expect(hasCards || hasSkeletons).toBeTruthy();
+    await expect(statCard.or(skeleton)).toBeVisible({ timeout: 15000 });
   });
 
   test('clicking New Policy opens the create dialog', async ({ page }) => {
