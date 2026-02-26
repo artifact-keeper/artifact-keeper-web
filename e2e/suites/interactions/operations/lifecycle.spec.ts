@@ -35,7 +35,11 @@ test.describe('Lifecycle Page', () => {
     const enabledPolicies = page.getByText(/enabled|active/i).first();
     const lastExecution = page.getByText(/last|execution|run/i).first();
 
-    await expect(totalPolicies.or(enabledPolicies).or(lastExecution)).toBeVisible();
+    const hasTotal = await totalPolicies.isVisible({ timeout: 10000 }).catch(() => false);
+    const hasEnabled = await enabledPolicies.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasLast = await lastExecution.isVisible({ timeout: 5000 }).catch(() => false);
+
+    expect(hasTotal || hasEnabled || hasLast).toBeTruthy();
   });
 
   test('clicking New Policy opens the create dialog', async ({ page }) => {
