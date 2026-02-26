@@ -409,11 +409,11 @@ export default function RepositoriesPage() {
           className="border rounded-lg overflow-hidden"
           style={{ height: "calc(100vh - 10rem)" }}
         >
-          <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
+          <ResizablePanel defaultSize="30%" minSize="20%" maxSize="45%">
             {masterContent}
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={70} minSize={55}>
+          <ResizablePanel defaultSize="70%" minSize="55%">
             {effectiveSelectedKey ? (
               <RepoDetailPanel repoKey={effectiveSelectedKey} />
             ) : (
