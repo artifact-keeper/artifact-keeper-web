@@ -82,6 +82,28 @@ describe("middleware", () => {
     expect(url.origin).toBe("http://custom-backend:9090");
   });
 
+  it("rewrites native format paths to backend", async () => {
+    const { middleware } = await import("../middleware");
+
+    const formatPaths = [
+      "/pypi/my-repo/simple/",
+      "/npm/my-repo/package",
+      "/maven/my-repo/com/example/artifact",
+      "/v2/my-repo/manifests/latest",
+      "/helm/my-repo/index.yaml",
+      "/cargo/my-repo/api/v1/crates",
+    ];
+
+    for (const path of formatPaths) {
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expect(mockRewrite).toHaveBeenCalledTimes(1);
+      const url = mockRewrite.mock.calls[0][0] as URL;
+      expect(url.pathname).toBe(path);
+      expect(url.origin).toBe("http://backend:8080");
+    }
+  });
+
   it("exports matcher config for API, health, and native format routes", async () => {
     const { config } = await import("../middleware");
     expect(config.matcher).toContain("/api/:path*");
