@@ -39,6 +39,9 @@ export async function seedRepositories(request: APIRequestContext): Promise<void
     { key: 'e2e-maven-local', name: 'E2E Maven Local', format: 'maven', repo_type: 'local' },
     { key: 'e2e-npm-remote', name: 'E2E NPM Remote', format: 'npm', repo_type: 'remote', upstream_url: 'https://registry.npmjs.org' },
     { key: 'e2e-docker-virtual', name: 'E2E Docker Virtual', format: 'docker', repo_type: 'virtual' },
+    // Visibility test repos: one public, one private (default)
+    { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', is_public: true },
+    { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', is_public: false },
   ];
   for (const repo of repos) {
     await api(request, 'POST', '/repositories', repo);
@@ -127,6 +130,8 @@ export async function cleanupAll(request: APIRequestContext): Promise<void> {
   await api(request, 'DELETE', '/repositories/e2e-maven-local').catch(() => {});
   await api(request, 'DELETE', '/repositories/e2e-npm-remote').catch(() => {});
   await api(request, 'DELETE', '/repositories/e2e-docker-virtual').catch(() => {});
+  await api(request, 'DELETE', '/repositories/e2e-public-pypi').catch(() => {});
+  await api(request, 'DELETE', '/repositories/e2e-private-pypi').catch(() => {});
 
   // Users (non-admin)
   for (const [roleName, role] of Object.entries(TEST_ROLES)) {
