@@ -82,8 +82,14 @@ describe("middleware", () => {
     expect(url.origin).toBe("http://custom-backend:9090");
   });
 
-  it("exports matcher config for API and health routes", async () => {
+  it("exports matcher config for API, health, and native format routes", async () => {
     const { config } = await import("../middleware");
-    expect(config.matcher).toEqual(["/api/:path*", "/health"]);
+    expect(config.matcher).toContain("/api/:path*");
+    expect(config.matcher).toContain("/health");
+    expect(config.matcher).toContain("/pypi/:path*");
+    expect(config.matcher).toContain("/npm/:path*");
+    expect(config.matcher).toContain("/maven/:path*");
+    expect(config.matcher).toContain("/v2/:path*");
+    expect(config.matcher.length).toBeGreaterThan(30);
   });
 });
