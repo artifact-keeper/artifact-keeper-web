@@ -117,7 +117,7 @@ export default function AccessTokensPage() {
     mutationFn: (data: CreateApiKeyRequest) => profileApi.createApiKey(data),
     onSuccess: (result: CreateApiKeyResponse) => {
       queryClient.invalidateQueries({ queryKey: ["profile", "api-keys"] });
-      setNewlyCreatedKey(result.key);
+      setNewlyCreatedKey(result.token);
       setKeyName("");
       setKeyScopes(["read"]);
       setKeyExpiry("90");

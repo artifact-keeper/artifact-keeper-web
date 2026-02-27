@@ -33,8 +33,9 @@ export interface CreateApiKeyRequest {
 }
 
 export interface CreateApiKeyResponse {
-  api_key: ApiKey;
-  key: string; // Full key, only shown once
+  id: string;
+  token: string; // Full key, only shown once
+  name: string;
 }
 
 export interface AccessToken {
@@ -54,8 +55,9 @@ export interface CreateAccessTokenRequest {
 }
 
 export interface CreateAccessTokenResponse {
-  access_token: AccessToken;
+  id: string;
   token: string; // Full token, only shown once
+  name: string;
 }
 
 export const profileApi = {
