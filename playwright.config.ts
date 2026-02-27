@@ -89,7 +89,7 @@ export default defineConfig({
     {
       name: 'roles-unauthenticated',
       testDir: './e2e/suites/roles',
-      testMatch: /unauthenticated\.spec\.ts/,
+      testMatch: /unauthenticated\.spec\.ts|private-repo-visibility\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         // No storageState - unauthenticated
