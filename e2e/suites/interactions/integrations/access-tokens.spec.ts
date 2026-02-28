@@ -76,17 +76,32 @@ test.describe('Access Tokens Page', () => {
   });
 });
 
+/**
+ * Revoke a token/key via the AlertDialog confirmation flow.
+ * Clicks the trash button in the row, waits for the AlertDialog,
+ * clicks the confirm button inside it, and waits for the dialog to close.
+ */
+async function revokeViaDialog(page: import('@playwright/test').Page, row: import('@playwright/test').Locator) {
+  await row.getByRole('button').first().click();
+
+  const alertDialog = page.getByRole('alertdialog');
+  await expect(alertDialog).toBeVisible({ timeout: 5000 });
+
+  await alertDialog.getByRole('button', { name: /revoke/i }).click();
+
+  // Dialog closing means the mutation completed successfully
+  await expect(alertDialog).toBeHidden({ timeout: 10000 });
+}
+
 test.describe.serial('Access Tokens - API Key CRUD', () => {
   test('create an API key and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
     // Revoke any leftover e2e-api-key entries from prior runs (max 3 attempts)
     for (let i = 0; i < 3 && await isRowVisible(page, 'e2e-api-key'); i++) {
-      const btn = page.getByRole('row', { name: /e2e-api-key/i }).first().getByRole('button').first();
-      await btn.click({ timeout: 5000 }).catch(() => {});
-      const confirm = page.getByRole('button', { name: /revoke/i }).last();
-      await confirm.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(3000);
+      const row = page.getByRole('row', { name: /e2e-api-key/i }).first();
+      await revokeViaDialog(page, row).catch(() => {});
+      await page.waitForTimeout(2000);
     }
 
     const dialog = await openDialog(page, /create api key/i);
@@ -128,22 +143,14 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found');
 
     const row = page.getByRole('row', { name: /e2e-api-key/i }).first();
-    await row.getByRole('button').first().click();
-
-    // Wait for confirm button with auto-retry, then click
-    const confirm = page.getByRole('button', { name: /revoke/i }).last();
-    await expect(confirm).toBeVisible({ timeout: 5000 });
-    await confirm.click();
-
-    // Wait for the revoke API call to complete
-    await page.waitForTimeout(3000);
+    await revokeViaDialog(page, row);
 
     // Reload to verify the key is gone
+    await page.waitForTimeout(2000);
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
 
-    // Use expect().toBeHidden() for auto-retry
     await expect(page.getByRole('row', { name: /e2e-api-key/i })).toBeHidden({ timeout: 10000 });
   });
 });
@@ -155,11 +162,9 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
 
     // Revoke any leftover e2e-access-token entries from prior runs (max 3 attempts)
     for (let i = 0; i < 3 && await isRowVisible(page, 'e2e-access-token'); i++) {
-      const btn = page.getByRole('row', { name: /e2e-access-token/i }).first().getByRole('button').first();
-      await btn.click({ timeout: 5000 }).catch(() => {});
-      const confirm = page.getByRole('button', { name: /revoke/i }).last();
-      await confirm.click({ timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(3000);
+      const row = page.getByRole('row', { name: /e2e-access-token/i }).first();
+      await revokeViaDialog(page, row).catch(() => {});
+      await page.waitForTimeout(2000);
     }
 
     const dialog = await openDialog(page, /create token/i);
@@ -202,23 +207,15 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
     const row = page.getByRole('row', { name: /e2e-access-token/i }).first();
-    await row.getByRole('button').first().click();
-
-    // Wait for confirm button with auto-retry, then click
-    const confirm = page.getByRole('button', { name: /revoke/i }).last();
-    await expect(confirm).toBeVisible({ timeout: 5000 });
-    await confirm.click();
-
-    // Wait for the revoke API call to complete
-    await page.waitForTimeout(3000);
+    await revokeViaDialog(page, row);
 
     // Reload to verify the token is gone
+    await page.waitForTimeout(2000);
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
     await switchTab(page, /Access Tokens/i);
     await page.waitForTimeout(2000);
 
-    // Use expect().toBeHidden() for auto-retry instead of manual isVisible check
     await expect(page.getByRole('row', { name: /e2e-access-token/i })).toBeHidden({ timeout: 10000 });
   });
 });

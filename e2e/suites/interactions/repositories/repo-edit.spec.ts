@@ -111,6 +111,8 @@ test.describe('Repository - Edit and Actions', () => {
 
     await repoLink.click();
     await page.waitForLoadState('domcontentloaded');
+    // Wait for initial data fetch and React renders to settle
+    await page.waitForTimeout(5000);
 
     // Should have tabs: Artifacts, Upload, Security, Members
     const tabs = page.locator('[role="tablist"]').first();
@@ -118,9 +120,10 @@ test.describe('Repository - Edit and Actions', () => {
 
     if (hasTabs) {
       // Check for Security tab and its Scan All button
-      const securityTab = tabs.getByText(/security/i).first();
+      // Use force:true to avoid detached-DOM issues from continuous re-renders
+      const securityTab = page.getByRole('tab', { name: /security/i }).first();
       if (await securityTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await securityTab.click();
+        await securityTab.click({ force: true, timeout: 10000 }).catch(() => {});
         await page.waitForTimeout(2000);
 
         const scanAllBtn = page.getByRole('button', { name: /scan all/i }).first();

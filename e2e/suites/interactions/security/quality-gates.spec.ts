@@ -33,12 +33,8 @@ test.describe('Quality Gates Page', () => {
   test('gate stats cards are visible', async ({ page }) => {
     await expect(page.getByText(/quality gates/i).first()).toBeVisible({ timeout: 10000 });
 
-    // Wait for data to load - use .or() with expect().toBeVisible() for auto-retry
-    await expect(
-      page.getByText(/total gates/i).first()
-        .or(page.getByText(/enabled/i).first())
-        .or(page.getByText(/no quality gates/i).first())
-    ).toBeVisible({ timeout: 15000 });
+    // Wait for data to load - check for "Total Gates" stat card (always rendered once data loads)
+    await expect(page.getByText('Total Gates')).toBeVisible({ timeout: 15000 });
   });
 
   test('quality gates table or empty state is shown', async ({ page }) => {
