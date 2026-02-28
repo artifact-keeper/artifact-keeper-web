@@ -80,17 +80,6 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
   test('create an API key and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
-    // Revoke any leftover e2e-api-key entries from prior runs
-    while (await isRowVisible(page, 'e2e-api-key')) {
-      const btn = page.getByRole('row', { name: /e2e-api-key/i }).first().getByRole('button').first();
-      await btn.click();
-      const confirm = page.getByRole('button', { name: /revoke/i }).last();
-      if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await confirm.click();
-      }
-      await page.waitForTimeout(2000);
-    }
-
     const dialog = await openDialog(page, /create api key/i);
     await fillDialogName(dialog, 'e2e-api-key');
 
@@ -130,18 +119,26 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found');
 
     const row = page.getByRole('row', { name: /e2e-api-key/i }).first();
-    await row.getByRole('button').first().click();
-    const confirm = page.getByRole('button', { name: /revoke/i }).last();
-    if (await confirm.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await confirm.click();
-    }
 
-    // Reload to verify the key is gone
-    await page.waitForTimeout(2000);
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    const stillVisible = await page.getByText('e2e-api-key').isVisible({ timeout: 5000 }).catch(() => false);
-    expect(stillVisible).toBeFalsy();
+    // Click the trash/revoke button in the row
+    await row.getByRole('button').first().click();
+
+    // Wait for the AlertDialog confirmation to appear
+    const alertDialog = page.getByRole('alertdialog');
+    await expect(alertDialog).toBeVisible({ timeout: 5000 });
+
+    // Click the confirm button and verify the DELETE API call succeeds
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.request().method() === 'DELETE' && resp.url().includes('/api/'),
+        { timeout: 10000 }
+      ),
+      alertDialog.getByRole('button', { name: /revoke/i }).click(),
+    ]);
+    expect(response.status()).toBeLessThan(300);
+
+    // Dialog closing confirms the mutation's onSuccess fired
+    await expect(alertDialog).toBeHidden({ timeout: 10000 });
   });
 });
 
@@ -149,17 +146,6 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
   test('create an access token and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
-
-    // Revoke any leftover e2e-access-token entries from prior runs
-    while (await isRowVisible(page, 'e2e-access-token')) {
-      const btn = page.getByRole('row', { name: /e2e-access-token/i }).first().getByRole('button').first();
-      await btn.click();
-      const confirm = page.getByRole('button', { name: /revoke/i }).last();
-      if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await confirm.click();
-      }
-      await page.waitForTimeout(2000);
-    }
 
     const dialog = await openDialog(page, /create token/i);
     await fillDialogName(dialog, 'e2e-access-token');
@@ -197,22 +183,29 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
   test('revoke the created access token', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
     const row = page.getByRole('row', { name: /e2e-access-token/i }).first();
-    await row.getByRole('button').first().click();
-    const confirm = page.getByRole('button', { name: /revoke/i }).last();
-    if (await confirm.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await confirm.click();
-    }
 
-    // Reload to verify the token is gone
-    await page.waitForTimeout(2000);
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-    await switchTab(page, /Access Tokens/i);
-    const stillVisible = await page.getByText('e2e-access-token').isVisible({ timeout: 5000 }).catch(() => false);
-    expect(stillVisible).toBeFalsy();
+    // Click the trash/revoke button in the row
+    await row.getByRole('button').first().click();
+
+    // Wait for the AlertDialog confirmation to appear
+    const alertDialog = page.getByRole('alertdialog');
+    await expect(alertDialog).toBeVisible({ timeout: 5000 });
+
+    // Click the confirm button and verify the DELETE API call succeeds
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.request().method() === 'DELETE' && resp.url().includes('/api/'),
+        { timeout: 10000 }
+      ),
+      alertDialog.getByRole('button', { name: /revoke/i }).click(),
+    ]);
+    expect(response.status()).toBeLessThan(300);
+
+    // Dialog closing confirms the mutation's onSuccess fired
+    await expect(alertDialog).toBeHidden({ timeout: 10000 });
   });
 });

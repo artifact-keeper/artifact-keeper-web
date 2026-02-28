@@ -33,13 +33,8 @@ test.describe('Quality Gates Page', () => {
   test('gate stats cards are visible', async ({ page }) => {
     await expect(page.getByText(/quality gates/i).first()).toBeVisible({ timeout: 10000 });
 
-    const totalGates = page.getByText(/total gates/i);
-    const enabled = page.getByText(/enabled/i);
-
-    const hasTotal = await totalGates.first().isVisible({ timeout: 5000 }).catch(() => false);
-    const hasEnabled = await enabled.first().isVisible({ timeout: 5000 }).catch(() => false);
-
-    expect(hasTotal || hasEnabled).toBeTruthy();
+    // Wait for data to load - check for "Total Gates" stat card (always rendered once data loads)
+    await expect(page.getByText('Total Gates')).toBeVisible({ timeout: 15000 });
   });
 
   test('quality gates table or empty state is shown', async ({ page }) => {
