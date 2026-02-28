@@ -33,8 +33,9 @@ export interface CreateApiKeyRequest {
 }
 
 export interface CreateApiKeyResponse {
-  api_key: ApiKey;
-  key: string; // Full key, only shown once
+  id: string;
+  token: string; // Full key, only shown once
+  name: string;
 }
 
 export interface AccessToken {
@@ -54,8 +55,9 @@ export interface CreateAccessTokenRequest {
 }
 
 export interface CreateAccessTokenResponse {
-  access_token: AccessToken;
+  id: string;
   token: string; // Full token, only shown once
+  name: string;
 }
 
 export const profileApi = {
@@ -82,7 +84,7 @@ export const profileApi = {
     const userId = (me as any).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.api_keys ?? [];
+    return (data as any)?.items ?? [];
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
@@ -103,7 +105,7 @@ export const profileApi = {
     const userId = (me as any).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.access_tokens ?? [];
+    return (data as any)?.items ?? [];
   },
 
   createAccessToken: async (

@@ -78,7 +78,7 @@ test.describe('Access Tokens Page', () => {
 });
 
 test.describe.serial('Access Tokens - API Key CRUD', () => {
-  test('create an API key', async ({ page }) => {
+  test('create an API key and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
     const dialog = await openDialog(page, /create api key/i);
@@ -86,16 +86,32 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
 
     await dialog.getByRole('button', { name: /create key/i }).click();
     await page.waitForTimeout(3000);
+
+    // The token-created alert should show the secret value
+    await expect(dialog.getByText(/store it safely/i)).toBeVisible({ timeout: 5000 });
+    // The full key value should be displayed in a code element
+    const keyCode = dialog.locator('code').first();
+    await expect(keyCode).toBeVisible({ timeout: 5000 });
+    const keyValue = await keyCode.textContent();
+    expect(keyValue?.length).toBeGreaterThan(0);
+
     await dismissTokenAlert(page);
     await assertNoAppErrors(page);
   });
 
-  test('created API key appears in table', async ({ page }) => {
+  test('created API key appears in table with prefix and scopes', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await page.waitForTimeout(2000);
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found in table');
 
-    await expect(page.getByText('e2e-api-key').first()).toBeVisible();
+    const row = page.getByRole('row', { name: /e2e-api-key/i });
+    await expect(row).toBeVisible({ timeout: 10000 });
+
+    // Key prefix column should show a truncated prefix (e.g., "ak_...")
+    await expect(row.locator('code').first()).toBeVisible({ timeout: 5000 });
+
+    // Default scope "read" should be shown as a badge
+    await expect(row.getByText('read')).toBeVisible({ timeout: 5000 });
   });
 
   test('revoke the created API key', async ({ page }) => {
@@ -104,11 +120,15 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found');
 
     await revokeRowItem(page, /e2e-api-key/i);
+
+    // Verify the key is gone from the table
+    await page.waitForTimeout(2000);
+    await expect(page.getByText('e2e-api-key')).not.toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe.serial('Access Tokens - Personal Token CRUD', () => {
-  test('create an access token', async ({ page }) => {
+  test('create an access token and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
 
@@ -117,17 +137,32 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
 
     await dialog.getByRole('button', { name: /create token/i }).click();
     await page.waitForTimeout(3000);
+
+    // The token-created alert should show the secret value
+    await expect(dialog.getByText(/store it safely/i)).toBeVisible({ timeout: 5000 });
+    const tokenCode = dialog.locator('code').first();
+    await expect(tokenCode).toBeVisible({ timeout: 5000 });
+    const tokenValue = await tokenCode.textContent();
+    expect(tokenValue?.length).toBeGreaterThan(0);
+
     await dismissTokenAlert(page);
     await assertNoAppErrors(page);
   });
 
-  test('created access token appears in table', async ({ page }) => {
+  test('created access token appears in table with prefix and scopes', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
     await page.waitForTimeout(1000);
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
-    await expect(page.getByText('e2e-access-token').first()).toBeVisible();
+    const row = page.getByRole('row', { name: /e2e-access-token/i });
+    await expect(row).toBeVisible({ timeout: 10000 });
+
+    // Token prefix column should show a truncated prefix
+    await expect(row.locator('code').first()).toBeVisible({ timeout: 5000 });
+
+    // Default scope "read" should be shown as a badge
+    await expect(row.getByText('read')).toBeVisible({ timeout: 5000 });
   });
 
   test('revoke the created access token', async ({ page }) => {
@@ -137,5 +172,9 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
     await revokeRowItem(page, /e2e-access-token/i);
+
+    // Verify the token is gone from the table
+    await page.waitForTimeout(2000);
+    await expect(page.getByText('e2e-access-token')).not.toBeVisible({ timeout: 5000 });
   });
 });
