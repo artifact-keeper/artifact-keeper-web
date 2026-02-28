@@ -79,7 +79,8 @@ test.describe('Access Tokens Page', () => {
 /**
  * Revoke a token/key via the AlertDialog confirmation flow.
  * Clicks the trash button in the row, waits for the AlertDialog,
- * clicks the confirm button inside it, and waits for the dialog to close.
+ * clicks the confirm button inside it, and waits for the DELETE API
+ * response to verify the revocation actually succeeded.
  */
 async function revokeViaDialog(page: import('@playwright/test').Page, row: import('@playwright/test').Locator) {
   await row.getByRole('button').first().click();
@@ -87,9 +88,19 @@ async function revokeViaDialog(page: import('@playwright/test').Page, row: impor
   const alertDialog = page.getByRole('alertdialog');
   await expect(alertDialog).toBeVisible({ timeout: 5000 });
 
-  await alertDialog.getByRole('button', { name: /revoke/i }).click();
+  // Intercept the DELETE API call and click the confirm button simultaneously
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (resp) => resp.request().method() === 'DELETE' && resp.url().includes('/api/'),
+      { timeout: 10000 }
+    ),
+    alertDialog.getByRole('button', { name: /revoke/i }).click(),
+  ]);
 
-  // Dialog closing means the mutation completed successfully
+  // Verify the API call succeeded
+  expect(response.status()).toBeLessThan(300);
+
+  // Wait for the dialog to close (mutation onSuccess sets state to null)
   await expect(alertDialog).toBeHidden({ timeout: 10000 });
 }
 
