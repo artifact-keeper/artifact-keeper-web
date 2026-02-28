@@ -9,7 +9,6 @@ import {
   assertNoAppErrors,
   switchTab,
   isRowVisible,
-  revokeRowItem,
 } from '../../../fixtures/test-fixtures';
 
 test.describe('Access Tokens Page', () => {
@@ -81,6 +80,17 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
   test('create an API key and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
+    // Revoke any leftover e2e-api-key entries from prior runs
+    while (await isRowVisible(page, 'e2e-api-key')) {
+      const btn = page.getByRole('row', { name: /e2e-api-key/i }).first().getByRole('button').first();
+      await btn.click();
+      const confirm = page.getByRole('button', { name: /revoke/i }).last();
+      if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await confirm.click();
+      }
+      await page.waitForTimeout(2000);
+    }
+
     const dialog = await openDialog(page, /create api key/i);
     await fillDialogName(dialog, 'e2e-api-key');
 
@@ -104,7 +114,7 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     await page.waitForTimeout(2000);
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found in table');
 
-    const row = page.getByRole('row', { name: /e2e-api-key/i });
+    const row = page.getByRole('row', { name: /e2e-api-key/i }).first();
     await expect(row).toBeVisible({ timeout: 10000 });
 
     // Key prefix column should show a truncated prefix (e.g., "ak_...")
@@ -119,11 +129,19 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     await page.waitForTimeout(2000);
     test.skip(!(await isRowVisible(page, 'e2e-api-key')), 'API key e2e-api-key not found');
 
-    await revokeRowItem(page, /e2e-api-key/i);
+    const row = page.getByRole('row', { name: /e2e-api-key/i }).first();
+    await row.getByRole('button').first().click();
+    const confirm = page.getByRole('button', { name: /revoke/i }).last();
+    if (await confirm.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await confirm.click();
+    }
 
-    // Verify the key is gone from the table
+    // Reload to verify the key is gone
     await page.waitForTimeout(2000);
-    await expect(page.getByText('e2e-api-key')).not.toBeVisible({ timeout: 5000 });
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    const stillVisible = await page.getByText('e2e-api-key').isVisible({ timeout: 5000 }).catch(() => false);
+    expect(stillVisible).toBeFalsy();
   });
 });
 
@@ -131,6 +149,17 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
   test('create an access token and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
+
+    // Revoke any leftover e2e-access-token entries from prior runs
+    while (await isRowVisible(page, 'e2e-access-token')) {
+      const btn = page.getByRole('row', { name: /e2e-access-token/i }).first().getByRole('button').first();
+      await btn.click();
+      const confirm = page.getByRole('button', { name: /revoke/i }).last();
+      if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await confirm.click();
+      }
+      await page.waitForTimeout(2000);
+    }
 
     const dialog = await openDialog(page, /create token/i);
     await fillDialogName(dialog, 'e2e-access-token');
@@ -155,7 +184,7 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     await page.waitForTimeout(1000);
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
-    const row = page.getByRole('row', { name: /e2e-access-token/i });
+    const row = page.getByRole('row', { name: /e2e-access-token/i }).first();
     await expect(row).toBeVisible({ timeout: 10000 });
 
     // Token prefix column should show a truncated prefix
@@ -171,10 +200,19 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     await page.waitForTimeout(1000);
     test.skip(!(await isRowVisible(page, 'e2e-access-token')), 'Access token e2e-access-token not found');
 
-    await revokeRowItem(page, /e2e-access-token/i);
+    const row = page.getByRole('row', { name: /e2e-access-token/i }).first();
+    await row.getByRole('button').first().click();
+    const confirm = page.getByRole('button', { name: /revoke/i }).last();
+    if (await confirm.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await confirm.click();
+    }
 
-    // Verify the token is gone from the table
+    // Reload to verify the token is gone
     await page.waitForTimeout(2000);
-    await expect(page.getByText('e2e-access-token')).not.toBeVisible({ timeout: 5000 });
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await switchTab(page, /Access Tokens/i);
+    const stillVisible = await page.getByText('e2e-access-token').isVisible({ timeout: 5000 }).catch(() => false);
+    expect(stillVisible).toBeFalsy();
   });
 });
