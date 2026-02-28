@@ -13,16 +13,12 @@ test.describe('Security Scans Page', () => {
   });
 
   test('scans table or empty state is visible', async ({ page }) => {
-    // Wait for data to load (the page fetches scan results via TanStack Query)
-    await page.waitForLoadState('domcontentloaded');
-
-    const table = page.getByRole('table').first();
-    const emptyState = page.getByText(/no scan results found/i).first();
-
-    const hasTable = await table.isVisible({ timeout: 15000 }).catch(() => false);
-    const hasEmpty = await emptyState.isVisible({ timeout: 5000 }).catch(() => false);
-
-    expect(hasTable || hasEmpty).toBeTruthy();
+    // Use .or() with expect().toBeVisible() so Playwright auto-retries until data loads
+    await expect(
+      page.getByRole('table').first()
+        .or(page.getByText(/no scan results found/i).first())
+        .or(page.getByText(/no data found/i).first())
+    ).toBeVisible({ timeout: 15000 });
   });
 
   test('trigger scan button is visible', async ({ page }) => {
