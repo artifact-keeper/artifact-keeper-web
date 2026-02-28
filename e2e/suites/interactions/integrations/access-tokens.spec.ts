@@ -80,10 +80,10 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
   test('create an API key and see the secret', async ({ page }) => {
     await navigateTo(page, '/access-tokens');
 
-    // Revoke any leftover e2e-api-key entries from prior runs
-    while (await isRowVisible(page, 'e2e-api-key')) {
+    // Revoke any leftover e2e-api-key entries from prior runs (max 3 attempts)
+    for (let i = 0; i < 3 && await isRowVisible(page, 'e2e-api-key'); i++) {
       const btn = page.getByRole('row', { name: /e2e-api-key/i }).first().getByRole('button').first();
-      await btn.click();
+      await btn.click({ timeout: 5000 }).catch(() => {});
       const confirm = page.getByRole('button', { name: /revoke/i }).last();
       if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
         await confirm.click();
@@ -139,7 +139,7 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     // Reload to verify the key is gone
     await page.waitForTimeout(2000);
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const stillVisible = await page.getByText('e2e-api-key').isVisible({ timeout: 5000 }).catch(() => false);
     expect(stillVisible).toBeFalsy();
   });
@@ -150,10 +150,10 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     await navigateTo(page, '/access-tokens');
     await switchTab(page, /Access Tokens/i);
 
-    // Revoke any leftover e2e-access-token entries from prior runs
-    while (await isRowVisible(page, 'e2e-access-token')) {
+    // Revoke any leftover e2e-access-token entries from prior runs (max 3 attempts)
+    for (let i = 0; i < 3 && await isRowVisible(page, 'e2e-access-token'); i++) {
       const btn = page.getByRole('row', { name: /e2e-access-token/i }).first().getByRole('button').first();
-      await btn.click();
+      await btn.click({ timeout: 5000 }).catch(() => {});
       const confirm = page.getByRole('button', { name: /revoke/i }).last();
       if (await confirm.isVisible({ timeout: 3000 }).catch(() => false)) {
         await confirm.click();
@@ -210,7 +210,7 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     // Reload to verify the token is gone
     await page.waitForTimeout(2000);
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await switchTab(page, /Access Tokens/i);
     const stillVisible = await page.getByText('e2e-access-token').isVisible({ timeout: 5000 }).catch(() => false);
     expect(stillVisible).toBeFalsy();

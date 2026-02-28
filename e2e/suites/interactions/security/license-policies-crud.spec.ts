@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('License Policies - Edit, Toggle, Delete', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/security/license-policies');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('create policy button opens dialog', async ({ page }) => {

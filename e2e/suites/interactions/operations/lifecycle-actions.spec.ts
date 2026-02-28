@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Lifecycle - Execute, Toggle, Delete Actions', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/lifecycle');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(
       page.getByRole('heading').filter({ hasText: /lifecycle/i }).first()
     ).toBeVisible({ timeout: 10000 });

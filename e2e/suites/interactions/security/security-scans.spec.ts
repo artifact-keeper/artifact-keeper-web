@@ -14,7 +14,7 @@ test.describe('Security Scans Page', () => {
 
   test('scans table or empty state is visible', async ({ page }) => {
     // Wait for data to load (the page fetches scan results via TanStack Query)
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const table = page.getByRole('table').first();
     const emptyState = page.getByText(/no scan results found/i).first();

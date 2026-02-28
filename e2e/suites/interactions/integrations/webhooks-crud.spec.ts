@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Webhooks - Edit, Toggle, Delete', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/webhooks');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('refresh button reloads webhook data', async ({ page }) => {

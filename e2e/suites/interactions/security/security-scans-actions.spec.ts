@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Security Scans - Trigger and Actions', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/security/scans');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('trigger scan button opens scan dialog', async ({ page }) => {

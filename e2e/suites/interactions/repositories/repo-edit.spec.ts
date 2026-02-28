@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Repository - Edit and Actions', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/repositories');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('refresh button reloads repository list', async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe('Repository - Edit and Actions', () => {
     test.skip(!hasLink, 'No repository links visible');
 
     await repoLink.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Should have tabs: Artifacts, Upload, Security, Members
     const tabs = page.locator('[role="tablist"]').first();

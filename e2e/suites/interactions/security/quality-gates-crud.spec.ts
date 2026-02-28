@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Quality Gates - Edit, Toggle, Delete', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/quality-gates');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText(/quality gates/i).first()).toBeVisible({ timeout: 10000 });
   });
 
