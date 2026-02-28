@@ -49,7 +49,7 @@ export const artifactsApi = {
   },
 
   getDownloadUrl: (repoKey: string, artifactPath: string): string => {
-    return `/api/v1/repositories/${repoKey}/artifacts/${encodeURIComponent(artifactPath)}/download`;
+    return `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
   },
 
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
