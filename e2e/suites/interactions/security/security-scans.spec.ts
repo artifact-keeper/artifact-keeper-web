@@ -13,11 +13,14 @@ test.describe('Security Scans Page', () => {
   });
 
   test('scans table or empty state is visible', async ({ page }) => {
-    const table = page.getByRole('table').first();
-    const emptyState = page.getByText(/no scan|no result/i).first();
+    // Wait for data to load (the page fetches scan results via TanStack Query)
+    await page.waitForLoadState('networkidle');
 
-    const hasTable = await table.isVisible({ timeout: 10000 }).catch(() => false);
-    const hasEmpty = await emptyState.isVisible().catch(() => false);
+    const table = page.getByRole('table').first();
+    const emptyState = page.getByText(/no scan results found/i).first();
+
+    const hasTable = await table.isVisible({ timeout: 15000 }).catch(() => false);
+    const hasEmpty = await emptyState.isVisible({ timeout: 5000 }).catch(() => false);
 
     expect(hasTable || hasEmpty).toBeTruthy();
   });
