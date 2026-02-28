@@ -58,6 +58,7 @@ export const config = {
     "/proto/:path*",
     "/incus/:path*",
     "/ext/:path*",
+    "/v2",
     "/v2/:path*",
   ],
 };
