@@ -42,6 +42,8 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel(/key|name/i).first().fill('npm-virtual-demo');
+  await tutorial.pause(400);
+  await dialog.locator('#create-name').fill('NPM Virtual Demo');
   await tutorial.pause(800);
 
   const formatSelect = dialog.getByLabel(/format/i).or(dialog.getByRole('combobox').first());

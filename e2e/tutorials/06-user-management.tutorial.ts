@@ -40,7 +40,7 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
 
   await tutorial.show('User form filled', 'Fill in the username, email, display name, and an initial password.');
 
-  await userDialog.getByRole('button', { name: /create$/i }).click();
+  await userDialog.getByRole('button', { name: /create user/i }).click();
   await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.step('User created');

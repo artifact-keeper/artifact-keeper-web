@@ -25,6 +25,8 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel(/key|name/i).first().fill('npm-proxy-demo');
+  await tutorial.pause(400);
+  await dialog.locator('#create-name').fill('NPM Proxy Demo');
   await tutorial.pause(800);
 
   const formatSelect = dialog.getByLabel(/format/i).or(dialog.getByRole('combobox').first());
