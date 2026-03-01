@@ -25,13 +25,17 @@ test('Tutorial: User Management and Access Control', async ({ page }) => {
   const userDialog = page.getByRole('dialog');
   await tutorial.step('Create user dialog');
 
-  await userDialog.getByLabel(/username/i).first().fill('jane.smith');
+  await userDialog.getByLabel(/username/i).first().fill('john.doe');
   await tutorial.pause(600);
-  await userDialog.getByLabel(/email/i).first().fill('jane.smith@example.com');
+  await userDialog.getByLabel(/email/i).first().fill('john.doe@example.com');
   await tutorial.pause(600);
-  await userDialog.getByLabel(/display name/i).or(userDialog.getByLabel(/name/i)).first().fill('Jane Smith');
+  await userDialog.getByLabel(/display name/i).or(userDialog.getByLabel(/name/i)).first().fill('John Doe');
   await tutorial.pause(600);
-  await userDialog.getByLabel(/password/i).first().fill('SecurePassword1!');
+
+  // Disable auto-generate password so the password input becomes visible
+  await userDialog.locator('#auto-generate').click();
+  await tutorial.pause(400);
+  await userDialog.getByPlaceholder('Enter password').fill('SecurePassword1!');
   await tutorial.pause(600);
 
   await tutorial.show('User form filled', 'Fill in the username, email, display name, and an initial password.');

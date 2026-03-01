@@ -48,18 +48,18 @@ test('Tutorial: Security Scanning and Quality Gates', async ({ page }) => {
   await tutorial.step('Quality gate form');
 
   // Fill in the form fields
-  const nameInput = dialog.getByLabel(/name/i).first();
-  await nameInput.fill('production-release-gate');
+  const nameInput = dialog.getByPlaceholder('e.g., Production Release Gate');
+  await nameInput.fill('staging-release-gate');
   await tutorial.pause(800);
 
-  // Look for vulnerability threshold fields
-  const criticalInput = dialog.getByLabel(/critical/i).or(dialog.getByPlaceholder(/critical/i)).first();
+  // Look for vulnerability threshold fields (type=number inputs have role spinbutton)
+  const criticalInput = dialog.getByText('Critical', { exact: true }).locator('..').getByRole('spinbutton');
   if (await criticalInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await criticalInput.fill('0');
     await tutorial.pause(600);
   }
 
-  const highInput = dialog.getByLabel(/high/i).or(dialog.getByPlaceholder(/high/i)).first();
+  const highInput = dialog.getByText('High', { exact: true }).locator('..').getByRole('spinbutton');
   if (await highInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await highInput.fill('3');
     await tutorial.pause(600);
