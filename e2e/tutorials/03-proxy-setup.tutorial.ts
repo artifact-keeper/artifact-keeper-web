@@ -24,7 +24,9 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
   await page.waitForTimeout(1000);
 
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel(/key|name/i).first().fill('npmjs-cache');
+  await dialog.getByLabel(/key|name/i).first().fill('npm-proxy-demo');
+  await tutorial.pause(400);
+  await dialog.locator('#create-name').fill('NPM Proxy Demo');
   await tutorial.pause(800);
 
   const formatSelect = dialog.getByLabel(/format/i).or(dialog.getByRole('combobox').first());
@@ -59,7 +61,7 @@ test('Tutorial: Setting Up a Proxy Repository', async ({ page }) => {
   await tutorial.pause(1000);
 
   // Click on the proxy repo
-  await page.getByText('npmjs-cache').or(page.getByText('npmjs-proxy')).first().click();
+  await page.getByText('npm-proxy-demo').first().click();
   await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
   await tutorial.show('Proxy detail view', 'The detail panel shows repository settings, cached packages, and download statistics.');

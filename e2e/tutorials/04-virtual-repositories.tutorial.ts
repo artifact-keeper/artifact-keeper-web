@@ -24,7 +24,7 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   await tutorial.pause(1500);
 
   // Show existing repos
-  const searchInput = page.getByPlaceholder(/search/i);
+  const searchInput = page.getByPlaceholder('Search...');
   await searchInput.fill('npm');
   await tutorial.pause(1500);
   await tutorial.show('NPM repositories', 'We can see our local NPM repository and NPM proxy are already set up.');
@@ -41,7 +41,9 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   await page.waitForTimeout(1000);
 
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel(/key|name/i).first().fill('npm-all');
+  await dialog.getByLabel(/key|name/i).first().fill('npm-virtual-demo');
+  await tutorial.pause(400);
+  await dialog.locator('#create-name').fill('NPM Virtual Demo');
   await tutorial.pause(800);
 
   const formatSelect = dialog.getByLabel(/format/i).or(dialog.getByRole('combobox').first());
@@ -70,7 +72,7 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(1000);
 
-  await page.getByText('npm-all').or(page.getByText('npm-virtual')).first().click();
+  await page.getByText('npm-virtual-demo').first().click();
   await page.waitForLoadState('domcontentloaded');
   await tutorial.pause(2000);
 
