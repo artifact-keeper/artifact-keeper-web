@@ -1,0 +1,81 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for the Artifact Keeper web interface
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature. Your feedback helps shape the direction of Artifact Keeper.
+
+        If your request is related to the backend API or server functionality, please file it in the [artifact-keeper](https://github.com/artifact-keeper/artifact-keeper/issues/new) repository instead. If you are not sure where it belongs, go ahead and file it here and we will move it if needed.
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? Describe the pain point or gap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this to work? Be as specific as you can.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches or workarounds?
+    validations:
+      required: false
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe a concrete scenario where this feature would be useful.
+      placeholder: "As a [type of user], I want [goal] so that [reason]."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the web interface does this relate to?
+      options:
+        - Dashboard
+        - Repository Browser
+        - Search
+        - Package Details
+        - Admin Panel
+        - Security / Scanning
+        - User Management
+        - Settings
+        - Navigation / Layout
+        - Accessibility
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, mockups, or references that might help.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to make sure this is not a duplicate.
+          required: true
+        - label: I have reviewed the documentation to confirm this feature does not already exist.
+          required: true
