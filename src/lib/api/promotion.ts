@@ -31,8 +31,8 @@ export const promotionApi = {
     const { data, error } = await sdkListRepositories({
       query: {
         ...params,
-        repo_type: 'staging',
-      } as any,
+        type: 'staging',
+      },
     });
     if (error) throw error;
     return data as any;
@@ -66,9 +66,9 @@ export const promotionApi = {
     const { data, error } = await sdkListRepositories({
       query: {
         ...params,
-        repo_type: 'local',
+        type: 'local',
         per_page: 100,
-      } as any,
+      },
     });
     if (error) throw error;
     return data as any;
