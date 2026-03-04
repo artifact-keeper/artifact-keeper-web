@@ -101,10 +101,20 @@ export default function RepositoriesPage() {
 
   const createMutation = useMutation({
     mutationFn: (d: CreateRepositoryRequest) => repositoriesApi.create(d),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       invalidateAllRepoQueries();
       setCreateOpen(false);
-      toast.success("Repository created");
+      if (variables.repo_type === "staging") {
+        toast.success("Repository created", {
+          description: "Configure promotion rules to start promoting artifacts.",
+          action: {
+            label: "Go to Staging",
+            onClick: () => router.push("/staging"),
+          },
+        });
+      } else {
+        toast.success("Repository created");
+      }
     },
     onError: (err) => {
       toast.error(getErrorMessage(err, "Failed to create repository"));
