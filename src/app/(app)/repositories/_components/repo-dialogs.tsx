@@ -254,6 +254,13 @@ export function RepoDialogs({
                 </Select>
               </div>
             </div>
+            {/* Staging repository: inline hint */}
+            {createForm.repo_type === "staging" && (
+              <p className="text-xs text-muted-foreground">
+                Staging repos hold artifacts for review before promotion to a release repository.
+                Configure promotion rules after creation.
+              </p>
+            )}
             {/* Remote repository: upstream URL */}
             {createForm.repo_type === "remote" && (
               <div className="space-y-2">
