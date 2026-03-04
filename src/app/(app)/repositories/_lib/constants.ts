@@ -73,6 +73,7 @@ export const FORMAT_GROUPS = Array.from(
 
 export const TYPE_OPTIONS: { value: RepositoryType; label: string }[] = [
   { value: "local", label: "Local" },
+  { value: "staging", label: "Staging" },
   { value: "remote", label: "Remote" },
   { value: "virtual", label: "Virtual" },
 ];
