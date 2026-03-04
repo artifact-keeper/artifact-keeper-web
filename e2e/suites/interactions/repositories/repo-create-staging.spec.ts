@@ -132,15 +132,17 @@ test.describe.serial('Staging Repository Creation', () => {
     await expect(submitBtn).toBeVisible({ timeout: 5000 });
     await submitBtn.click();
 
-    // Wait for the toast to appear
-    const toast = page.locator('[data-sonner-toast]').first();
-    await expect(toast).toBeVisible({ timeout: 10000 });
+    // Wait for the toast to appear (use fallback locators for resilience)
+    const toast = page.locator('[data-sonner-toast][data-type="success"]').or(
+      page.getByRole('status').filter({ hasText: /repository created|created/i })
+    );
+    await expect(toast.first()).toBeVisible({ timeout: 10000 });
 
     // Verify toast contains promotion rules text
-    await expect(toast.getByText(/configure promotion rules/i)).toBeVisible({ timeout: 5000 });
+    await expect(toast.first().getByText(/configure promotion rules/i)).toBeVisible({ timeout: 5000 });
 
     // Verify toast has "Go to Staging" action button
-    await expect(toast.getByRole('button', { name: /go to staging/i })).toBeVisible({ timeout: 5000 });
+    await expect(toast.first().getByRole('button', { name: /go to staging/i })).toBeVisible({ timeout: 5000 });
   });
 
   test('staging repo appears in repository list with staging type', async ({ page }) => {
