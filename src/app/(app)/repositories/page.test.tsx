@@ -84,7 +84,10 @@ vi.mock('@/components/ui/scroll-area', () => ({
 
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: React.forwardRef(({ children, ...props }: { children: React.ReactNode; asChild?: boolean }, ref: React.Ref<HTMLDivElement>) => <div ref={ref} {...props}>{children}</div>),
+  TooltipTrigger: Object.assign(
+    React.forwardRef(function TooltipTrigger({ children, ...props }: { children: React.ReactNode; asChild?: boolean }, ref: React.Ref<HTMLDivElement>) { return <div ref={ref} {...props}>{children}</div>; }),
+    { displayName: 'TooltipTrigger' }
+  ),
   TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
@@ -101,12 +104,8 @@ vi.mock('./_components/repo-detail-panel', () => ({
   RepoDetailPanel: ({ repoKey }: { repoKey: string }) => <div data-testid="detail-panel">{repoKey}</div>,
 }));
 
-let repoDialogsProps: Record<string, unknown> = {};
 vi.mock('./_components/repo-dialogs', () => ({
-  RepoDialogs: (props: Record<string, unknown>) => {
-    repoDialogsProps = props;
-    return null;
-  },
+  RepoDialogs: () => null,
 }));
 
 describe('RepositoriesPage - create mutation callbacks', () => {
@@ -114,7 +113,7 @@ describe('RepositoriesPage - create mutation callbacks', () => {
     mutationConfigs.length = 0;
     useQueryCallIndex = 0;
     repoListItemCalls = [];
-    repoDialogsProps = {};
+
     vi.clearAllMocks();
   });
 
@@ -187,7 +186,7 @@ describe('RepositoriesPage - rendering', () => {
     mutationConfigs.length = 0;
     useQueryCallIndex = 0;
     repoListItemCalls = [];
-    repoDialogsProps = {};
+
     vi.clearAllMocks();
   });
 
