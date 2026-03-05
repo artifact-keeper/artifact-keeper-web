@@ -182,6 +182,8 @@ export interface PaginatedResponse<T> {
 export interface HealthResponse {
   status: string;
   version: string;
+  commit?: string;
+  dirty?: boolean;
   checks: {
     database: { status: string; message?: string };
     storage: { status: string; message?: string };

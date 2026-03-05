@@ -16,6 +16,8 @@ FROM node-base AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
