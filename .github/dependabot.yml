@@ -23,6 +23,13 @@ updates:
     commit-message:
       prefix: "chore"
     open-pull-requests-limit: 10
+    ignore:
+      # eslint v10 not compatible with eslint-plugin-react, eslint-plugin-import,
+      # eslint-plugin-jsx-a11y, or eslint-config-next as of March 2026.
+      # Remove this once upstream plugins release v10-compatible versions.
+      # Tracking: https://github.com/jsx-eslint/eslint-plugin-react/issues/3977
+      - dependency-name: "eslint"
+        versions: [">=10.0.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
