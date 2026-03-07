@@ -1,11 +1,22 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
+import { execSync } from "child_process";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
+
+function getGitSha(): string {
+  if (process.env.GIT_SHA) return process.env.GIT_SHA;
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_GIT_SHA: getGitSha(),
   },
   output: "standalone",
   devIndicators: false,
