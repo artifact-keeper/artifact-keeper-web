@@ -112,9 +112,27 @@ export default function SettingsPage() {
               />
               <Separator />
               <SettingRow
-                label="Version"
-                value={health?.version ?? "..."}
+                label="Server Version"
+                value={
+                  health?.version
+                    ? health.dirty && health.commit
+                      ? `${health.version} (${health.commit.slice(0, 7)})`
+                      : health.version
+                    : "..."
+                }
                 description="Current Artifact Keeper server version."
+              />
+              <Separator />
+              <SettingRow
+                label="Web Version"
+                value={
+                  process.env.NEXT_PUBLIC_APP_VERSION?.includes("-") &&
+                  process.env.NEXT_PUBLIC_GIT_SHA &&
+                  process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
+                    ? `${process.env.NEXT_PUBLIC_APP_VERSION} (${process.env.NEXT_PUBLIC_GIT_SHA.slice(0, 7)})`
+                    : process.env.NEXT_PUBLIC_APP_VERSION ?? "..."
+                }
+                description="Current web frontend version."
               />
               <Separator />
               <div className="space-y-2">

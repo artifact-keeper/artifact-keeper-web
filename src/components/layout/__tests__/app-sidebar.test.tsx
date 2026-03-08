@@ -148,6 +148,66 @@ describe("AppSidebar", () => {
     expect(versionEl.textContent).toContain("/ Server 1.1.0-rc.8");
   });
 
+  it("shows web git SHA for prerelease versions", () => {
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0-rc.8";
+    process.env.NEXT_PUBLIC_GIT_SHA = "cf1b0d2abc1234567890";
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({ data: undefined });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Web 1\.1\.0-rc\.8/);
+    expect(versionEl.textContent).toContain("(cf1b0d2)");
+  });
+
+  it("hides web git SHA for stable versions", () => {
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
+    process.env.NEXT_PUBLIC_GIT_SHA = "cf1b0d2abc1234567890";
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({ data: undefined });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Web 1\.1\.0/);
+    expect(versionEl.textContent).not.toContain("(cf1b0d2)");
+  });
+
+  it("hides web git SHA when SHA is unknown", () => {
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0-rc.8";
+    process.env.NEXT_PUBLIC_GIT_SHA = "unknown";
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({ data: undefined });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Web 1\.1\.0-rc\.8/);
+    expect(versionEl.textContent).not.toContain("(unknown)");
+  });
+
+  it("shows server commit hash when dirty", () => {
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({
+      data: { version: "1.1.0-rc.5", dirty: true, commit: "abc1234567890def" },
+    });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Server 1\.1\.0-rc\.5/);
+    expect(versionEl.textContent).toContain("(abc1234)");
+  });
+
+  it("hides server commit hash when not dirty", () => {
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({
+      data: { version: "1.1.0-rc.5", dirty: false, commit: "abc1234567890def" },
+    });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Server 1\.1\.0-rc\.5/);
+    expect(versionEl.textContent).not.toContain("(abc1234)");
+  });
+
   it("does not fetch health when unauthenticated", () => {
     authState({ isAuthenticated: false });
 

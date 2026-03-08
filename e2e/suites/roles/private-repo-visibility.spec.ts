@@ -63,10 +63,12 @@ test.describe('Private repository visibility (anonymous)', () => {
     expect(resp.status()).toBe(200);
   });
 
-  test('native format endpoint for private repo returns 404', async ({ request }) => {
-    // PyPI simple index should be blocked for private repos
+  test('native format endpoint for private repo is blocked', async ({ request }) => {
+    // PyPI simple index should be blocked for private repos.
+    // Native format handlers authenticate before checking repo visibility,
+    // so they return 401 (not 404) for unauthenticated requests.
     const resp = await request.get('/pypi/e2e-private-pypi/simple/');
-    expect(resp.status()).toBe(404);
+    expect(resp.status()).toBe(401);
   });
 
   test('native format endpoint for public repo succeeds', async ({ request }) => {
