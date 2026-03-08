@@ -401,7 +401,7 @@ function PackageDetailView({
               <ResizablePanel defaultSize={65} minSize={40}>
                 <FileViewer
                   repositoryKey={repositoryKey}
-                  filePath={selectedFile.path}
+                  filePath={stripRepoPrefix(selectedFile.path, repositoryKey)}
                   fileName={selectedFile.name}
                   fileSize={selectedFile.metadata?.artifact?.size_bytes}
                   onClose={() => setSelectedFile(null)}
@@ -435,6 +435,14 @@ function PackageDetailView({
       </Tabs>
     </div>
   );
+}
+
+/** Strip the repository key prefix from tree node paths.
+ *  Tree nodes include the repo key (e.g. "maven-releases/com/example/lib.jar")
+ *  but the backend APIs expect paths without it ("com/example/lib.jar"). */
+function stripRepoPrefix(path: string, repoKey: string): string {
+  const prefix = repoKey + "/";
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 function MetadataItem({ label, value }: { label: string; value: string }) {
