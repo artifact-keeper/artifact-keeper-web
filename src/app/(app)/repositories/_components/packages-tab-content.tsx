@@ -34,6 +34,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { FileTree } from "@/components/package/file-tree";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { FileViewer } from "@/components/package/file-viewer";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { TreeNode } from "@/types/tree";
 import { PackageDependencies } from "./package-dependencies";
 import { PackageMetadataViewer } from "./package-metadata-viewer";
 
@@ -226,6 +234,7 @@ function PackageDetailView({
   repositoryFormat: string;
   onBack: () => void;
 }) {
+  const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
   const installCmd = getInstallCommand(pkg.name, pkg.version, repositoryFormat);
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
@@ -372,10 +381,40 @@ function PackageDetailView({
 
         {/* Files */}
         <TabsContent value="files" className="mt-4">
-          <FileTree
-            repositoryKey={repositoryKey}
-            rootPath={pkg.name}
-          />
+          {selectedFile ? (
+            <ResizablePanelGroup
+              orientation="horizontal"
+              className="border rounded-lg overflow-hidden"
+              style={{ height: "calc(100vh - 20rem)" }}
+            >
+              <ResizablePanel defaultSize={35} minSize={20} maxSize={50}>
+                <ScrollArea className="h-full">
+                  <FileTree
+                    repositoryKey={repositoryKey}
+                    rootPath={pkg.name}
+                    onFileSelect={setSelectedFile}
+                    selectedPath={selectedFile.path}
+                  />
+                </ScrollArea>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={65} minSize={40}>
+                <FileViewer
+                  repositoryKey={repositoryKey}
+                  filePath={stripRepoPrefix(selectedFile.path, repositoryKey)}
+                  fileName={selectedFile.name}
+                  fileSize={selectedFile.metadata?.artifact?.size_bytes}
+                  onClose={() => setSelectedFile(null)}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          ) : (
+            <FileTree
+              repositoryKey={repositoryKey}
+              rootPath={pkg.name}
+              onFileSelect={setSelectedFile}
+            />
+          )}
         </TabsContent>
 
         {/* Dependencies */}
@@ -396,6 +435,14 @@ function PackageDetailView({
       </Tabs>
     </div>
   );
+}
+
+/** Strip the repository key prefix from tree node paths.
+ *  Tree nodes include the repo key (e.g. "maven-releases/com/example/lib.jar")
+ *  but the backend APIs expect paths without it ("com/example/lib.jar"). */
+function stripRepoPrefix(path: string, repoKey: string): string {
+  const prefix = repoKey + "/";
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 function MetadataItem({ label, value }: { label: string; value: string }) {
