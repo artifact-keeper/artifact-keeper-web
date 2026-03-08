@@ -5,12 +5,6 @@ import { createHighlighter } from "shiki";
 // Mock shiki to avoid loading the real highlighter (heavy dependency)
 // ---------------------------------------------------------------------------
 
-const mockHighlighter = {
-  codeToHtml: vi.fn().mockReturnValue("<pre>highlighted</pre>"),
-  getLoadedLanguages: vi.fn().mockReturnValue(["javascript"]),
-  loadLanguage: vi.fn().mockResolvedValue(undefined),
-};
-
 vi.mock("shiki", () => ({
   createHighlighter: vi.fn().mockResolvedValue({
     codeToHtml: vi.fn().mockReturnValue("<pre>highlighted</pre>"),
@@ -85,12 +79,12 @@ describe("shiki highlighter singleton", () => {
 
   it("returns a fresh instance after module reset", async () => {
     const mod1 = await import("../shiki");
-    const h1 = await mod1.getHighlighter();
+    await mod1.getHighlighter();
 
     vi.resetModules();
 
     const mod2 = await import("../shiki");
-    const h2 = await mod2.getHighlighter();
+    await mod2.getHighlighter();
 
     // After module reset, createHighlighter is called again (new module scope)
     expect(createHighlighter).toHaveBeenCalledTimes(2);
