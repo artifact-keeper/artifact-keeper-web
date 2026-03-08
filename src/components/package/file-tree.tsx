@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { treeApi } from "@/lib/api/tree";
-import { formatBytes } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 import type { TreeNode } from "@/types/tree";
 
 // ---- Helpers ----
@@ -78,10 +78,14 @@ function TreeNodeRow({
   node,
   repositoryKey,
   depth,
+  onFileSelect,
+  selectedPath,
 }: {
   node: TreeNode;
   repositoryKey: string;
   depth: number;
+  onFileSelect?: (node: TreeNode) => void;
+  selectedPath?: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isFolder = isFolderLike(node);
@@ -107,10 +111,15 @@ function TreeNodeRow({
   const paddingLeft = depth * 16 + 8;
 
   if (!isFolder) {
+    const isSelected = selectedPath === node.path;
     return (
-      <div
-        className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 text-sm"
+      <button
+        className={cn(
+          "flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-muted/50 text-sm w-full text-left",
+          isSelected && "bg-muted"
+        )}
         style={{ paddingLeft }}
+        onClick={() => onFileSelect?.(node)}
       >
         {getFileIcon(node)}
         <span className="truncate flex-1">{node.name}</span>
@@ -125,7 +134,7 @@ function TreeNodeRow({
             )}
           </div>
         )}
-      </div>
+      </button>
     );
   }
 
@@ -183,6 +192,8 @@ function TreeNodeRow({
               node={child}
               repositoryKey={repositoryKey}
               depth={depth + 1}
+              onFileSelect={onFileSelect}
+              selectedPath={selectedPath}
             />
           ))}
       </CollapsibleContent>
@@ -195,9 +206,13 @@ function TreeNodeRow({
 export function FileTree({
   repositoryKey,
   rootPath,
+  onFileSelect,
+  selectedPath,
 }: {
   repositoryKey: string;
   rootPath?: string;
+  onFileSelect?: (node: TreeNode) => void;
+  selectedPath?: string | null;
 }) {
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["tree-children", repositoryKey, rootPath ?? "/"],
@@ -238,6 +253,8 @@ export function FileTree({
           node={node}
           repositoryKey={repositoryKey}
           depth={0}
+          onFileSelect={onFileSelect}
+          selectedPath={selectedPath}
         />
       ))}
     </div>
