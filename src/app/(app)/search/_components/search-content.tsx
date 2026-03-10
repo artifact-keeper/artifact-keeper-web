@@ -50,8 +50,14 @@ type ViewMode = "list" | "grid";
 type SortField = "name" | "created_at" | "size_bytes";
 
 interface PropertyFilter {
+  id: string;
   key: string;
   value: string;
+}
+
+let nextFilterId = 0;
+function makeFilterId() {
+  return `pf-${++nextFilterId}`;
 }
 
 interface PackageSearchValues {
@@ -121,7 +127,7 @@ export function SearchContent() {
     format: "",
   });
   const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([
-    { key: "", value: "" },
+    { id: makeFilterId(), key: "", value: "" },
   ]);
   const [gavcValues, setGavcValues] = useState<GavcSearchValues>({
     groupId: "",
@@ -275,7 +281,7 @@ export function SearchContent() {
 
   // Property filter helpers
   const addPropertyFilter = useCallback(() => {
-    setPropertyFilters((prev) => [...prev, { key: "", value: "" }]);
+    setPropertyFilters((prev) => [...prev, { id: makeFilterId(), key: "", value: "" }]);
   }, []);
 
   const removePropertyFilter = useCallback((index: number) => {
@@ -426,7 +432,7 @@ export function SearchContent() {
             <TabsContent value="property">
               <div className="space-y-3">
                 {propertyFilters.map((filter, index) => (
-                  <div key={`prop-filter-${index}`} className="flex items-end gap-3">
+                  <div key={filter.id} className="flex items-end gap-3">
                     <div className="flex-1 space-y-1.5">
                       <label htmlFor={`prop-key-${index}`} className="text-sm font-medium">
                         Property Key
@@ -745,26 +751,15 @@ export function SearchContent() {
             {!loading && sortedResults.length > 0 && viewMode === "grid" && (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {sortedResults.map((result) => (
-                  <div
+                  <button
                     key={result.id}
-                    className="group cursor-pointer rounded-lg border p-4 transition-colors hover:bg-muted/50"
-                    role="button"
-                    tabIndex={0}
+                    type="button"
+                    className="group cursor-pointer rounded-lg border p-4 transition-colors hover:bg-muted/50 text-left w-full"
                     onClick={() => {
                       if (result.repository_key && result.path) {
                         router.push(
                           `/repositories/${result.repository_key}?path=${encodeURIComponent(result.path)}`
                         );
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        if (result.repository_key && result.path) {
-                          router.push(
-                            `/repositories/${result.repository_key}?path=${encodeURIComponent(result.path)}`
-                          );
-                        }
                       }
                     }}
                   >
@@ -806,7 +801,7 @@ export function SearchContent() {
                         {formatBytes(result.size_bytes)}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}

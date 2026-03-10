@@ -113,8 +113,8 @@ function HealthCard({
 function HealthSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Skeleton key={`health-skeleton-${i}`} className="h-[72px] rounded-xl" />
+      {["a", "b", "c", "d", "e"].map((id) => (
+        <Skeleton key={id} className="h-[72px] rounded-xl" />
       ))}
     </div>
   );
@@ -123,8 +123,8 @@ function HealthSkeleton() {
 function StatsSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={`stat-skeleton-${i}`} className="h-[100px] rounded-xl" />
+      {["a", "b", "c", "d"].map((id) => (
+        <Skeleton key={id} className="h-[100px] rounded-xl" />
       ))}
     </div>
   );
@@ -133,8 +133,8 @@ function StatsSkeleton() {
 function TableSkeleton() {
   return (
     <div className="space-y-3 px-6">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Skeleton key={`table-skeleton-${i}`} className="h-10 rounded-md" />
+      {["a", "b", "c", "d", "e"].map((id) => (
+        <Skeleton key={id} className="h-10 rounded-md" />
       ))}
     </div>
   );
