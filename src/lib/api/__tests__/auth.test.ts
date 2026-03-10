@@ -76,4 +76,27 @@ describe("authApi", () => {
     const result = await authApi.getCurrentUser();
     expect(result).toEqual(mockUser);
   });
+
+  // --- Error paths for logout, refreshToken, getCurrentUser ---
+
+  it("logout throws on SDK error", async () => {
+    mockLogout.mockResolvedValue({ error: "session expired" });
+
+    const { authApi } = await import("../auth");
+    await expect(authApi.logout()).rejects.toBe("session expired");
+  });
+
+  it("refreshToken throws on SDK error", async () => {
+    mockRefreshToken.mockResolvedValue({ data: undefined, error: "token invalid" });
+
+    const { authApi } = await import("../auth");
+    await expect(authApi.refreshToken()).rejects.toBe("token invalid");
+  });
+
+  it("getCurrentUser throws on SDK error", async () => {
+    mockGetCurrentUser.mockResolvedValue({ data: undefined, error: "unauthorized" });
+
+    const { authApi } = await import("../auth");
+    await expect(authApi.getCurrentUser()).rejects.toBe("unauthorized");
+  });
 });
