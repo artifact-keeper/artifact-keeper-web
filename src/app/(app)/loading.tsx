@@ -12,7 +12,7 @@ export default function AppLoading() {
       {/* Stats row skeleton */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[100px] rounded-xl" />
+          <Skeleton key={`skeleton-${i}`} className="h-[100px] rounded-xl" />
         ))}
       </div>
 
@@ -21,7 +21,7 @@ export default function AppLoading() {
         <Skeleton className="h-10 rounded-t-xl rounded-b-none" />
         <div className="space-y-3 p-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 rounded-md" />
+            <Skeleton key={`skeleton-${i}`} className="h-10 rounded-md" />
           ))}
         </div>
       </div>

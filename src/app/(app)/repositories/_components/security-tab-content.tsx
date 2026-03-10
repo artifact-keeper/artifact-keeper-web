@@ -692,6 +692,12 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 /**
  * Status bar showing whether the Dependency-Track integration is connected.
  */
+function dtConnectionLabel(connected: boolean, enabled: boolean): string {
+  if (connected) return "Connected";
+  if (!enabled) return "Disabled";
+  return "Unhealthy";
+}
+
 function DtIntegrationStatusBar({
   enabled,
   healthy,
@@ -719,7 +725,7 @@ function DtIntegrationStatusBar({
             variant="outline"
             className={`text-xs ${connected ? "text-green-600 bg-green-100 dark:bg-green-950/40" : "text-red-600 bg-red-100 dark:bg-red-950/40"}`}
           >
-            {connected ? "Connected" : !enabled ? "Disabled" : "Unhealthy"}
+            {dtConnectionLabel(connected, enabled)}
           </Badge>
           {projectLinked && (
             <Badge variant="outline" className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-950/40">

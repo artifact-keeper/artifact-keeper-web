@@ -14,6 +14,16 @@
  *  6. Anything else falls back to the provided default message
  */
 
+/** Return the value if it is a non-empty string, otherwise undefined. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** Check whether a value is a non-null object (not an array). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Extract a human-readable message from an unknown thrown value.
  *
@@ -30,29 +40,25 @@ export function toUserMessage(error: unknown, fallback: string): string {
     return error.message;
   }
 
-  if (error && typeof error === 'object') {
-    const obj = error as Record<string, unknown>;
+  if (!isPlainObject(error)) {
+    return fallback;
+  }
 
-    // SDK errors often carry { error: "some message" }
-    if (typeof obj.error === 'string' && obj.error.length > 0) {
-      return obj.error;
-    }
+  // SDK errors often carry { error: "some message" }
+  const errorField = nonEmptyString(error.error);
+  if (errorField) return errorField;
 
-    // Some SDK responses use { message: "..." }
-    if (typeof obj.message === 'string' && obj.message.length > 0) {
-      return obj.message;
-    }
+  // Some SDK responses use { message: "..." }
+  const messageField = nonEmptyString(error.message);
+  if (messageField) return messageField;
 
-    // Wrapped HTTP errors: { body: { message: "..." } } or { body: { error: "..." } }
-    if (obj.body && typeof obj.body === 'object') {
-      const body = obj.body as Record<string, unknown>;
-      if (typeof body.message === 'string' && body.message.length > 0) {
-        return body.message;
-      }
-      if (typeof body.error === 'string' && body.error.length > 0) {
-        return body.error;
-      }
-    }
+  // Wrapped HTTP errors: { body: { message: "..." } } or { body: { error: "..." } }
+  if (isPlainObject(error.body)) {
+    const bodyMessage = nonEmptyString(error.body.message);
+    if (bodyMessage) return bodyMessage;
+
+    const bodyError = nonEmptyString(error.body.error);
+    if (bodyError) return bodyError;
   }
 
   return fallback;

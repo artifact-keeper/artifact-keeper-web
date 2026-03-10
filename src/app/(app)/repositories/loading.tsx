@@ -21,7 +21,7 @@ export default function RepositoriesLoading() {
       {/* Repository list */}
       <div className="space-y-2">
         {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 rounded-lg" />
+          <Skeleton key={`skeleton-${i}`} className="h-16 rounded-lg" />
         ))}
       </div>
     </div>

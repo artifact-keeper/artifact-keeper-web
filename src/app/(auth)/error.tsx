@@ -13,10 +13,10 @@ import {
 export default function AuthError({
   error,
   reset,
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   useEffect(() => {
     console.error("Auth route error:", error);
   }, [error]);

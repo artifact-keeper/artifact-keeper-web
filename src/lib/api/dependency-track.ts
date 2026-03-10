@@ -59,7 +59,7 @@ const dtApi = {
   getProjectMetricsHistory: async (projectUuid: string, days?: number): Promise<DtProjectMetrics[]> => {
     const { data, error } = await sdkGetProjectMetricsHistory({
       path: { project_uuid: projectUuid },
-      query: days !== undefined ? { days } as never : undefined,
+      query: days === undefined ? undefined : { days } as never,
     });
     if (error) throw error;
     return data as never;

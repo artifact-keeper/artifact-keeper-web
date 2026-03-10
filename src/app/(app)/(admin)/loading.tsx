@@ -11,7 +11,7 @@ export default function AdminLoading() {
         <Skeleton className="h-10 rounded-t-xl rounded-b-none" />
         <div className="space-y-3 p-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 rounded-md" />
+            <Skeleton key={`skeleton-${i}`} className="h-10 rounded-md" />
           ))}
         </div>
       </div>

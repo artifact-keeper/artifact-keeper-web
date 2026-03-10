@@ -10,7 +10,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   // Build headers with defaults first so caller values take precedence.
   const headers = new Headers({ 'Content-Type': 'application/json' });
-  const incoming = new Headers(callerHeaders as HeadersInit | undefined);
+  const incoming = new Headers(callerHeaders);
   incoming.forEach((value, key) => {
     headers.set(key, value);
   });

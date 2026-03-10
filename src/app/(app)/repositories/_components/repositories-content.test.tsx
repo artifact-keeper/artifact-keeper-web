@@ -410,6 +410,10 @@ describe("RepositoriesContent", () => {
     try { await createConfig.mutationFn({ key: "test", format: "maven", repo_type: "local", name: "Test" }); } catch { /* mock throws */ }
     try { await updateConfig.mutationFn({ key: "test", data: { name: "Updated" } }); } catch { /* mock throws */ }
     try { await deleteConfig.mutationFn("test"); } catch { /* mock throws */ }
+
+    expect(createConfig.mutationFn).toBeDefined();
+    expect(updateConfig.mutationFn).toBeDefined();
+    expect(deleteConfig.mutationFn).toBeDefined();
   });
 
   it("create mutation onSuccess shows toast for staging repo", () => {

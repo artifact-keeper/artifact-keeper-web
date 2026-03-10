@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 export default function AppError({
   error,
   reset,
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   useEffect(() => {
     console.error("App route error:", error);
   }, [error]);

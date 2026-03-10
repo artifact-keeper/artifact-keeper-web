@@ -58,8 +58,8 @@ export function RepositoriesContent() {
 
   // selection — initialize from URL if present
   const [selectedKey, setSelectedKey] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URL(window.location.href).searchParams.get("selected");
+    if (typeof globalThis.window === "undefined") return null;
+    return new URL(globalThis.window.location.href).searchParams.get("selected");
   });
 
   // dialog state
@@ -122,9 +122,9 @@ export function RepositoriesContent() {
       // If the key was renamed, update the selected key and URL
       if (updatedRepo.key !== originalKey && selectedKey === originalKey) {
         setSelectedKey(updatedRepo.key);
-        const url = new URL(window.location.href);
+        const url = new URL(globalThis.window.location.href);
         url.searchParams.set("selected", updatedRepo.key);
-        window.history.replaceState(null, "", url.toString());
+        globalThis.window.history.replaceState(null, "", url.toString());
       }
       toast.success("Repository updated");
     },
@@ -155,9 +155,9 @@ export function RepositoriesContent() {
       } else {
         setSelectedKey(repo.key);
         // Sync to URL without navigation
-        const url = new URL(window.location.href);
+        const url = new URL(globalThis.window.location.href);
         url.searchParams.set("selected", repo.key);
-        window.history.replaceState(null, "", url.toString());
+        globalThis.window.history.replaceState(null, "", url.toString());
       }
     },
     [isMobile, router]
@@ -304,21 +304,23 @@ export function RepositoriesContent() {
 
       {/* Repository list */}
       <ScrollArea className="flex-1">
-        {isLoading ? (
+        {isLoading && (
           <div className="p-3 space-y-2" role="status" aria-live="polite" aria-busy="true">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="space-y-1.5 px-3 py-2.5">
+              <div key={`skeleton-${i}`} className="space-y-1.5 px-3 py-2.5">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        )}
+        {!isLoading && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Package className="size-8 mb-2 opacity-50" />
             <p className="text-sm">No repositories found.</p>
           </div>
-        ) : (
+        )}
+        {!isLoading && filtered.length > 0 && (
           <div className="divide-y">
             {filtered.map((repo) => (
               <RepoListItem

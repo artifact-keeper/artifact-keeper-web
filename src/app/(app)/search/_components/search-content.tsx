@@ -345,8 +345,9 @@ export function SearchContent() {
             <TabsContent value="package">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Package Name</label>
+                  <label htmlFor="search-package-name" className="text-sm font-medium">Package Name</label>
                   <Input
+                    id="search-package-name"
                     placeholder="e.g., react, lodash"
                     value={packageValues.name}
                     onChange={(e) =>
@@ -356,8 +357,9 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Version</label>
+                  <label htmlFor="search-package-version" className="text-sm font-medium">Version</label>
                   <Input
+                    id="search-package-version"
                     placeholder="e.g., 1.0.0, ^2.0"
                     value={packageValues.version}
                     onChange={(e) =>
@@ -370,7 +372,7 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Repository</label>
+                  <label htmlFor="search-package-repository" className="text-sm font-medium">Repository</label>
                   <Select
                     value={packageValues.repository}
                     onValueChange={(val) =>
@@ -380,7 +382,7 @@ export function SearchContent() {
                       }))
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="search-package-repository" className="w-full">
                       <SelectValue placeholder="All repositories" />
                     </SelectTrigger>
                     <SelectContent>
@@ -394,7 +396,7 @@ export function SearchContent() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Format</label>
+                  <label htmlFor="search-package-format" className="text-sm font-medium">Format</label>
                   <Select
                     value={packageValues.format}
                     onValueChange={(val) =>
@@ -404,7 +406,7 @@ export function SearchContent() {
                       }))
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="search-package-format" className="w-full">
                       <SelectValue placeholder="All formats" />
                     </SelectTrigger>
                     <SelectContent>
@@ -424,12 +426,13 @@ export function SearchContent() {
             <TabsContent value="property">
               <div className="space-y-3">
                 {propertyFilters.map((filter, index) => (
-                  <div key={index} className="flex items-end gap-3">
+                  <div key={`prop-filter-${index}`} className="flex items-end gap-3">
                     <div className="flex-1 space-y-1.5">
-                      <label className="text-sm font-medium">
+                      <label htmlFor={`prop-key-${index}`} className="text-sm font-medium">
                         Property Key
                       </label>
                       <Input
+                        id={`prop-key-${index}`}
                         placeholder="e.g., build.number"
                         value={filter.key}
                         onChange={(e) =>
@@ -439,10 +442,11 @@ export function SearchContent() {
                       />
                     </div>
                     <div className="flex-1 space-y-1.5">
-                      <label className="text-sm font-medium">
+                      <label htmlFor={`prop-value-${index}`} className="text-sm font-medium">
                         Property Value
                       </label>
                       <Input
+                        id={`prop-value-${index}`}
                         placeholder="e.g., 42"
                         value={filter.value}
                         onChange={(e) =>
@@ -480,8 +484,9 @@ export function SearchContent() {
             <TabsContent value="gavc">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Group ID</label>
+                  <label htmlFor="search-gavc-group" className="text-sm font-medium">Group ID</label>
                   <Input
+                    id="search-gavc-group"
                     placeholder="e.g., org.apache.maven"
                     value={gavcValues.groupId}
                     onChange={(e) =>
@@ -494,8 +499,9 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Artifact ID</label>
+                  <label htmlFor="search-gavc-artifact" className="text-sm font-medium">Artifact ID</label>
                   <Input
+                    id="search-gavc-artifact"
                     placeholder="e.g., maven-core"
                     value={gavcValues.artifactId}
                     onChange={(e) =>
@@ -508,8 +514,9 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Version</label>
+                  <label htmlFor="search-gavc-version" className="text-sm font-medium">Version</label>
                   <Input
+                    id="search-gavc-version"
                     placeholder="e.g., 3.9.0"
                     value={gavcValues.version}
                     onChange={(e) =>
@@ -522,8 +529,9 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Classifier</label>
+                  <label htmlFor="search-gavc-classifier" className="text-sm font-medium">Classifier</label>
                   <Input
+                    id="search-gavc-classifier"
                     placeholder="e.g., sources, javadoc"
                     value={gavcValues.classifier}
                     onChange={(e) =>
@@ -542,8 +550,9 @@ export function SearchContent() {
             <TabsContent value="checksum">
               <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Checksum Value</label>
+                  <label htmlFor="search-checksum-value" className="text-sm font-medium">Checksum Value</label>
                   <Input
+                    id="search-checksum-value"
                     placeholder="Enter SHA-256, SHA-1, or MD5 checksum"
                     value={checksumValues.value}
                     onChange={(e) =>
@@ -557,7 +566,7 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Algorithm</label>
+                  <label htmlFor="search-checksum-algorithm" className="text-sm font-medium">Algorithm</label>
                   <Select
                     value={checksumValues.type}
                     onValueChange={(val) =>
@@ -567,7 +576,7 @@ export function SearchContent() {
                       }))
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger id="search-checksum-algorithm" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

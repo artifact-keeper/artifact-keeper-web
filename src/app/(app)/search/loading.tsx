@@ -16,7 +16,7 @@ export default function SearchLoading() {
       {/* Results */}
       <div className="space-y-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 rounded-lg" />
+          <Skeleton key={`skeleton-${i}`} className="h-20 rounded-lg" />
         ))}
       </div>
     </div>

@@ -93,10 +93,10 @@ function getFormatBadgeClass(format: string): string {
 function HealthCard({
   label,
   status,
-}: {
+}: Readonly<{
   label: string;
   status: string | undefined;
-}) {
+}>) {
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
       {healthIcon(status)}
@@ -114,7 +114,7 @@ function HealthSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {Array.from({ length: 5 }).map((_, i) => (
-        <Skeleton key={i} className="h-[72px] rounded-xl" />
+        <Skeleton key={`health-skeleton-${i}`} className="h-[72px] rounded-xl" />
       ))}
     </div>
   );
@@ -124,7 +124,7 @@ function StatsSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={i} className="h-[100px] rounded-xl" />
+        <Skeleton key={`stat-skeleton-${i}`} className="h-[100px] rounded-xl" />
       ))}
     </div>
   );
@@ -134,13 +134,13 @@ function TableSkeleton() {
   return (
     <div className="space-y-3 px-6">
       {Array.from({ length: 5 }).map((_, i) => (
-        <Skeleton key={i} className="h-10 rounded-md" />
+        <Skeleton key={`table-skeleton-${i}`} className="h-10 rounded-md" />
       ))}
     </div>
   );
 }
 
-function RepoRow({ repo }: { repo: Repository }) {
+function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
   return (
     <TableRow>
       <TableCell>
@@ -189,7 +189,7 @@ const SEVERITY_TEXT_COLORS: Record<string, string> = {
   low: "text-blue-600 dark:text-blue-400",
 };
 
-function SeverityBreakdown({ trends }: { trends: CveTrends }) {
+function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
   const counts = {
     critical: trends.critical_count,
     high: trends.high_count,
@@ -358,9 +358,8 @@ export function DashboardContent() {
           <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Statistics
           </h2>
-          {statsLoading ? (
-            <StatsSkeleton />
-          ) : stats ? (
+          {statsLoading && <StatsSkeleton />}
+          {!statsLoading && stats && (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatCard
                 icon={Database}
@@ -390,7 +389,8 @@ export function DashboardContent() {
                 color="yellow"
               />
             </div>
-          ) : (
+          )}
+          {!statsLoading && !stats && (
             <div className="rounded-lg border bg-destructive/5 px-4 py-3 text-sm text-destructive">
               Failed to load admin statistics.
             </div>
@@ -404,9 +404,8 @@ export function DashboardContent() {
           <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Security Overview
           </h2>
-          {cveTrendsLoading ? (
-            <StatsSkeleton />
-          ) : cveTrends ? (
+          {cveTrendsLoading && <StatsSkeleton />}
+          {!cveTrendsLoading && cveTrends && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatCard
@@ -447,7 +446,8 @@ export function DashboardContent() {
                 </Card>
               )}
             </div>
-          ) : (
+          )}
+          {!cveTrendsLoading && !cveTrends && (
             <div className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
               No CVE data available yet. Generate SBOMs and run security scans to track vulnerabilities.
             </div>
@@ -468,9 +468,8 @@ export function DashboardContent() {
             </Button>
           </CardAction>
         </CardHeader>
-        {reposLoading ? (
-          <TableSkeleton />
-        ) : recentRepos && recentRepos.items.length > 0 ? (
+        {reposLoading && <TableSkeleton />}
+        {!reposLoading && recentRepos && recentRepos.items.length > 0 && (
           <CardContent className="px-0">
             <Table>
               <TableHeader>
@@ -488,7 +487,8 @@ export function DashboardContent() {
               </TableBody>
             </Table>
           </CardContent>
-        ) : (
+        )}
+        {!reposLoading && (!recentRepos || recentRepos.items.length === 0) && (
           <CardContent>
             <EmptyState
               icon={Package}
