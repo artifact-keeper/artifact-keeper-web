@@ -44,12 +44,18 @@ vi.mock("@/components/ui/button", () => ({
 
 vi.mock("@/components/ui/select", () => ({
   Select: ({ children, onValueChange, value }: any) => (
-    <div data-testid="select" data-value={value}>{children}</div>
+    <select
+      data-testid="select"
+      value={value}
+      onChange={(e: any) => onValueChange?.(e.target.value)}
+    >
+      {children}
+    </select>
   ),
-  SelectTrigger: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  SelectTrigger: ({ children, ...props }: any) => <>{children}</>,
   SelectValue: () => <span data-testid="select-value" />,
-  SelectContent: ({ children }: any) => <div>{children}</div>,
-  SelectItem: ({ children, value }: any) => <div data-value={value}>{children}</div>,
+  SelectContent: ({ children }: any) => <>{children}</>,
+  SelectItem: ({ children, value }: any) => <option value={value}>{children}</option>,
 }));
 
 vi.mock("@/components/ui/skeleton", () => ({
@@ -400,5 +406,56 @@ describe("DataTable", () => {
 
     // Empty state is shown, but the empty table message is rendered
     expect(screen.getByText("No data found.")).toBeInTheDocument();
+  });
+
+  // ---- Sort fallback for non-string/non-number values ----
+
+  it("returns 0 when sorting values that are neither string nor number", () => {
+    const boolColumns: DataTableColumn<{ id: string; active: boolean }>[] = [
+      {
+        id: "active",
+        header: "Active",
+        accessor: (r) => r.active as unknown as string,
+        sortable: true,
+      },
+    ];
+    const boolData = [
+      { id: "1", active: true },
+      { id: "2", active: false },
+      { id: "3", active: true },
+    ];
+
+    render(<DataTable columns={boolColumns} data={boolData} />);
+
+    fireEvent.click(screen.getByLabelText("Sort by Active"));
+
+    // Should render all 3 rows without error (sort returns 0 for booleans)
+    const cells = screen.getAllByRole("cell");
+    expect(cells).toHaveLength(3);
+  });
+
+  // ---- onPageSizeChange callback ----
+
+  it("calls onPageSizeChange when page size select changes", () => {
+    const handlePageSizeChange = vi.fn();
+
+    render(
+      <DataTable
+        columns={columns}
+        data={testData}
+        total={100}
+        page={1}
+        pageSize={20}
+        onPageChange={vi.fn()}
+        onPageSizeChange={handlePageSizeChange}
+      />
+    );
+
+    const selects = screen.getAllByTestId("select");
+    // The page size select should be the one with value "20"
+    const pageSizeSelect = selects.find((s) => s.getAttribute("value") === "20") ?? selects[0];
+    fireEvent.change(pageSizeSelect, { target: { value: "50" } });
+
+    expect(handlePageSizeChange).toHaveBeenCalledWith(50);
   });
 });
