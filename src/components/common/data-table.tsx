@@ -106,7 +106,8 @@ export function DataTable<T>({
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
+        <span className="sr-only">Loading data</span>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -162,29 +163,42 @@ export function DataTable<T>({
         <Table>
           <TableHeader>
             <TableRow>
-              {columns.map((col) => (
-                <TableHead key={col.id} className={col.headerClassName}>
-                  {col.sortable ? (
-                    <button
-                      className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors -ml-2 px-2 py-1 rounded-md hover:bg-accent"
-                      onClick={() => handleSort(col.id)}
-                    >
-                      {col.header}
-                      {sortColumn === col.id ? (
-                        sortDir === "asc" ? (
-                          <ArrowUp className="size-3.5" />
+              {columns.map((col) => {
+                const isSorted = sortColumn === col.id;
+                const ariaSortValue = col.sortable
+                  ? isSorted
+                    ? sortDir === "asc" ? "ascending" : "descending"
+                    : "none"
+                  : undefined;
+                return (
+                  <TableHead
+                    key={col.id}
+                    className={col.headerClassName}
+                    aria-sort={ariaSortValue}
+                  >
+                    {col.sortable ? (
+                      <button
+                        className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors -ml-2 px-2 py-1 rounded-md hover:bg-accent"
+                        onClick={() => handleSort(col.id)}
+                        aria-label={`Sort by ${col.header}`}
+                      >
+                        {col.header}
+                        {isSorted ? (
+                          sortDir === "asc" ? (
+                            <ArrowUp className="size-3.5" />
+                          ) : (
+                            <ArrowDown className="size-3.5" />
+                          )
                         ) : (
-                          <ArrowDown className="size-3.5" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="size-3.5 opacity-40" />
-                      )}
-                    </button>
-                  ) : (
-                    col.header
-                  )}
-                </TableHead>
-              ))}
+                          <ArrowUpDown className="size-3.5 opacity-40" />
+                        )}
+                      </button>
+                    ) : (
+                      col.header
+                    )}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -193,6 +207,18 @@ export function DataTable<T>({
                 key={rowKey ? rowKey(row) : i}
                 className={cn(onRowClick && "cursor-pointer")}
                 onClick={() => onRowClick?.(row)}
+                {...(onRowClick
+                  ? {
+                      role: "button",
+                      tabIndex: 0,
+                      onKeyDown: (e: React.KeyboardEvent<HTMLTableRowElement>) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      },
+                    }
+                  : {})}
               >
                 {columns.map((col) => (
                   <TableCell key={col.id} className={col.className}>
@@ -241,6 +267,7 @@ export function DataTable<T>({
               size="icon-sm"
               disabled={page <= 1}
               onClick={() => onPageChange?.(page - 1)}
+              aria-label="Previous page"
             >
               <ChevronLeft className="size-4" />
             </Button>
@@ -252,6 +279,7 @@ export function DataTable<T>({
               size="icon-sm"
               disabled={page >= totalPages}
               onClick={() => onPageChange?.(page + 1)}
+              aria-label="Next page"
             >
               <ChevronRight className="size-4" />
             </Button>

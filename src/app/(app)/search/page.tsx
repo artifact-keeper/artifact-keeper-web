@@ -465,6 +465,7 @@ function SearchContent() {
                         size="icon"
                         onClick={() => removePropertyFilter(index)}
                         className="shrink-0"
+                        aria-label="Remove filter"
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -639,6 +640,7 @@ function SearchContent() {
                     size="icon-sm"
                     onClick={() => setViewMode("list")}
                     className="rounded-r-none"
+                    aria-label="List view"
                   >
                     <LayoutList className="size-4" />
                   </Button>
@@ -647,6 +649,7 @@ function SearchContent() {
                     size="icon-sm"
                     onClick={() => setViewMode("grid")}
                     className="rounded-l-none"
+                    aria-label="Grid view"
                   >
                     <LayoutGrid className="size-4" />
                   </Button>
@@ -726,6 +729,7 @@ function SearchContent() {
                             e.stopPropagation();
                             handleDownload(result);
                           }}
+                          aria-label={`Download ${result.name}`}
                         >
                           <Download className="size-3.5" />
                         </Button>
@@ -781,6 +785,7 @@ function SearchContent() {
                           e.stopPropagation();
                           handleDownload(result);
                         }}
+                        aria-label={`Download ${result.name}`}
                       >
                         <Download className="size-3" />
                       </Button>

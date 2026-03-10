@@ -317,7 +317,7 @@ export default function RepositoriesPage() {
       {/* Repository list */}
       <ScrollArea className="flex-1">
         {isLoading ? (
-          <div className="p-3 space-y-2">
+          <div className="p-3 space-y-2" role="status" aria-live="polite" aria-busy="true">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="space-y-1.5 px-3 py-2.5">
                 <Skeleton className="h-4 w-3/4" />
@@ -359,6 +359,7 @@ export default function RepositoriesPage() {
               size="icon-xs"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
+              aria-label="Previous page"
             >
               &lt;
             </Button>
@@ -367,6 +368,7 @@ export default function RepositoriesPage() {
               size="icon-xs"
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
+              aria-label="Next page"
             >
               &gt;
             </Button>
@@ -395,6 +397,7 @@ export default function RepositoriesPage() {
                 onClick={() =>
                   queryClient.invalidateQueries({ queryKey: ["repositories"] })
                 }
+                aria-label="Refresh repositories"
               >
                 <RefreshCw
                   className={`size-4 ${isFetching ? "animate-spin" : ""}`}
