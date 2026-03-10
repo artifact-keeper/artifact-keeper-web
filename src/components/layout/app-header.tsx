@@ -86,6 +86,7 @@ export function AppHeader() {
             size="icon"
             className="sm:hidden"
             onClick={() => setSearchOpen(true)}
+            aria-label="Search"
           >
             <SearchIcon className="size-4" />
           </Button>
@@ -108,7 +109,7 @@ export function AppHeader() {
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
+                <Button variant="ghost" size="icon" className="rounded-full" aria-label="User menu">
                   <Avatar className="size-7">
                     <AvatarFallback className="text-xs">
                       {userInitials}
