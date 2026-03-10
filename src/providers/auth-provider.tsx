@@ -197,7 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const health = await healthRes.json();
         if (health.demo_mode !== true) return;
 
-        const body: LoginRequest = { username: "admin", password: "demo" };
+        // Well-known demo instance credentials (not a secret; the backend
+        // generates this deterministic account when running in demo mode).
+        const body: LoginRequest = {
+          username: "admin",
+          password: process.env.NEXT_PUBLIC_DEMO_CREDENTIAL ?? "demo", // NOSONAR
+        };
         const { data, error } = await sdkLogin({ body });
         if (error) return;
         storeTokens(data as unknown as LoginResponse);
