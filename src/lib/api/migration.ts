@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listConnections as sdkListConnections,
@@ -39,21 +38,22 @@ export const migrationApi = {
   listConnections: async (): Promise<SourceConnection[]> => {
     const { data, error } = await sdkListConnections();
     if (error) throw error;
-    return (data as any)?.items ?? (data as any);
+    const response = data as unknown as { items?: SourceConnection[] };
+    return response?.items ?? (data as unknown as SourceConnection[]);
   },
 
   createConnection: async (
     reqData: CreateConnectionRequest
   ): Promise<SourceConnection> => {
-    const { data, error } = await sdkCreateConnection({ body: reqData as any });
+    const { data, error } = await sdkCreateConnection({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getConnection: async (id: string): Promise<SourceConnection> => {
     const { data, error } = await sdkGetConnection({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteConnection: async (id: string): Promise<void> => {
@@ -64,7 +64,7 @@ export const migrationApi = {
   testConnection: async (id: string): Promise<ConnectionTestResult> => {
     const { data, error } = await sdkTestConnection({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   listSourceRepositories: async (
@@ -72,7 +72,8 @@ export const migrationApi = {
   ): Promise<SourceRepository[]> => {
     const { data, error } = await sdkListSourceRepositories({ path: { id: connectionId } });
     if (error) throw error;
-    return (data as any)?.items ?? (data as any);
+    const response = data as unknown as { items?: SourceRepository[] };
+    return response?.items ?? (data as unknown as SourceRepository[]);
   },
 
   // Migration Jobs
@@ -81,23 +82,23 @@ export const migrationApi = {
     page?: number;
     per_page?: number;
   }): Promise<PaginatedResponse<MigrationJob>> => {
-    const { data, error } = await sdkListMigrations({ query: params as any });
+    const { data, error } = await sdkListMigrations({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   createMigration: async (
     reqData: CreateMigrationRequest
   ): Promise<MigrationJob> => {
-    const { data, error } = await sdkCreateMigration({ body: reqData as any });
+    const { data, error } = await sdkCreateMigration({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getMigration: async (id: string): Promise<MigrationJob> => {
     const { data, error } = await sdkGetMigration({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteMigration: async (id: string): Promise<void> => {
@@ -108,25 +109,25 @@ export const migrationApi = {
   startMigration: async (id: string): Promise<MigrationJob> => {
     const { data, error } = await sdkStartMigration({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   pauseMigration: async (id: string): Promise<MigrationJob> => {
     const { data, error } = await sdkPauseMigration({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   resumeMigration: async (id: string): Promise<MigrationJob> => {
     const { data, error } = await sdkResumeMigration({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   cancelMigration: async (id: string): Promise<MigrationJob> => {
     const { data, error } = await sdkCancelMigration({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   listMigrationItems: async (
@@ -138,40 +139,40 @@ export const migrationApi = {
       per_page?: number;
     }
   ): Promise<PaginatedResponse<MigrationItem>> => {
-    const { data, error } = await sdkListMigrationItems({ path: { id: jobId }, query: params as any });
+    const { data, error } = await sdkListMigrationItems({ path: { id: jobId }, query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getMigrationReport: async (
     jobId: string,
     format: 'json' | 'html' = 'json'
   ): Promise<MigrationReport | string> => {
-    const { data, error } = await sdkGetMigrationReport({ path: { id: jobId }, query: { format } as any });
+    const { data, error } = await sdkGetMigrationReport({ path: { id: jobId }, query: { format } as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   // Assessment
   runAssessment: async (jobId: string): Promise<MigrationJob> => {
     const { data, error } = await sdkRunAssessment({ path: { id: jobId } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getAssessment: async (jobId: string): Promise<AssessmentResult> => {
     const { data, error } = await sdkGetAssessment({ path: { id: jobId } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   // Download/stream tickets
   createStreamTicket: async (jobId: string): Promise<string> => {
     const { data, error } = await sdkCreateDownloadTicket({
-      body: { purpose: 'stream', resource_path: `migration/${jobId}` } as any,
+      body: { purpose: 'stream', resource_path: `migration/${jobId}` } as never,
     });
     if (error) throw error;
-    return (data as any).ticket;
+    return (data as unknown as { ticket: string }).ticket;
   },
 
   // SSE Stream for progress — kept as native EventSource (not SDK)

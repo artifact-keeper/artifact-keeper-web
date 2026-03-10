@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listBuilds as sdkListBuilds,
@@ -24,35 +23,35 @@ export interface ListBuildsParams {
 
 export const buildsApi = {
   list: async (params: ListBuildsParams = {}): Promise<PaginatedResponse<Build>> => {
-    const { data, error } = await sdkListBuilds({ query: params as any });
+    const { data, error } = await sdkListBuilds({ query: params as never });
     if (error) throw error;
-    return data as any as PaginatedResponse<Build>;
+    return data as unknown as PaginatedResponse<Build>;
   },
 
   get: async (buildId: string): Promise<Build> => {
     const { data, error } = await sdkGetBuild({ path: { id: buildId } });
     if (error) throw error;
-    return data as any as Build;
+    return data as unknown as Build;
   },
 
   create: async (data: { name: string; build_number: number; agent?: string; started_at?: string; vcs_url?: string; vcs_revision?: string; vcs_branch?: string; vcs_message?: string; metadata?: Record<string, unknown> }): Promise<Build> => {
-    const { data: result, error } = await sdkCreateBuild({ body: data as any });
+    const { data: result, error } = await sdkCreateBuild({ body: data as never });
     if (error) throw error;
-    return result as any as Build;
+    return result as unknown as Build;
   },
 
   updateStatus: async (buildId: string, data: { status: string; finished_at?: string }): Promise<Build> => {
-    const { data: result, error } = await sdkUpdateBuild({ path: { id: buildId }, body: data as any });
+    const { data: result, error } = await sdkUpdateBuild({ path: { id: buildId }, body: data as never });
     if (error) throw error;
-    return result as any as Build;
+    return result as unknown as Build;
   },
 
   diff: async (buildIdA: string, buildIdB: string): Promise<BuildDiff> => {
     const { data, error } = await getBuildDiff({
-      query: { build_a: buildIdA, build_b: buildIdB } as any,
+      query: { build_a: buildIdA, build_b: buildIdB } as never,
     });
     if (error) throw error;
-    return data as any as BuildDiff;
+    return data as unknown as BuildDiff;
   },
 };
 

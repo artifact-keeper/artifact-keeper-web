@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listWebhooks as sdkListWebhooks,
@@ -84,21 +83,21 @@ export interface ListDeliveriesParams {
 
 export const webhooksApi = {
   list: async (params: ListWebhooksParams = {}): Promise<WebhookListResponse<Webhook>> => {
-    const { data, error } = await sdkListWebhooks({ query: params as any });
+    const { data, error } = await sdkListWebhooks({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   get: async (id: string): Promise<Webhook> => {
     const { data, error } = await sdkGetWebhook({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   create: async (data: CreateWebhookRequest): Promise<Webhook> => {
-    const { data: result, error } = await sdkCreateWebhook({ body: data as any });
+    const { data: result, error } = await sdkCreateWebhook({ body: data as never });
     if (error) throw error;
-    return result as any;
+    return result as never;
   },
 
   delete: async (id: string): Promise<void> => {
@@ -119,19 +118,19 @@ export const webhooksApi = {
   test: async (id: string): Promise<WebhookTestResult> => {
     const { data, error } = await sdkTestWebhook({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   listDeliveries: async (id: string, params: ListDeliveriesParams = {}): Promise<WebhookListResponse<WebhookDelivery>> => {
-    const { data, error } = await sdkListDeliveries({ path: { id }, query: params as any });
+    const { data, error } = await sdkListDeliveries({ path: { id }, query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   redeliver: async (webhookId: string, deliveryId: string): Promise<WebhookDelivery> => {
     const { data, error } = await sdkRedeliver({ path: { id: webhookId, delivery_id: deliveryId } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 };
 

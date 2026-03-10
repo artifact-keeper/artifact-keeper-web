@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listRepositories as sdkListRepositories,
@@ -35,7 +34,7 @@ export const promotionApi = {
       },
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**
@@ -51,10 +50,10 @@ export const promotionApi = {
   ): Promise<PaginatedResponse<Artifact>> => {
     const { data, error } = await sdkListArtifacts({
       path: { key: repoKey },
-      query: params as any,
+      query: params as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**
@@ -71,7 +70,7 @@ export const promotionApi = {
       },
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**
@@ -84,10 +83,10 @@ export const promotionApi = {
   ): Promise<PromotionResponse> => {
     const { data, error } = await sdkPromoteArtifact({
       path: { key: repoKey, artifact_id: artifactId },
-      body: request as any,
+      body: request as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**
@@ -99,10 +98,10 @@ export const promotionApi = {
   ): Promise<BulkPromotionResponse> => {
     const { data, error } = await sdkPromoteArtifactsBulk({
       path: { key: repoKey },
-      body: request as any,
+      body: request as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**
@@ -119,10 +118,10 @@ export const promotionApi = {
   ): Promise<PromotionHistoryResponse> => {
     const { data, error } = await sdkPromotionHistory({
       path: { key: repoKey },
-      query: params as any,
+      query: params as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /**

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   setupTotp as sdkSetupTotp,
@@ -17,27 +16,26 @@ export interface TotpEnableResponse {
 }
 
 export const totpApi = {
-  setup: async () => {
+  setup: async (): Promise<TotpSetupResponse> => {
     const { data, error } = await sdkSetupTotp();
     if (error) throw error;
-    return data as any;
+    return data as unknown as TotpSetupResponse;
   },
 
-  enable: async (code: string) => {
-    const { data, error } = await sdkEnableTotp({ body: { code } as any });
+  enable: async (code: string): Promise<TotpEnableResponse> => {
+    const { data, error } = await sdkEnableTotp({ body: { code } as never });
     if (error) throw error;
-    return data as any;
+    return data as unknown as TotpEnableResponse;
   },
 
-  verify: async (totpToken: string, code: string) => {
-    const { data, error } = await sdkVerifyTotp({ body: { totp_token: totpToken, code } as any });
+  verify: async (totpToken: string, code: string): Promise<unknown> => {
+    const { data, error } = await sdkVerifyTotp({ body: { totp_token: totpToken, code } as never });
     if (error) throw error;
-    return data as any;
+    return data;
   },
 
-  disable: async (password: string, code: string) => {
-    const { data, error } = await sdkDisableTotp({ body: { password, code } as any });
+  disable: async (password: string, code: string): Promise<void> => {
+    const { error } = await sdkDisableTotp({ body: { password, code } as never });
     if (error) throw error;
-    return data as any;
   },
 };

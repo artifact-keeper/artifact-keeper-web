@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listGroups,
@@ -23,27 +22,27 @@ export interface ListGroupsParams {
 
 export const groupsApi = {
   list: async (params: ListGroupsParams = {}): Promise<PaginatedResponse<Group>> => {
-    const { data, error } = await listGroups({ query: params as any });
+    const { data, error } = await listGroups({ query: params as never });
     if (error) throw error;
-    return data as any as PaginatedResponse<Group>;
+    return data as unknown as PaginatedResponse<Group>;
   },
 
   get: async (groupId: string): Promise<Group> => {
     const { data, error } = await getGroup({ path: { id: groupId } });
     if (error) throw error;
-    return data as any as Group;
+    return data as unknown as Group;
   },
 
   create: async (data: CreateGroupRequest): Promise<Group> => {
-    const { data: result, error } = await createGroup({ body: data as any });
+    const { data: result, error } = await createGroup({ body: data as never });
     if (error) throw error;
-    return result as any as Group;
+    return result as unknown as Group;
   },
 
   update: async (groupId: string, data: Partial<CreateGroupRequest>): Promise<Group> => {
-    const { data: result, error } = await updateGroup({ path: { id: groupId }, body: data as any });
+    const { data: result, error } = await updateGroup({ path: { id: groupId }, body: data as never });
     if (error) throw error;
-    return result as any as Group;
+    return result as unknown as Group;
   },
 
   delete: async (groupId: string): Promise<void> => {
@@ -54,7 +53,7 @@ export const groupsApi = {
   addMembers: async (groupId: string, userIds: string[]): Promise<void> => {
     const { error } = await addMembers({
       path: { id: groupId },
-      body: { user_ids: userIds } as any,
+      body: { user_ids: userIds } as never,
     });
     if (error) throw error;
   },
@@ -62,7 +61,7 @@ export const groupsApi = {
   removeMembers: async (groupId: string, userIds: string[]): Promise<void> => {
     const { error } = await removeMembers({
       path: { id: groupId },
-      body: { user_ids: userIds } as any,
+      body: { user_ids: userIds } as never,
     });
     if (error) throw error;
   },

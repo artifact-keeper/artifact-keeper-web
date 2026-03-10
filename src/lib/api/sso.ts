@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listProviders as sdkListProviders,
@@ -44,7 +43,7 @@ export const ssoApi = {
   listProviders: async (): Promise<SsoProvider[]> => {
     const { data, error } = await sdkListProviders();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   // --- OIDC ---
@@ -52,28 +51,28 @@ export const ssoApi = {
   listOidc: async (): Promise<OidcConfig[]> => {
     const { data, error } = await sdkListOidc();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getOidc: async (id: string): Promise<OidcConfig> => {
     const { data, error } = await sdkGetOidc({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   createOidc: async (reqData: CreateOidcConfigRequest): Promise<OidcConfig> => {
-    const { data, error } = await sdkCreateOidc({ body: reqData as any });
+    const { data, error } = await sdkCreateOidc({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   updateOidc: async (
     id: string,
     reqData: UpdateOidcConfigRequest
   ): Promise<OidcConfig> => {
-    const { data, error } = await sdkUpdateOidc({ path: { id }, body: reqData as any });
+    const { data, error } = await sdkUpdateOidc({ path: { id }, body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteOidc: async (id: string): Promise<void> => {
@@ -82,12 +81,12 @@ export const ssoApi = {
   },
 
   enableOidc: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: true } as any });
+    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: true } as never });
     if (error) throw error;
   },
 
   disableOidc: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: false } as any });
+    const { error } = await sdkToggleOidc({ path: { id }, body: { enabled: false } as never });
     if (error) throw error;
   },
 
@@ -96,28 +95,28 @@ export const ssoApi = {
   listLdap: async (): Promise<LdapConfig[]> => {
     const { data, error } = await sdkListLdap();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getLdap: async (id: string): Promise<LdapConfig> => {
     const { data, error } = await sdkGetLdap({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   createLdap: async (reqData: CreateLdapConfigRequest): Promise<LdapConfig> => {
-    const { data, error } = await sdkCreateLdap({ body: reqData as any });
+    const { data, error } = await sdkCreateLdap({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   updateLdap: async (
     id: string,
     reqData: UpdateLdapConfigRequest
   ): Promise<LdapConfig> => {
-    const { data, error } = await sdkUpdateLdap({ path: { id }, body: reqData as any });
+    const { data, error } = await sdkUpdateLdap({ path: { id }, body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteLdap: async (id: string): Promise<void> => {
@@ -126,12 +125,12 @@ export const ssoApi = {
   },
 
   enableLdap: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: true } as any });
+    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: true } as never });
     if (error) throw error;
   },
 
   disableLdap: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: false } as any });
+    const { error } = await sdkToggleLdap({ path: { id }, body: { enabled: false } as never });
     if (error) throw error;
   },
 
@@ -142,16 +141,16 @@ export const ssoApi = {
   ): Promise<{ access_token: string; refresh_token: string }> => {
     const { data, error } = await sdkLdapLogin({
       path: { id: providerId },
-      body: { username, password } as any,
+      body: { username, password } as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   testLdap: async (id: string): Promise<LdapTestResult> => {
     const { data, error } = await sdkTestLdap({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   // --- SAML ---
@@ -159,28 +158,28 @@ export const ssoApi = {
   listSaml: async (): Promise<SamlConfig[]> => {
     const { data, error } = await sdkListSaml();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getSaml: async (id: string): Promise<SamlConfig> => {
     const { data, error } = await sdkGetSaml({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   createSaml: async (reqData: CreateSamlConfigRequest): Promise<SamlConfig> => {
-    const { data, error } = await sdkCreateSaml({ body: reqData as any });
+    const { data, error } = await sdkCreateSaml({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   updateSaml: async (
     id: string,
     reqData: UpdateSamlConfigRequest
   ): Promise<SamlConfig> => {
-    const { data, error } = await sdkUpdateSaml({ path: { id }, body: reqData as any });
+    const { data, error } = await sdkUpdateSaml({ path: { id }, body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteSaml: async (id: string): Promise<void> => {
@@ -189,12 +188,12 @@ export const ssoApi = {
   },
 
   enableSaml: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: true } as any });
+    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: true } as never });
     if (error) throw error;
   },
 
   disableSaml: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: false } as any });
+    const { error } = await sdkToggleSaml({ path: { id }, body: { enabled: false } as never });
     if (error) throw error;
   },
 
@@ -203,9 +202,9 @@ export const ssoApi = {
   exchangeCode: async (
     code: string
   ): Promise<{ access_token: string; refresh_token: string }> => {
-    const { data, error } = await sdkExchangeCode({ body: { code } as any });
+    const { data, error } = await sdkExchangeCode({ body: { code } as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 };
 

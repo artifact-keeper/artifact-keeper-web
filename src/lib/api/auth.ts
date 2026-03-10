@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import { login as sdkLogin, logout as sdkLogout, refreshToken as sdkRefreshToken, getCurrentUser as sdkGetCurrentUser } from '@artifact-keeper/sdk';
+import type { LoginRequest, RefreshTokenRequest } from '@artifact-keeper/sdk';
 import type { LoginResponse, User } from '@/types';
 
 export interface LoginCredentials {
@@ -10,9 +10,10 @@ export interface LoginCredentials {
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
-    const { data, error } = await sdkLogin({ body: credentials as any });
+    const body: LoginRequest = credentials;
+    const { data, error } = await sdkLogin({ body });
     if (error) throw error;
-    return data as any as LoginResponse;
+    return data as unknown as LoginResponse;
   },
 
   logout: async (): Promise<void> => {
@@ -21,17 +22,16 @@ export const authApi = {
   },
 
   refreshToken: async (): Promise<LoginResponse> => {
-    const { data, error } = await sdkRefreshToken({
-      body: {} as any,
-    });
+    const body: RefreshTokenRequest = {};
+    const { data, error } = await sdkRefreshToken({ body });
     if (error) throw error;
-    return data as any as LoginResponse;
+    return data as unknown as LoginResponse;
   },
 
   getCurrentUser: async (): Promise<User> => {
     const { data, error } = await sdkGetCurrentUser();
     if (error) throw error;
-    return data as any as User;
+    return data as unknown as User;
   },
 };
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   getCurrentUser as sdkGetCurrentUser,
@@ -64,33 +63,33 @@ export const profileApi = {
   get: async (): Promise<User> => {
     const { data, error } = await sdkGetCurrentUser();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   update: async (reqData: UpdateProfileRequest): Promise<User> => {
     // getCurrentUser to get the user id, then updateUser
     const { data: me, error: meError } = await sdkGetCurrentUser();
     if (meError) throw meError;
-    const userId = (me as any).id;
-    const { data, error } = await sdkUpdateUser({ path: { id: userId }, body: reqData as any });
+    const userId = (me as unknown as { id: string }).id;
+    const { data, error } = await sdkUpdateUser({ path: { id: userId }, body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   // API Keys
   listApiKeys: async (): Promise<ApiKey[]> => {
     const { data: me, error: meError } = await sdkGetCurrentUser();
     if (meError) throw meError;
-    const userId = (me as any).id;
+    const userId = (me as unknown as { id: string }).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.items ?? [];
+    return (data as unknown as { items?: never[] })?.items ?? [];
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
-    const { data, error } = await sdkCreateApiToken({ body: reqData as any });
+    const { data, error } = await sdkCreateApiToken({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteApiKey: async (keyId: string): Promise<void> => {
@@ -102,18 +101,18 @@ export const profileApi = {
   listAccessTokens: async (): Promise<AccessToken[]> => {
     const { data: me, error: meError } = await sdkGetCurrentUser();
     if (meError) throw meError;
-    const userId = (me as any).id;
+    const userId = (me as unknown as { id: string }).id;
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return (data as any)?.items ?? [];
+    return (data as unknown as { items?: never[] })?.items ?? [];
   },
 
   createAccessToken: async (
     reqData: CreateAccessTokenRequest
   ): Promise<CreateAccessTokenResponse> => {
-    const { data, error } = await sdkCreateApiToken({ body: reqData as any });
+    const { data, error } = await sdkCreateApiToken({ body: reqData as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteAccessToken: async (tokenId: string): Promise<void> => {
