@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listRepositories,
@@ -27,27 +26,47 @@ export interface ReorderMemberInput {
 
 export const repositoriesApi = {
   list: async (params: ListRepositoriesParams = {}): Promise<PaginatedResponse<Repository>> => {
-    const { data, error } = await listRepositories({ query: params as any });
+    const { data, error } = await listRepositories({ query: params as Record<string, unknown> });
     if (error) throw error;
-    return data as any as PaginatedResponse<Repository>;
+    return data as unknown as PaginatedResponse<Repository>;
   },
 
   get: async (key: string): Promise<Repository> => {
     const { data, error } = await getRepository({ path: { key } });
     if (error) throw error;
-    return data as any as Repository;
+    return data as unknown as Repository;
   },
 
-  create: async (data: CreateRepositoryRequest): Promise<Repository> => {
-    const { data: result, error } = await createRepository({ body: data as any });
+  create: async (input: CreateRepositoryRequest): Promise<Repository> => {
+    const { data, error } = await createRepository({
+      body: {
+        key: input.key,
+        name: input.name,
+        description: input.description ?? null,
+        format: input.format,
+        repo_type: input.repo_type,
+        is_public: input.is_public ?? null,
+        quota_bytes: input.quota_bytes ?? null,
+        upstream_url: input.upstream_url ?? null,
+      },
+    });
     if (error) throw error;
-    return result as any as Repository;
+    return data as unknown as Repository;
   },
 
-  update: async (key: string, data: Partial<CreateRepositoryRequest>): Promise<Repository> => {
-    const { data: result, error } = await updateRepository({ path: { key }, body: data as any });
+  update: async (key: string, input: Partial<CreateRepositoryRequest>): Promise<Repository> => {
+    const { data, error } = await updateRepository({
+      path: { key },
+      body: {
+        name: input.name ?? null,
+        description: input.description ?? null,
+        is_public: input.is_public ?? null,
+        quota_bytes: input.quota_bytes ?? null,
+        key: input.key ?? null,
+      },
+    });
     if (error) throw error;
-    return result as any as Repository;
+    return data as unknown as Repository;
   },
 
   delete: async (key: string): Promise<void> => {
@@ -59,16 +78,18 @@ export const repositoriesApi = {
   listMembers: async (repoKey: string): Promise<VirtualMembersResponse> => {
     const { data, error } = await listVirtualMembers({ path: { key: repoKey } });
     if (error) throw error;
-    return data as any as VirtualMembersResponse;
+    // SDK returns { items: [...] }, our type expects { members: [...] }
+    const response = data as unknown as { items: VirtualRepoMember[] };
+    return { members: response.items };
   },
 
   addMember: async (repoKey: string, memberKey: string, priority?: number): Promise<VirtualRepoMember> => {
     const { data, error } = await addVirtualMember({
       path: { key: repoKey },
-      body: { member_key: memberKey, priority } as any,
+      body: { member_key: memberKey, priority: priority ?? null },
     });
     if (error) throw error;
-    return data as any as VirtualRepoMember;
+    return data as unknown as VirtualRepoMember;
   },
 
   removeMember: async (repoKey: string, memberKey: string): Promise<void> => {
@@ -79,10 +100,11 @@ export const repositoriesApi = {
   reorderMembers: async (repoKey: string, members: ReorderMemberInput[]): Promise<VirtualMembersResponse> => {
     const { data, error } = await updateVirtualMembers({
       path: { key: repoKey },
-      body: { members } as any,
+      body: { members },
     });
     if (error) throw error;
-    return data as any as VirtualMembersResponse;
+    const response = data as unknown as { items: VirtualRepoMember[] };
+    return { members: response.items };
   },
 };
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   getHealthLog as sdkGetHealthLog,
@@ -17,26 +16,26 @@ const monitoringApi = {
   getHealthLog: async (
     params?: HealthLogQuery
   ): Promise<ServiceHealthEntry[]> => {
-    const { data, error } = await sdkGetHealthLog({ query: params as any });
+    const { data, error } = await sdkGetHealthLog({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getAlerts: async (): Promise<AlertState[]> => {
     const { data, error } = await sdkGetAlertStates();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   suppressAlert: async (req: SuppressRequest): Promise<void> => {
-    const { error } = await sdkSuppressAlert({ body: req as any });
+    const { error } = await sdkSuppressAlert({ body: req as never });
     if (error) throw error;
   },
 
   triggerCheck: async (): Promise<ServiceHealthEntry[]> => {
     const { data, error } = await sdkRunHealthCheck();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 };
 

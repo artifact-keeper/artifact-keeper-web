@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   getTelemetrySettings as sdkGetTelemetrySettings,
@@ -20,42 +19,42 @@ const telemetryApi = {
   getSettings: async (): Promise<TelemetrySettings> => {
     const { data, error } = await sdkGetTelemetrySettings();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   updateSettings: async (
     settings: TelemetrySettings
   ): Promise<TelemetrySettings> => {
-    const { data, error } = await sdkUpdateTelemetrySettings({ body: settings as any });
+    const { data, error } = await sdkUpdateTelemetrySettings({ body: settings as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   listCrashes: async (params?: {
     page?: number;
     per_page?: number;
   }): Promise<CrashListResponse> => {
-    const { data, error } = await sdkListCrashes({ query: params as any });
+    const { data, error } = await sdkListCrashes({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   listPending: async (): Promise<CrashReport[]> => {
     const { data, error } = await sdkListPendingCrashes();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getCrash: async (id: string): Promise<CrashReport> => {
     const { data, error } = await sdkGetCrash({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   submitCrashes: async (ids: string[]): Promise<SubmitResponse> => {
-    const { data, error } = await sdkSubmitCrashes({ body: { ids } as any });
+    const { data, error } = await sdkSubmitCrashes({ body: { ids } as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   deleteCrash: async (id: string): Promise<void> => {
