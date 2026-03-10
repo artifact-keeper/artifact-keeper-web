@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
 import dtApi from "@/lib/api/dependency-track";
+import { toUserMessage } from "@/lib/error-utils";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -136,8 +137,8 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       queryClient.invalidateQueries({ queryKey: ["cve-history", artifact.id] });
       toast.success("CVE status updated");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to update CVE status: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update CVE status"));
     },
   });
 
@@ -195,8 +196,8 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       queryClient.invalidateQueries({ queryKey: ["dt-project-metrics", dtProjectUuid] });
       toast.success("Dependency-Track analysis updated");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to update analysis: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update analysis"));
     },
   });
 

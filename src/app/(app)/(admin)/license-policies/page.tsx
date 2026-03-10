@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
+import { toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import type {
   LicensePolicy,
@@ -120,8 +121,8 @@ export default function LicensePoliciesPage() {
       setForm(EMPTY_FORM);
       toast.success(selectedPolicy ? "Policy updated" : "Policy created");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to save policy: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to save policy"));
     },
   });
 
@@ -133,8 +134,8 @@ export default function LicensePoliciesPage() {
       setSelectedPolicy(null);
       toast.success("Policy deleted");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to delete policy: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete policy"));
     },
   });
 
@@ -154,8 +155,8 @@ export default function LicensePoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["license-policies"] });
       toast.success(`Policy ${policy.is_enabled ? "disabled" : "enabled"}`);
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to toggle policy: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to toggle policy"));
     },
   });
 

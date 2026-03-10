@@ -35,20 +35,11 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 
+import { toUserMessage } from "@/lib/error-utils";
 import { FORMAT_GROUPS, TYPE_OPTIONS } from "./_lib/constants";
 import { RepoListItem } from "./_components/repo-list-item";
 import { RepoDetailPanel } from "./_components/repo-detail-panel";
 import { RepoDialogs } from "./_components/repo-dialogs";
-
-function getErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'error' in err && typeof (err as Record<string, unknown>).error === 'string') {
-    return (err as Record<string, unknown>).error as string;
-  }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return fallback;
-}
 
 export default function RepositoriesPage() {
   const router = useRouter();
@@ -117,7 +108,7 @@ export default function RepositoriesPage() {
       }
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, "Failed to create repository"));
+      toast.error(toUserMessage(err, "Failed to create repository"));
     },
   });
 
@@ -138,7 +129,7 @@ export default function RepositoriesPage() {
       toast.success("Repository updated");
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, "Failed to update repository"));
+      toast.error(toUserMessage(err, "Failed to update repository"));
     },
   });
 
@@ -152,7 +143,7 @@ export default function RepositoriesPage() {
       toast.success("Repository deleted");
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, "Failed to delete repository"));
+      toast.error(toUserMessage(err, "Failed to delete repository"));
     },
   });
 

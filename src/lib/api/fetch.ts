@@ -6,13 +6,19 @@ import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
  */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = getActiveInstanceBaseUrl();
+  const { headers: callerHeaders, ...rest } = init ?? {};
+
+  // Build headers with defaults first so caller values take precedence.
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const incoming = new Headers(callerHeaders as HeadersInit | undefined);
+  incoming.forEach((value, key) => {
+    headers.set(key, value);
+  });
+
   const response = await fetch(`${baseUrl}${path}`, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
+    ...rest,
+    headers,
   });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
