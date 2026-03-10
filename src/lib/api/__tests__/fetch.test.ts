@@ -135,29 +135,31 @@ describe("apiFetch", () => {
     await apiFetch("/api/v1/test");
 
     const callArgs = mockFetch.mock.calls[0];
-    expect(callArgs[1].headers).toMatchObject({
-      "Content-Type": "application/json",
-    });
+    const headers: Headers = callArgs[1].headers;
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers.get("Content-Type")).toBe("application/json");
   });
 
   // ---- Custom headers merge ----
 
-  it("custom headers from init override the merged headers object via spread", async () => {
+  it("merges custom headers from init with defaults", async () => {
     mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 200, json: {} }));
 
     await apiFetch("/api/v1/test", {
       headers: { Authorization: "Bearer token-123" },
     });
 
-    // Because apiFetch spreads ...init after building the headers object,
-    // the init.headers replaces the merged headers entirely.
+    // apiFetch builds a Headers object with defaults, then merges caller
+    // headers on top, so both the default Content-Type and the custom
+    // Authorization header should be present.
     const callArgs = mockFetch.mock.calls[0];
-    expect(callArgs[1].headers).toMatchObject({
-      Authorization: "Bearer token-123",
-    });
+    const headers: Headers = callArgs[1].headers;
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers.get("Authorization")).toBe("Bearer token-123");
+    expect(headers.get("Content-Type")).toBe("application/json");
   });
 
-  it("allows overriding Content-Type header via init spread", async () => {
+  it("allows overriding Content-Type header via init", async () => {
     mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 200, json: {} }));
 
     await apiFetch("/api/v1/upload", {
@@ -165,9 +167,9 @@ describe("apiFetch", () => {
     });
 
     const callArgs = mockFetch.mock.calls[0];
-    expect(callArgs[1].headers).toMatchObject({
-      "Content-Type": "multipart/form-data",
-    });
+    const headers: Headers = callArgs[1].headers;
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers.get("Content-Type")).toBe("multipart/form-data");
   });
 
   // ---- Pass-through of init options ----
@@ -225,9 +227,12 @@ describe("apiFetch", () => {
       "http://localhost:8080/api/v1/repos",
       expect.objectContaining({
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
       })
     );
+    const callArgs = mockFetch.mock.calls[0];
+    const headers: Headers = callArgs[1].headers;
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers.get("Content-Type")).toBe("application/json");
     expect(result).toEqual({ items: [] });
   });
 });
