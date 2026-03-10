@@ -120,8 +120,8 @@ export function DataTable<T>({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={`skeleton-row-${i}`}>
+              {["skel-a", "skel-b", "skel-c", "skel-d", "skel-e"].map((id) => (
+                <TableRow key={id}>
                   {columns.map((col) => (
                     <TableCell key={col.id}>
                       <Skeleton className="h-4 w-full max-w-[200px]" />
@@ -168,10 +168,10 @@ export function DataTable<T>({
                 let ariaSortValue: "ascending" | "descending" | "none" | undefined;
                 if (!col.sortable) {
                   ariaSortValue = undefined;
-                } else if (!isSorted) {
-                  ariaSortValue = "none";
-                } else {
+                } else if (isSorted) {
                   ariaSortValue = sortDir === "asc" ? "ascending" : "descending";
+                } else {
+                  ariaSortValue = "none";
                 }
                 return (
                   <TableHead

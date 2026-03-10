@@ -58,7 +58,7 @@ export function RepositoriesContent() {
 
   // selection — initialize from URL if present
   const [selectedKey, setSelectedKey] = useState<string | null>(() => {
-    if (typeof globalThis.window === "undefined") return null;
+    if (globalThis.window === undefined) return null;
     return new URL(globalThis.window.location.href).searchParams.get("selected");
   });
 
@@ -306,8 +306,8 @@ export function RepositoriesContent() {
       <ScrollArea className="flex-1">
         {isLoading && (
           <div className="p-3 space-y-2" role="status" aria-live="polite" aria-busy="true">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={`skeleton-${i}`} className="space-y-1.5 px-3 py-2.5">
+            {["a", "b", "c", "d", "e", "f", "g", "h"].map((id) => (
+              <div key={id} className="space-y-1.5 px-3 py-2.5">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
