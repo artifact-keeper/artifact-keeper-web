@@ -6,6 +6,7 @@ import { XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { promotionApi } from "@/lib/api/promotion";
+import { toUserMessage } from "@/lib/error-utils";
 import type { StagingArtifact } from "@/types/promotion";
 
 import { Button } from "@/components/ui/button";
@@ -72,8 +73,8 @@ export function RejectionDialog({
       setNotes("");
       onSuccess?.();
     },
-    onError: (err: Error) => {
-      toast.error(`Rejection failed: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Rejection failed"));
     },
   });
 

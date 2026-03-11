@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
 import dtApi from "@/lib/api/dependency-track";
+import { toUserMessage } from "@/lib/error-utils";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -136,8 +137,8 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       queryClient.invalidateQueries({ queryKey: ["cve-history", artifact.id] });
       toast.success("CVE status updated");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to update CVE status: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update CVE status"));
     },
   });
 
@@ -195,8 +196,8 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       queryClient.invalidateQueries({ queryKey: ["dt-project-metrics", dtProjectUuid] });
       toast.success("Dependency-Track analysis updated");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to update analysis: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update analysis"));
     },
   });
 
@@ -691,6 +692,12 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 /**
  * Status bar showing whether the Dependency-Track integration is connected.
  */
+function dtConnectionLabel(connected: boolean, enabled: boolean): string {
+  if (connected) return "Connected";
+  if (!enabled) return "Disabled";
+  return "Unhealthy";
+}
+
 function DtIntegrationStatusBar({
   enabled,
   healthy,
@@ -718,7 +725,7 @@ function DtIntegrationStatusBar({
             variant="outline"
             className={`text-xs ${connected ? "text-green-600 bg-green-100 dark:bg-green-950/40" : "text-red-600 bg-red-100 dark:bg-red-950/40"}`}
           >
-            {connected ? "Connected" : !enabled ? "Disabled" : "Unhealthy"}
+            {dtConnectionLabel(connected, enabled)}
           </Badge>
           {projectLinked && (
             <Badge variant="outline" className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-950/40">

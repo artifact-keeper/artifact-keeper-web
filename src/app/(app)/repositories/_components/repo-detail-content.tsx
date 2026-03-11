@@ -20,6 +20,7 @@ import {
 import { repositoriesApi } from "@/lib/api/repositories";
 import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
+import { toUserMessage } from "@/lib/error-utils";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
@@ -136,8 +137,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       setSelectedArtifact(null);
       toast.success("Artifact deleted");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to delete artifact: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete artifact"));
     },
   });
 
@@ -147,8 +148,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onSuccess: (res) => {
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to trigger scan: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to trigger scan"));
     },
   });
 
@@ -158,8 +159,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onSuccess: (res) => {
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to trigger scan: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to trigger scan"));
     },
   });
 
@@ -171,8 +172,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       setSecForm(null); // reset to refetched defaults
       toast.success("Security settings saved");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to save security settings: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to save security settings"));
     },
   });
 

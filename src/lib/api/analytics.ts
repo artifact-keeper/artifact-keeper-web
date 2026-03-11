@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   getStorageTrend as sdkGetStorageTrend,
@@ -24,39 +23,39 @@ const analyticsApi = {
   getStorageTrend: async (
     params?: DateRangeQuery
   ): Promise<StorageSnapshot[]> => {
-    const { data, error } = await sdkGetStorageTrend({ query: params as any });
+    const { data, error } = await sdkGetStorageTrend({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getStorageBreakdown: async (): Promise<RepositoryStorageBreakdown[]> => {
     const { data, error } = await sdkGetStorageBreakdown();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getGrowthSummary: async (
     params?: DateRangeQuery
   ): Promise<GrowthSummary> => {
-    const { data, error } = await sdkGetGrowthSummary({ query: params as any });
+    const { data, error } = await sdkGetGrowthSummary({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getStaleArtifacts: async (
     params?: StaleQuery
   ): Promise<StaleArtifact[]> => {
-    const { data, error } = await sdkGetStaleArtifacts({ query: params as any });
+    const { data, error } = await sdkGetStaleArtifacts({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getDownloadTrends: async (
     params?: DateRangeQuery
   ): Promise<DownloadTrend[]> => {
-    const { data, error } = await sdkGetDownloadTrends({ query: params as any });
+    const { data, error } = await sdkGetDownloadTrends({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   getRepositoryTrend: async (
@@ -65,10 +64,10 @@ const analyticsApi = {
   ): Promise<RepositorySnapshot[]> => {
     const { data, error } = await sdkGetRepositoryTrend({
       path: { id: repositoryId },
-      query: params as any,
+      query: params as never,
     });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   captureSnapshot: async (): Promise<void> => {

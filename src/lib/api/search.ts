@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import { quickSearch, advancedSearch, checksumSearch } from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
@@ -51,18 +50,18 @@ export const searchApi = {
         q: params.query,
         limit: params.limit,
         types: params.types?.join(','),
-      } as any,
+      } as never,
     });
     if (error) throw error;
-    return (data as any).results as SearchResult[];
+    return (data as unknown as { results: SearchResult[] }).results;
   },
 
   advancedSearch: async (
     params: AdvancedSearchParams
   ): Promise<PaginatedResponse<SearchResult>> => {
-    const { data, error } = await advancedSearch({ query: params as any });
+    const { data, error } = await advancedSearch({ query: params as never });
     if (error) throw error;
-    return data as any as PaginatedResponse<SearchResult>;
+    return data as unknown as PaginatedResponse<SearchResult>;
   },
 
   checksumSearch: async (params: ChecksumSearchParams): Promise<Artifact[]> => {
@@ -70,10 +69,10 @@ export const searchApi = {
       query: {
         checksum: params.checksum,
         algorithm: params.algorithm || 'sha256',
-      } as any,
+      } as never,
     });
     if (error) throw error;
-    return (data as any).artifacts as Artifact[];
+    return (data as unknown as { artifacts: Artifact[] }).artifacts;
   },
 };
 

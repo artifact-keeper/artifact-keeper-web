@@ -19,6 +19,7 @@ import { profileApi } from "@/lib/api/profile";
 import { totpApi } from "@/lib/api/totp";
 import type { TotpSetupResponse } from "@/lib/api/totp";
 import { useAuth } from "@/providers/auth-provider";
+import { toUserMessage } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -341,7 +342,7 @@ export default function ProfilePage() {
                           setTotpDisableCode("");
                           toast.success("Two-factor authentication disabled");
                         } catch (err) {
-                          setTotpError(err instanceof Error ? err.message : "Failed to disable 2FA");
+                          setTotpError(toUserMessage(err, "Failed to disable 2FA"));
                         } finally {
                           setTotpIsLoading(false);
                         }
@@ -436,7 +437,7 @@ export default function ProfilePage() {
                         await refreshUser();
                         toast.success("Two-factor authentication enabled");
                       } catch (err) {
-                        setTotpError(err instanceof Error ? err.message : "Invalid code");
+                        setTotpError(toUserMessage(err, "Invalid code"));
                       } finally {
                         setTotpIsLoading(false);
                       }
@@ -477,7 +478,7 @@ export default function ProfilePage() {
                       setTotpSetupData(data);
                       setShowTotpSetup(true);
                     } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Failed to start 2FA setup");
+                      toast.error(toUserMessage(err, "Failed to start 2FA setup"));
                     } finally {
                       setTotpIsLoading(false);
                     }

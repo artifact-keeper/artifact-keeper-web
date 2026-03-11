@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
+import { toUserMessage } from "@/lib/error-utils";
 import type { Repository, VirtualRepoMember } from "@/types";
 import { REPO_TYPE_COLORS } from "@/lib/utils";
 import { toast } from "sonner";
@@ -80,8 +81,8 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       toast.success("Member added");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to add member: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to add member"));
     },
   });
 
@@ -95,8 +96,8 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       setMemberToRemove(null);
       toast.success("Member removed");
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to remove member: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to remove member"));
     },
   });
 
@@ -107,8 +108,8 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["virtual-members", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
     },
-    onError: (err: Error) => {
-      toast.error(`Failed to reorder members: ${err.message}`);
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to reorder members"));
     },
   });
 
