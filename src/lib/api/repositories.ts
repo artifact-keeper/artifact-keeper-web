@@ -11,6 +11,7 @@ import {
   removeVirtualMember,
   updateVirtualMembers,
 } from '@artifact-keeper/sdk';
+import { apiFetch } from '@/lib/api/fetch';
 import type { Repository, CreateRepositoryRequest, PaginatedResponse, VirtualRepoMember, VirtualMembersResponse } from '@/types';
 
 export interface ListRepositoriesParams {
@@ -23,6 +24,12 @@ export interface ListRepositoriesParams {
 export interface ReorderMemberInput {
   member_key: string;
   priority: number;
+}
+
+export interface UpstreamAuthPayload {
+  auth_type: string;
+  username?: string;
+  password?: string;
 }
 
 export const repositoriesApi = {
@@ -83,6 +90,20 @@ export const repositoriesApi = {
     });
     if (error) throw error;
     return data as any as VirtualMembersResponse;
+  },
+
+  // Upstream authentication management
+  updateUpstreamAuth: async (repoKey: string, payload: UpstreamAuthPayload): Promise<void> => {
+    await apiFetch<void>(`/api/v1/repositories/${encodeURIComponent(repoKey)}/upstream-auth`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  testUpstream: async (repoKey: string): Promise<{ success: boolean; message?: string }> => {
+    return apiFetch(`/api/v1/repositories/${encodeURIComponent(repoKey)}/test-upstream`, {
+      method: 'POST',
+    });
   },
 };
 

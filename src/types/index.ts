@@ -61,6 +61,8 @@ export interface Repository {
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;
+  upstream_auth_type?: string | null;
+  upstream_auth_configured?: boolean;
   // For virtual repositories
   member_repos?: VirtualRepoMember[];
   created_at: string;
@@ -133,6 +135,9 @@ export interface CreateRepositoryRequest {
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;
+  upstream_auth_type?: string;
+  upstream_username?: string;
+  upstream_password?: string;
   // For virtual repositories - array of member repo keys with priorities
   member_repos?: VirtualRepoMemberInput[];
 }

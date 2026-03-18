@@ -37,6 +37,8 @@ interface RepoDialogsProps {
   editRepo: Repository | null;
   onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean }) => void;
   editPending: boolean;
+  onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
+  upstreamAuthPending?: boolean;
   deleteOpen: boolean;
   onDeleteOpenChange: (open: boolean) => void;
   deleteRepo: Repository | null;
@@ -56,6 +58,8 @@ export function RepoDialogs({
   editRepo,
   onEditSubmit,
   editPending,
+  onUpstreamAuthUpdate,
+  upstreamAuthPending = false,
   deleteOpen,
   onDeleteOpenChange,
   deleteRepo,
@@ -77,6 +81,17 @@ export function RepoDialogs({
 
   // For virtual repos: selected member repo keys
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  // Upstream auth state for create dialog
+  const [upstreamAuthType, setUpstreamAuthType] = useState<string>("none");
+  const [upstreamUsername, setUpstreamUsername] = useState("");
+  const [upstreamPassword, setUpstreamPassword] = useState("");
+
+  // Upstream auth state for edit dialog
+  const [editAuthMode, setEditAuthMode] = useState<"view" | "edit">("view");
+  const [editAuthType, setEditAuthType] = useState<string>("none");
+  const [editAuthUsername, setEditAuthUsername] = useState("");
+  const [editAuthPassword, setEditAuthPassword] = useState("");
 
   // Key validation - check if key is already taken
   const keyTaken = useMemo(() => {
@@ -124,6 +139,9 @@ export function RepoDialogs({
       member_repos: [],
     });
     setSelectedMembers([]);
+    setUpstreamAuthType("none");
+    setUpstreamUsername("");
+    setUpstreamPassword("");
   };
 
   // Build member_repos array from selected keys
@@ -161,6 +179,13 @@ export function RepoDialogs({
                 upstream_url: createForm.repo_type === "remote" ? createForm.upstream_url : undefined,
                 member_repos: createForm.repo_type === "virtual" ? buildMemberRepos() : undefined,
               };
+              if (createForm.repo_type === "remote" && upstreamAuthType !== "none") {
+                submitData.upstream_auth_type = upstreamAuthType;
+                if (upstreamAuthType === "basic") {
+                  submitData.upstream_username = upstreamUsername;
+                }
+                submitData.upstream_password = upstreamPassword;
+              }
               onCreateSubmit(submitData);
             }}
           >
@@ -234,12 +259,17 @@ export function RepoDialogs({
                 <Label>Type</Label>
                 <Select
                   value={createForm.repo_type}
-                  onValueChange={(v) =>
+                  onValueChange={(v) => {
                     setCreateForm((f) => ({
                       ...f,
                       repo_type: v as RepositoryType,
-                    }))
-                  }
+                    }));
+                    if (v !== "remote") {
+                      setUpstreamAuthType("none");
+                      setUpstreamUsername("");
+                      setUpstreamPassword("");
+                    }
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -277,6 +307,48 @@ export function RepoDialogs({
                 <p className="text-xs text-muted-foreground">
                   The upstream registry URL to proxy requests to.
                 </p>
+              </div>
+            )}
+
+            {/* Remote repository: upstream authentication */}
+            {createForm.repo_type === "remote" && (
+              <div className="space-y-3">
+                <Label>Upstream Authentication</Label>
+                <Select value={upstreamAuthType} onValueChange={setUpstreamAuthType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="basic">Basic (username + password)</SelectItem>
+                    <SelectItem value="bearer">Bearer token</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {upstreamAuthType === "basic" && (
+                  <>
+                    <Input
+                      placeholder="Username"
+                      value={upstreamUsername}
+                      onChange={(e) => setUpstreamUsername(e.target.value)}
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Password or token"
+                      value={upstreamPassword}
+                      onChange={(e) => setUpstreamPassword(e.target.value)}
+                    />
+                  </>
+                )}
+
+                {upstreamAuthType === "bearer" && (
+                  <Input
+                    type="password"
+                    placeholder="Bearer token"
+                    value={upstreamPassword}
+                    onChange={(e) => setUpstreamPassword(e.target.value)}
+                  />
+                )}
               </div>
             )}
 
@@ -346,7 +418,16 @@ export function RepoDialogs({
       </Dialog>
 
       {/* -- Edit Repository Dialog -- */}
-      <Dialog open={editOpen} onOpenChange={(open) => { if (!open) setEditFormOverrides({}); onEditOpenChange(open); }}>
+      <Dialog open={editOpen} onOpenChange={(open) => {
+        if (!open) {
+          setEditFormOverrides({});
+          setEditAuthMode("view");
+          setEditAuthType("none");
+          setEditAuthUsername("");
+          setEditAuthPassword("");
+        }
+        onEditOpenChange(open);
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Repository: {editRepo?.key}</DialogTitle>
@@ -415,6 +496,144 @@ export function RepoDialogs({
               />
               <Label htmlFor="edit-public">Public repository</Label>
             </div>
+
+            {/* Upstream authentication for remote repos */}
+            {editRepo?.repo_type === "remote" && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>Upstream Authentication</Label>
+
+                {editAuthMode === "view" ? (
+                  <div className="space-y-2">
+                    {editRepo.upstream_auth_configured ? (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          Authentication configured ({editRepo.upstream_auth_type})
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditAuthMode("edit");
+                              setEditAuthType(editRepo.upstream_auth_type ?? "basic");
+                            }}
+                          >
+                            Change
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={upstreamAuthPending}
+                            onClick={() => {
+                              if (onUpstreamAuthUpdate) {
+                                onUpstreamAuthUpdate(editRepo.key, { auth_type: "none" });
+                              }
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          No authentication configured
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditAuthMode("edit")}
+                        >
+                          Configure
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Select value={editAuthType} onValueChange={setEditAuthType}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="basic">Basic (username + password)</SelectItem>
+                        <SelectItem value="bearer">Bearer token</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {editAuthType === "basic" && (
+                      <>
+                        <Input
+                          placeholder="Username"
+                          value={editAuthUsername}
+                          onChange={(e) => setEditAuthUsername(e.target.value)}
+                        />
+                        <Input
+                          type="password"
+                          placeholder="Password or token"
+                          value={editAuthPassword}
+                          onChange={(e) => setEditAuthPassword(e.target.value)}
+                        />
+                      </>
+                    )}
+
+                    {editAuthType === "bearer" && (
+                      <Input
+                        type="password"
+                        placeholder="Bearer token"
+                        value={editAuthPassword}
+                        onChange={(e) => setEditAuthPassword(e.target.value)}
+                      />
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditAuthMode("view");
+                          setEditAuthType("none");
+                          setEditAuthUsername("");
+                          setEditAuthPassword("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={upstreamAuthPending || (editAuthType !== "none" && !editAuthPassword)}
+                        onClick={() => {
+                          if (onUpstreamAuthUpdate && editRepo) {
+                            const payload: { auth_type: string; username?: string; password?: string } = {
+                              auth_type: editAuthType,
+                            };
+                            if (editAuthType === "basic") {
+                              payload.username = editAuthUsername;
+                              payload.password = editAuthPassword;
+                            } else if (editAuthType === "bearer") {
+                              payload.password = editAuthPassword;
+                            }
+                            onUpstreamAuthUpdate(editRepo.key, payload);
+                            setEditAuthMode("view");
+                            setEditAuthUsername("");
+                            setEditAuthPassword("");
+                          }
+                        }}
+                      >
+                        {upstreamAuthPending ? "Saving..." : "Save Authentication"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <DialogFooter>
               <Button
                 variant="outline"

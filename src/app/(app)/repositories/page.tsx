@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package } from "lucide-react";
 import { toast } from "sonner";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { repositoriesApi, type UpstreamAuthPayload } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
 import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
@@ -153,6 +153,18 @@ export default function RepositoriesPage() {
     },
     onError: (err) => {
       toast.error(getErrorMessage(err, "Failed to delete repository"));
+    },
+  });
+
+  const upstreamAuthMutation = useMutation({
+    mutationFn: ({ key, payload }: { key: string; payload: UpstreamAuthPayload }) =>
+      repositoriesApi.updateUpstreamAuth(key, payload),
+    onSuccess: () => {
+      invalidateAllRepoQueries();
+      toast.success("Upstream authentication updated");
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err, "Failed to update upstream authentication"));
     },
   });
 
@@ -453,6 +465,8 @@ export default function RepositoriesPage() {
         editRepo={dialogRepo}
         onEditSubmit={(key, d) => updateMutation.mutate({ key, data: d })}
         editPending={updateMutation.isPending}
+        onUpstreamAuthUpdate={(key, payload) => upstreamAuthMutation.mutate({ key, payload })}
+        upstreamAuthPending={upstreamAuthMutation.isPending}
         deleteOpen={deleteOpen}
         onDeleteOpenChange={(o) => {
           setDeleteOpen(o);
