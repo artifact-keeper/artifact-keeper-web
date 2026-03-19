@@ -14,9 +14,10 @@ import type {
   CreatePermissionRequest,
 } from "@/lib/api/permissions";
 import { groupsApi } from "@/lib/api/groups";
+import { repositoriesApi } from "@/lib/api/repositories";
 import { adminApi } from "@/lib/api/admin";
 import { useAuth } from "@/providers/auth-provider";
-import type { User } from "@/types";
+import type { User, Repository } from "@/types";
 import type { Group } from "@/types/groups";
 
 import { Button } from "@/components/ui/button";
@@ -112,9 +113,16 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
+  const { data: repositoriesData } = useQuery({
+    queryKey: ["admin-repositories"],
+    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
+    enabled: !!currentUser?.is_admin,
+  });
+
   const permissions = permissionsData?.items ?? [];
   const users = usersData ?? [];
   const groups = groupsData?.items ?? [];
+  const repositories = repositoriesData?.items ?? [];
 
   // principal options based on selected type
   const principalOptions = useMemo(() => {
@@ -130,6 +138,24 @@ export default function PermissionsPage() {
     }));
   }, [form.principal_type, users, groups]);
 
+  const repositoryOptions = useMemo(() =>
+    repositories.map((r: Repository) => ({
+      value: r.id,
+      label: `${r.key}${r.name ? ` — ${r.name}` : ""}`,
+    })),
+  [repositories]);
+
+  const targetOptions = useMemo(() => {
+    switch (form.target_type) {
+      case "repository":
+        return repositoryOptions;
+      case "group":
+        return groups.map((g: Group) => ({ value: g.id, label: g.name }));
+      default:
+        return [];
+    }
+  }, [form.target_type, repositoryOptions, groups]);
+
   // -- mutations --
   const createMutation = useMutation({
     mutationFn: (data: CreatePermissionRequest) => permissionsApi.create(data),
@@ -139,7 +165,8 @@ export default function PermissionsPage() {
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: () => toast.error("Failed to create permission"),
+    onError: (error: unknown) =>
+      toast.error(error instanceof Error ? error.message : "Failed to create permission"),
   });
 
   const updateMutation = useMutation({
@@ -148,7 +175,7 @@ export default function PermissionsPage() {
       data,
     }: {
       id: string;
-      data: Partial<CreatePermissionRequest>;
+      data: CreatePermissionRequest;
     }) => permissionsApi.update(id, data),
     onSuccess: () => {
       toast.success("Permission updated successfully");
@@ -156,7 +183,8 @@ export default function PermissionsPage() {
       setEditOpen(false);
       setSelectedPermission(null);
     },
-    onError: () => toast.error("Failed to update permission"),
+    onError: (error: unknown) =>
+      toast.error(error instanceof Error ? error.message : "Failed to update permission"),
   });
 
   const deleteMutation = useMutation({
@@ -360,6 +388,7 @@ export default function PermissionsPage() {
               setForm((f) => ({
                 ...f,
                 target_type: v as PermissionTargetType,
+                target_id: "",
               }))
             }
             disabled={editOpen}
@@ -375,15 +404,36 @@ export default function PermissionsPage() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Target Pattern</Label>
-          <Input
-            placeholder="e.g., npm-*, docker-prod-*"
-            value={form.target_id}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, target_id: e.target.value }))
-            }
-            disabled={editOpen}
-          />
+          <Label>{form.target_type === "repository" ? "Repository" : form.target_type === "group" ? "Target Group" : "Artifact ID"}</Label>
+          {form.target_type === "artifact" ? (
+            <Input
+              placeholder="Artifact UUID"
+              value={form.target_id}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, target_id: e.target.value.trim() }))
+              }
+              disabled={editOpen}
+            />
+          ) : (
+            <Select
+              value={form.target_id}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, target_id: v }))
+              }
+              disabled={editOpen}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={`Select ${form.target_type}...`} />
+              </SelectTrigger>
+              <SelectContent>
+                {targetOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -541,10 +591,16 @@ export default function PermissionsPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (selectedPermission && form.actions.length > 0) {
+              if (selectedPermission && form.principal_id && form.target_id && form.actions.length > 0) {
                 updateMutation.mutate({
                   id: selectedPermission.id,
-                  data: { actions: form.actions },
+                  data: {
+                    principal_type: form.principal_type,
+                    principal_id: form.principal_id,
+                    target_type: form.target_type,
+                    target_id: form.target_id,
+                    actions: form.actions,
+                  },
                 });
               }
             }}
