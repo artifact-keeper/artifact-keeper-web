@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listPermissions,
@@ -45,21 +44,21 @@ export interface ListPermissionsParams {
 
 export const permissionsApi = {
   list: async (params: ListPermissionsParams = {}): Promise<PaginatedResponse<Permission>> => {
-    const { data, error } = await listPermissions({ query: params as any });
+    const { data, error } = await listPermissions({ query: params as never });
     if (error) throw error;
-    return data as any as PaginatedResponse<Permission>;
+    return data as unknown as PaginatedResponse<Permission>;
   },
 
   get: async (permissionId: string): Promise<Permission> => {
     const { data, error } = await getPermission({ path: { id: permissionId } });
     if (error) throw error;
-    return data as any as Permission;
+    return data as unknown as Permission;
   },
 
   create: async (data: CreatePermissionRequest): Promise<Permission> => {
-    const { data: result, error } = await createPermission({ body: data as any });
+    const { data: result, error } = await createPermission({ body: data as never });
     if (error) throw error;
-    return result as any as Permission;
+    return result as unknown as Permission;
   },
 
   update: async (
@@ -68,10 +67,10 @@ export const permissionsApi = {
   ): Promise<Permission> => {
     const { data: result, error } = await updatePermission({
       path: { id: permissionId },
-      body: data as any,
+      body: data as never,
     });
     if (error) throw error;
-    return result as any as Permission;
+    return result as unknown as Permission;
   },
 
   delete: async (permissionId: string): Promise<void> => {

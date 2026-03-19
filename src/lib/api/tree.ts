@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import { getTree } from '@artifact-keeper/sdk';
 
@@ -19,10 +18,10 @@ export const treeApi = {
         repository_key: params.repository_key,
         path: params.path,
         include_metadata: params.include_metadata,
-      } as any,
+      } as never,
     });
     if (error) throw error;
-    return (data as any).nodes as TreeNode[];
+    return (data as unknown as { nodes: TreeNode[] }).nodes;
   },
 
   async getContent(params: {

@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { Loader2, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { toUserMessage } from "@/lib/error-utils";
 import { ssoApi } from "@/lib/api/sso";
 import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
@@ -104,11 +105,7 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Login failed. Please check your credentials.";
-      setError(message);
+      setError(toUserMessage(err, "Login failed. Please check your credentials."));
     } finally {
       setIsLoading(false);
     }
@@ -122,8 +119,7 @@ export default function LoginPage() {
       await verifyTotp(totpCode);
       router.push("/");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Invalid TOTP code";
-      setError(message);
+      setError(toUserMessage(err, "Invalid TOTP code"));
     } finally {
       setIsLoading(false);
     }

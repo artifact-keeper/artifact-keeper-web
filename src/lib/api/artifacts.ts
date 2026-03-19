@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   listArtifacts,
@@ -22,9 +21,9 @@ export const artifactsApi = {
     // Map 'search' to 'q' for backwards compat
     const { search, ...rest } = params;
     const query = { ...rest, q: params.q || search || undefined };
-    const { data, error } = await listArtifacts({ path: { key: repoKey }, query: query as any });
+    const { data, error } = await listArtifacts({ path: { key: repoKey }, query: query as never });
     if (error) throw error;
-    return data as any as PaginatedResponse<Artifact>;
+    return data as unknown as PaginatedResponse<Artifact>;
   },
 
   get: async (repoKey: string, artifactPath: string): Promise<Artifact> => {
@@ -54,10 +53,10 @@ export const artifactsApi = {
 
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
     const { data, error } = await createDownloadTicket({
-      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` } as any,
+      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` } as never,
     });
     if (error) throw error;
-    return (data as any).ticket as string;
+    return (data as unknown as { ticket: string }).ticket;
   },
 
   upload: async (

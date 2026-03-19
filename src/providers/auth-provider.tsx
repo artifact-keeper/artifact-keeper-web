@@ -17,6 +17,13 @@ import {
   changePassword as sdkChangePassword,
   setupStatus as sdkSetupStatus,
 } from '@artifact-keeper/sdk';
+import type {
+  LoginRequest,
+  LoginResponse as SdkLoginResponse,
+  TotpVerifyRequest,
+  ChangePasswordRequest,
+  SetupStatusResponse2 as SetupStatusResponse,
+} from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
 
 interface AuthContextType {
@@ -38,7 +45,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function storeTokens(_response: LoginResponse): void {
   // Tokens are now stored as httpOnly cookies by the backend.
   // No localStorage needed for the local instance.
@@ -65,8 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await sdkGetCurrentUser();
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setUser(data as any);
+      setUser(data as unknown as User);
     } catch {
       setUser(null);
       clearTokens();
@@ -75,11 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await sdkLogin({ body: { username, password } as any });
+      const body: LoginRequest = { username, password };
+      const { data, error } = await sdkLogin({ body });
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const loginData = data as any;
+      const loginData = data as unknown as SdkLoginResponse;
 
       if (loginData.totp_required && loginData.totp_token) {
         setTotpRequired(true);
@@ -87,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return "totp"; // Don't redirect yet
       }
 
-      storeTokens(loginData);
+      storeTokens(loginData as unknown as LoginResponse);
       await refreshUser();
 
       if (loginData.must_change_password) {
@@ -102,12 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyTotp = useCallback(
     async (code: string) => {
       if (!totpToken) throw new Error("No TOTP token");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await sdkVerifyTotp({ body: { totp_token: totpToken, code } as any });
+      const body: TotpVerifyRequest = { totp_token: totpToken, code };
+      const { data, error } = await sdkVerifyTotp({ body });
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tokenData = data as any;
-      storeTokens(tokenData);
+      const tokenData = data as unknown as SdkLoginResponse;
+      storeTokens(tokenData as unknown as LoginResponse);
       setTotpRequired(false);
       setTotpToken(null);
       await refreshUser();
@@ -139,8 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (currentPassword: string, newPassword: string) => {
       if (!user) throw new Error("Not authenticated");
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await sdkChangePassword({ path: { id: user.id }, body: { current_password: currentPassword, new_password: newPassword } as any });
+      const body: ChangePasswordRequest = { current_password: currentPassword, new_password: newPassword };
+      const { error } = await sdkChangePassword({ path: { id: user.id }, body });
       if (error) throw error;
 
       setMustChangePassword(false);
@@ -159,8 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if first-boot setup is required
       try {
         const { data: setupData } = await sdkSetupStatus();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((setupData as any)?.setup_required) {
+        const status = setupData as unknown as SetupStatusResponse | undefined;
+        if (status?.setup_required) {
           setSetupRequired(true);
         }
       } catch {
@@ -172,8 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await sdkGetCurrentUser();
         if (!error && data) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setUser(data as any);
+          setUser(data as unknown as User);
           setIsLoading(false);
           return;
         }
@@ -195,11 +197,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const health = await healthRes.json();
         if (health.demo_mode !== true) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await sdkLogin({ body: { username: "admin", password: "demo" } as any });
+        // Well-known demo instance credentials (not a secret; the backend
+        // generates this deterministic account when running in demo mode).
+        const body: LoginRequest = {
+          username: "admin",
+          password: process.env.NEXT_PUBLIC_DEMO_CREDENTIAL ?? "demo", // NOSONAR
+        };
+        const { data, error } = await sdkLogin({ body });
         if (error) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        storeTokens(data as any);
+        storeTokens(data as unknown as LoginResponse);
         await refreshUser();
       } catch {
         // Health check or demo auto-login failed, continue as anonymous

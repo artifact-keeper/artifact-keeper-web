@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Lock, Shield, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
+import { toUserMessage } from "@/lib/error-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -60,9 +61,7 @@ export default function ChangePasswordPage() {
       toast.success("Password changed successfully!");
       router.push("/");
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to change password.";
-      toast.error(message);
+      toast.error(toUserMessage(err, "Failed to change password."));
     } finally {
       setIsLoading(false);
     }

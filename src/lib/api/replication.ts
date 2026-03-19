@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@/lib/sdk-client';
 import {
   getIdentity as sdkGetIdentity,
@@ -72,7 +71,7 @@ export const peersApi = {
   getIdentity: async (): Promise<PeerIdentity> => {
     const { data, error } = await sdkGetIdentity();
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /** List all peer instances */
@@ -84,23 +83,23 @@ export const peersApi = {
       per_page?: number;
     }
   ): Promise<{ items: PeerInstance[]; total: number }> => {
-    const { data, error } = await sdkListPeers({ query: params as any });
+    const { data, error } = await sdkListPeers({ query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /** Get a single peer */
   get: async (id: string): Promise<PeerInstance> => {
     const { data, error } = await sdkGetPeer({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /** Register a new peer */
   register: async (req: RegisterPeerRequest): Promise<PeerInstance> => {
-    const { data, error } = await sdkRegisterPeer({ body: req as any });
+    const { data, error } = await sdkRegisterPeer({ body: req as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /** Unregister a peer */
@@ -114,7 +113,7 @@ export const peersApi = {
     id: string,
     req: { cache_used_bytes: number; status?: string }
   ): Promise<void> => {
-    const { error } = await sdkHeartbeat({ path: { id }, body: req as any });
+    const { error } = await sdkHeartbeat({ path: { id }, body: req as never });
     if (error) throw error;
   },
 
@@ -128,7 +127,7 @@ export const peersApi = {
   getRepositories: async (id: string): Promise<string[]> => {
     const { data, error } = await sdkGetAssignedRepos({ path: { id } });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 
   /** Assign a repository to a peer */
@@ -136,7 +135,7 @@ export const peersApi = {
     peerId: string,
     req: AssignRepoRequest
   ): Promise<void> => {
-    const { error } = await sdkAssignRepo({ path: { id: peerId }, body: req as any });
+    const { error } = await sdkAssignRepo({ path: { id: peerId }, body: req as never });
     if (error) throw error;
   },
 
@@ -154,9 +153,9 @@ export const peersApi = {
     id: string,
     params?: { status?: string }
   ): Promise<PeerConnection[]> => {
-    const { data, error } = await sdkListPeerConnections({ path: { id }, query: params as any });
+    const { data, error } = await sdkListPeerConnections({ path: { id }, query: params as never });
     if (error) throw error;
-    return data as any;
+    return data as never;
   },
 };
 
