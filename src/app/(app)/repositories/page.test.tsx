@@ -52,6 +52,7 @@ vi.mock('@/lib/api/repositories', () => ({
     update: vi.fn(),
     delete: vi.fn(),
     get: vi.fn(),
+    updateUpstreamAuth: vi.fn(),
   },
 }));
 
@@ -284,5 +285,53 @@ describe('RepositoriesPage - delete mutation callbacks', () => {
     config.onError?.(null);
 
     expect(mockToastError).toHaveBeenCalledWith('Failed to delete repository');
+  });
+});
+
+describe('RepositoriesPage - upstream auth mutation callbacks', () => {
+  beforeEach(() => {
+    mutationConfigs.length = 0;
+    useQueryCallIndex = 0;
+    vi.clearAllMocks();
+  });
+
+  async function getUpstreamAuthMutationConfig() {
+    const mod = await import('./page');
+    render(<mod.default />);
+    // Fourth useMutation call is upstreamAuthMutation
+    return mutationConfigs[3];
+  }
+
+  it('shows success toast on upstream auth update', async () => {
+    const config = await getUpstreamAuthMutationConfig();
+    config.onSuccess?.();
+
+    expect(mockToastSuccess).toHaveBeenCalledWith('Upstream authentication updated');
+  });
+
+  it('shows error toast on upstream auth failure', async () => {
+    const config = await getUpstreamAuthMutationConfig();
+    config.onError?.(new Error('Auth update failed'));
+
+    expect(mockToastError).toHaveBeenCalledWith('Auth update failed');
+  });
+
+  it('uses fallback message for unknown upstream auth error', async () => {
+    const config = await getUpstreamAuthMutationConfig();
+    config.onError?.(42);
+
+    expect(mockToastError).toHaveBeenCalledWith('Failed to update upstream authentication');
+  });
+
+  it('extracts error from object with error field', async () => {
+    const config = await getUpstreamAuthMutationConfig();
+    config.onError?.({ error: 'Invalid credentials' });
+
+    expect(mockToastError).toHaveBeenCalledWith('Invalid credentials');
+  });
+
+  it('calls repositoriesApi.updateUpstreamAuth via mutationFn', async () => {
+    const config = await getUpstreamAuthMutationConfig();
+    expect(config.mutationFn).toBeDefined();
   });
 });

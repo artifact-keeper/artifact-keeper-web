@@ -755,4 +755,110 @@ describe('RepoDialogs - Upstream Auth (Edit)', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).queryByText('Upstream Authentication')).toBeNull();
   });
+
+  it('calls onUpstreamAuthUpdate with bearer auth payload on save', async () => {
+    const onUpstreamAuthUpdate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={{ ...mockRemoteEditRepo, upstream_auth_configured: false, upstream_auth_type: null }}
+        onUpstreamAuthUpdate={onUpstreamAuthUpdate}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // Click Configure to enter edit mode
+    await user.click(within(dialog).getByRole('button', { name: /configure/i }));
+
+    // Select bearer auth
+    const selects = within(dialog).getAllByTestId('mock-select');
+    const authSelect = selects[0];
+    fireEvent.change(authSelect, { target: { value: 'bearer' } });
+
+    // Fill in bearer token
+    await user.type(within(dialog).getByPlaceholderText('Bearer token'), 'my-secret-token');
+
+    // Save
+    await user.click(within(dialog).getByRole('button', { name: /save authentication/i }));
+
+    expect(onUpstreamAuthUpdate).toHaveBeenCalledWith('remote-repo', {
+      auth_type: 'bearer',
+      password: 'my-secret-token',
+    });
+  });
+
+  it('returns to view mode and resets fields when cancel is clicked in edit auth form', async () => {
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockRemoteEditRepo}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // Click Change to enter edit mode
+    await user.click(within(dialog).getByRole('button', { name: /^change$/i }));
+
+    // Verify we are in edit mode (save button visible)
+    expect(within(dialog).getByRole('button', { name: /save authentication/i })).toBeTruthy();
+
+    // Click the auth form Cancel (size=sm), not the dialog footer Cancel.
+    // There are two Cancel buttons; the auth form one has data-size="sm".
+    const cancelButtons = within(dialog).getAllByRole('button', { name: /^cancel$/i });
+    const authCancelBtn = cancelButtons.find((btn) => btn.getAttribute('data-size') === 'sm');
+    expect(authCancelBtn).toBeTruthy();
+    await user.click(authCancelBtn!);
+
+    // Should be back in view mode: Change and Remove buttons visible
+    expect(within(dialog).getByRole('button', { name: /^change$/i })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /^remove$/i })).toBeTruthy();
+    // Save button should be gone
+    expect(within(dialog).queryByRole('button', { name: /save authentication/i })).toBeNull();
+  });
+
+  it('resets auth state when edit dialog is closed and reopened', async () => {
+    const onEditOpenChange = vi.fn();
+    const user = userEvent.setup();
+
+    const { unmount } = render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockRemoteEditRepo}
+        onEditOpenChange={onEditOpenChange}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // Enter edit auth mode
+    await user.click(within(dialog).getByRole('button', { name: /^change$/i }));
+    expect(within(dialog).getByRole('button', { name: /save authentication/i })).toBeTruthy();
+
+    // Unmount to simulate dialog closing (the Dialog onOpenChange resets state)
+    unmount();
+
+    // Re-mount with editOpen=true to simulate reopening
+    // The component creates fresh state on mount, so auth mode should be "view"
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockRemoteEditRepo}
+        onEditOpenChange={onEditOpenChange}
+      />
+    );
+
+    // Should be in view mode (not edit mode), meaning Change button is present
+    const reopenedDialog = screen.getByRole('dialog');
+    expect(within(reopenedDialog).getByRole('button', { name: /^change$/i })).toBeTruthy();
+    expect(within(reopenedDialog).queryByRole('button', { name: /save authentication/i })).toBeNull();
+  });
 });
