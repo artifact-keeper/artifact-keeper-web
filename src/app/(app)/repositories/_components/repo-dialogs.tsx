@@ -26,6 +26,26 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
+type QuotaUnit = "MB" | "GB";
+
+const BYTES_PER_MB = 1048576;
+const BYTES_PER_GB = 1073741824;
+
+/** Convert a quota value and unit to bytes. Returns null for empty/zero values. */
+export function quotaToBytes(value: string, unit: QuotaUnit): number | null {
+  const num = parseFloat(value);
+  if (!num || num <= 0) return null;
+  return Math.round(num * (unit === "GB" ? BYTES_PER_GB : BYTES_PER_MB));
+}
+
+/** Convert bytes to a human-friendly value and unit. Prefers GB when evenly divisible. */
+export function bytesToQuota(bytes: number | undefined | null): { value: string; unit: QuotaUnit } {
+  if (!bytes || bytes <= 0) return { value: "", unit: "GB" };
+  if (bytes >= BYTES_PER_GB && bytes % BYTES_PER_GB === 0) {
+    return { value: String(bytes / BYTES_PER_GB), unit: "GB" };
+  }
+  return { value: String(Math.round(bytes / BYTES_PER_MB)), unit: "MB" };
+}
 
 interface RepoDialogsProps {
   createOpen: boolean;
@@ -35,7 +55,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean; quota_bytes?: number }) => void;
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
   upstreamAuthPending?: boolean;
@@ -82,6 +102,10 @@ export function RepoDialogs({
   // For virtual repos: selected member repo keys
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
+  // Quota state for create dialog
+  const [createQuotaValue, setCreateQuotaValue] = useState("");
+  const [createQuotaUnit, setCreateQuotaUnit] = useState<QuotaUnit>("GB");
+
   // Upstream auth state for create dialog
   const [upstreamAuthType, setUpstreamAuthType] = useState<string>("none");
   const [upstreamUsername, setUpstreamUsername] = useState("");
@@ -93,6 +117,12 @@ export function RepoDialogs({
   const [editAuthUsername, setEditAuthUsername] = useState("");
   const [editAuthPassword, setEditAuthPassword] = useState("");
   const [removeAuthConfirm, setRemoveAuthConfirm] = useState(false);
+
+  // Quota state for edit dialog — initialized from editRepo
+  const editQuotaDefaults = useMemo(() => bytesToQuota(editRepo?.quota_bytes), [editRepo]);
+  const [editQuotaOverrides, setEditQuotaOverrides] = useState<{ value?: string; unit?: QuotaUnit }>({});
+  const editQuotaValue = editQuotaOverrides.value ?? editQuotaDefaults.value;
+  const editQuotaUnit = editQuotaOverrides.unit ?? editQuotaDefaults.unit;
 
   // Key validation - check if key is already taken
   const keyTaken = useMemo(() => {
@@ -140,6 +170,8 @@ export function RepoDialogs({
       member_repos: [],
     });
     setSelectedMembers([]);
+    setCreateQuotaValue("");
+    setCreateQuotaUnit("GB");
     setUpstreamAuthType("none");
     setUpstreamUsername("");
     setUpstreamPassword("");
@@ -177,6 +209,7 @@ export function RepoDialogs({
               e.preventDefault();
               const submitData: CreateRepositoryRequest = {
                 ...createForm,
+                quota_bytes: quotaToBytes(createQuotaValue, createQuotaUnit) ?? undefined,
                 upstream_url: createForm.repo_type === "remote" ? createForm.upstream_url : undefined,
                 member_repos: createForm.repo_type === "virtual" ? buildMemberRepos() : undefined,
               };
@@ -419,6 +452,36 @@ export function RepoDialogs({
               />
               <Label htmlFor="create-public">Public repository</Label>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-quota">Storage Quota</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="create-quota"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="No limit"
+                  value={createQuotaValue}
+                  onChange={(e) => setCreateQuotaValue(e.target.value)}
+                  className="flex-1"
+                />
+                <Select
+                  value={createQuotaUnit}
+                  onValueChange={(v) => setCreateQuotaUnit(v as QuotaUnit)}
+                >
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MB">MB</SelectItem>
+                    <SelectItem value="GB">GB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Maximum storage for this repository. Leave empty for no limit.
+              </p>
+            </div>
             <DialogFooter>
               <Button
                 variant="outline"
@@ -439,6 +502,7 @@ export function RepoDialogs({
       <Dialog open={editOpen} onOpenChange={(open) => {
         if (!open) {
           setEditFormOverrides({});
+          setEditQuotaOverrides({});
           setEditAuthMode("view");
           setEditAuthType("none");
           setEditAuthUsername("");
@@ -463,6 +527,7 @@ export function RepoDialogs({
                 onEditSubmit(editRepo.key, {
                   ...rest,
                   ...(editKeyChanged ? { key: formKey } : {}),
+                  quota_bytes: quotaToBytes(editQuotaValue, editQuotaUnit) ?? undefined,
                 });
               }
             }}
@@ -514,6 +579,36 @@ export function RepoDialogs({
                 }
               />
               <Label htmlFor="edit-public">Public repository</Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-quota">Storage Quota</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="edit-quota"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="No limit"
+                  value={editQuotaValue}
+                  onChange={(e) => setEditQuotaOverrides((o) => ({ ...o, value: e.target.value }))}
+                  className="flex-1"
+                />
+                <Select
+                  value={editQuotaUnit}
+                  onValueChange={(v) => setEditQuotaOverrides((o) => ({ ...o, unit: v as QuotaUnit }))}
+                >
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MB">MB</SelectItem>
+                    <SelectItem value="GB">GB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Maximum storage for this repository. Leave empty for no limit.
+              </p>
             </div>
 
             {/* Upstream authentication for remote repos (saved separately from main form) */}

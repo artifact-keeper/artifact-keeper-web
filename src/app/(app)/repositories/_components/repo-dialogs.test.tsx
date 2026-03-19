@@ -725,10 +725,9 @@ describe('RepoDialogs - Upstream Auth (Edit)', () => {
     // Click Configure to enter edit mode
     await user.click(within(dialog).getByRole('button', { name: /configure/i }));
 
-    // Select basic auth
+    // Select basic auth — quota unit select is first, auth select is last
     const selects = within(dialog).getAllByTestId('mock-select');
-    // In edit dialog, the auth select is the only mock-select
-    const authSelect = selects[0];
+    const authSelect = selects[selects.length - 1];
     fireEvent.change(authSelect, { target: { value: 'basic' } });
 
     // Fill in credentials
@@ -776,9 +775,9 @@ describe('RepoDialogs - Upstream Auth (Edit)', () => {
     // Click Configure to enter edit mode
     await user.click(within(dialog).getByRole('button', { name: /configure/i }));
 
-    // Select bearer auth
+    // Select bearer auth — quota unit select is first, auth select is last
     const selects = within(dialog).getAllByTestId('mock-select');
-    const authSelect = selects[0];
+    const authSelect = selects[selects.length - 1];
     fireEvent.change(authSelect, { target: { value: 'bearer' } });
 
     // Fill in bearer token
@@ -863,5 +862,235 @@ describe('RepoDialogs - Upstream Auth (Edit)', () => {
     const reopenedDialog = screen.getByRole('dialog');
     expect(within(reopenedDialog).getByRole('button', { name: /^change$/i })).toBeTruthy();
     expect(within(reopenedDialog).queryByRole('button', { name: /save authentication/i })).toBeNull();
+  });
+});
+
+describe('RepoDialogs - Storage Quota', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('renders quota input in create dialog', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText(/storage quota/i)).toBeTruthy();
+    expect(within(dialog).getByPlaceholderText('No limit')).toBeTruthy();
+    expect(within(dialog).getByText(/maximum storage for this repository/i)).toBeTruthy();
+  });
+
+  it('submits quota with GB unit converted to bytes', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'quota-test');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'Quota Test');
+
+    // Enter quota value (default unit is GB)
+    const quotaInput = within(dialog).getByPlaceholderText('No limit');
+    await user.type(quotaInput, '5');
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quota_bytes: 5 * 1073741824, // 5 GB in bytes
+      })
+    );
+  });
+
+  it('submits quota with MB unit converted to bytes', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'mb-test');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'MB Test');
+
+    // Enter quota value
+    const quotaInput = within(dialog).getByPlaceholderText('No limit');
+    await user.type(quotaInput, '512');
+
+    // Switch unit to MB
+    const selects = within(dialog).getAllByTestId('mock-select');
+    // The quota unit select is the last one (after Format and Type)
+    const quotaUnitSelect = selects[selects.length - 1];
+    fireEvent.change(quotaUnitSelect, { target: { value: 'MB' } });
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quota_bytes: 512 * 1048576, // 512 MB in bytes
+      })
+    );
+  });
+
+  it('sends undefined quota_bytes when quota is empty', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'no-quota');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'No Quota');
+
+    // Leave quota empty, submit
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledTimes(1);
+    const submitData = onCreateSubmit.mock.calls[0][0];
+    expect(submitData.quota_bytes).toBeUndefined();
+  });
+
+  it('shows existing quota in edit dialog', () => {
+    const repoWith10GB = {
+      ...mockEditRepo,
+      quota_bytes: 10 * 1073741824, // 10 GB
+    };
+
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={repoWith10GB}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const quotaInput = within(dialog).getByLabelText(/storage quota/i) as HTMLInputElement;
+    expect(quotaInput.value).toBe('10');
+  });
+
+  it('resets quota fields when create dialog closes', async () => {
+    const user = userEvent.setup();
+    const onCreateOpenChange = vi.fn();
+
+    const { unmount } = render(
+      <RepoDialogs {...defaultProps} onCreateOpenChange={onCreateOpenChange} />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // Type a quota value
+    const quotaInput = within(dialog).getByPlaceholderText('No limit');
+    await user.type(quotaInput, '100');
+
+    // Close dialog via Cancel
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+    unmount();
+
+    // Reopen: quota should be empty (fresh state from mount)
+    render(<RepoDialogs {...defaultProps} />);
+    const reopenedDialog = screen.getByRole('dialog');
+    const newQuotaInput = within(reopenedDialog).getByPlaceholderText('No limit') as HTMLInputElement;
+    expect(newQuotaInput.value).toBe('');
+  });
+
+  it('includes quota_bytes in edit submit data', async () => {
+    const onEditSubmit = vi.fn();
+    const user = userEvent.setup();
+    const repoWith5GB = {
+      ...mockEditRepo,
+      quota_bytes: 5 * 1073741824,
+    };
+
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={repoWith5GB}
+        onEditSubmit={onEditSubmit}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    // Clear and set new quota
+    const quotaInput = within(dialog).getByLabelText(/storage quota/i);
+    await user.clear(quotaInput);
+    await user.type(quotaInput, '20');
+
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    expect(onEditSubmit).toHaveBeenCalledWith(
+      'test-repo',
+      expect.objectContaining({
+        quota_bytes: 20 * 1073741824, // 20 GB
+      })
+    );
+  });
+
+  it('sends undefined quota_bytes when edit quota is cleared', async () => {
+    const onEditSubmit = vi.fn();
+    const user = userEvent.setup();
+    const repoWith5GB = {
+      ...mockEditRepo,
+      quota_bytes: 5 * 1073741824,
+    };
+
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={repoWith5GB}
+        onEditSubmit={onEditSubmit}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const quotaInput = within(dialog).getByLabelText(/storage quota/i);
+    await user.clear(quotaInput);
+
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    expect(onEditSubmit).toHaveBeenCalledTimes(1);
+    const submitData = onEditSubmit.mock.calls[0][1];
+    expect(submitData.quota_bytes).toBeUndefined();
+  });
+});
+
+describe('quotaToBytes and bytesToQuota', () => {
+  // Import the helpers directly
+  it('quotaToBytes converts GB correctly', async () => {
+    const { quotaToBytes } = await import('./repo-dialogs');
+    expect(quotaToBytes('5', 'GB')).toBe(5 * 1073741824);
+    expect(quotaToBytes('1', 'GB')).toBe(1073741824);
+  });
+
+  it('quotaToBytes converts MB correctly', async () => {
+    const { quotaToBytes } = await import('./repo-dialogs');
+    expect(quotaToBytes('512', 'MB')).toBe(512 * 1048576);
+    expect(quotaToBytes('1', 'MB')).toBe(1048576);
+  });
+
+  it('quotaToBytes returns null for empty or zero', async () => {
+    const { quotaToBytes } = await import('./repo-dialogs');
+    expect(quotaToBytes('', 'GB')).toBeNull();
+    expect(quotaToBytes('0', 'GB')).toBeNull();
+    expect(quotaToBytes('0', 'MB')).toBeNull();
+  });
+
+  it('bytesToQuota returns GB for evenly divisible values', async () => {
+    const { bytesToQuota } = await import('./repo-dialogs');
+    expect(bytesToQuota(10 * 1073741824)).toEqual({ value: '10', unit: 'GB' });
+    expect(bytesToQuota(1073741824)).toEqual({ value: '1', unit: 'GB' });
+  });
+
+  it('bytesToQuota returns MB for non-GB values', async () => {
+    const { bytesToQuota } = await import('./repo-dialogs');
+    expect(bytesToQuota(512 * 1048576)).toEqual({ value: '512', unit: 'MB' });
+  });
+
+  it('bytesToQuota returns empty for null/undefined/zero', async () => {
+    const { bytesToQuota } = await import('./repo-dialogs');
+    expect(bytesToQuota(null)).toEqual({ value: '', unit: 'GB' });
+    expect(bytesToQuota(undefined)).toEqual({ value: '', unit: 'GB' });
+    expect(bytesToQuota(0)).toEqual({ value: '', unit: 'GB' });
   });
 });
