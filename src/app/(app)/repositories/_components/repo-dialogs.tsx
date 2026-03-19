@@ -33,8 +33,8 @@ const BYTES_PER_GB = 1073741824;
 
 /** Convert a quota value and unit to bytes. Returns null for empty/zero values. */
 export function quotaToBytes(value: string, unit: QuotaUnit): number | null {
-  const num = parseFloat(value);
-  if (!num || num <= 0) return null;
+  const num = Number(value);
+  if (!num || num <= 0 || !Number.isFinite(num)) return null;
   return Math.round(num * (unit === "GB" ? BYTES_PER_GB : BYTES_PER_MB));
 }
 
