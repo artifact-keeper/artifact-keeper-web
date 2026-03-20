@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   KeyRound,
+  Key,
   ToggleLeft,
   ToggleRight,
   Copy,
@@ -24,6 +25,7 @@ import {
   deleteUser as sdkDeleteUser,
 } from "@artifact-keeper/sdk";
 import { adminApi } from "@/lib/api/admin";
+import type { ApiKey } from "@/lib/api/profile";
 import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, CreateUserResponse } from "@/types";
@@ -102,6 +104,8 @@ export default function UsersPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
+  const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
@@ -237,6 +241,32 @@ export default function UsersPage() {
     },
   });
 
+  // -- user tokens query (for the selected user) --
+  const {
+    data: userTokens,
+    isLoading: tokensLoading,
+  } = useQuery({
+    queryKey: ["admin-user-tokens", selectedUser?.id],
+    queryFn: () => adminApi.listUserTokens(selectedUser!.id),
+    enabled: tokensOpen && !!selectedUser,
+  });
+
+  const revokeTokenMutation = useMutation({
+    mutationFn: async ({ userId, tokenId }: { userId: string; tokenId: string }) => {
+      await adminApi.revokeUserToken(userId, tokenId);
+    },
+    onSuccess: () => {
+      toast.success("Token revoked");
+      queryClient.invalidateQueries({
+        queryKey: ["admin-user-tokens", selectedUser?.id],
+      });
+      setRevokeTokenId(null);
+    },
+    onError: () => {
+      toast.error("Failed to revoke token");
+    },
+  });
+
   // -- handlers --
   const isSelf = useCallback(
     (u: User) => u.id === currentUser?.id,
@@ -276,6 +306,11 @@ export default function UsersPage() {
     },
     [isSelf, resetPasswordMutation]
   );
+
+  const handleViewTokens = useCallback((u: User) => {
+    setSelectedUser(u);
+    setTokensOpen(true);
+  }, []);
 
   const handleToggleStatus = useCallback(
     (u: User) => {
@@ -352,6 +387,14 @@ export default function UsersPage() {
           className="flex items-center gap-1 justify-end"
           onClick={(e) => e.stopPropagation()}
         >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-xs" onClick={() => handleViewTokens(u)}>
+                <Key className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View Tokens</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-xs" onClick={() => handleEdit(u)}>
@@ -760,6 +803,131 @@ export default function UsersPage() {
         loading={deleteMutation.isPending}
         onConfirm={() => {
           if (selectedUser) deleteMutation.mutate(selectedUser.id);
+        }}
+      />
+
+      {/* User Tokens Dialog */}
+      <Dialog
+        open={tokensOpen}
+        onOpenChange={(o) => {
+          setTokensOpen(o);
+          if (!o) {
+            setSelectedUser(null);
+            setRevokeTokenId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              API Tokens: {selectedUser?.username}
+            </DialogTitle>
+            <DialogDescription>
+              View and revoke API tokens for this user.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {tokensLoading ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Loading tokens...
+              </p>
+            ) : (userTokens ?? []).length === 0 ? (
+              <EmptyState
+                icon={Key}
+                title="No tokens"
+                description="This user has no API tokens."
+              />
+            ) : (
+              <div className="divide-y">
+                {(userTokens ?? []).map((token: ApiKey) => (
+                  <div
+                    key={token.id}
+                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">
+                          {token.name}
+                        </span>
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-xs shrink-0">
+                          {token.key_prefix}...
+                        </code>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(token.scopes ?? []).map((s) => (
+                          <Badge key={s} variant="secondary" className="text-xs">
+                            {s}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span>
+                          Created{" "}
+                          {token.created_at
+                            ? new Date(token.created_at).toLocaleDateString()
+                            : "N/A"}
+                        </span>
+                        {token.expires_at && (
+                          <span>
+                            Expires{" "}
+                            {new Date(token.expires_at).toLocaleDateString()}
+                          </span>
+                        )}
+                        <span>
+                          Last used{" "}
+                          {token.last_used_at
+                            ? new Date(token.last_used_at).toLocaleDateString()
+                            : "Never"}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive shrink-0 ml-2"
+                      onClick={() => setRevokeTokenId(token.id)}
+                    >
+                      <Trash2 className="size-3.5 mr-1" />
+                      Revoke
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTokensOpen(false);
+                setSelectedUser(null);
+                setRevokeTokenId(null);
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke User Token Confirm */}
+      <ConfirmDialog
+        open={!!revokeTokenId}
+        onOpenChange={(o) => {
+          if (!o) setRevokeTokenId(null);
+        }}
+        title="Revoke Token"
+        description="This will permanently invalidate this API token. Any applications using it will lose access immediately."
+        confirmText="Revoke Token"
+        danger
+        loading={revokeTokenMutation.isPending}
+        onConfirm={() => {
+          if (revokeTokenId && selectedUser) {
+            revokeTokenMutation.mutate({
+              userId: selectedUser.id,
+              tokenId: revokeTokenId,
+            });
+          }
         }}
       />
     </div>

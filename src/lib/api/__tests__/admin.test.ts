@@ -5,11 +5,15 @@ vi.mock("@/lib/sdk-client", () => ({}));
 const mockGetSystemStats = vi.fn();
 const mockListUsers = vi.fn();
 const mockHealthCheck = vi.fn();
+const mockListUserTokens = vi.fn();
+const mockRevokeUserApiToken = vi.fn();
 
 vi.mock("@artifact-keeper/sdk", () => ({
   getSystemStats: (...args: unknown[]) => mockGetSystemStats(...args),
   listUsers: (...args: unknown[]) => mockListUsers(...args),
   healthCheck: (...args: unknown[]) => mockHealthCheck(...args),
+  listUserTokens: (...args: unknown[]) => mockListUserTokens(...args),
+  revokeUserApiToken: (...args: unknown[]) => mockRevokeUserApiToken(...args),
 }));
 
 describe("adminApi", () => {
@@ -57,5 +61,66 @@ describe("adminApi", () => {
     mockHealthCheck.mockResolvedValue({ data: undefined, error: "down" });
     const { adminApi } = await import("../admin");
     await expect(adminApi.getHealth()).rejects.toBe("down");
+  });
+
+  // ---- listUserTokens ----
+
+  it("listUserTokens returns items array for a given user", async () => {
+    const tokens = [
+      { id: "tok-1", name: "CI Token", key_prefix: "ak_" },
+      { id: "tok-2", name: "Deploy Token", key_prefix: "ak_" },
+    ];
+    mockListUserTokens.mockResolvedValue({
+      data: { items: tokens },
+      error: undefined,
+    });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.listUserTokens("user-42");
+    expect(mockListUserTokens).toHaveBeenCalledWith({
+      path: { id: "user-42" },
+    });
+    expect(result).toEqual(tokens);
+  });
+
+  it("listUserTokens returns empty array when data has no items", async () => {
+    mockListUserTokens.mockResolvedValue({ data: {}, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.listUserTokens("user-42");
+    expect(result).toEqual([]);
+  });
+
+  it("listUserTokens returns empty array when data is null", async () => {
+    mockListUserTokens.mockResolvedValue({ data: null, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.listUserTokens("user-42");
+    expect(result).toEqual([]);
+  });
+
+  it("listUserTokens throws on error", async () => {
+    mockListUserTokens.mockResolvedValue({
+      data: undefined,
+      error: "forbidden",
+    });
+    const { adminApi } = await import("../admin");
+    await expect(adminApi.listUserTokens("user-42")).rejects.toBe("forbidden");
+  });
+
+  // ---- revokeUserToken ----
+
+  it("revokeUserToken calls SDK with user id and token id", async () => {
+    mockRevokeUserApiToken.mockResolvedValue({ error: undefined });
+    const { adminApi } = await import("../admin");
+    await adminApi.revokeUserToken("user-42", "tok-1");
+    expect(mockRevokeUserApiToken).toHaveBeenCalledWith({
+      path: { id: "user-42", token_id: "tok-1" },
+    });
+  });
+
+  it("revokeUserToken throws on error", async () => {
+    mockRevokeUserApiToken.mockResolvedValue({ error: "not found" });
+    const { adminApi } = await import("../admin");
+    await expect(
+      adminApi.revokeUserToken("user-42", "bad-id")
+    ).rejects.toBe("not found");
   });
 });
