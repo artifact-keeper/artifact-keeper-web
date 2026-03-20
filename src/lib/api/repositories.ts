@@ -45,17 +45,19 @@ export const repositoriesApi = {
   },
 
   create: async (input: CreateRepositoryRequest): Promise<Repository> => {
+    const body = {
+      key: input.key,
+      name: input.name,
+      description: input.description ?? null,
+      format: input.format,
+      repo_type: input.repo_type,
+      is_public: input.is_public ?? null,
+      quota_bytes: input.quota_bytes ?? null,
+      upstream_url: input.upstream_url ?? null,
+      member_repos: input.member_repos ?? null,
+    };
     const { data, error } = await createRepository({
-      body: {
-        key: input.key,
-        name: input.name,
-        description: input.description ?? null,
-        format: input.format,
-        repo_type: input.repo_type,
-        is_public: input.is_public ?? null,
-        quota_bytes: input.quota_bytes ?? null,
-        upstream_url: input.upstream_url ?? null,
-      },
+      body: body as unknown as Parameters<typeof createRepository>[0]['body'],
     });
     if (error) throw error;
     return data as unknown as Repository;
@@ -85,9 +87,7 @@ export const repositoriesApi = {
   listMembers: async (repoKey: string): Promise<VirtualMembersResponse> => {
     const { data, error } = await listVirtualMembers({ path: { key: repoKey } });
     if (error) throw error;
-    // SDK returns { items: [...] }, our type expects { members: [...] }
-    const response = data as unknown as { items: VirtualRepoMember[] };
-    return { members: response.items };
+    return data as unknown as VirtualMembersResponse;
   },
 
   addMember: async (repoKey: string, memberKey: string, priority?: number): Promise<VirtualRepoMember> => {
@@ -110,8 +110,7 @@ export const repositoriesApi = {
       body: { members },
     });
     if (error) throw error;
-    const response = data as unknown as { items: VirtualRepoMember[] };
-    return { members: response.items };
+    return data as unknown as VirtualMembersResponse;
   },
 
   // Upstream authentication management
