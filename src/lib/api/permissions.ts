@@ -63,7 +63,7 @@ export const permissionsApi = {
 
   update: async (
     permissionId: string,
-    data: Partial<CreatePermissionRequest>
+    data: CreatePermissionRequest
   ): Promise<Permission> => {
     const { data: result, error } = await updatePermission({
       path: { id: permissionId },
