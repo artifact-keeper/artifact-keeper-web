@@ -23,7 +23,7 @@
   "dependencies": {
     "@artifact-keeper/sdk": "^1.1.0-rc.5",
     "@hookform/resolvers": "^5.2.2",
-    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query": "^5.94.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
