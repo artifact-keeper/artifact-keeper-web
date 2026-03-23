@@ -51,10 +51,16 @@ function CallbackHandler() {
 
         if (!response.ok) {
           const body = await response.json().catch(() => null);
+          const ERROR_MESSAGES: Record<string, string> = {
+            invalid_state: "SSO session expired. Please try again.",
+            invalid_code: "Authorization failed. Please try again.",
+            provider_error: "Identity provider returned an error.",
+            user_disabled: "Your account has been disabled.",
+          };
           const message =
-            body?.message ||
-            body?.error ||
-            "Failed to exchange authorization code. It may have expired.";
+            (body?.error && ERROR_MESSAGES[body.error]) ||
+            (body?.code && ERROR_MESSAGES[body.code]) ||
+            "Authentication failed. Please try again.";
           setError(message);
           return;
         }
