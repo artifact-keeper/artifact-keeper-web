@@ -52,7 +52,12 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            // 'unsafe-inline' is still required for script-src because Next.js
+            // injects inline <script> tags for page data (__NEXT_DATA__) and
+            // runtime configuration. The long-term fix is to switch to
+            // nonce-based CSP via next.config.ts experimental.serverActions or a
+            // custom Document with per-request nonces.
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests",
           },
         ],
       },
