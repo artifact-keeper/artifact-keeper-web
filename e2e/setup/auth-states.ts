@@ -19,7 +19,7 @@ const AUTH_DIR = path.join(__dirname, '..', '.auth');
 export const TEST_ROLES: Record<string, TestRole> = {
   admin: {
     username: 'admin',
-    password: 'admin',
+    password: 'Admin1234!',
     email: 'admin@test.local',
     displayName: 'Admin User',
     isAdmin: true,

@@ -2,6 +2,13 @@ import { test as setup, expect } from '@playwright/test';
 import { TEST_ROLES } from './auth-states';
 import { seedAll } from './seed-data';
 
+/**
+ * The initial admin password set by ADMIN_PASSWORD env var in CI.
+ * When this matches a well-known default, the backend forces a password
+ * change on first login (must_change_password: true).
+ */
+const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+
 /** Login as a user via the UI and save their storageState */
 async function loginAndSaveState(
   page: import('@playwright/test').Page,
@@ -40,29 +47,79 @@ async function loginAndSaveState(
   // Wait for redirect to dashboard or change-password
   await expect(page).toHaveURL(/\/$|\/dashboard|\/change-password/, { timeout: 15000 });
 
-  // Handle first-login password change if needed
-  if (page.url().includes('change-password')) {
-    await page.getByLabel(/new password/i).first().fill(password);
-    await page.getByLabel(/confirm/i).fill(password);
-    await page.getByRole('button', { name: /change|update|save/i }).click();
-    await expect(page).toHaveURL(/\/$/);
-  }
-
   await page.context().storageState({ path: storageStatePath });
 }
 
-setup('authenticate and seed data', async ({ page }) => {
-  // 1. Login as admin first
-  const admin = TEST_ROLES.admin;
-  await loginAndSaveState(page, admin.username, admin.password, admin.storageStatePath);
+/**
+ * Handle first-login password change when the backend forces it.
+ * The initial password (from ADMIN_PASSWORD env var) is typically a
+ * well-known default like "admin" which the backend flags as insecure.
+ * This changes it to the role's desired password.
+ */
+async function handlePasswordChangeIfNeeded(
+  page: import('@playwright/test').Page,
+  currentPassword: string,
+  newPassword: string,
+) {
+  if (!page.url().includes('change-password')) return false;
 
-  // 2. Seed test data using admin's authenticated session
+  console.log('[setup] Password change required, completing setup...');
+  await page.getByLabel(/current password/i).fill(currentPassword);
+  await page.getByLabel(/new password/i).first().fill(newPassword);
+  await page.getByLabel(/confirm/i).fill(newPassword);
+  await page.getByRole('button', { name: /change|update|save/i }).click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15000 });
+  console.log('[setup] Password changed successfully');
+  return true;
+}
+
+setup('authenticate and seed data', async ({ page }) => {
+  const admin = TEST_ROLES.admin;
+
+  // 1. Login as admin with the initial (possibly default) password
+  const initialPassword = INITIAL_ADMIN_PASSWORD;
+  console.log(`[setup] Logging in as admin with initial password...`);
+
+  const apiResponse = await page.request.post('/api/v1/auth/login', {
+    data: { username: admin.username, password: initialPassword },
+  });
+  console.log(`[setup] Direct API login for admin: ${apiResponse.status()}`);
+
+  await page.goto('/login');
+  await page.getByLabel('Username').fill(admin.username);
+  await page.getByLabel('Password').fill(initialPassword);
+
+  const loginPromise = page.waitForResponse(
+    (resp) => resp.url().includes('/auth/login') && resp.request().method() === 'POST',
+    { timeout: 15000 },
+  );
+
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  const loginResponse = await loginPromise.catch(() => null);
+  if (loginResponse) {
+    console.log(`[setup] Login response for admin: ${loginResponse.status()}`);
+  }
+
+  await expect(page).toHaveURL(/\/$|\/dashboard|\/change-password/, { timeout: 15000 });
+
+  // 2. Handle forced password change (initial password -> role password)
+  const changed = await handlePasswordChangeIfNeeded(page, initialPassword, admin.password);
+
+  if (changed) {
+    // Re-login with the new password since the session may have changed
+    await page.context().clearCookies();
+    await loginAndSaveState(page, admin.username, admin.password, admin.storageStatePath);
+  } else {
+    await page.context().storageState({ path: admin.storageStatePath });
+  }
+
+  // 3. Seed test data using admin's authenticated session
   await seedAll(page.request);
 
-  // 3. Login as each non-admin role and save their auth state
+  // 4. Login as each non-admin role and save their auth state
   for (const [roleName, role] of Object.entries(TEST_ROLES)) {
     if (roleName === 'admin') continue;
-    // Clear cookies/state before logging in as next user
     await page.context().clearCookies();
     console.log(`[setup] Authenticating as ${roleName}...`);
     await loginAndSaveState(page, role.username, role.password, role.storageStatePath);
