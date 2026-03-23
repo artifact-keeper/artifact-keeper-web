@@ -60,10 +60,10 @@ import { EmptyState } from "@/components/common/empty-state";
 
 function generateRandomPassword(length = 16): string {
   const chars =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
-  return Array.from({ length }, () =>
-    chars.charAt(Math.floor(Math.random() * chars.length))
-  ).join("");
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
+  const array = new Uint32Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array, (n) => chars[n % chars.length]).join("");
 }
 
 // -- types --
