@@ -359,7 +359,7 @@ describe("useChunkedUpload", () => {
   // ---- Pause / Resume state transitions ----
 
   it("pause sets status to paused when uploading", async () => {
-    const hook = await loadHook();
+    await loadHook();
 
     // The hook's pause relies on status === "uploading". Since we mock useState,
     // the status state slot is stateSlots[0]. Simulate uploading state.
@@ -395,7 +395,7 @@ describe("useChunkedUpload", () => {
       refSlots[3].current = "test-file.bin";
     }
 
-    await hook.cancel();
+    hook.cancel();
 
     expect(mockCancelUploadSession).toHaveBeenCalledWith("sess-cancel");
     expect(mockLocalStorage.removeItem).toHaveBeenCalledWith(
@@ -412,7 +412,7 @@ describe("useChunkedUpload", () => {
     }
     mockCancelUploadSession.mockResolvedValue(undefined);
 
-    await hook.cancel();
+    hook.cancel();
 
     // After cancel, the status setter should have been called with "idle"
     // and progress setter with initial values. Verify through state slots.
@@ -433,7 +433,7 @@ describe("useChunkedUpload", () => {
     const hook = await loadHook();
 
     // No session ref set (default null)
-    await hook.cancel();
+    hook.cancel();
 
     expect(mockCancelUploadSession).not.toHaveBeenCalled();
   });
