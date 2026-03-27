@@ -63,18 +63,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    return [
-      // The backend redirects to /auth/callback after SSO code exchange,
-      // but the Next.js page lives in the (auth) route group which does
-      // not produce a URL segment. Rewrite so the page is reachable at
-      // both /callback and /auth/callback.
-      {
-        source: "/auth/callback",
-        destination: "/callback",
-      },
-    ];
-  },
   // API proxy is handled by src/middleware.ts at runtime (reads BACKEND_URL
   // env var on each request) so that Docker containers can be configured
   // without rebuilding.  See: https://github.com/artifact-keeper/artifact-keeper-web/issues/56
