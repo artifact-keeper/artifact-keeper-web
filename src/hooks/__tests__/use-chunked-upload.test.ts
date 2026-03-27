@@ -395,7 +395,7 @@ describe("useChunkedUpload", () => {
       refSlots[3].current = "test-file.bin";
     }
 
-    hook.cancel();
+    await hook.cancel();
 
     expect(mockCancelUploadSession).toHaveBeenCalledWith("sess-cancel");
     expect(mockLocalStorage.removeItem).toHaveBeenCalledWith(
@@ -412,7 +412,7 @@ describe("useChunkedUpload", () => {
     }
     mockCancelUploadSession.mockResolvedValue(undefined);
 
-    hook.cancel();
+    await hook.cancel();
 
     // After cancel, the status setter should have been called with "idle"
     // and progress setter with initial values. Verify through state slots.
@@ -433,7 +433,7 @@ describe("useChunkedUpload", () => {
     const hook = await loadHook();
 
     // No session ref set (default null)
-    hook.cancel();
+    await hook.cancel();
 
     expect(mockCancelUploadSession).not.toHaveBeenCalled();
   });
