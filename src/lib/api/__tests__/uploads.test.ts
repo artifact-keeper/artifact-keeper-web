@@ -8,9 +8,16 @@ vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
 }));
 
-const mockApiFetch = vi.fn();
-vi.mock("@/lib/api/fetch", () => ({
-  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+// Mock the SDK functions that the refactored module now calls
+const mockCreateSession = vi.fn();
+const mockGetSessionStatus = vi.fn();
+const mockComplete = vi.fn();
+const mockCancel = vi.fn();
+vi.mock("@artifact-keeper/sdk", () => ({
+  createSession: (...args: unknown[]) => mockCreateSession(...args),
+  getSessionStatus: (...args: unknown[]) => mockGetSessionStatus(...args),
+  complete: (...args: unknown[]) => mockComplete(...args),
+  cancel: (...args: unknown[]) => mockCancel(...args),
 }));
 
 const mockFetch = vi.fn();
@@ -62,6 +69,24 @@ function mockResponse(options: {
   } as unknown as Response;
 }
 
+/** Build an SDK-style success result ({ data, error: undefined, response }). */
+function sdkOk<T>(data: T, status = 200) {
+  return {
+    data,
+    error: undefined,
+    response: mockResponse({ ok: true, status, json: data }),
+  };
+}
+
+/** Build an SDK-style error result ({ data: undefined, error, response }). */
+function sdkErr(error: { code: string; message: string }, status: number) {
+  return {
+    data: undefined,
+    error,
+    response: mockResponse({ ok: false, status }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -74,14 +99,14 @@ describe("uploads API client", () => {
   // ---- createUploadSession ----
 
   describe("createUploadSession", () => {
-    it("calls apiFetch with POST and stringified body", async () => {
+    it("calls SDK createSession with correct body and returns data", async () => {
       const responseData: CreateSessionResponse = {
         session_id: "sess-001",
         chunk_count: 4,
         chunk_size: 8388608,
         expires_at: "2026-03-25T00:00:00Z",
       };
-      mockApiFetch.mockResolvedValue(responseData);
+      mockCreateSession.mockResolvedValue(sdkOk(responseData, 201));
 
       const result = await createUploadSession({
         repository_key: "my-repo",
@@ -92,22 +117,23 @@ describe("uploads API client", () => {
         content_type: "application/gzip",
       });
 
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/uploads", {
-        method: "POST",
-        body: JSON.stringify({
+      expect(mockCreateSession).toHaveBeenCalledWith({
+        body: {
           repository_key: "my-repo",
           artifact_path: "pkg/foo-1.0.tar.gz",
           total_size: 33554432,
           checksum_sha256: "abcdef1234567890",
           chunk_size: 8388608,
           content_type: "application/gzip",
-        }),
+        },
       });
       expect(result).toEqual(responseData);
     });
 
-    it("propagates errors from apiFetch", async () => {
-      mockApiFetch.mockRejectedValue(new Error("API error 500: internal"));
+    it("throws on SDK error", async () => {
+      mockCreateSession.mockResolvedValue(
+        sdkErr({ code: "INTERNAL", message: "internal" }, 500)
+      );
 
       await expect(
         createUploadSession({
@@ -116,7 +142,7 @@ describe("uploads API client", () => {
           total_size: 100,
           checksum_sha256: "abc",
         })
-      ).rejects.toThrow("API error 500: internal");
+      ).rejects.toThrow("Failed to create upload session: internal");
     });
   });
 
@@ -212,7 +238,7 @@ describe("uploads API client", () => {
   // ---- getUploadSession ----
 
   describe("getUploadSession", () => {
-    it("fetches session status with GET", async () => {
+    it("calls SDK getSessionStatus and returns data", async () => {
       const session: UploadSession = {
         session_id: "sess-001",
         status: "in_progress",
@@ -225,25 +251,19 @@ describe("uploads API client", () => {
         created_at: "2026-03-24T10:00:00Z",
         expires_at: "2026-03-25T10:00:00Z",
       };
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: true, status: 200, json: session })
-      );
+      mockGetSessionStatus.mockResolvedValue(sdkOk(session));
 
       const result = await getUploadSession("sess-001");
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:8080/api/v1/uploads/sess-001",
-        expect.objectContaining({
-          method: "GET",
-          credentials: "include",
-        })
-      );
+      expect(mockGetSessionStatus).toHaveBeenCalledWith({
+        path: { session_id: "sess-001" },
+      });
       expect(result).toEqual(session);
     });
 
     it("throws UploadSessionExpiredError on 410 status", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 410, text: "expired" })
+      mockGetSessionStatus.mockResolvedValue(
+        sdkErr({ code: "EXPIRED", message: "expired" }, 410)
       );
 
       await expect(getUploadSession("old-sess")).rejects.toThrow(
@@ -251,23 +271,13 @@ describe("uploads API client", () => {
       );
     });
 
-    it("throws generic error with status for other failures", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 404, text: "not found" })
+    it("throws generic error for other failure statuses", async () => {
+      mockGetSessionStatus.mockResolvedValue(
+        sdkErr({ code: "NOT_FOUND", message: "not found" }, 404)
       );
 
       await expect(getUploadSession("missing-sess")).rejects.toThrow(
-        "Failed to get upload session (404): not found"
-      );
-    });
-
-    it("throws with empty body when response.text() fails", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 503, textRejects: true })
-      );
-
-      await expect(getUploadSession("sess-001")).rejects.toThrow(
-        "Failed to get upload session (503): "
+        "Failed to get upload session: not found"
       );
     });
   });
@@ -275,32 +285,26 @@ describe("uploads API client", () => {
   // ---- completeUploadSession ----
 
   describe("completeUploadSession", () => {
-    it("sends PUT to complete endpoint and returns result", async () => {
+    it("calls SDK complete and returns result", async () => {
       const completeResult: CompleteResult = {
         artifact_id: "art-001",
         path: "pkg/foo-1.0.tar.gz",
         size: 33554432,
         checksum_sha256: "abcdef1234567890",
       };
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: true, status: 200, json: completeResult })
-      );
+      mockComplete.mockResolvedValue(sdkOk(completeResult));
 
       const result = await completeUploadSession("sess-001");
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:8080/api/v1/uploads/sess-001/complete",
-        expect.objectContaining({
-          method: "PUT",
-          credentials: "include",
-        })
-      );
+      expect(mockComplete).toHaveBeenCalledWith({
+        path: { session_id: "sess-001" },
+      });
       expect(result).toEqual(completeResult);
     });
 
     it("throws ChecksumMismatchError on 409 status", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 409, text: "checksum mismatch" })
+      mockComplete.mockResolvedValue(
+        sdkErr({ code: "CHECKSUM_MISMATCH", message: "checksum mismatch" }, 409)
       );
 
       await expect(completeUploadSession("sess-001")).rejects.toThrow(
@@ -309,8 +313,8 @@ describe("uploads API client", () => {
     });
 
     it("throws UploadSessionExpiredError on 410 status", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 410, text: "expired" })
+      mockComplete.mockResolvedValue(
+        sdkErr({ code: "EXPIRED", message: "expired" }, 410)
       );
 
       await expect(completeUploadSession("sess-001")).rejects.toThrow(
@@ -319,22 +323,12 @@ describe("uploads API client", () => {
     });
 
     it("throws generic error for other failure statuses", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 500, text: "internal error" })
+      mockComplete.mockResolvedValue(
+        sdkErr({ code: "INTERNAL", message: "internal error" }, 500)
       );
 
       await expect(completeUploadSession("sess-001")).rejects.toThrow(
-        "Failed to finalize upload (500): internal error"
-      );
-    });
-
-    it("throws with empty body when response.text() fails", async () => {
-      mockFetch.mockResolvedValue(
-        mockResponse({ ok: false, status: 502, textRejects: true })
-      );
-
-      await expect(completeUploadSession("sess-001")).rejects.toThrow(
-        "Failed to finalize upload (502): "
+        "Failed to finalize upload: internal error"
       );
     });
   });
@@ -342,21 +336,27 @@ describe("uploads API client", () => {
   // ---- cancelUploadSession ----
 
   describe("cancelUploadSession", () => {
-    it("calls apiFetch with DELETE for the session", async () => {
-      mockApiFetch.mockResolvedValue(undefined);
+    it("calls SDK cancel with session path", async () => {
+      mockCancel.mockResolvedValue({
+        data: undefined,
+        error: undefined,
+        response: mockResponse({ ok: true, status: 204 }),
+      });
 
       await cancelUploadSession("sess-001");
 
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/uploads/sess-001", {
-        method: "DELETE",
+      expect(mockCancel).toHaveBeenCalledWith({
+        path: { session_id: "sess-001" },
       });
     });
 
-    it("propagates errors from apiFetch", async () => {
-      mockApiFetch.mockRejectedValue(new Error("API error 404: Not Found"));
+    it("throws on SDK error", async () => {
+      mockCancel.mockResolvedValue(
+        sdkErr({ code: "NOT_FOUND", message: "Not Found" }, 404)
+      );
 
       await expect(cancelUploadSession("no-such")).rejects.toThrow(
-        "API error 404: Not Found"
+        "Failed to cancel upload: Not Found"
       );
     });
   });

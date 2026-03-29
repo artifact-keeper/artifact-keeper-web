@@ -1,52 +1,36 @@
-import { apiFetch } from './fetch';
+import '@/lib/sdk-client';
+import {
+  createSession as sdkCreateSession,
+  getSessionStatus as sdkGetSessionStatus,
+  complete as sdkComplete,
+  cancel as sdkCancel,
+} from '@artifact-keeper/sdk';
+import type {
+  CreateSessionRequest,
+  CreateSessionResponse,
+  SessionStatusResponse,
+  ChunkResponse,
+  CompleteResponse,
+} from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 
-// --- Types ---
+// --- Re-export SDK types under the names the rest of the codebase expects ---
 
-export interface CreateSessionParams {
-  repository_key: string;
-  artifact_path: string;
-  total_size: number;
-  checksum_sha256: string;
-  chunk_size?: number;
-  content_type?: string;
-}
+export type { CreateSessionResponse };
 
-/** Response from POST /api/v1/uploads (create session) */
-export interface CreateSessionResponse {
-  session_id: string;
-  chunk_count: number;
-  chunk_size: number;
-  expires_at: string;
-}
+/** Alias for the SDK's SessionStatusResponse, matching the old hand-rolled type. */
+export type UploadSession = SessionStatusResponse;
 
-/** Response from GET /api/v1/uploads/{session_id} (session status) */
-export interface UploadSession {
-  session_id: string;
-  status: 'in_progress' | 'completed' | 'cancelled' | 'expired';
-  total_size: number;
-  bytes_received: number;
-  chunks_completed: number;
-  chunks_total: number;
-  repository_key: string;
-  artifact_path: string;
-  created_at: string;
-  expires_at: string;
-}
+/** Alias kept for backward compatibility with the hook's public interface. */
+export type CompleteResult = CompleteResponse;
 
-export interface ChunkResult {
-  chunk_index: number;
-  bytes_received: number;
-  chunks_completed: number;
-  chunks_remaining: number;
-}
+/** Alias kept for backward compatibility. */
+export type ChunkResult = ChunkResponse;
 
-export interface CompleteResult {
-  artifact_id: string;
-  path: string;
-  size: number;
-  checksum_sha256: string;
-}
+/** Parameters for creating an upload session (maps to CreateSessionRequest). */
+export type CreateSessionParams = CreateSessionRequest;
+
+// --- Custom error classes (not provided by the SDK) ---
 
 export class UploadSessionExpiredError extends Error {
   constructor(sessionId: string) {
@@ -62,19 +46,32 @@ export class ChecksumMismatchError extends Error {
   }
 }
 
-// --- API Functions ---
+// --- Helpers ---
 
-const UPLOADS_PATH = '/api/v1/uploads';
+function errorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
+
+// --- API Functions ---
 
 export async function createUploadSession(
   params: CreateSessionParams
 ): Promise<CreateSessionResponse> {
-  return apiFetch<CreateSessionResponse>(UPLOADS_PATH, {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  const { data, error } = await sdkCreateSession({ body: params });
+  if (error) {
+    throw new Error(`Failed to create upload session: ${errorMessage(error)}`);
+  }
+  return data as unknown as CreateSessionResponse;
 }
 
+/**
+ * Upload a binary chunk. The SDK's uploadChunk declares body as never because
+ * the OpenAPI spec uses application/octet-stream, which the generated client
+ * cannot serialize. We keep a raw fetch call for this endpoint.
+ */
 export async function uploadChunk(
   sessionId: string,
   start: number,
@@ -83,7 +80,7 @@ export async function uploadChunk(
   data: Blob
 ): Promise<ChunkResult> {
   const baseUrl = getActiveInstanceBaseUrl();
-  const response = await fetch(`${baseUrl}${UPLOADS_PATH}/${sessionId}`, {
+  const response = await fetch(`${baseUrl}/api/v1/uploads/${sessionId}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: {
@@ -105,48 +102,49 @@ export async function uploadChunk(
 export async function getUploadSession(
   sessionId: string
 ): Promise<UploadSession> {
-  const baseUrl = getActiveInstanceBaseUrl();
-  const response = await fetch(`${baseUrl}${UPLOADS_PATH}/${sessionId}`, {
-    method: 'GET',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+  const { data, error, response } = await sdkGetSessionStatus({
+    path: { session_id: sessionId },
   });
-  if (!response.ok) {
-    if (response.status === 410) {
+  if (error) {
+    if (response?.status === 410) {
       throw new UploadSessionExpiredError(sessionId);
     }
-    const body = await response.text().catch(() => '');
-    throw new Error(`Failed to get upload session (${response.status}): ${body}`);
+    throw new Error(
+      `Failed to get upload session: ${errorMessage(error)}`
+    );
   }
-  return response.json() as Promise<UploadSession>;
+  return data as unknown as UploadSession;
 }
 
 export async function completeUploadSession(
   sessionId: string
 ): Promise<CompleteResult> {
-  const baseUrl = getActiveInstanceBaseUrl();
-  const response = await fetch(`${baseUrl}${UPLOADS_PATH}/${sessionId}/complete`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+  const { data, error, response } = await sdkComplete({
+    path: { session_id: sessionId },
   });
-  if (!response.ok) {
-    if (response.status === 409) {
+  if (error) {
+    if (response?.status === 409) {
       throw new ChecksumMismatchError();
     }
-    if (response.status === 410) {
+    if (response?.status === 410) {
       throw new UploadSessionExpiredError(sessionId);
     }
-    const body = await response.text().catch(() => '');
-    throw new Error(`Failed to finalize upload (${response.status}): ${body}`);
+    throw new Error(
+      `Failed to finalize upload: ${errorMessage(error)}`
+    );
   }
-  return response.json() as Promise<CompleteResult>;
+  return data as unknown as CompleteResult;
 }
 
 export async function cancelUploadSession(
   sessionId: string
 ): Promise<void> {
-  return apiFetch<void>(`${UPLOADS_PATH}/${sessionId}`, {
-    method: 'DELETE',
+  const { error } = await sdkCancel({
+    path: { session_id: sessionId },
   });
+  if (error) {
+    throw new Error(
+      `Failed to cancel upload: ${errorMessage(error)}`
+    );
+  }
 }
