@@ -389,7 +389,7 @@ export default function UsersPage() {
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={() => handleViewTokens(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label="View Tokens" onClick={() => handleViewTokens(u)}>
                 <Key className="size-3.5" />
               </Button>
             </TooltipTrigger>
@@ -397,7 +397,7 @@ export default function UsersPage() {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={() => handleEdit(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label="Edit" onClick={() => handleEdit(u)}>
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
@@ -408,6 +408,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Reset Password"
                 onClick={() => handleResetPassword(u)}
                 disabled={isSelf(u)}
               >
@@ -421,6 +422,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label={u.is_active !== false ? "Disable" : "Enable"}
                 onClick={() => handleToggleStatus(u)}
                 disabled={isSelf(u)}
               >
@@ -440,6 +442,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Delete"
                 className="text-destructive hover:text-destructive"
                 onClick={() => handleDelete(u)}
                 disabled={isSelf(u)}
