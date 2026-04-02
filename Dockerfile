@@ -101,6 +101,9 @@ COPY --from=build --chown=root:root --chmod=555 /app/public ./public
 COPY --from=build --chown=root:root --chmod=555 /app/.next/standalone ./
 COPY --from=build --chown=root:root --chmod=555 /app/.next/static ./.next/static
 
+# Next.js needs a writable cache directory for image optimization at runtime
+RUN mkdir -p .next/cache && chown 1001:0 .next/cache
+
 USER 1001
 
 EXPOSE 3000
