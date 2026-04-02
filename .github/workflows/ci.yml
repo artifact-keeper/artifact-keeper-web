@@ -104,6 +104,7 @@ jobs:
         run: npx playwright test --project=interactions --shard=${{ matrix.shard }}/3 --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload test report
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -155,6 +156,7 @@ jobs:
         run: npx playwright test --project=roles-admin --project=roles-developer --project=roles-viewer --project=roles-security --project=roles-restricted --project=roles-unauthenticated --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload test report
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -206,6 +208,7 @@ jobs:
         run: npx playwright test --project=visual --update-snapshots --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload visual baseline snapshots
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

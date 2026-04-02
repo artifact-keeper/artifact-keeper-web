@@ -22,7 +22,7 @@ test.describe('Authentication', () => {
   test('successful login redirects to dashboard', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
-    await loginPage.login('admin', 'admin');
+    await loginPage.login('admin', process.env.ADMIN_PASSWORD || 'TestRunner!2026secure');
     await expect(page).toHaveURL(/\/$|\/dashboard|\/change-password/, { timeout: 10000 });
   });
 
