@@ -98,12 +98,12 @@ npm config set //${REGISTRY_HOST}/npm/${repoKey}/:_authToken YOUR_TOKEN`,
           title: "Configure pip",
           description: "Add to ~/.pip/pip.conf or ~/.config/pip/pip.conf:",
           code: `[global]
-index-url = ${REGISTRY_URL}/pypi/${repoKey}/simple/
+index-url = ${REGISTRY_URL}/pypi/${repoKey}/
 trusted-host = ${REGISTRY_HOST}`,
         },
         {
           title: "Install a package",
-          code: `pip install --index-url ${REGISTRY_URL}/pypi/${repoKey}/simple/ <package-name>`,
+          code: `pip install --index-url ${REGISTRY_URL}/pypi/${repoKey}/ <package-name>`,
         },
         {
           title: "Upload with twine",
