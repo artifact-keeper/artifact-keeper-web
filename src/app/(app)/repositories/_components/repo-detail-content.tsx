@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  Bell,
   Download,
   Trash2,
   Search,
@@ -26,6 +27,7 @@ import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
 import { HealthTabContent } from "./health-tab-content";
+import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
@@ -511,6 +513,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Security
             </TabsTrigger>
           )}
+          {user?.is_admin && (
+            <TabsTrigger value="notifications">
+              <Bell className="size-3.5 mr-1" />
+              Notifications
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* --- Artifacts Tab --- */}
@@ -675,6 +683,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 </Button>
               </form>
             )}
+          </TabsContent>
+        )}
+
+        {/* --- Notifications Tab --- */}
+        {user?.is_admin && (
+          <TabsContent value="notifications" className="mt-4">
+            <NotificationsTabContent repositoryId={repository.id} />
           </TabsContent>
         )}
       </Tabs>
