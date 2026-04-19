@@ -32,6 +32,8 @@ vi.mock("lucide-react", () => {
     Copy: stub("Copy"),
     Users: stub("Users"),
     ShieldCheck: stub("ShieldCheck"),
+    Check: stub("Check"),
+    X: stub("X"),
   };
 });
 
@@ -97,6 +99,26 @@ vi.mock("@/lib/api/admin", () => ({
 }));
 
 vi.mock("@/lib/api/profile", () => ({}));
+vi.mock("@/lib/api/settings", () => ({
+  settingsApi: {
+    getPasswordPolicy: vi.fn().mockResolvedValue({
+      min_length: 8,
+      require_uppercase: true,
+      require_lowercase: true,
+      require_digit: true,
+      require_special: false,
+      history_count: 5,
+    }),
+    DEFAULT_PASSWORD_POLICY: {
+      min_length: 8,
+      require_uppercase: true,
+      require_lowercase: true,
+      require_digit: true,
+      require_special: false,
+      history_count: 5,
+    },
+  },
+}));
 vi.mock("@/lib/query-keys", () => ({
   invalidateGroup: vi.fn(),
 }));

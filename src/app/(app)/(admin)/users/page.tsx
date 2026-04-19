@@ -55,6 +55,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { StatusBadge } from "@/components/common/status-badge";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 
 // -- helpers --
 
@@ -590,31 +591,34 @@ export default function UsersPage() {
                 </div>
               </div>
               {!createForm.auto_generate && (
-                <div className="flex gap-2">
-                  <Input
-                    id="create-password"
-                    type="text"
-                    placeholder="Enter password"
-                    value={createForm.password}
-                    onChange={(e) =>
-                      setCreateForm((f) => ({ ...f, password: e.target.value }))
-                    }
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCreateForm((f) => ({
-                        ...f,
-                        password: generateRandomPassword(),
-                      }))
-                    }
-                  >
-                    Generate
-                  </Button>
-                </div>
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      id="create-password"
+                      type="text"
+                      placeholder="Enter password"
+                      value={createForm.password}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, password: e.target.value }))
+                      }
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCreateForm((f) => ({
+                          ...f,
+                          password: generateRandomPassword(),
+                        }))
+                      }
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                  <PasswordPolicyHint password={createForm.password} />
+                </>
               )}
             </div>
             <div className="flex items-center gap-3">

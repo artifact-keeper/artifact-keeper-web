@@ -3,6 +3,7 @@
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api/admin";
+import { settingsApi } from "@/lib/api/settings";
 import { Server, HardDrive, Lock, Info } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 
 import { PageHeader } from "@/components/common/page-header";
+import type { PasswordPolicy } from "@/lib/api/settings";
 
 // -- helpers --
 
@@ -37,6 +39,23 @@ function SettingRow({
   );
 }
 
+function formatPasswordPolicy(policy: PasswordPolicy | undefined): string {
+  if (!policy) return "Loading...";
+  const parts = [`Minimum ${policy.min_length} characters`];
+  const complexity: string[] = [];
+  if (policy.require_uppercase) complexity.push("uppercase");
+  if (policy.require_lowercase) complexity.push("lowercase");
+  if (policy.require_digit) complexity.push("number");
+  if (policy.require_special) complexity.push("special character");
+  if (complexity.length > 0) {
+    parts.push(`requires ${complexity.join(", ")}`);
+  }
+  if (policy.history_count > 0) {
+    parts.push(`${policy.history_count} password history`);
+  }
+  return parts.join("; ");
+}
+
 // -- page --
 
 export default function SettingsPage() {
@@ -44,6 +63,13 @@ export default function SettingsPage() {
   const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: () => adminApi.getHealth(),
+  });
+
+  const { data: passwordPolicy } = useQuery({
+    queryKey: ["password-policy"],
+    queryFn: () => settingsApi.getPasswordPolicy(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   if (!user?.is_admin) {
@@ -210,7 +236,7 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Password Policy"
-                value="Minimum 8 characters"
+                value={formatPasswordPolicy(passwordPolicy)}
                 description="Minimum password requirements for user accounts."
               />
             </CardContent>
