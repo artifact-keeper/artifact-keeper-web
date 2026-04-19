@@ -42,6 +42,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,18 +111,22 @@ interface NotificationsTabContentProps {
 export function NotificationsTabContent({ repositoryId }: NotificationsTabContentProps) {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [webhookToDelete, setWebhookToDelete] = useState<string | null>(null);
+  const [actingWebhookId, setActingWebhookId] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
   const [formUrl, setFormUrl] = useState("");
   const [formSecret, setFormSecret] = useState("");
   const [formEvents, setFormEvents] = useState<WebhookEvent[]>([]);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
     setFormName("");
     setFormUrl("");
     setFormSecret("");
     setFormEvents([]);
+    setUrlError(null);
   }, []);
 
   // -------------------------------------------------------------------------
@@ -157,9 +162,12 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     mutationFn: (id: string) => webhooksApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
+      setWebhookToDelete(null);
+      setActingWebhookId(null);
       toast.success("Webhook deleted");
     },
     onError: (err: unknown) => {
+      setActingWebhookId(null);
       toast.error(toUserMessage(err, "Failed to delete webhook"));
     },
   });
@@ -168,9 +176,11 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     mutationFn: (id: string) => webhooksApi.enable(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
+      setActingWebhookId(null);
       toast.success("Webhook enabled");
     },
     onError: (err: unknown) => {
+      setActingWebhookId(null);
       toast.error(toUserMessage(err, "Failed to enable webhook"));
     },
   });
@@ -179,9 +189,11 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     mutationFn: (id: string) => webhooksApi.disable(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
+      setActingWebhookId(null);
       toast.success("Webhook disabled");
     },
     onError: (err: unknown) => {
+      setActingWebhookId(null);
       toast.error(toUserMessage(err, "Failed to disable webhook"));
     },
   });
@@ -189,6 +201,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
   const testMutation = useMutation({
     mutationFn: (id: string) => webhooksApi.test(id),
     onSuccess: (result) => {
+      setActingWebhookId(null);
       if (result.success) {
         toast.success(`Test delivery succeeded (HTTP ${result.status_code})`);
       } else {
@@ -196,6 +209,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       }
     },
     onError: (err: unknown) => {
+      setActingWebhookId(null);
       toast.error(toUserMessage(err, "Failed to send test"));
     },
   });
@@ -218,9 +232,15 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       toast.error("Name, URL, and at least one event are required");
       return;
     }
+    const trimmedUrl = formUrl.trim();
+    if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+      setUrlError("URL must start with http:// or https://");
+      return;
+    }
+    setUrlError(null);
     createMutation.mutate({
       name: formName.trim(),
-      url: formUrl.trim(),
+      url: trimmedUrl,
       events: formEvents,
       secret: formSecret.trim() || undefined,
       repository_id: repositoryId,
@@ -281,18 +301,30 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
         </div>
       ) : (
         <div className="space-y-3">
-          {webhooks.map((webhook) => (
-            <WebhookCard
-              key={webhook.id}
-              webhook={webhook}
-              onDelete={(id) => deleteMutation.mutate(id)}
-              onEnable={(id) => enableMutation.mutate(id)}
-              onDisable={(id) => disableMutation.mutate(id)}
-              onTest={(id) => testMutation.mutate(id)}
-              isDeleting={deleteMutation.isPending}
-              isTesting={testMutation.isPending}
-            />
-          ))}
+          {webhooks.map((webhook) => {
+            const isActing = actingWebhookId === webhook.id;
+            return (
+              <WebhookCard
+                key={webhook.id}
+                webhook={webhook}
+                onDelete={(id) => setWebhookToDelete(id)}
+                onEnable={(id) => {
+                  setActingWebhookId(id);
+                  enableMutation.mutate(id);
+                }}
+                onDisable={(id) => {
+                  setActingWebhookId(id);
+                  disableMutation.mutate(id);
+                }}
+                onTest={(id) => {
+                  setActingWebhookId(id);
+                  testMutation.mutate(id);
+                }}
+                isDeleting={isActing && deleteMutation.isPending}
+                isTesting={isActing && testMutation.isPending}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -321,8 +353,16 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
                 type="url"
                 placeholder="https://example.com/webhook"
                 value={formUrl}
-                onChange={(e) => setFormUrl(e.target.value)}
+                onChange={(e) => {
+                  setFormUrl(e.target.value);
+                  setUrlError(null);
+                }}
               />
+              {urlError && (
+                <p className="text-xs text-destructive" data-testid="url-error">
+                  {urlError}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -393,6 +433,25 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Webhook Confirm */}
+      <ConfirmDialog
+        open={!!webhookToDelete}
+        onOpenChange={(open) => {
+          if (!open) setWebhookToDelete(null);
+        }}
+        title="Delete Webhook"
+        description="This will permanently remove this webhook. It will no longer receive event notifications."
+        confirmText="Delete Webhook"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (webhookToDelete) {
+            setActingWebhookId(webhookToDelete);
+            deleteMutation.mutate(webhookToDelete);
+          }
+        }}
+      />
     </div>
   );
 }

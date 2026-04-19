@@ -115,6 +115,47 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
 }));
 
+// Stub ConfirmDialog
+vi.mock("@/components/common/confirm-dialog", () => ({
+  ConfirmDialog: ({
+    open,
+    onOpenChange,
+    title,
+    description,
+    confirmText,
+    loading,
+    onConfirm,
+  }: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    title: string;
+    description: string;
+    confirmText?: string;
+    loading?: boolean;
+    danger?: boolean;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div data-testid="confirm-dialog">
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <button
+          data-testid="confirm-dialog-cancel"
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </button>
+        <button
+          data-testid="confirm-dialog-confirm"
+          disabled={loading}
+          onClick={onConfirm}
+        >
+          {confirmText ?? "Confirm"}
+        </button>
+      </div>
+    ) : null,
+}));
+
 // Stub Checkbox as a simple native checkbox
 vi.mock("@/components/ui/checkbox", () => ({
   Checkbox: ({
@@ -518,6 +559,110 @@ describe("NotificationsTabContent", () => {
       name: "Enable webhook",
     });
     expect(enableBtn).toBeInTheDocument();
+  });
+
+  // -----------------------------------------------------------------------
+  // Delete confirmation dialog
+  // -----------------------------------------------------------------------
+
+  it("opens confirm dialog when delete button is clicked", async () => {
+    queryResponses["webhooks"] = {
+      data: { items: [SAMPLE_WEBHOOKS[0]], total: 1 },
+      isLoading: false,
+    };
+    render(<NotificationsTabContent repositoryId="repo-123" />);
+
+    // Confirm dialog should not be visible initially
+    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+
+    const card = screen.getByTestId("webhook-card-wh-1");
+    const deleteBtn = within(card).getByRole("button", {
+      name: "Delete webhook",
+    });
+    await userEvent.click(deleteBtn);
+
+    // Confirm dialog should now be visible
+    const confirmDialog = screen.getByTestId("confirm-dialog");
+    expect(confirmDialog).toBeInTheDocument();
+    expect(
+      within(confirmDialog).getByText(
+        "This will permanently remove this webhook. It will no longer receive event notifications."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("dismisses confirm dialog when cancel is clicked", async () => {
+    queryResponses["webhooks"] = {
+      data: { items: [SAMPLE_WEBHOOKS[0]], total: 1 },
+      isLoading: false,
+    };
+    render(<NotificationsTabContent repositoryId="repo-123" />);
+
+    const card = screen.getByTestId("webhook-card-wh-1");
+    const deleteBtn = within(card).getByRole("button", {
+      name: "Delete webhook",
+    });
+    await userEvent.click(deleteBtn);
+
+    expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("confirm-dialog-cancel"));
+    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+  });
+
+  // -----------------------------------------------------------------------
+  // URL validation
+  // -----------------------------------------------------------------------
+
+  it("shows URL validation error for non-http URLs", async () => {
+    queryResponses["webhooks"] = {
+      data: { items: [], total: 0 },
+      isLoading: false,
+    };
+    render(<NotificationsTabContent repositoryId="repo-123" />);
+    await userEvent.click(screen.getByTestId("add-webhook-button"));
+
+    // Fill in name and events
+    await userEvent.type(screen.getByLabelText("Name"), "Test Hook");
+    await userEvent.type(
+      screen.getByPlaceholderText("https://example.com/webhook"),
+      "ftp://example.com/hook"
+    );
+    // Check at least one event
+    const checkboxes = screen.getAllByTestId("mock-checkbox");
+    await userEvent.click(checkboxes[0]);
+
+    await userEvent.click(screen.getByTestId("create-webhook-submit"));
+
+    expect(screen.getByTestId("url-error")).toBeInTheDocument();
+    expect(
+      screen.getByText("URL must start with http:// or https://")
+    ).toBeInTheDocument();
+  });
+
+  it("clears URL validation error when URL field is edited", async () => {
+    queryResponses["webhooks"] = {
+      data: { items: [], total: 0 },
+      isLoading: false,
+    };
+    render(<NotificationsTabContent repositoryId="repo-123" />);
+    await userEvent.click(screen.getByTestId("add-webhook-button"));
+
+    // Fill in name and events
+    await userEvent.type(screen.getByLabelText("Name"), "Test Hook");
+    const urlInput = screen.getByPlaceholderText(
+      "https://example.com/webhook"
+    );
+    await userEvent.type(urlInput, "ftp://bad");
+    const checkboxes = screen.getAllByTestId("mock-checkbox");
+    await userEvent.click(checkboxes[0]);
+
+    await userEvent.click(screen.getByTestId("create-webhook-submit"));
+    expect(screen.getByTestId("url-error")).toBeInTheDocument();
+
+    // Typing in the URL field clears the error
+    await userEvent.type(urlInput, "x");
+    expect(screen.queryByTestId("url-error")).not.toBeInTheDocument();
   });
 
   // -----------------------------------------------------------------------
