@@ -25,6 +25,44 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Detect whether an error indicates an account lockout.
+ *
+ * The backend returns `AppError::Authentication` with the message
+ * "Account temporarily locked due to too many failed login attempts"
+ * for locked accounts (HTTP 401, code "AUTH_ERROR"). This function
+ * checks every error shape that `toUserMessage` handles for the
+ * word "locked", which is present in all lockout-related messages
+ * but absent from normal credential failures.
+ */
+export function isAccountLocked(error: unknown): boolean {
+  const LOCKOUT_PATTERN = 'locked';
+
+  function containsLockout(value: unknown): boolean {
+    return typeof value === 'string' && value.toLowerCase().includes(LOCKOUT_PATTERN);
+  }
+
+  if (containsLockout(error)) return true;
+
+  if (error instanceof Error) {
+    return containsLockout(error.message);
+  }
+
+  if (!isPlainObject(error)) return false;
+
+  if (containsLockout(error.error)) return true;
+  if (containsLockout(error.message)) return true;
+  if (containsLockout(error.code)) return true;
+
+  if (isPlainObject(error.body)) {
+    if (containsLockout(error.body.message)) return true;
+    if (containsLockout(error.body.error)) return true;
+    if (containsLockout(error.body.code)) return true;
+  }
+
+  return false;
+}
+
+/**
  * Extract a human-readable message from an unknown thrown value.
  *
  * @param error  - The caught value (could be anything)
