@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-19
+
+First stable release of Artifact Keeper Web. Platform parity with `artifact-keeper` 1.1.0 backend. Consolidates `1.1.0-rc.5` through `1.1.0-rc.9` and post-RC work.
+
+### Added
+- **Chunked upload for multi-GB artifacts** (#218) - hashing, pause/resume/cancel controls, retry-per-chunk, speed/ETA readout; automatically engages for files >=100MB when uploading into a repository
+- **Repository-scoped access tokens** (#294) - limit tokens by format filters, name pattern, and labels; token create dialog grows a repo selector when enabled
+- **Repository Settings tab on the detail view** (#298) - inline edit of repository metadata without leaving the page
+- **Notification configuration tab on repositories** (#293) - per-repo webhook and email notification targets
+- **SMTP configuration in admin settings** (#299) - configure outbound mail server from the UI
+- **Webhook payload template selector** (#295) - choose a predefined or custom payload template when creating a webhook
+- **Quarantine status on artifacts** (#292) - list and detail views show quarantine state and banner
+- **Auth source badge on admin users list and edit dialog** (#291) - shows which identity provider a user came from (local, LDAP, SAML, OIDC)
+- **Account lockout status on failed login** (#284) - login page surfaces remaining attempts and lockout expiry
+- **Password expiry warning banner and force-change flow** (#286) - warn before expiry and block access after, forcing a change
+- **Global error and root error boundary pages** (#290) - Next.js `error.tsx` and `global-error.tsx` with telemetry and retry UX
+- **Admin permissions UI** (#186 by @TechEnchante) - manage principal / target / action permissions with repository selection
+- **Staging repository creation** (#142) - create staging repos from the UI
+- **Artifact content viewer with syntax highlighting** (#154) - browse file contents inline via Shiki
+- **Git commit hash in sidebar and settings** (#153) - shows the running build hash for support and reproducibility
+- **Upstream auth fields on remote repo create/edit** (#181) - set proxy credentials and tokens when configuring remote repositories
+- **Storage quota field on repository create/edit** (#184) - per-repository size limits
+- **Default upstream URL suggestion by format** (#185) - prefill proxy URL based on selected package format
+- **Admin token management for other users** (#191) - admins can create, list, and revoke tokens on behalf of users
+- **Playwright E2E suite expansion** (#76, #119, #121, #151) - 250+ interaction tests with RBAC role coverage, visual regression, and CI sharding
+- **Vitest unit test suite with V8 coverage** (#69, #70, #71, #112, #113) - coverage gate integrated into CI
+- **Tutorial video pipeline** (#79) - YouTube-ready tutorial generation with Amazon Polly voiceover
+
+### Changed
+- **SDK bump to `@artifact-keeper/sdk` 1.1.4** (#297, #233, #231) - track the generated OpenAPI client through the 1.1.0-rc.5 → 1.1.0 → 1.1.4 progression
+- Major dependency upgrades: Next.js 16.2.x, React 19.2.x, Tailwind CSS 4.2.x, shadcn/ui on Radix UI, TanStack Query 5.99.x, react-hook-form 7.72.x, framer-motion 12.38.x, vitest 4.1.x, shiki 4.0.x, lucide-react 1.8.x
+- **CI hardening** - SonarCloud scan gated on `SONAR_TOKEN` availability (#94); pre-release tags excluded from Docker Hub `:latest` (#223); duplication and new-code coverage gates added with visible per-step output (#313)
+
+### Fixed
+- **Access token create dialog overflowed viewport in Playwright** (#312) - dialog now capped at `90vh` with inner scroll, matching the pattern used by quality-gates, webhooks, and settings-sso dialogs
+- **E2E selectors collided with new "Name Pattern" label** (#301) - anchored `getByLabel(/^name$/i)` on the access token dialog
+- **SSO callback did not refresh auth context after token exchange** (#276 by @nikitatsym) - callback now calls `refreshUser()` before redirecting, so the sidebar reflects the authenticated user without reload
+- **CSP tightened, `Math.random` replaced, SSO errors sanitized** (#217) - reduce XSS surface and information disclosure
+- **Proxy body size limit raised for large artifact uploads** (#285) - Next.js proxy middleware body limit increased
+- **CVE findings displayed GHSA instead of CVE identifier** (#280) - resolve advisory IDs for display
+- **Scan status showed incorrect state when scan failed to execute** (#288)
+- **Password reuse rejection message** (#296) - surface the backend's policy message on change-password
+- **API keys and access tokens not showing after creation** (#106)
+- **Download URL pattern mismatch with backend route** (#115)
+- **Staging repo filtering used wrong type param** (#138)
+- **Docker login `/v2` not reaching middleware** (#108) - middleware matcher extended
+- **SSO callback route** (#201) - `/auth/callback` rewrite routes to the SSO page
+- **Virtual repo create field mapping** (#187) - include `member_repos`, fix members list
+- **Non-admin users saw admin scope checkbox** (#57)
+- **BACKEND_URL ignored at runtime in standalone Docker** (#56, #58)
+- **Duplicate create buttons in Playwright strict mode** (#66)
+- **Flaky E2E tests for security scans and access tokens** (#119)
+- **Forced password change in E2E setup** (#202)
+- **Release gate ran before image build** - Docker publish now builds first, runs the compatibility gate after as an advisory check
+- **Code duplication gate result was invisible** (#313) - step now prints percentage and clone list to stdout and fails fast on parser errors
+
+### Security
+- **URL validation in package metadata and CSP header** (#92) - validate URLs rendered from package metadata to prevent stored XSS; add `Content-Security-Policy` header
+- **Instance URL SSRF hardening** - reject private IP ranges and IPv6 loopback variants; remove legacy token storage from `localStorage`
+- **CSP tightening, Math.random replacement, SSO error sanitization** (#217)
+
+### New Contributors
+- @TechEnchante (#186)
+- @nikitatsym (#276)
+- @mergify[bot] (#232)
+
 ## [1.1.0-rc.4] - 2026-02-25
 
 ### Added
