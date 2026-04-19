@@ -218,6 +218,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     [repoKey, queryClient]
   );
 
+  const handleChunkedComplete = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+    queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
+  }, [repoKey, queryClient]);
+
   const showDetail = useCallback((artifact: Artifact) => {
     setSelectedArtifact(artifact);
     setDetailOpen(true);
@@ -601,7 +606,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               <h3 className="text-sm font-medium mb-4">
                 Upload an artifact to {repository.key}
               </h3>
-              <FileUpload onUpload={handleUpload} showPathInput />
+              <FileUpload
+                onUpload={handleUpload}
+                showPathInput
+                repositoryKey={repoKey}
+                onChunkedComplete={handleChunkedComplete}
+              />
             </div>
           </TabsContent>
         )}

@@ -1,18 +1,96 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { Upload, X, FileIcon, AlertCircle } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  Upload,
+  X,
+  FileIcon,
+  AlertCircle,
+  Pause,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { cn, formatBytes } from "@/lib/utils";
+import {
+  useChunkedUpload,
+  type UploadProgress,
+  type UploadStatus,
+} from "@/hooks/use-chunked-upload";
 
 interface FileUploadProps {
   onUpload: (file: File, path?: string) => Promise<void>;
   showPathInput?: boolean;
   accept?: string;
   className?: string;
+  /** When provided, enables chunked upload for files over the threshold */
+  repositoryKey?: string;
+  /** Chunk size in bytes (default 8MB) */
+  chunkSize?: number;
+  /** Files larger than this use chunked upload (default 100MB) */
+  chunkedThreshold?: number;
+  /** Called when chunked upload completes */
+  onChunkedComplete?: () => void;
+}
+
+function formatSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond === 0) return "0 B/s";
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+function formatEta(seconds: number): string {
+  if (seconds <= 0 || !isFinite(seconds)) return "";
+  if (seconds < 60) return `~${Math.ceil(seconds)}s remaining`;
+  if (seconds < 3600) return `~${Math.ceil(seconds / 60)} min remaining`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.ceil((seconds % 3600) / 60);
+  return `~${hours}h ${mins}m remaining`;
+}
+
+function ChunkedProgressDisplay({
+  progress,
+  status,
+}: {
+  progress: UploadProgress;
+  status: UploadStatus;
+}) {
+  return (
+    <div className="space-y-2">
+      <Progress value={progress.percentage} className="h-2" />
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+        <span>
+          {formatBytes(progress.bytesUploaded)} / {formatBytes(progress.totalBytes)}
+        </span>
+        <span className="text-right">
+          {progress.percentage}%
+        </span>
+        {status === "uploading" && progress.speed > 0 && (
+          <>
+            <span>{formatSpeed(progress.speed)}</span>
+            <span className="text-right">{formatEta(progress.eta)}</span>
+          </>
+        )}
+        {status === "hashing" && (
+          <span className="col-span-2">Computing file checksum...</span>
+        )}
+        {status === "finalizing" && (
+          <span className="col-span-2">Finalizing upload...</span>
+        )}
+        {status === "paused" && (
+          <span className="col-span-2">Upload paused</span>
+        )}
+      </div>
+      {progress.chunksTotal > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {progress.chunksCompleted.toLocaleString()} /{" "}
+          {progress.chunksTotal.toLocaleString()} chunks
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function FileUpload({
@@ -20,20 +98,57 @@ export function FileUpload({
   showPathInput = false,
   accept,
   className,
+  repositoryKey,
+  chunkSize,
+  chunkedThreshold = 100 * 1024 * 1024,
+  onChunkedComplete,
 }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [customPath, setCustomPath] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [simpleProgress, setSimpleProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback((f: File) => {
-    setFile(f);
-    setProgress(0);
-    setError(null);
-  }, []);
+  const isChunkedMode = !!repositoryKey && !!file && file.size >= chunkedThreshold;
+
+  const chunked = useChunkedUpload({
+    repositoryKey: repositoryKey || "",
+    chunkSize,
+    threshold: chunkedThreshold,
+    onComplete: () => {
+      onChunkedComplete?.();
+      handleClear();
+    },
+    onError: () => {
+      setUploading(false);
+    },
+  });
+
+  const isActive =
+    uploading ||
+    chunked.status === "uploading" ||
+    chunked.status === "hashing" ||
+    chunked.status === "finalizing" ||
+    chunked.status === "paused";
+
+  const handleFile = useCallback(
+    (f: File) => {
+      setFile(f);
+      setSimpleProgress(0);
+      setShowResumePrompt(false);
+      setError(null);
+
+      if (repositoryKey && f.size >= chunkedThreshold) {
+        if (chunked.hasPendingSession(f)) {
+          setShowResumePrompt(true);
+        }
+      }
+    },
+    [repositoryKey, chunkedThreshold, chunked]
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -69,8 +184,9 @@ export function FileUpload({
 
   const handleClear = useCallback(() => {
     setFile(null);
-    setProgress(0);
+    setSimpleProgress(0);
     setCustomPath("");
+    setShowResumePrompt(false);
     setError(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
@@ -78,23 +194,45 @@ export function FileUpload({
   const handleUpload = useCallback(async () => {
     if (!file) return;
     setUploading(true);
-    setProgress(0);
+    setSimpleProgress(0);
+    setShowResumePrompt(false);
     setError(null);
-    try {
-      await onUpload(file, customPath || undefined);
-      handleClear();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Upload failed";
-      setError(message);
-    } finally {
-      setUploading(false);
-      setProgress(0);
-    }
-  }, [file, customPath, onUpload, handleClear]);
 
-  // Expose setProgress for parent to drive progress updates
-  // (in practice, the parent's onUpload callback controls this)
+    try {
+      if (isChunkedMode) {
+        await chunked.upload(file, customPath || undefined);
+      } else {
+        await onUpload(file, customPath || undefined);
+        handleClear();
+      }
+    } catch (err) {
+      if (!isChunkedMode) {
+        const message =
+          err instanceof Error ? err.message : "Upload failed";
+        setError(message);
+      }
+    } finally {
+      if (!isChunkedMode) {
+        setUploading(false);
+        setSimpleProgress(0);
+      }
+    }
+  }, [file, customPath, isChunkedMode, chunked, onUpload, handleClear]);
+
+  const handleCancel = useCallback(() => {
+    if (isChunkedMode && isActive) {
+      chunked.cancel();
+      setUploading(false);
+    }
+    handleClear();
+  }, [isChunkedMode, isActive, chunked, handleClear]);
+
+  // Reset uploading state when chunked upload completes or errors
+  useEffect(() => {
+    if (chunked.status === "complete" || chunked.status === "error") {
+      setUploading(false);
+    }
+  }, [chunked.status]);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -106,7 +244,7 @@ export function FileUpload({
             placeholder="e.g. libs/mylib-1.0.jar"
             value={customPath}
             onChange={(e) => setCustomPath(e.target.value)}
-            disabled={uploading}
+            disabled={isActive}
           />
         </div>
       )}
@@ -117,18 +255,22 @@ export function FileUpload({
           dragOver
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-muted-foreground/50",
-          uploading && "pointer-events-none opacity-60"
+          isActive && "pointer-events-none opacity-60"
         )}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={!file ? handleBrowse : undefined}
-        onKeyDown={!file ? (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            handleBrowse();
-          }
-        } : undefined}
+        onKeyDown={
+          !file
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleBrowse();
+                }
+              }
+            : undefined
+        }
         role={!file ? "button" : undefined}
         tabIndex={!file ? 0 : undefined}
       >
@@ -147,9 +289,12 @@ export function FileUpload({
               <p className="font-medium">{file.name}</p>
               <p className="text-muted-foreground">
                 {formatBytes(file.size)}
+                {isChunkedMode && (
+                  <span className="ml-2 text-xs opacity-70">(chunked upload)</span>
+                )}
               </p>
             </div>
-            {!uploading && (
+            {!isActive && (
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -177,36 +322,71 @@ export function FileUpload({
         )}
       </div>
 
-      {uploading && (
+      {/* Resume prompt for interrupted chunked uploads */}
+      {showResumePrompt && !isActive && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          <RotateCcw className="size-4 text-amber-500 shrink-0" />
+          <span className="text-muted-foreground">
+            A previous upload session was found for this file. Uploading will
+            resume from where it left off.
+          </span>
+        </div>
+      )}
+
+      {/* Chunked upload progress */}
+      {isChunkedMode && isActive && (
+        <ChunkedProgressDisplay
+          progress={chunked.progress}
+          status={chunked.status}
+        />
+      )}
+
+      {/* Simple upload progress */}
+      {!isChunkedMode && uploading && (
         <div className="space-y-1.5">
-          <Progress value={progress} className="h-1.5" />
+          <Progress value={simpleProgress} className="h-1.5" />
           <p className="text-xs text-muted-foreground text-center">
-            Uploading... {progress}%
+            Uploading... {simpleProgress}%
           </p>
         </div>
       )}
 
-      {error && (
+      {(error || (chunked.status === "error" && chunked.error)) && (
         <div
           className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle className="size-4 mt-0.5 shrink-0" />
-          <p>{error}</p>
+          <p>{error ?? `Upload failed: ${chunked.error?.message}`}</p>
         </div>
       )}
 
       {file && (
         <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={handleClear} disabled={uploading}>
+          {/* Pause/Resume for chunked uploads */}
+          {isChunkedMode && chunked.status === "uploading" && (
+            <Button variant="outline" size="sm" onClick={chunked.pause}>
+              <Pause className="size-3.5 mr-1.5" />
+              Pause
+            </Button>
+          )}
+          {isChunkedMode && chunked.status === "paused" && (
+            <Button variant="outline" size="sm" onClick={chunked.resume}>
+              <Play className="size-3.5 mr-1.5" />
+              Resume
+            </Button>
+          )}
+
+          <Button variant="outline" onClick={handleCancel} disabled={chunked.status === "finalizing"}>
             Cancel
           </Button>
-          <Button onClick={handleUpload} disabled={uploading}>
-            {uploading ? "Uploading..." : "Upload"}
-          </Button>
+          {!isActive && (
+            <Button onClick={handleUpload}>
+              {showResumePrompt ? "Resume Upload" : "Upload"}
+            </Button>
+          )}
         </div>
       )}
     </div>
   );
 }
-
