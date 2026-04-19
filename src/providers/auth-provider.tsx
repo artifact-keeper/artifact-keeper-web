@@ -76,9 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = data as unknown as User;
       setUser(userData);
       setPasswordExpiresAt(userData.password_expires_at ?? null);
-      if (userData.must_change_password) {
-        setMustChangePassword(true);
-      }
+      setMustChangePassword(!!userData.must_change_password);
     } catch {
       setUser(null);
       setPasswordExpiresAt(null);
@@ -188,9 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = data as unknown as User;
           setUser(userData);
           setPasswordExpiresAt(userData.password_expires_at ?? null);
-          if (userData.must_change_password) {
-            setMustChangePassword(true);
-          }
+          setMustChangePassword(!!userData.must_change_password);
           setIsLoading(false);
           return;
         }

@@ -10,7 +10,8 @@ function daysUntil(dateString: string): number {
   const now = new Date();
   const expiry = new Date(dateString);
   const diffMs = expiry.getTime() - now.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return Math.max(0, days);
 }
 
 export function PasswordExpiryBanner() {
@@ -22,9 +23,13 @@ export function PasswordExpiryBanner() {
 
   const daysRemaining = daysUntil(passwordExpiresAt);
 
+  if (isNaN(daysRemaining)) {
+    return null;
+  }
+
   // Already expired passwords are handled by RequireAuth redirect,
   // so this banner only covers the warning window.
-  if (daysRemaining > WARNING_THRESHOLD_DAYS || daysRemaining < 0) {
+  if (daysRemaining > WARNING_THRESHOLD_DAYS) {
     return null;
   }
 

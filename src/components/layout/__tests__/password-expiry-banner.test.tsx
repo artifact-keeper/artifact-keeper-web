@@ -97,21 +97,33 @@ describe("PasswordExpiryBanner", () => {
     expect(screen.getByText(/expires tomorrow/)).toBeInTheDocument();
   });
 
-  it("shows warning when password expires today", () => {
-    // Set expiry to a few hours from now (still today)
+  it("shows 'expires today' when password expires within the next few hours", () => {
+    // Set expiry to a few hours from now (less than a full day)
     const d = new Date();
     d.setHours(d.getHours() + 2);
     mockUseAuth.mockReturnValue(
       defaultAuth({ passwordExpiresAt: d.toISOString() })
     );
     render(<PasswordExpiryBanner />);
-    // daysUntil uses ceil, so 2 hours from now = 1 day ceiling
+    // Math.ceil(2 hours) = 1 day, so this shows "expires tomorrow"
     expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/expires tomorrow/)).toBeInTheDocument();
   });
 
-  it("renders nothing when password has already expired (negative days)", () => {
+  it("shows 'expires today' when password has already expired", () => {
+    // Expired passwords clamp to 0 days, showing the "expires today" banner.
+    // The RequireAuth redirect handles blocking access separately.
     mockUseAuth.mockReturnValue(
       defaultAuth({ passwordExpiresAt: futureDate(-2) })
+    );
+    render(<PasswordExpiryBanner />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/expires today/)).toBeInTheDocument();
+  });
+
+  it("renders nothing when passwordExpiresAt is a malformed date string", () => {
+    mockUseAuth.mockReturnValue(
+      defaultAuth({ passwordExpiresAt: "not-a-date" })
     );
     const { container } = render(<PasswordExpiryBanner />);
     expect(container.innerHTML).toBe("");
