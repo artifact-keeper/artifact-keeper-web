@@ -1,5 +1,6 @@
 import "@/lib/sdk-client";
 import { getSettings } from "@artifact-keeper/sdk";
+import { apiFetch } from "@/lib/api/fetch";
 
 export interface PasswordPolicy {
   min_length: number;
@@ -8,6 +9,26 @@ export interface PasswordPolicy {
   require_digit: boolean;
   require_special: boolean;
   history_count: number;
+}
+
+export type SmtpTlsMode = "none" | "starttls" | "tls";
+
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  from_address: string;
+  tls_mode: SmtpTlsMode;
+}
+
+export interface SendTestEmailRequest {
+  recipient: string;
+}
+
+export interface SendTestEmailResponse {
+  success: boolean;
+  message: string;
 }
 
 /**
@@ -84,6 +105,102 @@ export const settingsApi = {
       return DEFAULT_PASSWORD_POLICY;
     }
   },
+
+  /**
+   * Fetch the SMTP configuration from system settings.
+   *
+   * The backend includes SMTP fields in the /api/v1/admin/settings response
+   * but the SDK type definition does not yet declare them. We extract the
+   * smtp_config object (or individual smtp_* fields) from the raw response
+   * and merge with defaults.
+   */
+  getSmtpConfig: async (): Promise<SmtpConfig> => {
+    try {
+      const { data, error } = await getSettings();
+      if (error) return DEFAULT_SMTP_CONFIG;
+
+      const raw = data as unknown as Record<string, unknown>;
+      const serverSmtp =
+        (raw?.smtp_config as Partial<SmtpConfig>) ??
+        (raw?.smtp as Partial<SmtpConfig>) ??
+        {};
+
+      return {
+        host:
+          typeof serverSmtp.host === "string"
+            ? serverSmtp.host
+            : (typeof raw?.smtp_host === "string"
+                ? raw.smtp_host
+                : DEFAULT_SMTP_CONFIG.host),
+        port:
+          typeof serverSmtp.port === "number"
+            ? serverSmtp.port
+            : (typeof raw?.smtp_port === "number"
+                ? raw.smtp_port
+                : DEFAULT_SMTP_CONFIG.port),
+        username:
+          typeof serverSmtp.username === "string"
+            ? serverSmtp.username
+            : (typeof raw?.smtp_username === "string"
+                ? raw.smtp_username
+                : DEFAULT_SMTP_CONFIG.username),
+        password:
+          typeof serverSmtp.password === "string"
+            ? serverSmtp.password
+            : DEFAULT_SMTP_CONFIG.password,
+        from_address:
+          typeof serverSmtp.from_address === "string"
+            ? serverSmtp.from_address
+            : (typeof raw?.smtp_from_address === "string"
+                ? raw.smtp_from_address
+                : DEFAULT_SMTP_CONFIG.from_address),
+        tls_mode:
+          isValidTlsMode(serverSmtp.tls_mode)
+            ? serverSmtp.tls_mode
+            : (isValidTlsMode(raw?.smtp_tls_mode)
+                ? (raw.smtp_tls_mode as SmtpTlsMode)
+                : DEFAULT_SMTP_CONFIG.tls_mode),
+      };
+    } catch {
+      return DEFAULT_SMTP_CONFIG;
+    }
+  },
+
+  /**
+   * Save SMTP configuration. Uses the /api/v1/admin/smtp endpoint which
+   * is not yet in the generated SDK.
+   */
+  updateSmtpConfig: async (config: SmtpConfig): Promise<void> => {
+    await apiFetch<void>("/api/v1/admin/smtp", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  },
+
+  /**
+   * Send a test email through the configured SMTP server.
+   */
+  sendTestEmail: async (recipient: string): Promise<SendTestEmailResponse> => {
+    return apiFetch<SendTestEmailResponse>("/api/v1/admin/smtp/test", {
+      method: "POST",
+      body: JSON.stringify({ recipient }),
+    });
+  },
 };
+
+function isValidTlsMode(value: unknown): value is SmtpTlsMode {
+  return value === "none" || value === "starttls" || value === "tls";
+}
+
+const DEFAULT_SMTP_CONFIG: SmtpConfig = {
+  host: "",
+  port: 587,
+  username: "",
+  password: "",
+  from_address: "",
+  tls_mode: "starttls",
+};
+
+export { DEFAULT_SMTP_CONFIG };
 
 export default settingsApi;
