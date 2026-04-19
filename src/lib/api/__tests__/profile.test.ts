@@ -314,6 +314,44 @@ describe("profileApi", () => {
     ).rejects.toBe("invalid request");
   });
 
+  it("createAccessToken passes repo_selector to SDK", async () => {
+    const mockResponse = {
+      id: "tok-scoped",
+      token: "akt_scoped_token",
+      name: "Scoped Token",
+    };
+    mockCreateApiToken.mockResolvedValue({
+      data: mockResponse,
+      error: undefined,
+    });
+
+    const { profileApi } = await import("../profile");
+    const result = await profileApi.createAccessToken({
+      name: "Scoped Token",
+      expires_in_days: 90,
+      scopes: ["read", "write"],
+      repo_selector: {
+        match_formats: ["docker", "npm"],
+        match_pattern: "prod-*",
+        match_labels: { env: "production" },
+      },
+    });
+
+    expect(mockCreateApiToken).toHaveBeenCalledWith({
+      body: {
+        name: "Scoped Token",
+        expires_in_days: 90,
+        scopes: ["read", "write"],
+        repo_selector: {
+          match_formats: ["docker", "npm"],
+          match_pattern: "prod-*",
+          match_labels: { env: "production" },
+        },
+      },
+    });
+    expect(result).toEqual(mockResponse);
+  });
+
   // ---- deleteAccessToken ----
 
   it("deleteAccessToken calls SDK with token id", async () => {
