@@ -432,7 +432,7 @@ export default function AccessTokensPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           {newlyCreatedToken ? (
             <TokenCreatedAlert
               title="Access Token Created"
