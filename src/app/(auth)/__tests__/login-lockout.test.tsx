@@ -13,9 +13,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-vi.mock("next/image", () => ({
-  default: (props: any) => <img {...props} />,
-}));
+vi.mock("next/image", () => {
+  const MockImage = (props: any) => <img alt="" {...props} />;
+  MockImage.displayName = "MockImage";
+  return { default: MockImage };
+});
 
 // Stub lucide-react icons
 vi.mock("lucide-react", () => {
@@ -40,9 +42,11 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/input", () => ({
-  Input: React.forwardRef((props: any, ref: any) => <input ref={ref} {...props} />),
-}));
+vi.mock("@/components/ui/input", () => {
+  const MockInput = React.forwardRef((props: any, ref: any) => <input ref={ref} {...props} />);
+  MockInput.displayName = "MockInput";
+  return { Input: MockInput };
+});
 
 vi.mock("@/components/ui/alert", () => ({
   Alert: ({ children, ...props }: any) => <div role="alert" {...props}>{children}</div>,
