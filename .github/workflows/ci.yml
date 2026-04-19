@@ -130,50 +130,68 @@ jobs:
 
       - name: Code duplication gate
         if: always() && github.event_name == 'pull_request'
+        env:
+          JSCPD_REPORT: /tmp/jscpd-report/jscpd-report.json
         run: |
-          npm install -g jscpd@4 --silent 2>/dev/null
-          git fetch --no-tags --depth=1 origin ${{ github.base_ref }} 2>/dev/null || true
-          CHANGED_SRC=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
+          set -euo pipefail
+          npm install -g jscpd@4 --silent
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+
+          CHANGED_SRC=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' \
+            | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
 
           if [ -z "$CHANGED_SRC" ]; then
-            echo "### Code Duplication: N/A (no source changes)" >> $GITHUB_STEP_SUMMARY
+            echo "No source files changed against ${{ github.base_ref }}"
+            echo "### Code Duplication: N/A (no source changes)" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          RESULT=$(jscpd --min-lines 10 --threshold 3 --reporters json \
+          echo "Analyzing $(echo "$CHANGED_SRC" | wc -l | tr -d ' ') changed source file(s):"
+          echo "$CHANGED_SRC" | sed 's/^/  /'
+          echo
+
+          jscpd --min-lines 10 --threshold 100 --reporters json \
             --format typescript,tsx --output /tmp/jscpd-report \
-            $(echo "$CHANGED_SRC" | tr '\n' ' ') 2>&1) || true
+            $(echo "$CHANGED_SRC" | tr '\n' ' ')
 
-          if [ -f /tmp/jscpd-report/jscpd-report.json ]; then
-            DUP_PCT=$(python3 -c "
+          if [ ! -f "$JSCPD_REPORT" ]; then
+            echo "jscpd produced no report at $JSCPD_REPORT"
+            echo "### Code Duplication: 0% (no report)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          read -r PCT DUPS LINES CLONES < <(python3 <<'PY'
           import json
-          data = json.load(open('/tmp/jscpd-report/jscpd-report.json'))
-          stats = data.get('statistics', {})
-          total = stats.get('total', {})
-          pct = total.get('percentage', 0)
-          dups = total.get('duplicatedLines', 0)
-          lines = total.get('lines', 0)
-          clones = len(data.get('duplicates', []))
-          print(f'{pct:.1f} {dups} {lines} {clones}')
-          " 2>/dev/null) || DUP_PCT="0.0 0 0 0"
+          with open("/tmp/jscpd-report/jscpd-report.json") as f:
+              data = json.load(f)
+          total = data.get("statistics", {}).get("total", {})
+          print(
+              f"{total.get('percentage', 0):.1f}",
+              total.get("duplicatedLines", 0),
+              total.get("lines", 0),
+              len(data.get("duplicates", [])),
+          )
+          PY
+          )
 
-            PCT=$(echo "$DUP_PCT" | awk '{print $1}')
-            echo "### Code Duplication: ${PCT}%" >> $GITHUB_STEP_SUMMARY
+          echo "Code duplication: ${PCT}% (${DUPS}/${LINES} duplicated lines across ${CLONES} clone pair(s))"
+          echo "### Code Duplication: ${PCT}% (${DUPS}/${LINES} lines, ${CLONES} clone pair(s))" >> "$GITHUB_STEP_SUMMARY"
 
-            OVER=$(python3 -c "print('yes' if float('${PCT}') > 3.0 else 'no')")
-            if [ "$OVER" = "yes" ]; then
-              echo "::error::Code duplication is ${PCT}%, exceeding 3% threshold"
-              python3 -c "
+          PCT_INT=$(python3 -c "print(int(round(float('${PCT}') * 10)))")
+          if [ "$PCT_INT" -gt 30 ]; then
+            echo "::error::Code duplication is ${PCT}%, exceeding 3% threshold"
+            python3 <<'PY'
           import json
-          data = json.load(open('/tmp/jscpd-report/jscpd-report.json'))
-          for d in data.get('duplicates', []):
-              fa, sa = d['firstFile'], d['secondFile']
-              print(f\"  {fa['name']}:{fa['startLoc']['line']}-{fa['endLoc']['line']} <-> {sa['name']}:{sa['startLoc']['line']}-{sa['endLoc']['line']}\")
-          " 2>/dev/null || true
-              exit 1
-            fi
-          else
-            echo "### Code Duplication: 0%" >> $GITHUB_STEP_SUMMARY
+          with open("/tmp/jscpd-report/jscpd-report.json") as f:
+              data = json.load(f)
+          for d in data.get("duplicates", []):
+              fa, sa = d["firstFile"], d["secondFile"]
+              print(
+                  f"  {fa['name']}:{fa['startLoc']['line']}-{fa['endLoc']['line']}"
+                  f" <-> {sa['name']}:{sa['startLoc']['line']}-{sa['endLoc']['line']}"
+              )
+          PY
+            exit 1
           fi
 
   build:
