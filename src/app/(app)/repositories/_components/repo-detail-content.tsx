@@ -16,6 +16,7 @@ import {
   HeartPulse,
   Layers,
   Package as PackageIcon,
+  Settings,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -33,6 +34,7 @@ import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
+import { RepoSettingsTab } from "./repo-settings-tab";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -530,6 +532,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Notifications
             </TabsTrigger>
           )}
+          {user?.is_admin && (
+            <TabsTrigger value="settings">
+              <Settings className="size-3.5 mr-1" />
+              Settings
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* --- Artifacts Tab --- */}
@@ -701,6 +709,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {user?.is_admin && (
           <TabsContent value="notifications" className="mt-4">
             <NotificationsTabContent repositoryId={repository.id} />
+          </TabsContent>
+        )}
+
+        {/* --- Settings Tab --- */}
+        {user?.is_admin && (
+          <TabsContent value="settings" className="mt-4">
+            <RepoSettingsTab repository={repository} />
           </TabsContent>
         )}
       </Tabs>
