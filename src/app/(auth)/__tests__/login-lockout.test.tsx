@@ -1,0 +1,346 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-library/react";
+import React from "react";
+
+// ---------------------------------------------------------------------------
+// Mocks
+// ---------------------------------------------------------------------------
+
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock("next/image", () => ({
+  default: (props: any) => <img {...props} />,
+}));
+
+// Stub lucide-react icons
+vi.mock("lucide-react", () => {
+  const stub = (name: string) => {
+    const Icon = (props: any) => <span data-testid={`icon-${name}`} {...props} />;
+    Icon.displayName = name;
+    return Icon;
+  };
+  return {
+    Loader2: stub("Loader2"),
+    Lock: stub("Lock"),
+    LogIn: stub("LogIn"),
+    Shield: stub("Shield"),
+    Terminal: stub("Terminal"),
+  };
+});
+
+// Stub UI components
+vi.mock("@/components/ui/button", () => ({
+  Button: ({ children, ...props }: any) => (
+    <button {...props}>{children}</button>
+  ),
+}));
+
+vi.mock("@/components/ui/input", () => ({
+  Input: React.forwardRef((props: any, ref: any) => <input ref={ref} {...props} />),
+}));
+
+vi.mock("@/components/ui/alert", () => ({
+  Alert: ({ children, ...props }: any) => <div role="alert" {...props}>{children}</div>,
+  AlertTitle: ({ children }: any) => <strong>{children}</strong>,
+  AlertDescription: ({ children }: any) => <span>{children}</span>,
+}));
+
+vi.mock("@/components/ui/separator", () => ({
+  Separator: () => <hr />,
+}));
+
+vi.mock("@/components/ui/card", () => ({
+  Card: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+  CardContent: ({ children }: any) => <div>{children}</div>,
+  CardHeader: ({ children }: any) => <div>{children}</div>,
+  CardTitle: ({ children }: any) => <h2>{children}</h2>,
+  CardDescription: ({ children }: any) => <p>{children}</p>,
+}));
+
+// Auth provider mock with mutable state
+const mockLogin = vi.fn();
+const mockRefreshUser = vi.fn();
+const mockVerifyTotp = vi.fn();
+const mockClearTotpRequired = vi.fn();
+
+let authState = {
+  login: mockLogin,
+  refreshUser: mockRefreshUser,
+  setupRequired: false,
+  totpRequired: false,
+  verifyTotp: mockVerifyTotp,
+  clearTotpRequired: mockClearTotpRequired,
+};
+
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => authState,
+}));
+
+// SSO mock
+vi.mock("@/lib/api/sso", () => ({
+  ssoApi: {
+    listProviders: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Import under test (after mocks)
+// ---------------------------------------------------------------------------
+
+import LoginPage from "../login/page";
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("LoginPage lockout UI", () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    mockLogin.mockClear();
+    mockRefreshUser.mockClear();
+    authState = {
+      login: mockLogin,
+      refreshUser: mockRefreshUser,
+      setupRequired: false,
+      totpRequired: false,
+      verifyTotp: mockVerifyTotp,
+      clearTotpRequired: mockClearTotpRequired,
+    };
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("does not show the lockout alert by default", () => {
+    render(<LoginPage />);
+
+    expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
+  });
+
+  it("shows Account Locked alert after a lockout error from login", async () => {
+    mockLogin.mockRejectedValueOnce({
+      message: "Account temporarily locked due to too many failed login attempts",
+    });
+
+    render(<LoginPage />);
+
+    // Fill in username and password using the actual react-hook-form bindings
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "testuser" } });
+      fireEvent.change(passwordInput, { target: { value: "testpass" } });
+    });
+
+    // Submit the form
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    // Wait for the lockout alert to appear
+    await waitFor(() => {
+      expect(screen.getByText("Account Locked")).toBeInTheDocument();
+    });
+
+    // Verify the lockout description is shown
+    expect(
+      screen.getByText(/temporarily locked due to too many failed/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows generic error for non-lockout login failures", async () => {
+    mockLogin.mockRejectedValueOnce(
+      new Error("Invalid username or password")
+    );
+
+    render(<LoginPage />);
+
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "testuser" } });
+      fireEvent.change(passwordInput, { target: { value: "wrongpass" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid username or password")).toBeInTheDocument();
+    });
+
+    // The lockout alert should NOT be shown for generic errors
+    expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
+  });
+
+  it("hides the generic error text when lockout is shown", async () => {
+    mockLogin.mockRejectedValueOnce({
+      error: "Account locked",
+    });
+
+    render(<LoginPage />);
+
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "testuser" } });
+      fireEvent.change(passwordInput, { target: { value: "testpass" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Account Locked")).toBeInTheDocument();
+    });
+
+    // The generic error div should NOT be rendered when accountLocked is true
+    // (the component has: {error && !accountLocked && <div>...error...</div>})
+    const errorDivs = document.querySelectorAll(".bg-destructive\\/10");
+    expect(errorDivs.length).toBe(0);
+  });
+
+  it("clears lockout state on next submission attempt", async () => {
+    // First attempt: lockout
+    mockLogin.mockRejectedValueOnce({
+      message: "Account temporarily locked due to too many failed login attempts",
+    });
+
+    render(<LoginPage />);
+
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "testuser" } });
+      fireEvent.change(passwordInput, { target: { value: "testpass" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Account Locked")).toBeInTheDocument();
+    });
+
+    // Second attempt: regular failure (lockout should clear)
+    mockLogin.mockRejectedValueOnce(new Error("Invalid credentials"));
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "testuser" } });
+      fireEvent.change(passwordInput, { target: { value: "newpass" } });
+    });
+
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
+      expect(screen.getByText("Invalid credentials")).toBeInTheDocument();
+    });
+  });
+
+  it("shows the sign in form with username and password fields", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByText("Username")).toBeInTheDocument();
+    expect(screen.getByText("Password")).toBeInTheDocument();
+    expect(screen.getByText("Sign In")).toBeInTheDocument();
+  });
+
+  it("renders the first-time setup alert when setupRequired is true", () => {
+    authState.setupRequired = true;
+
+    render(<LoginPage />);
+
+    expect(screen.getByText("First-Time Setup")).toBeInTheDocument();
+  });
+
+  it("does not render setup alert when setupRequired is false", () => {
+    render(<LoginPage />);
+
+    expect(screen.queryByText("First-Time Setup")).not.toBeInTheDocument();
+  });
+
+  it("renders the TOTP form when totpRequired is true", () => {
+    authState.totpRequired = true;
+
+    render(<LoginPage />);
+
+    expect(
+      screen.getByText("Two-Factor Authentication")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Back to login")).toBeInTheDocument();
+  });
+
+  it("renders Artifact Keeper heading in the login card", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByText("Artifact Keeper")).toBeInTheDocument();
+    expect(screen.getByText("Sign in to your account")).toBeInTheDocument();
+  });
+
+  it("navigates to / on successful login", async () => {
+    mockLogin.mockResolvedValueOnce(false);
+
+    render(<LoginPage />);
+
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "admin" } });
+      fireEvent.change(passwordInput, { target: { value: "correct" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/");
+    });
+  });
+
+  it("navigates to /change-password when login returns true (must change)", async () => {
+    mockLogin.mockResolvedValueOnce(true);
+
+    render(<LoginPage />);
+
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "admin" } });
+      fireEvent.change(passwordInput, { target: { value: "expired" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/change-password");
+    });
+  });
+});
