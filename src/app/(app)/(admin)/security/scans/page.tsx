@@ -14,6 +14,7 @@ import {
 } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
 import { artifactsApi } from "@/lib/api/artifacts";
+import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -52,9 +53,6 @@ const STATUS_COLORS: Record<string, string> = {
   error:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
-
-/** Statuses where the scan did not complete successfully, so findings data is unreliable. */
-const INCOMPLETE_STATUSES = new Set(["failed", "error", "pending", "running"]);
 
 const SEVERITY_PILL: Record<string, string> = {
   critical:
@@ -229,29 +227,32 @@ export default function SecurityScansPage() {
       accessor: (r) => r.findings_count,
       sortable: true,
       cell: (r) => {
-        if (INCOMPLETE_STATUSES.has(r.status)) {
-          if (r.status === "failed" || r.status === "error") {
-            return (
-              <Badge
-                variant="outline"
-                className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
-              >
-                Scan Failed
-              </Badge>
-            );
-          }
+        if (isScanFailed(r.status)) {
+          return (
+            <Badge
+              variant="outline"
+              className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
+            >
+              Scan Failed
+            </Badge>
+          );
+        }
+        if (isScanIncomplete(r.status)) {
           return (
             <span className="text-xs text-muted-foreground">-</span>
           );
         }
-        return r.findings_count === 0 ? (
-          <Badge
-            variant="outline"
-            className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
-          >
-            Clean
-          </Badge>
-        ) : (
+        if (isScanClean(r.status, r.findings_count)) {
+          return (
+            <Badge
+              variant="outline"
+              className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
+            >
+              Clean
+            </Badge>
+          );
+        }
+        return (
           <div className="flex items-center gap-1">
             <SeverityCount
               count={r.critical_count}

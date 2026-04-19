@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
+import { isScanIncomplete } from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -57,11 +58,6 @@ const STATUS_BADGE: Record<string, string> = {
   error:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
-
-/** Whether a scan status means findings data should not be trusted. */
-function isScanIncomplete(status: string): boolean {
-  return status === "failed" || status === "error" || status === "pending" || status === "running";
-}
 
 const SEVERITY_BADGE: Record<string, string> = {
   critical:
