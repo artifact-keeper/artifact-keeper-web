@@ -33,6 +33,7 @@ export interface User {
   must_change_password?: boolean;
   password_expires_at?: string | null;
   totp_enabled?: boolean;
+  auth_provider?: string;
 }
 
 export interface LoginResponse {

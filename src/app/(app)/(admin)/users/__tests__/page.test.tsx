@@ -236,6 +236,18 @@ vi.mock("@/components/common/status-badge", () => ({
   ),
 }));
 
+vi.mock("@/components/common/auth-source-badge", () => ({
+  AuthSourceBadge: ({ provider }: any) => (
+    <span data-testid="auth-source-badge">{provider ?? "local"}</span>
+  ),
+  getAuthProviderLabel: (provider?: string) => {
+    if (!provider) return "Local";
+    const map: Record<string, string> = { local: "Local", ldap: "LDAP", oidc: "OIDC", saml: "SAML" };
+    const normalized = provider.toLowerCase();
+    return map[normalized] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+  },
+}));
+
 vi.mock("@/components/common/confirm-dialog", () => ({
   ConfirmDialog: ({ open, title, onConfirm, onOpenChange }: any) =>
     open ? (
@@ -274,6 +286,7 @@ const adminUser = {
   email: "admin@test.com",
   is_admin: true,
   is_active: true,
+  auth_provider: "local",
 };
 
 const regularUser = {
@@ -283,6 +296,7 @@ const regularUser = {
   display_name: "John Doe",
   is_admin: false,
   is_active: true,
+  auth_provider: "ldap",
 };
 
 const mockUsers = [adminUser, regularUser];
@@ -626,6 +640,87 @@ describe("UsersPage", () => {
     setupMocks({ users: [adminUser, inactiveUser] });
     render(<UsersPage />);
     expect(screen.getAllByTestId("icon-ToggleLeft").length).toBeGreaterThanOrEqual(1);
+  });
+
+  // -- Auth Source column --
+
+  it("renders Auth Source column header in the data table", () => {
+    setupMocks();
+    render(<UsersPage />);
+    expect(screen.getByText("Auth Source")).toBeInTheDocument();
+  });
+
+  it("renders auth source badge for each user in the table", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const authBadges = screen.getAllByTestId("auth-source-badge");
+    expect(authBadges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("displays correct auth provider value for local user", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const authBadges = screen.getAllByTestId("auth-source-badge");
+    expect(authBadges[0]).toHaveTextContent("local");
+  });
+
+  it("displays correct auth provider value for LDAP user", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const authBadges = screen.getAllByTestId("auth-source-badge");
+    expect(authBadges[1]).toHaveTextContent("ldap");
+  });
+
+  it("renders auth source badges for different provider types", () => {
+    const oidcUser = { ...regularUser, id: "user-3", username: "oidcuser", auth_provider: "oidc" };
+    const samlUser = { ...regularUser, id: "user-4", username: "samluser", auth_provider: "saml" };
+    setupMocks({ users: [adminUser, oidcUser, samlUser] });
+    render(<UsersPage />);
+    const authBadges = screen.getAllByTestId("auth-source-badge");
+    expect(authBadges).toHaveLength(3);
+    expect(authBadges[1]).toHaveTextContent("oidc");
+    expect(authBadges[2]).toHaveTextContent("saml");
+  });
+
+  it("renders auth source badge for user with no auth_provider field", () => {
+    const noProviderUser = { ...regularUser, auth_provider: undefined };
+    setupMocks({ users: [noProviderUser] });
+    render(<UsersPage />);
+    const authBadges = screen.getAllByTestId("auth-source-badge");
+    expect(authBadges.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // -- Auth Source in edit dialog --
+
+  it("shows auth source in edit dialog", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const editIcons = screen.getAllByTestId("icon-Pencil");
+    fireEvent.click(editIcons[1]); // jdoe
+    expect(screen.getByTestId("edit-auth-source")).toBeInTheDocument();
+  });
+
+  it("shows correct auth provider in edit dialog for LDAP user", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const editIcons = screen.getAllByTestId("icon-Pencil");
+    fireEvent.click(editIcons[1]); // jdoe (ldap)
+    const editAuthSource = screen.getByTestId("edit-auth-source");
+    const badge = editAuthSource.querySelector('[data-testid="auth-source-badge"]');
+    expect(badge).toHaveTextContent("ldap");
+  });
+
+  it("shows Auth Source label in edit dialog", () => {
+    setupMocks();
+    render(<UsersPage />);
+    const editIcons = screen.getAllByTestId("icon-Pencil");
+    fireEvent.click(editIcons[1]);
+    // "Auth Source" appears both in the table header and the edit dialog label
+    const authSourceTexts = screen.getAllByText("Auth Source");
+    expect(authSourceTexts.length).toBeGreaterThanOrEqual(2);
+    // The edit dialog container should include the auth source label
+    const editAuthSource = screen.getByTestId("edit-auth-source");
+    expect(editAuthSource.closest("form")).toBeInTheDocument();
   });
 
   // -- User without display name --

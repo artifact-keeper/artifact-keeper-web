@@ -53,6 +53,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
+import { AuthSourceBadge, getAuthProviderLabel } from "@/components/common/auth-source-badge";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
@@ -381,6 +382,13 @@ export default function UsersPage() {
       ),
     },
     {
+      id: "auth_source",
+      header: "Auth Source",
+      accessor: (u) => getAuthProviderLabel(u.auth_provider),
+      sortable: true,
+      cell: (u) => <AuthSourceBadge provider={u.auth_provider} />,
+    },
+    {
       id: "actions",
       header: "",
       cell: (u) => (
@@ -674,6 +682,12 @@ export default function UsersPage() {
               }
             }}
           >
+            <div className="space-y-2">
+              <Label>Auth Source</Label>
+              <div data-testid="edit-auth-source">
+                <AuthSourceBadge provider={selectedUser?.auth_provider} />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-email">Email</Label>
               <Input
