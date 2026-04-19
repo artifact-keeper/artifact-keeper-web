@@ -26,6 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 
 const changePasswordSchema = z
   .object({
@@ -132,6 +133,7 @@ export default function ChangePasswordPage() {
                       {...field}
                     />
                   </FormControl>
+                  <PasswordPolicyHint password={field.value} className="mt-1" />
                   <FormMessage />
                 </FormItem>
               )}
