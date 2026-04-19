@@ -2,9 +2,6 @@
  * Shared scan status utilities used by both the scan list and scan detail pages.
  */
 
-/** Known statuses where the scan did not complete successfully. */
-const INCOMPLETE_STATUSES = new Set(["failed", "error", "pending", "running"]);
-
 /**
  * Whether a scan status means findings data should not be trusted.
  *
