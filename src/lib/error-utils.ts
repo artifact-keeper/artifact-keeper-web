@@ -31,14 +31,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * "Account temporarily locked due to too many failed login attempts"
  * for locked accounts (HTTP 401, code "AUTH_ERROR"). This function
  * checks every error shape that `toUserMessage` handles for the
- * word "locked", which is present in all lockout-related messages
- * but absent from normal credential failures.
+ * phrase "account locked" or "account_locked", which is specific to
+ * lockout messages and avoids false positives from unrelated errors
+ * like "Repository is locked for maintenance".
  */
 export function isAccountLocked(error: unknown): boolean {
-  const LOCKOUT_PATTERN = 'locked';
+  const LOCKOUT_PATTERN = /account[\s_]+(temporarily\s+)?locked/i;
 
   function containsLockout(value: unknown): boolean {
-    return typeof value === 'string' && value.toLowerCase().includes(LOCKOUT_PATTERN);
+    return typeof value === 'string' && LOCKOUT_PATTERN.test(value);
   }
 
   if (containsLockout(error)) return true;

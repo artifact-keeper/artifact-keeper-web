@@ -220,4 +220,20 @@ describe("isAccountLocked", () => {
   it("returns false for an array", () => {
     expect(isAccountLocked(["locked"])).toBe(false);
   });
+
+  it("returns false for 'Repository is locked for maintenance'", () => {
+    expect(
+      isAccountLocked({ message: "Repository is locked for maintenance" })
+    ).toBe(false);
+  });
+
+  it("returns false for a plain string containing 'locked' without 'account'", () => {
+    expect(isAccountLocked("Resource locked by another process")).toBe(false);
+  });
+
+  it("returns false for body.error containing 'locked' without 'account'", () => {
+    expect(
+      isAccountLocked({ body: { error: "File is locked" } })
+    ).toBe(false);
+  });
 });
