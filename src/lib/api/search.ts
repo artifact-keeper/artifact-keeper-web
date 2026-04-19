@@ -11,6 +11,9 @@ export interface SearchResult {
   format?: string;
   version?: string;
   size_bytes?: number;
+  is_quarantined?: boolean;
+  quarantine_until?: string | null;
+  quarantine_reason?: string | null;
   created_at: string;
   highlights?: string[];
 }
