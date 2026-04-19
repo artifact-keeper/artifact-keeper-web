@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/providers/auth-provider";
 
 function getSsoErrorMessage(errorCode: string | null): string {
   const messages: Record<string, string> = {
@@ -23,6 +24,7 @@ function getSsoErrorMessage(errorCode: string | null): string {
 function CallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { refreshUser } = useAuth();
 
   const code = searchParams.get("code");
   const urlError = searchParams.get("error");
@@ -67,6 +69,7 @@ function CallbackHandler() {
 
         // Tokens are now set as httpOnly cookies by the backend.
         // No need to store them in localStorage.
+        await refreshUser();
         router.replace("/");
       } catch {
         setError("Failed to complete sign-in. Please try again.");
@@ -74,7 +77,7 @@ function CallbackHandler() {
     };
 
     exchangeCode();
-  }, [code, immediateError, router]);
+  }, [code, immediateError, refreshUser, router]);
 
   if (error) {
     return (
