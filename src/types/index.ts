@@ -171,6 +171,9 @@ export interface Artifact {
   checksum_sha256: string;
   content_type: string;
   download_count: number;
+  is_quarantined?: boolean;
+  quarantine_until?: string | null;
+  quarantine_reason?: string | null;
   created_at: string;
   metadata?: Record<string, unknown>;
 }

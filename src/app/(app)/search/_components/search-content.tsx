@@ -41,6 +41,7 @@ import {
 import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 
 // ---- Types ----
@@ -708,8 +709,16 @@ export function SearchContent() {
                         }
                       }}
                     >
-                      <TableCell className="font-medium max-w-[250px] truncate">
-                        {result.name}
+                      <TableCell className="font-medium max-w-[250px]">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate">{result.name}</span>
+                          {result.is_quarantined && (
+                            <QuarantineBadge
+                              reason={result.quarantine_reason}
+                              quarantineUntil={result.quarantine_until}
+                            />
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {result.version || "--"}
@@ -786,7 +795,13 @@ export function SearchContent() {
                         <Download className="size-3" />
                       </Button>
                     </div>
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-3 flex-wrap">
+                      {result.is_quarantined && (
+                        <QuarantineBadge
+                          reason={result.quarantine_reason}
+                          quarantineUntil={result.quarantine_until}
+                        />
+                      )}
                       {result.format && (
                         <Badge variant="secondary" className="text-xs">
                           {result.format}
