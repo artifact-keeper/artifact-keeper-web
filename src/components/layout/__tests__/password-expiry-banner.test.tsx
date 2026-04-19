@@ -146,4 +146,37 @@ describe("PasswordExpiryBanner", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText(/expires in 7 days/)).toBeInTheDocument();
   });
+
+  it("renders nothing when not authenticated even with an expiry date", () => {
+    mockUseAuth.mockReturnValue(
+      defaultAuth({ isAuthenticated: false, passwordExpiresAt: futureDate(3) })
+    );
+    const { container } = render(<PasswordExpiryBanner />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("shows warning for 2 days remaining", () => {
+    mockUseAuth.mockReturnValue(
+      defaultAuth({ passwordExpiresAt: futureDate(2) })
+    );
+    render(<PasswordExpiryBanner />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/expires in 2 days/)).toBeInTheDocument();
+  });
+
+  it("renders the alert icon", () => {
+    mockUseAuth.mockReturnValue(
+      defaultAuth({ passwordExpiresAt: futureDate(5) })
+    );
+    render(<PasswordExpiryBanner />);
+    expect(screen.getByTestId("alert-icon")).toBeInTheDocument();
+  });
+
+  it("renders nothing when password expires in exactly 8 days", () => {
+    mockUseAuth.mockReturnValue(
+      defaultAuth({ passwordExpiresAt: futureDate(8) })
+    );
+    const { container } = render(<PasswordExpiryBanner />);
+    expect(container.innerHTML).toBe("");
+  });
 });
