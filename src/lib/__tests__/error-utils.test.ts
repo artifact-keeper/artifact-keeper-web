@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { toUserMessage, isAccountLocked } from "../error-utils";
+import {
+  toUserMessage,
+  isAccountLocked,
+  isPasswordReuseError,
+  PASSWORD_REUSE_MESSAGE,
+} from "../error-utils";
 
 describe("toUserMessage", () => {
   const FALLBACK = "Something went wrong";
@@ -235,5 +240,76 @@ describe("isAccountLocked", () => {
     expect(
       isAccountLocked({ body: { error: "File is locked" } })
     ).toBe(false);
+  });
+});
+
+describe("isPasswordReuseError", () => {
+  it("detects 'password history' in an Error message", () => {
+    expect(
+      isPasswordReuseError(new Error("Password matches password history"))
+    ).toBe(true);
+  });
+
+  it("detects 'previously used' in an SDK error object", () => {
+    expect(
+      isPasswordReuseError({ error: "This password was previously used" })
+    ).toBe(true);
+  });
+
+  it("detects 'recently used' in a plain string", () => {
+    expect(isPasswordReuseError("Password was recently used")).toBe(true);
+  });
+
+  it("detects 'password reuse' in a body.message", () => {
+    expect(
+      isPasswordReuseError({
+        body: { message: "password reuse is not allowed" },
+      })
+    ).toBe(true);
+  });
+
+  it("detects 'password was used' in a message field", () => {
+    expect(
+      isPasswordReuseError({ message: "This password was used before" })
+    ).toBe(true);
+  });
+
+  it("detects 'already been used' in an error field", () => {
+    expect(
+      isPasswordReuseError({ error: "Password has already been used" })
+    ).toBe(true);
+  });
+
+  it("is case-insensitive", () => {
+    expect(
+      isPasswordReuseError(new Error("PASSWORD HISTORY violation"))
+    ).toBe(true);
+  });
+
+  it("returns false for unrelated errors", () => {
+    expect(isPasswordReuseError(new Error("Invalid credentials"))).toBe(false);
+  });
+
+  it("returns false for null", () => {
+    expect(isPasswordReuseError(null)).toBe(false);
+  });
+
+  it("returns false for undefined", () => {
+    expect(isPasswordReuseError(undefined)).toBe(false);
+  });
+
+  it("returns false for an empty object", () => {
+    expect(isPasswordReuseError({})).toBe(false);
+  });
+
+  it("returns false for an empty string", () => {
+    expect(isPasswordReuseError("")).toBe(false);
+  });
+});
+
+describe("PASSWORD_REUSE_MESSAGE", () => {
+  it("is a non-empty string", () => {
+    expect(typeof PASSWORD_REUSE_MESSAGE).toBe("string");
+    expect(PASSWORD_REUSE_MESSAGE.length).toBeGreaterThan(0);
   });
 });

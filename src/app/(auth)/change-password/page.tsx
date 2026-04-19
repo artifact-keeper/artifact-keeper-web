@@ -8,7 +8,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Lock, Shield, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
-import { toUserMessage } from "@/lib/error-utils";
+import {
+  toUserMessage,
+  isPasswordReuseError,
+  PASSWORD_REUSE_MESSAGE,
+} from "@/lib/error-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,7 +66,12 @@ export default function ChangePasswordPage() {
       toast.success("Password changed successfully!");
       router.push("/");
     } catch (err) {
-      toast.error(toUserMessage(err, "Failed to change password."));
+      if (isPasswordReuseError(err)) {
+        form.setError("newPassword", { message: PASSWORD_REUSE_MESSAGE });
+        toast.error(PASSWORD_REUSE_MESSAGE);
+      } else {
+        toast.error(toUserMessage(err, "Failed to change password."));
+      }
     } finally {
       setIsLoading(false);
     }

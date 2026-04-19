@@ -102,3 +102,36 @@ export function toUserMessage(error: unknown, fallback: string): string {
 
   return fallback;
 }
+
+/**
+ * Patterns the backend uses when rejecting a password that was recently used.
+ * Kept as a single source of truth so both the change-password page and
+ * the profile security tab can detect this specific error.
+ */
+const PASSWORD_REUSE_PATTERNS = [
+  'password history',
+  'previously used',
+  'recently used',
+  'password reuse',
+  'password was used',
+  'already been used',
+];
+
+/**
+ * User-facing message shown when the backend rejects a password due to
+ * password history rules.
+ */
+export const PASSWORD_REUSE_MESSAGE =
+  'This password was used recently. Please choose a different password.';
+
+/**
+ * Check whether an error from the backend indicates the submitted password
+ * was rejected because it matches a recently used password.
+ *
+ * Works with any error shape accepted by `toUserMessage`: Error instances,
+ * SDK error objects, wrapped HTTP errors, and plain strings.
+ */
+export function isPasswordReuseError(error: unknown): boolean {
+  const msg = toUserMessage(error, '').toLowerCase();
+  return PASSWORD_REUSE_PATTERNS.some((pattern) => msg.includes(pattern));
+}
