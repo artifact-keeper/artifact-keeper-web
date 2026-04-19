@@ -133,4 +133,78 @@ describe("VulnIdLink", () => {
 
     expect(container.firstChild).toHaveClass("my-custom-class");
   });
+
+  it("applies custom className to the outer element for unlinked identifiers", () => {
+    const { container } = render(
+      <VulnIdLink id="PYSEC-2024-42" className="custom-plain" />
+    );
+
+    expect(container.firstChild).toHaveClass("custom-plain");
+  });
+
+  // ---- showIcon with GHSA ----
+
+  it("shows the external link icon for GHSA IDs when showIcon is true", () => {
+    render(<VulnIdLink id="GHSA-abcd-efgh-ijkl" showIcon />);
+
+    expect(screen.getByTestId("icon-external-link")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://github.com/advisories/GHSA-abcd-efgh-ijkl"
+    );
+  });
+
+  it("does not render an icon for unlinked identifiers regardless of showIcon", () => {
+    render(<VulnIdLink id="PYSEC-2024-42" showIcon />);
+
+    // showIcon only applies within the anchor tag, so unlinked IDs never show it
+    expect(screen.queryByTestId("icon-external-link")).not.toBeInTheDocument();
+  });
+
+  // ---- source prop with showIcon ----
+
+  it("renders GHSA link with source override and icon", () => {
+    render(
+      <VulnIdLink id="GHSA-abcd-efgh-ijkl" source="GitHub" showIcon />
+    );
+
+    expect(screen.getByRole("link")).toBeInTheDocument();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+    expect(screen.queryByText("GHSA")).not.toBeInTheDocument();
+    expect(screen.getByTestId("icon-external-link")).toBeInTheDocument();
+  });
+
+  it("renders source label alongside plain text for unknown IDs with source", () => {
+    render(<VulnIdLink id="RUSTSEC-2024-1" source="RustSec" />);
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByText("RUSTSEC-2024-1")).toBeInTheDocument();
+    expect(screen.getByText("RustSec")).toBeInTheDocument();
+  });
+
+  // ---- empty string source ----
+
+  it("treats empty string source the same as an explicit value", () => {
+    render(<VulnIdLink id="CVE-2024-5678" source="" />);
+
+    // Empty string is truthy for the ?? operator, so it becomes the sourceLabel
+    // The component uses source ?? ..., and "" is not nullish, so it uses ""
+    // which results in no visible label text (empty span)
+    expect(screen.queryByText("CVE")).not.toBeInTheDocument();
+  });
+
+  // ---- click behavior on plain text ----
+
+  it("does not call stopPropagation for unlinked identifiers (no link to click)", () => {
+    const parentClick = vi.fn();
+
+    render(
+      <div onClick={parentClick}>
+        <VulnIdLink id="PYSEC-2024-42" />
+      </div>
+    );
+
+    fireEvent.click(screen.getByText("PYSEC-2024-42"));
+    expect(parentClick).toHaveBeenCalledTimes(1);
+  });
 });
