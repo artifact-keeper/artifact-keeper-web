@@ -85,10 +85,16 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => authState,
 }));
 
-// SSO mock
+// SSO mock with mutable return value so individual tests can override it
+const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
+  mockListProviders: vi.fn().mockResolvedValue([]),
+  mockLdapLogin: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/api/sso", () => ({
   ssoApi: {
-    listProviders: vi.fn().mockResolvedValue([]),
+    listProviders: mockListProviders,
+    ldapLogin: mockLdapLogin,
   },
 }));
 
@@ -107,6 +113,10 @@ describe("LoginPage lockout UI", () => {
     mockPush.mockClear();
     mockLogin.mockClear();
     mockRefreshUser.mockClear();
+    mockVerifyTotp.mockClear();
+    mockClearTotpRequired.mockClear();
+    mockListProviders.mockResolvedValue([]);
+    mockLdapLogin.mockResolvedValue(undefined);
     authState = {
       login: mockLogin,
       refreshUser: mockRefreshUser,
@@ -345,6 +355,170 @@ describe("LoginPage lockout UI", () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith("/change-password");
+    });
+  });
+
+  // ---- TOTP flow tests ----
+
+  it("submits TOTP code and navigates to / on success", async () => {
+    authState.totpRequired = true;
+    mockVerifyTotp.mockResolvedValueOnce(undefined);
+
+    render(<LoginPage />);
+
+    const totpInput = screen.getByPlaceholderText("000000");
+
+    await act(async () => {
+      fireEvent.change(totpInput, { target: { value: "123456" } });
+    });
+
+    const verifyButton = screen.getByText("Verify");
+    await act(async () => {
+      fireEvent.click(verifyButton);
+    });
+
+    await waitFor(() => {
+      expect(mockVerifyTotp).toHaveBeenCalledWith("123456");
+      expect(mockPush).toHaveBeenCalledWith("/");
+    });
+  });
+
+  it("shows error when TOTP verification fails", async () => {
+    authState.totpRequired = true;
+    mockVerifyTotp.mockRejectedValueOnce(new Error("Invalid code"));
+
+    render(<LoginPage />);
+
+    const totpInput = screen.getByPlaceholderText("000000");
+
+    await act(async () => {
+      fireEvent.change(totpInput, { target: { value: "999999" } });
+    });
+
+    const verifyButton = screen.getByText("Verify");
+    await act(async () => {
+      fireEvent.click(verifyButton);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid code")).toBeInTheDocument();
+    });
+  });
+
+  it("clicking Back to login clears TOTP state", async () => {
+    authState.totpRequired = true;
+
+    render(<LoginPage />);
+
+    const backButton = screen.getByText("Back to login");
+    await act(async () => {
+      fireEvent.click(backButton);
+    });
+
+    expect(mockClearTotpRequired).toHaveBeenCalled();
+  });
+
+  // ---- SSO provider tests ----
+
+  it("renders LDAP provider tabs and allows switching", async () => {
+    mockListProviders.mockResolvedValue([
+      { id: "ldap-1", name: "Corp LDAP", provider_type: "ldap", login_url: "" },
+    ]);
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+
+    // Wait for the provider tabs to appear
+    await waitFor(() => {
+      expect(screen.getByText("Corp LDAP")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Local")).toBeInTheDocument();
+
+    // Click the LDAP provider tab
+    await act(async () => {
+      fireEvent.click(screen.getByText("Corp LDAP"));
+    });
+
+    // Click back to Local tab
+    await act(async () => {
+      fireEvent.click(screen.getByText("Local"));
+    });
+  });
+
+  it("performs LDAP login when an LDAP provider is selected", async () => {
+    mockListProviders.mockResolvedValue([
+      { id: "ldap-1", name: "Corp LDAP", provider_type: "ldap", login_url: "" },
+    ]);
+    mockLdapLogin.mockResolvedValueOnce(undefined);
+    mockRefreshUser.mockResolvedValueOnce(undefined);
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Corp LDAP")).toBeInTheDocument();
+    });
+
+    // Select the LDAP provider
+    await act(async () => {
+      fireEvent.click(screen.getByText("Corp LDAP"));
+    });
+
+    // Fill credentials and submit
+    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "ldapuser" } });
+      fireEvent.change(passwordInput, { target: { value: "ldappass" } });
+    });
+
+    const submitButton = screen.getByText("Sign In");
+    await act(async () => {
+      fireEvent.click(submitButton);
+    });
+
+    await waitFor(() => {
+      expect(mockLdapLogin).toHaveBeenCalledWith("ldap-1", "ldapuser", "ldappass");
+      expect(mockRefreshUser).toHaveBeenCalled();
+      expect(mockPush).toHaveBeenCalledWith("/");
+    });
+  });
+
+  it("renders OIDC/SAML redirect provider buttons", async () => {
+    mockListProviders.mockResolvedValue([
+      { id: "oidc-1", name: "Okta SSO", provider_type: "oidc", login_url: "/api/v1/sso/oidc/oidc-1/login" },
+    ]);
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Sign in with Okta SSO")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("or continue with")).toBeInTheDocument();
+  });
+
+  it("redirects when clicking an OIDC provider button with relative login_url", async () => {
+    mockListProviders.mockResolvedValue([
+      { id: "saml-1", name: "Azure AD", provider_type: "saml", login_url: "/api/v1/sso/saml/saml-1/login" },
+    ]);
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Sign in with Azure AD")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign in with Azure AD"));
     });
   });
 });
