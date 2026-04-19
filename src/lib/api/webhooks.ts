@@ -35,6 +35,7 @@ export interface Webhook {
   is_enabled: boolean;
   repository_id?: string;
   headers?: Record<string, string>;
+  payload_template?: string;
   last_triggered_at?: string;
   created_at: string;
 }
@@ -46,6 +47,7 @@ export interface CreateWebhookRequest {
   secret?: string;
   repository_id?: string;
   headers?: Record<string, string>;
+  payload_template?: string;
 }
 
 export interface WebhookDelivery {
