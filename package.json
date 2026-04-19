@@ -17,11 +17,10 @@
     "tutorial:record": "playwright test --config playwright-tutorials.config.ts",
     "tutorial:record:one": "playwright test --config playwright-tutorials.config.ts -g",
     "tutorial:manifest": "npx tsx e2e/tutorials/scripts/generate-manifest.ts",
-    "tutorial:generate-videos": "npx tsx e2e/tutorials/scripts/generate-videos.ts",
-    "postinstall": "node scripts/patch-sdk.js"
+    "tutorial:generate-videos": "npx tsx e2e/tutorials/scripts/generate-videos.ts"
   },
   "dependencies": {
-    "@artifact-keeper/sdk": "^1.1.0",
+    "@artifact-keeper/sdk": "^1.1.4",
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.96.2",
     "class-variance-authority": "^0.7.1",
