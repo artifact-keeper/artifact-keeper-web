@@ -25,5 +25,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new Error(`API error ${response.status}: ${body}`);
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+
+  // Guard against empty response bodies (e.g. 200 with no content, or a 204
+  // that was rewritten to 200 by the Next.js middleware proxy). Calling
+  // response.json() on an empty body throws a SyntaxError which would cause
+  // mutations to appear to fail even though the server processed the request.
+  const text = await response.text();
+  if (!text.trim()) return undefined as T;
+  return JSON.parse(text) as T;
 }

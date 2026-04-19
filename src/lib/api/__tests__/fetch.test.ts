@@ -20,9 +20,15 @@ function mockResponse(options: {
     ok = true,
     status = 200,
     json,
-    text = "",
+    text,
     textRejects = false,
   } = options;
+
+  // When `json` is provided but `text` is not, serialize the JSON value so
+  // both `.json()` and `.text()` return consistent data. The implementation
+  // reads the body via `.text()` + `JSON.parse()` to safely handle empty
+  // response bodies.
+  const resolvedText = text ?? (json !== undefined ? JSON.stringify(json) : "");
 
   return {
     ok,
@@ -30,7 +36,7 @@ function mockResponse(options: {
     json: vi.fn().mockResolvedValue(json),
     text: textRejects
       ? vi.fn().mockRejectedValue(new Error("body read failed"))
-      : vi.fn().mockResolvedValue(text),
+      : vi.fn().mockResolvedValue(resolvedText),
     headers: new Headers(),
   } as unknown as Response;
 }
@@ -68,6 +74,30 @@ describe("apiFetch", () => {
     mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 204 }));
 
     const result = await apiFetch<void>("/api/v1/service-accounts/sa-1");
+
+    expect(result).toBeUndefined();
+  });
+
+  // ---- 200 with empty body (e.g. DELETE rewritten from 204 by proxy) ----
+
+  it("returns undefined for 200 response with empty body", async () => {
+    mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 200, text: "" }));
+
+    const result = await apiFetch<void>("/api/v1/service-accounts/sa-1", {
+      method: "DELETE",
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  // ---- 200 with whitespace-only body ----
+
+  it("returns undefined for 200 response with whitespace-only body", async () => {
+    mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 200, text: "  \n\t  " }));
+
+    const result = await apiFetch<void>("/api/v1/service-accounts/sa-1", {
+      method: "DELETE",
+    });
 
     expect(result).toBeUndefined();
   });

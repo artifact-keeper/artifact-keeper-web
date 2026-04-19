@@ -46,6 +46,7 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { CopyButton } from "@/components/common/copy-button";
+import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 
 // -- Profile Page --
 
@@ -237,15 +238,6 @@ export default function ProfilePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Alert className="mb-6">
-                <Info className="size-4" />
-                <AlertTitle>Password requirements</AlertTitle>
-                <AlertDescription>
-                  Your password must be at least 8 characters long. We recommend
-                  using a combination of letters, numbers, and special
-                  characters.
-                </AlertDescription>
-              </Alert>
               <form
                 className="space-y-4 max-w-md"
                 onSubmit={(e) => {
@@ -283,6 +275,7 @@ export default function ProfilePage() {
                     required
                     minLength={8}
                   />
+                  <PasswordPolicyHint password={newPassword} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>
