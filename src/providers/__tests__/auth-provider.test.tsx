@@ -53,11 +53,13 @@ import { AuthProvider, useAuth } from "../auth-provider";
 // Test consumer component
 // ---------------------------------------------------------------------------
 
-let capturedAuth: ReturnType<typeof useAuth> | null = null;
+const capturedAuthRef = { current: null as ReturnType<typeof useAuth> | null };
 
 function TestConsumer() {
   const auth = useAuth();
-  capturedAuth = auth;
+  React.useEffect(() => {
+    capturedAuthRef.current = auth;
+  });
   return (
     <div>
       <span data-testid="authenticated">{String(auth.isAuthenticated)}</span>
@@ -80,7 +82,7 @@ describe("AuthProvider", () => {
     mockSdkVerifyTotp.mockReset();
     mockSdkChangePassword.mockReset();
     mockSdkSetupStatus.mockReset();
-    capturedAuth = null;
+    capturedAuthRef.current = null;
 
     // Default: setup not required, not authenticated
     mockSdkSetupStatus.mockResolvedValue({ data: { setup_required: false } });
@@ -223,7 +225,7 @@ describe("AuthProvider", () => {
     });
 
     await act(async () => {
-      await capturedAuth!.refreshUser();
+      await capturedAuthRef.current!.refreshUser();
     });
 
     expect(screen.getByTestId("expires-at").textContent).toBe("null");
@@ -256,7 +258,7 @@ describe("AuthProvider", () => {
     });
 
     await act(async () => {
-      await capturedAuth!.logout();
+      await capturedAuthRef.current!.logout();
     });
 
     expect(screen.getByTestId("expires-at").textContent).toBe("null");
@@ -290,7 +292,7 @@ describe("AuthProvider", () => {
     });
 
     await act(async () => {
-      await capturedAuth!.changePassword("oldpass", "newpass");
+      await capturedAuthRef.current!.changePassword("oldpass", "newpass");
     });
 
     expect(screen.getByTestId("expires-at").textContent).toBe("null");
@@ -341,7 +343,7 @@ describe("AuthProvider", () => {
     });
 
     await act(async () => {
-      await capturedAuth!.login("admin", "password");
+      await capturedAuthRef.current!.login("admin", "password");
     });
 
     expect(screen.getByTestId("expires-at").textContent).toBe(expiresAt);
