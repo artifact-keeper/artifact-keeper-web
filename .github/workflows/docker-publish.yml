@@ -67,6 +67,7 @@ jobs:
           provenance: mode=max
           build-args: |
             GIT_SHA=${{ github.sha }}
+            APP_VERSION=${{ github.ref_name }}
 
       - name: Export digest
         run: |

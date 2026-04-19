@@ -17,7 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG GIT_SHA=unknown
+ARG APP_VERSION=dev
 ENV GIT_SHA=${GIT_SHA}
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
