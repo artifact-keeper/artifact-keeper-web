@@ -335,6 +335,10 @@ describe("SettingsPage", () => {
 
     const fromInput = screen.getByTestId("smtp-from") as HTMLInputElement;
     expect(fromInput.value).toBe("no-reply@example.com");
+
+    // Password should not be populated from server response
+    const passwordInput = screen.getByTestId("smtp-password") as HTMLInputElement;
+    expect(passwordInput.value).toBe("");
   });
 
   it("disables Save button when form is not dirty", () => {
@@ -382,10 +386,39 @@ describe("SettingsPage", () => {
       host: "smtp.test.com",
       port: 587,
       username: "",
-      password: "",
       from_address: "test@test.com",
       tls_mode: "starttls",
     });
+  });
+
+  it("includes password in save payload only when modified", () => {
+    const mutateFn = vi.fn();
+    mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+
+    render(<SettingsPage />);
+
+    // Fill required fields
+    fireEvent.change(screen.getByTestId("smtp-host"), {
+      target: { value: "smtp.test.com" },
+    });
+    fireEvent.change(screen.getByTestId("smtp-from"), {
+      target: { value: "test@test.com" },
+    });
+    // Modify the password field
+    fireEvent.change(screen.getByTestId("smtp-password"), {
+      target: { value: "new-secret" },
+    });
+
+    fireEvent.click(screen.getByText("Save SMTP Settings"));
+
+    expect(mutateFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: "smtp.test.com",
+        password: "new-secret",
+      })
+    );
   });
 
   it("shows validation error for empty host on save", () => {

@@ -101,7 +101,8 @@ function SmtpSettingsForm({
   const [host, setHost] = useState(initialConfig?.host ?? "");
   const [port, setPort] = useState(String(initialConfig?.port ?? 587));
   const [username, setUsername] = useState(initialConfig?.username ?? "");
-  const [password, setPassword] = useState(initialConfig?.password ?? "");
+  const [password, setPassword] = useState("");
+  const [passwordDirty, setPasswordDirty] = useState(false);
   const [fromAddress, setFromAddress] = useState(
     initialConfig?.from_address ?? ""
   );
@@ -154,14 +155,17 @@ function SmtpSettingsForm({
       toast.error("From address is required");
       return;
     }
-    saveMutation.mutate({
+    const payload: Record<string, unknown> = {
       host: host.trim(),
       port: portNum,
       username: username.trim(),
-      password,
       from_address: fromAddress.trim(),
       tls_mode: tlsMode,
-    });
+    };
+    if (passwordDirty) {
+      payload.password = password;
+    }
+    saveMutation.mutate(payload as unknown as SmtpConfig);
   }
 
   function handleSendTest() {
@@ -237,7 +241,11 @@ function SmtpSettingsForm({
                 placeholder="********"
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => handleFieldChange(setPassword)(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordDirty(true);
+                  setFormDirty(true);
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 Stored encrypted on the server. Leave blank to keep the existing value.
