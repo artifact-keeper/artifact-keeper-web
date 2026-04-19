@@ -19,7 +19,11 @@ import { profileApi } from "@/lib/api/profile";
 import { totpApi } from "@/lib/api/totp";
 import type { TotpSetupResponse } from "@/lib/api/totp";
 import { useAuth } from "@/providers/auth-provider";
-import { toUserMessage } from "@/lib/error-utils";
+import {
+  toUserMessage,
+  isPasswordReuseError,
+  PASSWORD_REUSE_MESSAGE,
+} from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,16 +88,27 @@ export default function ProfilePage() {
     onError: () => toast.error("Failed to update profile"),
   });
 
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   const passwordMutation = useMutation({
     mutationFn: () => changePassword(currentPassword, newPassword),
     onSuccess: () => {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setPasswordError(null);
       toast.success("Password changed successfully");
     },
-    onError: () =>
-      toast.error("Failed to change password. Check your current password."),
+    onError: (err: unknown) => {
+      if (isPasswordReuseError(err)) {
+        setPasswordError(PASSWORD_REUSE_MESSAGE);
+        toast.error(PASSWORD_REUSE_MESSAGE);
+      } else {
+        const msg = toUserMessage(err, "Failed to change password. Check your current password.");
+        setPasswordError(null);
+        toast.error(msg);
+      }
+    },
   });
 
   return (
@@ -270,12 +285,22 @@ export default function ProfilePage() {
                     id="new-password"
                     type="password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordError(null);
+                    }}
                     placeholder="Enter new password"
                     required
                     minLength={8}
+                    aria-invalid={!!passwordError}
+                    aria-describedby={passwordError ? "new-password-error" : undefined}
                   />
                   <PasswordPolicyHint password={newPassword} />
+                  {passwordError && (
+                    <p id="new-password-error" className="text-sm text-destructive" role="alert">
+                      {passwordError}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>
