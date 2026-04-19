@@ -31,6 +31,6 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   // response.json() on an empty body throws a SyntaxError which would cause
   // mutations to appear to fail even though the server processed the request.
   const text = await response.text();
-  if (!text) return undefined as T;
+  if (!text.trim()) return undefined as T;
   return JSON.parse(text) as T;
 }

@@ -90,6 +90,18 @@ describe("apiFetch", () => {
     expect(result).toBeUndefined();
   });
 
+  // ---- 200 with whitespace-only body ----
+
+  it("returns undefined for 200 response with whitespace-only body", async () => {
+    mockFetch.mockResolvedValue(mockResponse({ ok: true, status: 200, text: "  \n\t  " }));
+
+    const result = await apiFetch<void>("/api/v1/service-accounts/sa-1", {
+      method: "DELETE",
+    });
+
+    expect(result).toBeUndefined();
+  });
+
   // ---- Non-ok response error handling ----
 
   it("throws an error with status and body for non-ok response", async () => {
