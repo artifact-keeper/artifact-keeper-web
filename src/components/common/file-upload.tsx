@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, X, FileIcon } from "lucide-react";
+import { Upload, X, FileIcon, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,11 +26,13 @@ export function FileUpload({
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((f: File) => {
     setFile(f);
     setProgress(0);
+    setError(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -69,6 +71,7 @@ export function FileUpload({
     setFile(null);
     setProgress(0);
     setCustomPath("");
+    setError(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -76,9 +79,14 @@ export function FileUpload({
     if (!file) return;
     setUploading(true);
     setProgress(0);
+    setError(null);
     try {
       await onUpload(file, customPath || undefined);
       handleClear();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Upload failed";
+      setError(message);
     } finally {
       setUploading(false);
       setProgress(0);
@@ -175,6 +183,16 @@ export function FileUpload({
           <p className="text-xs text-muted-foreground text-center">
             Uploading... {progress}%
           </p>
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+          role="alert"
+        >
+          <AlertCircle className="size-4 mt-0.5 shrink-0" />
+          <p>{error}</p>
         </div>
       )}
 

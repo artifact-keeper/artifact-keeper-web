@@ -89,11 +89,22 @@ export const artifactsApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve(JSON.parse(xhr.responseText) as Artifact);
         } else {
-          reject(new Error(`Upload failed: ${xhr.status}`));
+          let detail = '';
+          try {
+            const body = JSON.parse(xhr.responseText);
+            detail = body?.error || body?.message || '';
+          } catch {
+            // response is not JSON
+          }
+          if (xhr.status === 413) {
+            reject(new Error('File exceeds the maximum upload size allowed by the server.'));
+          } else {
+            reject(new Error(detail || `Upload failed with status ${xhr.status}`));
+          }
         }
       };
 
-      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.onerror = () => reject(new Error('Upload failed. Check your network connection and try again.'));
       xhr.send(formData);
     });
   },
