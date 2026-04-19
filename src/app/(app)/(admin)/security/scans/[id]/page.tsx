@@ -54,7 +54,14 @@ const STATUS_BADGE: Record<string, string> = {
   pending: "bg-secondary text-secondary-foreground border-border",
   failed:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+  error:
+    "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
+
+/** Whether a scan status means findings data should not be trusted. */
+function isScanIncomplete(status: string): boolean {
+  return status === "failed" || status === "error" || status === "pending" || status === "running";
+}
 
 const SEVERITY_BADGE: Record<string, string> = {
   critical:
@@ -408,8 +415,25 @@ export default function SecurityScanDetailPage() {
         </Card>
       )}
 
-      {/* Summary stat cards */}
-      {scan && (
+      {/* Failed/error scan warning banner */}
+      {scan && (scan.status === "failed" || scan.status === "error") && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+          <AlertCircle className="size-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800 dark:text-red-400">
+              This scan failed to complete
+            </p>
+            <p className="text-xs text-red-700 dark:text-red-500 mt-1">
+              {scan.error_message
+                ? scan.error_message
+                : "The scanner encountered an error. Findings data below may be incomplete or missing. Try triggering a new scan."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Summary stat cards (only shown for completed scans) */}
+      {scan && !isScanIncomplete(scan.status) && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
             icon={Bug}
@@ -491,7 +515,13 @@ export default function SecurityScanDetailPage() {
           setPage(1);
         }}
         loading={findingsLoading}
-        emptyMessage="No findings for this scan."
+        emptyMessage={
+          scan && isScanIncomplete(scan.status)
+            ? scan.status === "failed" || scan.status === "error"
+              ? "No findings available. The scan did not complete successfully."
+              : "Scan is still in progress."
+            : "No findings for this scan."
+        }
         rowKey={(r) => r.id}
       />
 

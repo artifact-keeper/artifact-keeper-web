@@ -49,7 +49,12 @@ const STATUS_COLORS: Record<string, string> = {
     "bg-secondary text-secondary-foreground border-border",
   failed:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+  error:
+    "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
+
+/** Statuses where the scan did not complete successfully, so findings data is unreliable. */
+const INCOMPLETE_STATUSES = new Set(["failed", "error", "pending", "running"]);
 
 const SEVERITY_PILL: Record<string, string> = {
   critical:
@@ -223,8 +228,23 @@ export default function SecurityScansPage() {
       header: "Findings",
       accessor: (r) => r.findings_count,
       sortable: true,
-      cell: (r) =>
-        r.findings_count === 0 ? (
+      cell: (r) => {
+        if (INCOMPLETE_STATUSES.has(r.status)) {
+          if (r.status === "failed" || r.status === "error") {
+            return (
+              <Badge
+                variant="outline"
+                className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
+              >
+                Scan Failed
+              </Badge>
+            );
+          }
+          return (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        }
+        return r.findings_count === 0 ? (
           <Badge
             variant="outline"
             className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
@@ -242,7 +262,8 @@ export default function SecurityScansPage() {
             <SeverityCount count={r.medium_count} label="M" level="medium" />
             <SeverityCount count={r.low_count} label="L" level="low" />
           </div>
-        ),
+        );
+      },
     },
     {
       id: "started_at",
