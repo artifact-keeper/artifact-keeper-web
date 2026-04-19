@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Upload, X, FileIcon, Pause, Play, RotateCcw } from "lucide-react";
+import {
+  Upload,
+  X,
+  FileIcon,
+  AlertCircle,
+  Pause,
+  Play,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +109,7 @@ export function FileUpload({
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isChunkedMode = !!repositoryKey && !!file && file.size >= chunkedThreshold;
@@ -130,8 +139,8 @@ export function FileUpload({
       setFile(f);
       setSimpleProgress(0);
       setShowResumePrompt(false);
+      setError(null);
 
-      // Check for a pending session when a large file is selected
       if (repositoryKey && f.size >= chunkedThreshold) {
         if (chunked.hasPendingSession(f)) {
           setShowResumePrompt(true);
@@ -178,6 +187,7 @@ export function FileUpload({
     setSimpleProgress(0);
     setCustomPath("");
     setShowResumePrompt(false);
+    setError(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -186,6 +196,7 @@ export function FileUpload({
     setUploading(true);
     setSimpleProgress(0);
     setShowResumePrompt(false);
+    setError(null);
 
     try {
       if (isChunkedMode) {
@@ -194,8 +205,12 @@ export function FileUpload({
         await onUpload(file, customPath || undefined);
         handleClear();
       }
-    } catch {
-      // Error state handled by hook or parent
+    } catch (err) {
+      if (!isChunkedMode) {
+        const message =
+          err instanceof Error ? err.message : "Upload failed";
+        setError(message);
+      }
     } finally {
       if (!isChunkedMode) {
         setUploading(false);
@@ -336,11 +351,14 @@ export function FileUpload({
         </div>
       )}
 
-      {/* Error display */}
-      {chunked.status === "error" && chunked.error && (
-        <p className="text-sm text-destructive">
-          Upload failed: {chunked.error.message}
-        </p>
+      {(error || (chunked.status === "error" && chunked.error)) && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+          role="alert"
+        >
+          <AlertCircle className="size-4 mt-0.5 shrink-0" />
+          <p>{error ?? `Upload failed: ${chunked.error?.message}`}</p>
+        </div>
       )}
 
       {file && (

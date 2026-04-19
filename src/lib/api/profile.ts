@@ -7,6 +7,7 @@ import {
   revokeApiToken as sdkRevokeApiToken,
 } from '@artifact-keeper/sdk';
 import type { User } from '@/types';
+import type { RepoSelector } from '@/lib/api/service-accounts';
 
 export interface UpdateProfileRequest {
   display_name?: string;
@@ -45,12 +46,15 @@ export interface AccessToken {
   expires_at?: string;
   last_used_at?: string;
   scopes?: string[];
+  repo_selector?: RepoSelector;
+  repository_ids?: string[];
 }
 
 export interface CreateAccessTokenRequest {
   name: string;
   expires_in_days?: number;
   scopes?: string[];
+  repo_selector?: RepoSelector;
 }
 
 export interface CreateAccessTokenResponse {

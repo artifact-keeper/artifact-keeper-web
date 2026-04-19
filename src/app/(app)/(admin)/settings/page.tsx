@@ -1,19 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
-import { Server, HardDrive, Lock, Info } from "lucide-react";
+import { settingsApi } from "@/lib/api/settings";
+import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { PageHeader } from "@/components/common/page-header";
+import type { PasswordPolicy, SmtpConfig, SmtpTlsMode } from "@/lib/api/settings";
 
 // -- helpers --
 
@@ -37,6 +49,300 @@ function SettingRow({
   );
 }
 
+function formatPasswordPolicy(policy: PasswordPolicy | undefined): string {
+  if (!policy) return "Loading...";
+  const parts = [`Minimum ${policy.min_length} characters`];
+  const complexity: string[] = [];
+  if (policy.require_uppercase) complexity.push("uppercase");
+  if (policy.require_lowercase) complexity.push("lowercase");
+  if (policy.require_digit) complexity.push("number");
+  if (policy.require_special) complexity.push("special character");
+  if (complexity.length > 0) {
+    parts.push(`requires ${complexity.join(", ")}`);
+  }
+  if (policy.history_count > 0) {
+    parts.push(`${policy.history_count} password history`);
+  }
+  return parts.join("; ");
+}
+
+// -- SMTP settings tab --
+
+function SmtpSettingsTab() {
+  const { data: smtpConfig, isLoading, dataUpdatedAt } = useQuery({
+    queryKey: ["smtp-config"],
+    queryFn: () => settingsApi.getSmtpConfig(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Remount the form when query data changes so initial state resets
+  // without needing setState inside an effect.
+  return <SmtpSettingsForm key={dataUpdatedAt} initialConfig={smtpConfig} />;
+}
+
+function SmtpSettingsForm({
+  initialConfig,
+}: {
+  initialConfig: SmtpConfig | undefined;
+}) {
+  const queryClient = useQueryClient();
+
+  const [host, setHost] = useState(initialConfig?.host ?? "");
+  const [port, setPort] = useState(String(initialConfig?.port ?? 587));
+  const [username, setUsername] = useState(initialConfig?.username ?? "");
+  const [password, setPassword] = useState("");
+  const [passwordDirty, setPasswordDirty] = useState(false);
+  const [fromAddress, setFromAddress] = useState(
+    initialConfig?.from_address ?? ""
+  );
+  const [tlsMode, setTlsMode] = useState<SmtpTlsMode>(
+    initialConfig?.tls_mode ?? "starttls"
+  );
+  const [testRecipient, setTestRecipient] = useState("");
+  const [formDirty, setFormDirty] = useState(false);
+
+  const saveMutation = useMutation({
+    mutationFn: (config: SmtpConfig) => settingsApi.updateSmtpConfig(config),
+    onSuccess: () => {
+      toast.success("SMTP configuration saved");
+      queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
+      setFormDirty(false);
+    },
+    onError: () => toast.error("Failed to save SMTP configuration"),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: (recipient: string) => settingsApi.sendTestEmail(recipient),
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success(result.message || "Test email sent successfully");
+      } else {
+        toast.error(result.message || "Test email failed");
+      }
+    },
+    onError: () => toast.error("Failed to send test email"),
+  });
+
+  function handleFieldChange<T>(setter: (v: T) => void) {
+    return (value: T) => {
+      setter(value);
+      setFormDirty(true);
+    };
+  }
+
+  function handleSave() {
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      toast.error("Port must be a number between 1 and 65535");
+      return;
+    }
+    if (!host.trim()) {
+      toast.error("SMTP host is required");
+      return;
+    }
+    if (!fromAddress.trim()) {
+      toast.error("From address is required");
+      return;
+    }
+    const payload: Record<string, unknown> = {
+      host: host.trim(),
+      port: portNum,
+      username: username.trim(),
+      from_address: fromAddress.trim(),
+      tls_mode: tlsMode,
+    };
+    if (passwordDirty) {
+      payload.password = password;
+    }
+    saveMutation.mutate(payload as unknown as SmtpConfig);
+  }
+
+  function handleSendTest() {
+    if (!testRecipient.trim()) {
+      toast.error("Please enter a recipient email address");
+      return;
+    }
+    testMutation.mutate(testRecipient.trim());
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">SMTP Configuration</CardTitle>
+          <CardDescription>
+            Configure the outbound email server used for notifications, password
+            resets, and other system emails.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="smtp-host">Host</Label>
+              <Input
+                id="smtp-host"
+                placeholder="smtp.example.com"
+                value={host}
+                onChange={(e) => handleFieldChange(setHost)(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Hostname or IP address of the SMTP server.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtp-port">Port</Label>
+              <Input
+                id="smtp-port"
+                type="number"
+                min={1}
+                max={65535}
+                placeholder="587"
+                value={port}
+                onChange={(e) => handleFieldChange(setPort)(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Common ports: 25 (SMTP), 465 (SMTPS), 587 (Submission).
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="smtp-username">Username</Label>
+              <Input
+                id="smtp-username"
+                placeholder="user@example.com"
+                autoComplete="off"
+                value={username}
+                onChange={(e) => handleFieldChange(setUsername)(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank if the server does not require authentication.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtp-password">Password</Label>
+              <Input
+                id="smtp-password"
+                type="password"
+                placeholder="********"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordDirty(true);
+                  setFormDirty(true);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Stored encrypted on the server. Leave blank to keep the existing value.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="smtp-from">From Address</Label>
+              <Input
+                id="smtp-from"
+                type="email"
+                placeholder="noreply@example.com"
+                value={fromAddress}
+                onChange={(e) => handleFieldChange(setFromAddress)(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                The sender address used in outgoing emails.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="smtp-tls">TLS Mode</Label>
+              <Select
+                value={tlsMode}
+                onValueChange={(v) => handleFieldChange(setTlsMode)(v as SmtpTlsMode)}
+              >
+                <SelectTrigger id="smtp-tls">
+                  <SelectValue placeholder="Select TLS mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="starttls">STARTTLS</SelectItem>
+                  <SelectItem value="tls">TLS</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                STARTTLS upgrades an unencrypted connection. TLS connects with encryption from the start.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={saveMutation.isPending || !formDirty}
+            >
+              {saveMutation.isPending && (
+                <Loader2 className="size-4 mr-2 animate-spin" />
+              )}
+              Save SMTP Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Send Test Email</CardTitle>
+          <CardDescription>
+            Verify the SMTP configuration by sending a test message. Save any
+            pending changes before testing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-end gap-3">
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="test-recipient">Recipient</Label>
+              <Input
+                id="test-recipient"
+                type="email"
+                placeholder="admin@example.com"
+                value={testRecipient}
+                onChange={(e) => setTestRecipient(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleSendTest}
+              disabled={testMutation.isPending}
+            >
+              {testMutation.isPending && (
+                <Loader2 className="size-4 mr-2 animate-spin" />
+              )}
+              Send Test Email
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // -- page --
 
 export default function SettingsPage() {
@@ -44,6 +350,13 @@ export default function SettingsPage() {
   const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: () => adminApi.getHealth(),
+  });
+
+  const { data: passwordPolicy } = useQuery({
+    queryKey: ["password-policy"],
+    queryFn: () => settingsApi.getPasswordPolicy(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   if (!user?.is_admin) {
@@ -89,6 +402,10 @@ export default function SettingsPage() {
           <TabsTrigger value="auth">
             <Lock className="size-4 mr-1.5" />
             Authentication
+          </TabsTrigger>
+          <TabsTrigger value="email">
+            <Mail className="size-4 mr-1.5" />
+            Email
           </TabsTrigger>
         </TabsList>
 
@@ -210,11 +527,15 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Password Policy"
-                value="Minimum 8 characters"
+                value={formatPasswordPolicy(passwordPolicy)}
                 description="Minimum password requirements for user accounts."
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="email" className="mt-4">
+          <SmtpSettingsTab />
         </TabsContent>
       </Tabs>
     </div>

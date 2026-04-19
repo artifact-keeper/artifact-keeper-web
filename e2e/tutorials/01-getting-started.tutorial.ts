@@ -18,7 +18,7 @@ test('Tutorial: Getting Started with Artifact Keeper', async ({ page }) => {
 
   await page.getByLabel(/username/i).fill('admin');
   await tutorial.pause(600);
-  await page.getByLabel(/password/i).fill('admin');
+  await page.getByLabel(/password/i).fill(process.env.ADMIN_PASSWORD || 'TestRunner!2026secure');
   await tutorial.pause(600);
 
   tutorial.narrate('Enter your username and password, then click Sign In.');

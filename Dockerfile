@@ -17,7 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG GIT_SHA=unknown
+ARG APP_VERSION=dev
 ENV GIT_SHA=${GIT_SHA}
+ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
 RUN npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
@@ -100,6 +102,9 @@ ENV NODE_ENV=production \
 COPY --from=build --chown=root:root --chmod=555 /app/public ./public
 COPY --from=build --chown=root:root --chmod=555 /app/.next/standalone ./
 COPY --from=build --chown=root:root --chmod=555 /app/.next/static ./.next/static
+
+# Next.js needs a writable cache directory for image optimization at runtime
+RUN mkdir -p .next/cache && chown 1001:0 .next/cache
 
 USER 1001
 

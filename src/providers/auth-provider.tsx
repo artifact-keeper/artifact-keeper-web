@@ -31,6 +31,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   mustChangePassword: boolean;
+  passwordExpiresAt: string | null;
   setupRequired: boolean;
   totpRequired: boolean;
   totpToken: string | null;
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [passwordExpiresAt, setPasswordExpiresAt] = useState<string | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpToken, setTotpToken] = useState<string | null>(null);
@@ -71,9 +73,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await sdkGetCurrentUser();
       if (error) throw error;
-      setUser(data as unknown as User);
+      const userData = data as unknown as User;
+      setUser(userData);
+      setPasswordExpiresAt(userData.password_expires_at ?? null);
+      setMustChangePassword(!!userData.must_change_password);
     } catch {
       setUser(null);
+      setPasswordExpiresAt(null);
       clearTokens();
     }
   }, []);
@@ -135,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTokens();
       setUser(null);
       setMustChangePassword(false);
+      setPasswordExpiresAt(null);
     }
   }, []);
 
@@ -147,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       setMustChangePassword(false);
+      setPasswordExpiresAt(null);
       setSetupRequired(false);
     },
     [user]
@@ -175,7 +183,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await sdkGetCurrentUser();
         if (!error && data) {
-          setUser(data as unknown as User);
+          const userData = data as unknown as User;
+          setUser(userData);
+          setPasswordExpiresAt(userData.password_expires_at ?? null);
+          setMustChangePassword(!!userData.must_change_password);
           setIsLoading(false);
           return;
         }
@@ -222,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         mustChangePassword,
+        passwordExpiresAt,
         setupRequired,
         totpRequired,
         totpToken,

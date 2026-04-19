@@ -17,7 +17,7 @@ test.describe('Access Token Creation', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    await dialog.getByLabel(/name/i).fill('e2e-test-key');
+    await dialog.getByLabel(/^name$/i).fill('e2e-test-key');
 
     const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('/api/v1/auth/tokens') && resp.request().method() === 'POST',
@@ -65,7 +65,7 @@ test.describe('Access Token Creation', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    await dialog.getByLabel(/name/i).fill('e2e-test-token');
+    await dialog.getByLabel(/^name$/i).fill('e2e-test-token');
 
     const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('/api/v1/auth/tokens') && resp.request().method() === 'POST',
@@ -109,7 +109,7 @@ test.describe('Access Token Creation', () => {
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     const keyName = `e2e-table-key-${Date.now()}`;
-    await dialog.getByLabel(/name/i).fill(keyName);
+    await dialog.getByLabel(/^name$/i).fill(keyName);
 
     const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('/api/v1/auth/tokens') && resp.request().method() === 'POST',

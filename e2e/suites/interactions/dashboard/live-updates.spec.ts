@@ -5,11 +5,11 @@ import { test, expect } from '@playwright/test';
  * to see changes made by another tab without a manual page refresh.
  *
  * Run locally:
- *   ADMIN_PASSWORD=admin123 npx playwright test --config playwright-local.config.ts --headed
+ *   npx playwright test --config playwright-local.config.ts --headed
  */
 
 const ADMIN_USER = 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'TestRunner!2026secure';
 
 async function loginPage(page: import('@playwright/test').Page) {
   await page.goto('/login');

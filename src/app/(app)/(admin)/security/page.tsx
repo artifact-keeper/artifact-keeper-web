@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -195,8 +195,18 @@ export default function SecurityDashboardPage() {
       if (error) throw error;
       return (data as any)?.items ?? data ?? [];
     },
-    enabled: triggerOpen,
   });
+
+  // Build a lookup map from repository ID to display name (key) for the scores table
+  const repoNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (repos) {
+      for (const r of repos as Array<{ id: string; name: string; key: string }>) {
+        map.set(r.id, r.name || r.key);
+      }
+    }
+    return map;
+  }, [repos]);
 
   // Find the repo key from repo id for the artifact list API call
   const selectedRepoKey = selectedRepoId
@@ -227,10 +237,15 @@ export default function SecurityDashboardPage() {
     {
       id: "repository_id",
       header: "Repository",
-      accessor: (r) => r.repository_id,
-      cell: (r) => (
-        <code className="text-xs">{r.repository_id.slice(0, 12)}...</code>
-      ),
+      accessor: (r) => repoNameMap.get(r.repository_id) ?? r.repository_id,
+      cell: (r) => {
+        const name = repoNameMap.get(r.repository_id);
+        return name ? (
+          <span className="text-sm font-medium">{name}</span>
+        ) : (
+          <code className="text-xs">{r.repository_id.slice(0, 12)}...</code>
+        );
+      },
     },
     {
       id: "grade",

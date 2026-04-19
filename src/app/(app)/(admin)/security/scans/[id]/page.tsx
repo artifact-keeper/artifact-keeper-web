@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
+import { isScanIncomplete } from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import {
 import { StatCard } from "@/components/common/stat-card";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 // -- constants --
 
@@ -53,6 +55,8 @@ const STATUS_BADGE: Record<string, string> = {
     "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
   pending: "bg-secondary text-secondary-foreground border-border",
   failed:
+    "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+  error:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
 
@@ -234,19 +238,11 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "cve_id",
-      header: "CVE",
+      header: "Advisory",
       accessor: (r) => r.cve_id ?? "",
       cell: (r) =>
         r.cve_id ? (
-          <a
-            href={`https://nvd.nist.gov/vuln/detail/${r.cve_id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.cve_id}
-          </a>
+          <VulnIdLink id={r.cve_id} />
         ) : (
           <span className="text-sm text-muted-foreground">-</span>
         ),
@@ -408,8 +404,25 @@ export default function SecurityScanDetailPage() {
         </Card>
       )}
 
-      {/* Summary stat cards */}
-      {scan && (
+      {/* Failed/error scan warning banner */}
+      {scan && (scan.status === "failed" || scan.status === "error") && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+          <AlertCircle className="size-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800 dark:text-red-400">
+              This scan failed to complete
+            </p>
+            <p className="text-xs text-red-700 dark:text-red-500 mt-1">
+              {scan.error_message
+                ? scan.error_message
+                : "The scanner encountered an error. Findings data below may be incomplete or missing. Try triggering a new scan."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Summary stat cards (only shown for completed scans) */}
+      {scan && !isScanIncomplete(scan.status) && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
             icon={Bug}
@@ -491,7 +504,13 @@ export default function SecurityScanDetailPage() {
           setPage(1);
         }}
         loading={findingsLoading}
-        emptyMessage="No findings for this scan."
+        emptyMessage={
+          scan && isScanIncomplete(scan.status)
+            ? scan.status === "failed" || scan.status === "error"
+              ? "No findings available. The scan did not complete successfully."
+              : "Scan is still in progress."
+            : "No findings for this scan."
+        }
         rowKey={(r) => r.id}
       />
 

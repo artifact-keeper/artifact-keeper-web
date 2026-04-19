@@ -59,6 +59,14 @@ export type {
   CreateAccessTokenResponse,
 } from './profile';
 export type {
+  ServiceAccount,
+  ServiceAccountToken,
+  RepoSelector,
+  MatchedRepository,
+  CreateTokenRequest as CreateServiceAccountTokenRequest,
+  CreateTokenResponse as CreateServiceAccountTokenResponse,
+} from './service-accounts';
+export type {
   Webhook,
   WebhookDelivery,
   WebhookEvent,

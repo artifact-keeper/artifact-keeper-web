@@ -6,9 +6,9 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import { Loader2, LogIn, Shield, Terminal } from "lucide-react";
+import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import { toUserMessage } from "@/lib/error-utils";
+import { toUserMessage, isAccountLocked } from "@/lib/error-utils";
 import { ssoApi } from "@/lib/api/sso";
 import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, refreshUser, setupRequired, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [accountLocked, setAccountLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [totpCode, setTotpCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
@@ -81,6 +82,7 @@ export default function LoginPage() {
   async function onSubmit(values: LoginValues) {
     setIsLoading(true);
     setError(null);
+    setAccountLocked(false);
     try {
       if (selectedProvider.type === "ldap") {
         // Tokens are set as httpOnly cookies by the backend
@@ -105,7 +107,13 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      setError(toUserMessage(err, "Login failed. Please check your credentials."));
+      if (isAccountLocked(err)) {
+        setAccountLocked(true);
+        setError(null);
+      } else {
+        setAccountLocked(false);
+        setError(toUserMessage(err, "Login failed. Please check your credentials."));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +220,18 @@ export default function LoginPage() {
           <CardDescription>{setupRequired ? "Complete first-time setup" : "Sign in to your account"}</CardDescription>
         </CardHeader>
         <CardContent>
-          {error && (
+          {accountLocked && (
+            <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+              <Lock className="size-4 text-amber-600 dark:text-amber-400" />
+              <AlertTitle className="text-amber-800 dark:text-amber-200">Account Locked</AlertTitle>
+              <AlertDescription className="text-amber-700 dark:text-amber-300">
+                Your account has been temporarily locked due to too many failed
+                login attempts. Please wait a few minutes and try again, or
+                contact an administrator to unlock your account.
+              </AlertDescription>
+            </Alert>
+          )}
+          {error && !accountLocked && (
             <div className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {error}
             </div>

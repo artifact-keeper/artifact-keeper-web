@@ -111,7 +111,7 @@ export async function fillDialogName(
   placeholder?: RegExp
 ): Promise<void> {
   const nameInput = dialog
-    .getByLabel(/name/i)
+    .getByLabel(/^name$/i)
     .first()
     .or(dialog.getByPlaceholder(placeholder ?? /name/i).first());
   await nameInput.fill(value);

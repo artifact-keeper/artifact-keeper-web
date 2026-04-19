@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  Bell,
   Download,
   Trash2,
   Search,
@@ -15,19 +16,25 @@ import {
   HeartPulse,
   Layers,
   Package as PackageIcon,
+  Settings,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import { toUserMessage } from "@/lib/error-utils";
+import { isActivelyQuarantined } from "@/lib/quarantine";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
 import { HealthTabContent } from "./health-tab-content";
+import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PackagesTabContent } from "./packages-tab-content";
+import { QuarantineBadge } from "@/components/common/quarantine-badge";
+import { QuarantineBanner } from "@/components/common/quarantine-banner";
+import { RepoSettingsTab } from "./repo-settings-tab";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
@@ -229,16 +236,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       accessor: (a) => a.name,
       sortable: true,
       cell: (a) => (
-        <button
-          className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-          onClick={(e) => {
-            e.stopPropagation();
-            showDetail(a);
-          }}
-        >
-          <FileIcon className="size-4 text-muted-foreground" />
-          {a.name}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              showDetail(a);
+            }}
+          >
+            <FileIcon className="size-4 text-muted-foreground" />
+            {a.name}
+          </button>
+          {isActivelyQuarantined(a) && (
+            <QuarantineBadge
+              reason={a.quarantine_reason}
+              quarantineUntil={a.quarantine_until}
+            />
+          )}
+        </div>
       ),
     },
     {
@@ -516,6 +531,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Security
             </TabsTrigger>
           )}
+          {user?.is_admin && (
+            <TabsTrigger value="notifications">
+              <Bell className="size-3.5 mr-1" />
+              Notifications
+            </TabsTrigger>
+          )}
+          {user?.is_admin && (
+            <TabsTrigger value="settings">
+              <Settings className="size-3.5 mr-1" />
+              Settings
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* --- Artifacts Tab --- */}
@@ -687,6 +714,20 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             )}
           </TabsContent>
         )}
+
+        {/* --- Notifications Tab --- */}
+        {user?.is_admin && (
+          <TabsContent value="notifications" className="mt-4">
+            <NotificationsTabContent repositoryId={repository.id} />
+          </TabsContent>
+        )}
+
+        {/* --- Settings Tab --- */}
+        {user?.is_admin && (
+          <TabsContent value="settings" className="mt-4">
+            <RepoSettingsTab repository={repository} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* --- Artifact Detail Dialog --- */}
@@ -698,6 +739,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               {selectedArtifact?.name ?? "Artifact Details"}
             </DialogTitle>
           </DialogHeader>
+          {selectedArtifact && isActivelyQuarantined(selectedArtifact) && (
+            <QuarantineBanner
+              reason={selectedArtifact.quarantine_reason}
+              quarantineUntil={selectedArtifact.quarantine_until}
+            />
+          )}
           {selectedArtifact && (
             <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
               <TabsList variant="line" className="shrink-0">
@@ -738,6 +785,20 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Downloads"
                     value={selectedArtifact.download_count.toLocaleString()}
                   />
+                  {isActivelyQuarantined(selectedArtifact) && (
+                    <>
+                      <DetailRow
+                        label="Quarantine"
+                        value={selectedArtifact.quarantine_reason || "Active"}
+                      />
+                      {selectedArtifact.quarantine_until && (
+                        <DetailRow
+                          label="Quarantine Until"
+                          value={new Date(selectedArtifact.quarantine_until).toLocaleString()}
+                        />
+                      )}
+                    </>
+                  )}
                   <DetailRow
                     label="Created"
                     value={new Date(selectedArtifact.created_at).toLocaleString()}

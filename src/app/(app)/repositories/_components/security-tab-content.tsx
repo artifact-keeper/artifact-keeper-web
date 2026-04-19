@@ -39,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -249,10 +250,10 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const columns: DataTableColumn<CveHistoryEntry>[] = [
     {
       id: "cve_id",
-      header: "CVE ID",
+      header: "Advisory",
       accessor: (c) => c.cve_id,
       sortable: true,
-      cell: (c) => <span className="font-medium text-sm font-mono">{c.cve_id}</span>,
+      cell: (c) => <VulnIdLink id={c.cve_id} />,
     },
     {
       id: "severity",
@@ -370,14 +371,14 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const dtFindingsColumns: DataTableColumn<DtFinding>[] = [
     {
       id: "vulnId",
-      header: "Vuln ID",
+      header: "Advisory",
       accessor: (f) => f.vulnerability.vulnId,
       sortable: true,
       cell: (f) => (
-        <div>
-          <span className="font-medium text-sm font-mono">{f.vulnerability.vulnId}</span>
-          <span className="ml-1.5 text-xs text-muted-foreground">{f.vulnerability.source}</span>
-        </div>
+        <VulnIdLink
+          id={f.vulnerability.vulnId}
+          source={f.vulnerability.source}
+        />
       ),
     },
     {

@@ -31,7 +31,9 @@ export interface User {
   is_admin: boolean;
   is_active?: boolean;
   must_change_password?: boolean;
+  password_expires_at?: string | null;
   totp_enabled?: boolean;
+  auth_provider?: string;
 }
 
 export interface LoginResponse {
@@ -170,6 +172,9 @@ export interface Artifact {
   checksum_sha256: string;
   content_type: string;
   download_count: number;
+  is_quarantined?: boolean;
+  quarantine_until?: string | null;
+  quarantine_reason?: string | null;
   created_at: string;
   metadata?: Record<string, unknown>;
 }

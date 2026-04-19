@@ -7,7 +7,7 @@ import { seedAll } from './seed-data';
  * When this matches a well-known default, the backend forces a password
  * change on first login (must_change_password: true).
  */
-const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const INITIAL_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestRunner!2026secure';
 
 /** Login as a user via the UI and save their storageState */
 async function loginAndSaveState(

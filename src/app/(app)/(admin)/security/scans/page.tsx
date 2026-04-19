@@ -14,6 +14,7 @@ import {
 } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
 import { artifactsApi } from "@/lib/api/artifacts";
+import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ const STATUS_COLORS: Record<string, string> = {
   pending:
     "bg-secondary text-secondary-foreground border-border",
   failed:
+    "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
+  error:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
 
@@ -223,15 +226,33 @@ export default function SecurityScansPage() {
       header: "Findings",
       accessor: (r) => r.findings_count,
       sortable: true,
-      cell: (r) =>
-        r.findings_count === 0 ? (
-          <Badge
-            variant="outline"
-            className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
-          >
-            Clean
-          </Badge>
-        ) : (
+      cell: (r) => {
+        if (isScanFailed(r.status)) {
+          return (
+            <Badge
+              variant="outline"
+              className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
+            >
+              Scan Failed
+            </Badge>
+          );
+        }
+        if (isScanIncomplete(r.status)) {
+          return (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        }
+        if (isScanClean(r.status, r.findings_count)) {
+          return (
+            <Badge
+              variant="outline"
+              className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
+            >
+              Clean
+            </Badge>
+          );
+        }
+        return (
           <div className="flex items-center gap-1">
             <SeverityCount
               count={r.critical_count}
@@ -242,7 +263,8 @@ export default function SecurityScansPage() {
             <SeverityCount count={r.medium_count} label="M" level="medium" />
             <SeverityCount count={r.low_count} label="L" level="low" />
           </div>
-        ),
+        );
+      },
     },
     {
       id: "started_at",

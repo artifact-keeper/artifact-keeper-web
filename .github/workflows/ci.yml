@@ -41,17 +41,140 @@ jobs:
       - run: npm ci
       - run: npm run test:coverage
       - name: Upload coverage report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: coverage-report
           path: coverage/
           retention-days: 14
-      - name: SonarCloud Scan
-        if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7.0.0
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Coverage summary and gate
+        run: |
+          # Parse coverage summary from vitest output
+          if [ -f coverage/coverage-summary.json ]; then
+            RESULT=$(python3 -c "
+          import json
+          data = json.load(open('coverage/coverage-summary.json'))
+          total = data.get('total', {})
+          lines = total.get('lines', {})
+          pct = lines.get('pct', 0)
+          covered = lines.get('covered', 0)
+          total_lines = lines.get('total', 0)
+          print(f'{pct} {covered} {total_lines}')
+          ")
+            PCT=$(echo "$RESULT" | awk '{print $1}')
+            echo "### Coverage: ${PCT}% lines" >> $GITHUB_STEP_SUMMARY
+            echo "Total coverage: ${PCT}%"
+          else
+            echo "No coverage summary found"
+            PCT="0"
+          fi
+
+      - name: New code coverage gate
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+          CHANGED_FILES=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No source files changed, skipping new code coverage check"
+            echo "### New Code Coverage: N/A (no source changes)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          if [ ! -f coverage/lcov.info ]; then
+            echo "No lcov.info found, skipping"
+            exit 0
+          fi
+
+          RESULT=$(python3 -c "
+          import sys
+          changed = set('''$CHANGED_FILES'''.split())
+          hit = miss = 0
+          in_changed = False
+          for line in open('coverage/lcov.info'):
+              line = line.strip()
+              if line.startswith('SF:'):
+                  path = line[3:]
+                  in_changed = any(path.endswith(f) for f in changed)
+              elif line.startswith('DA:') and in_changed:
+                  parts = line[3:].split(',')
+                  count = int(parts[1])
+                  if count > 0:
+                      hit += 1
+                  else:
+                      miss += 1
+          total = hit + miss
+          if total == 0:
+              print('none')
+          else:
+              pct = (hit * 100) // total
+              print(f'{pct} {hit} {total}')
+          ")
+
+          if [ "$RESULT" = "none" ]; then
+            echo "### New Code Coverage: N/A (no instrumented lines)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          PCT=$(echo "$RESULT" | awk '{print $1}')
+          HIT=$(echo "$RESULT" | awk '{print $2}')
+          TOTAL=$(echo "$RESULT" | awk '{print $3}')
+
+          echo "### New Code Coverage: ${PCT}% (${HIT}/${TOTAL} lines)" >> $GITHUB_STEP_SUMMARY
+          echo "New code coverage: ${PCT}% (${HIT}/${TOTAL} lines)"
+
+          if [ "$PCT" -lt 80 ]; then
+            echo "::error::New code coverage is ${PCT}%, below 80% threshold"
+            exit 1
+          fi
+
+      - name: Code duplication gate
+        if: always() && github.event_name == 'pull_request'
+        run: |
+          npm install -g jscpd@4 --silent 2>/dev/null
+          git fetch --no-tags --depth=1 origin ${{ github.base_ref }} 2>/dev/null || true
+          CHANGED_SRC=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
+
+          if [ -z "$CHANGED_SRC" ]; then
+            echo "### Code Duplication: N/A (no source changes)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          RESULT=$(jscpd --min-lines 10 --threshold 3 --reporters json \
+            --format typescript,tsx --output /tmp/jscpd-report \
+            $(echo "$CHANGED_SRC" | tr '\n' ' ') 2>&1) || true
+
+          if [ -f /tmp/jscpd-report/jscpd-report.json ]; then
+            DUP_PCT=$(python3 -c "
+          import json
+          data = json.load(open('/tmp/jscpd-report/jscpd-report.json'))
+          stats = data.get('statistics', {})
+          total = stats.get('total', {})
+          pct = total.get('percentage', 0)
+          dups = total.get('duplicatedLines', 0)
+          lines = total.get('lines', 0)
+          clones = len(data.get('duplicates', []))
+          print(f'{pct:.1f} {dups} {lines} {clones}')
+          " 2>/dev/null) || DUP_PCT="0.0 0 0 0"
+
+            PCT=$(echo "$DUP_PCT" | awk '{print $1}')
+            echo "### Code Duplication: ${PCT}%" >> $GITHUB_STEP_SUMMARY
+
+            OVER=$(python3 -c "print('yes' if float('${PCT}') > 3.0 else 'no')")
+            if [ "$OVER" = "yes" ]; then
+              echo "::error::Code duplication is ${PCT}%, exceeding 3% threshold"
+              python3 -c "
+          import json
+          data = json.load(open('/tmp/jscpd-report/jscpd-report.json'))
+          for d in data.get('duplicates', []):
+              fa, sa = d['firstFile'], d['secondFile']
+              print(f\"  {fa['name']}:{fa['startLoc']['line']}-{fa['endLoc']['line']} <-> {sa['name']}:{sa['startLoc']['line']}-{sa['endLoc']['line']}\")
+          " 2>/dev/null || true
+              exit 1
+            fi
+          else
+            echo "### Code Duplication: 0%" >> $GITHUB_STEP_SUMMARY
+          fi
 
   build:
     name: Build
@@ -89,7 +212,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Log in to Container Registry
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -104,9 +227,10 @@ jobs:
         run: npx playwright test --project=interactions --shard=${{ matrix.shard }}/3 --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload test report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: playwright-interactions-shard-${{ matrix.shard }}
@@ -140,7 +264,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Log in to Container Registry
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -155,9 +279,10 @@ jobs:
         run: npx playwright test --project=roles-admin --project=roles-developer --project=roles-viewer --project=roles-security --project=roles-restricted --project=roles-unauthenticated --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload test report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: playwright-roles
@@ -191,7 +316,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Log in to Container Registry
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -206,9 +331,10 @@ jobs:
         run: npx playwright test --project=visual --update-snapshots --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          ADMIN_PASSWORD: TestRunner!2026secure
 
       - name: Upload visual baseline snapshots
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: visual-baseline-snapshots
@@ -216,7 +342,7 @@ jobs:
           retention-days: 30
 
       - name: Upload visual diff images on failure
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: visual-regression-diffs
@@ -224,7 +350,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: playwright-visual
@@ -259,7 +385,7 @@ jobs:
         run: npm run test:e2e:docs-export
 
       - name: Upload docs screenshots
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docs-screenshots
           path: e2e/docs-export/
@@ -283,7 +409,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -314,7 +440,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
           path: /tmp/digests/*
@@ -335,7 +461,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

@@ -117,8 +117,11 @@ test.describe('Admin Token Management', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10000 });
 
-    // Should show either tokens or an empty state message
-    const hasTokens = await dialog.getByRole('table').isVisible().catch(() => false);
+    // Wait for loading to finish before checking content
+    await expect(dialog.getByText(/loading tokens/i)).not.toBeVisible({ timeout: 10000 });
+
+    // Should show either token items (rendered as divs, not a table) or an empty state
+    const hasTokens = await dialog.getByText(/revoke/i).first().isVisible().catch(() => false);
     const hasEmptyState = await dialog.getByText(/no.*token/i).isVisible().catch(() => false);
     expect(hasTokens || hasEmptyState).toBeTruthy();
   });

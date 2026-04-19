@@ -53,8 +53,10 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
+import { AuthSourceBadge, getAuthProviderLabel } from "@/components/common/auth-source-badge";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 
 // -- helpers --
 
@@ -380,6 +382,13 @@ export default function UsersPage() {
       ),
     },
     {
+      id: "auth_source",
+      header: "Auth Source",
+      accessor: (u) => getAuthProviderLabel(u.auth_provider),
+      sortable: true,
+      cell: (u) => <AuthSourceBadge provider={u.auth_provider} />,
+    },
+    {
       id: "actions",
       header: "",
       cell: (u) => (
@@ -389,7 +398,7 @@ export default function UsersPage() {
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={() => handleViewTokens(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label="View Tokens" onClick={() => handleViewTokens(u)}>
                 <Key className="size-3.5" />
               </Button>
             </TooltipTrigger>
@@ -397,7 +406,7 @@ export default function UsersPage() {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" onClick={() => handleEdit(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label="Edit" onClick={() => handleEdit(u)}>
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
@@ -408,6 +417,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Reset Password"
                 onClick={() => handleResetPassword(u)}
                 disabled={isSelf(u)}
               >
@@ -421,6 +431,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label={u.is_active !== false ? "Disable" : "Enable"}
                 onClick={() => handleToggleStatus(u)}
                 disabled={isSelf(u)}
               >
@@ -440,6 +451,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Delete"
                 className="text-destructive hover:text-destructive"
                 onClick={() => handleDelete(u)}
                 disabled={isSelf(u)}
@@ -587,31 +599,34 @@ export default function UsersPage() {
                 </div>
               </div>
               {!createForm.auto_generate && (
-                <div className="flex gap-2">
-                  <Input
-                    id="create-password"
-                    type="text"
-                    placeholder="Enter password"
-                    value={createForm.password}
-                    onChange={(e) =>
-                      setCreateForm((f) => ({ ...f, password: e.target.value }))
-                    }
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCreateForm((f) => ({
-                        ...f,
-                        password: generateRandomPassword(),
-                      }))
-                    }
-                  >
-                    Generate
-                  </Button>
-                </div>
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      id="create-password"
+                      type="text"
+                      placeholder="Enter password"
+                      value={createForm.password}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, password: e.target.value }))
+                      }
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCreateForm((f) => ({
+                          ...f,
+                          password: generateRandomPassword(),
+                        }))
+                      }
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                  <PasswordPolicyHint password={createForm.password} />
+                </>
               )}
             </div>
             <div className="flex items-center gap-3">
@@ -667,6 +682,12 @@ export default function UsersPage() {
               }
             }}
           >
+            <div className="space-y-2">
+              <Label>Auth Source</Label>
+              <div data-testid="edit-auth-source">
+                <AuthSourceBadge provider={selectedUser?.auth_provider} />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-email">Email</Label>
               <Input
