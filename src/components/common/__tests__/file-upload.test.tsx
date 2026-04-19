@@ -174,4 +174,156 @@ describe("FileUpload", () => {
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  // ---- Drag and drop ----
+
+  it("accepts a file via drag and drop", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    render(<FileUpload onUpload={onUpload} />);
+
+    const dropZone = screen.getByRole("button");
+    const file = createMockFile("dropped.jar", 256);
+
+    fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    expect(screen.getByText("dropped.jar")).toBeInTheDocument();
+  });
+
+  it("applies drag-over styling and clears on drag-leave", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const dropZone = screen.getByRole("button");
+
+    fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
+    expect(dropZone.className).toContain("border-primary");
+
+    fireEvent.dragLeave(dropZone, { dataTransfer: { files: [] } });
+    expect(dropZone.className).not.toContain("border-primary");
+  });
+
+  // ---- Keyboard navigation ----
+
+  it("opens file picker on Enter key when no file is selected", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const dropZone = screen.getByRole("button");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.keyDown(dropZone, { key: "Enter" });
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it("opens file picker on Space key when no file is selected", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const dropZone = screen.getByRole("button");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.keyDown(dropZone, { key: " " });
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  // ---- Custom path input ----
+
+  it("renders custom path input when showPathInput is true", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} showPathInput />);
+
+    const pathInput = screen.getByPlaceholderText("e.g. libs/mylib-1.0.jar");
+    expect(pathInput).toBeInTheDocument();
+  });
+
+  it("passes custom path to onUpload callback", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    render(<FileUpload onUpload={onUpload} showPathInput />);
+
+    const pathInput = screen.getByPlaceholderText("e.g. libs/mylib-1.0.jar");
+    fireEvent.change(pathInput, { target: { value: "libs/custom-1.0.jar" } });
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [createMockFile("lib.jar", 512)] },
+    });
+    fireEvent.click(screen.getByText("Upload"));
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledWith(
+        expect.any(File),
+        "libs/custom-1.0.jar"
+      );
+    });
+  });
+
+  it("does not pass path when custom path input is empty", async () => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    render(<FileUpload onUpload={onUpload} showPathInput />);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [createMockFile("lib.jar", 512)] },
+    });
+    fireEvent.click(screen.getByText("Upload"));
+
+    await waitFor(() => {
+      expect(onUpload).toHaveBeenCalledWith(expect.any(File), undefined);
+    });
+  });
+
+  // ---- File display and clear button ----
+
+  it("displays file name and size after selection", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [createMockFile("my-lib.jar", 2048)] },
+    });
+
+    expect(screen.getByText("my-lib.jar")).toBeInTheDocument();
+    expect(screen.getByText("2048 bytes")).toBeInTheDocument();
+  });
+
+  it("clears file when the X button is clicked", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [createMockFile("removeme.jar", 100)] },
+    });
+
+    expect(screen.getByText("removeme.jar")).toBeInTheDocument();
+
+    // The X button is inside the file display area
+    const clearButtons = screen.getAllByRole("button");
+    // Find the button containing the X icon (icon-xs variant)
+    const xButton = clearButtons.find(
+      (btn) => btn.querySelector('[data-testid="icon-X"]') !== null
+    );
+    expect(xButton).toBeTruthy();
+    fireEvent.click(xButton!);
+
+    expect(screen.queryByText("removeme.jar")).not.toBeInTheDocument();
+  });
+
+  // ---- Drop zone click ----
+
+  it("opens file picker when drop zone is clicked (no file selected)", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} />);
+
+    const dropZone = screen.getByRole("button");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, "click");
+
+    fireEvent.click(dropZone);
+    expect(clickSpy).toHaveBeenCalled();
+  });
 });
