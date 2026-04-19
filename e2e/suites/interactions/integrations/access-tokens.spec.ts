@@ -46,7 +46,7 @@ test.describe('Access Tokens Page', () => {
   test('clicking Create API Key opens dialog with form fields', async ({ page }) => {
     const dialog = await openDialog(page, /create api key/i);
 
-    const nameInput = dialog.getByLabel(/name/i).first()
+    const nameInput = dialog.getByLabel(/^name$/i).first()
       .or(dialog.getByPlaceholder(/name/i).first());
     await expect(nameInput).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText(/expir/i).first()).toBeVisible({ timeout: 5000 });
@@ -61,7 +61,7 @@ test.describe('Access Tokens Page', () => {
 
     const dialog = await openDialog(page, /create token/i);
 
-    const nameInput = dialog.getByLabel(/name/i).first()
+    const nameInput = dialog.getByLabel(/^name$/i).first()
       .or(dialog.getByPlaceholder(/name/i).first());
     await expect(nameInput).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByText(/expir/i).first()).toBeVisible({ timeout: 5000 });

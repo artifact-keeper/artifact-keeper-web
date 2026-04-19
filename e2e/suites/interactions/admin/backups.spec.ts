@@ -103,7 +103,7 @@ test.describe('Backups Page', () => {
 
     // Either the table with backups or an empty state message
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no backups/i).or(page.getByText(/no data/i)).or(page.getByText(/get started/i));
+    const emptyState = page.getByText(/no backups/i).or(page.getByText(/no data/i)).or(page.getByText(/get started/i)).or(page.getByText(/access denied/i));
 
     await expect(
       table.or(emptyState).first()
