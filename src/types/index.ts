@@ -31,6 +31,7 @@ export interface User {
   is_admin: boolean;
   is_active?: boolean;
   must_change_password?: boolean;
+  password_expires_at?: string | null;
   totp_enabled?: boolean;
 }
 
