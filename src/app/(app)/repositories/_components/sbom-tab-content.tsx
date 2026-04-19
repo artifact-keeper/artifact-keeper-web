@@ -22,6 +22,7 @@ import { toUserMessage } from "@/lib/error-utils";
 import type { SbomComponent, SbomFormat, CveHistoryEntry } from "@/types/sbom";
 import type { Artifact } from "@/types";
 
+import { VulnIdLink } from "@/components/common/vuln-id-link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -414,7 +415,7 @@ function CveHistoryRow({ cve }: { cve: CveHistoryEntry }) {
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{cve.cve_id}</span>
+          <VulnIdLink id={cve.cve_id} />
           {cve.severity && (
             <Badge
               variant="outline"

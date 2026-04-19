@@ -43,6 +43,7 @@ import {
 import { StatCard } from "@/components/common/stat-card";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 // -- constants --
 
@@ -234,19 +235,11 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "cve_id",
-      header: "CVE",
+      header: "Advisory",
       accessor: (r) => r.cve_id ?? "",
       cell: (r) =>
         r.cve_id ? (
-          <a
-            href={`https://nvd.nist.gov/vuln/detail/${r.cve_id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.cve_id}
-          </a>
+          <VulnIdLink id={r.cve_id} />
         ) : (
           <span className="text-sm text-muted-foreground">-</span>
         ),

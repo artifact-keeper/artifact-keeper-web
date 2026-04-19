@@ -15,7 +15,6 @@ import {
   Package,
   Scale,
   BarChart3,
-  ExternalLink,
   Filter,
   CheckSquare,
   Loader2,
@@ -57,6 +56,7 @@ import {
 
 import { StatCard } from "@/components/common/stat-card";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 // -- constants --
 
@@ -145,7 +145,6 @@ function FindingTriageRow({
   };
 
   const vulnId = finding.vulnerability.vulnId;
-  const isCve = vulnId.startsWith("CVE-");
 
   return (
     <>
@@ -182,20 +181,11 @@ function FindingTriageRow({
         </td>
         {/* Vulnerability */}
         <td className="px-3 py-2.5">
-          {isCve ? (
-            <a
-              href={`https://nvd.nist.gov/vuln/detail/${vulnId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline inline-flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {vulnId}
-              <ExternalLink className="size-3" />
-            </a>
-          ) : (
-            <span className="text-sm font-medium">{vulnId}</span>
-          )}
+          <VulnIdLink
+            id={vulnId}
+            source={finding.vulnerability.source}
+            showIcon
+          />
         </td>
         {/* CVSS */}
         <td className="px-3 py-2.5">
