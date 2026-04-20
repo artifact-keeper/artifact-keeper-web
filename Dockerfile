@@ -20,7 +20,8 @@ ARG GIT_SHA=unknown
 ARG APP_VERSION=dev
 ENV GIT_SHA=${GIT_SHA}
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
-RUN npm run build
+# Reference APP_VERSION in the RUN to bust Docker build cache when it changes
+RUN echo "Building version: ${APP_VERSION} (${GIT_SHA})" && npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
 FROM registry.access.redhat.com/ubi9/ubi:9.7 AS rootfs-builder
