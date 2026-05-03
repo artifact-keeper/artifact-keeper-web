@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 
 import { PageHeader } from "@/components/common/page-header";
-import type { PasswordPolicy, SmtpConfig, SmtpTlsMode } from "@/lib/api/settings";
+import type { PasswordPolicy, SmtpConfig, SmtpTlsMode, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
 
@@ -64,6 +64,31 @@ function formatPasswordPolicy(policy: PasswordPolicy | undefined): string {
     parts.push(`${policy.history_count} password history`);
   }
   return parts.join("; ");
+}
+
+const STORAGE_BACKEND_LABELS: Record<string, string> = {
+  filesystem: "Local Filesystem",
+  s3: "S3",
+  gcs: "Google Cloud Storage",
+  azure: "Azure Blob Storage",
+};
+
+function formatStorageBackend(backend: string | undefined): string {
+  if (!backend) return "Loading...";
+  return STORAGE_BACKEND_LABELS[backend] ?? backend;
+}
+
+function formatBytes(bytes: number | undefined): string {
+  if (bytes === undefined) return "Loading...";
+  if (bytes <= 0) return "Unlimited";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIdx = 0;
+  while (size >= 1024 && unitIdx < units.length - 1) {
+    size /= 1024;
+    unitIdx++;
+  }
+  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unitIdx]}`;
 }
 
 // -- SMTP settings tab --
@@ -359,6 +384,13 @@ export default function SettingsPage() {
     retry: false,
   });
 
+  const { data: storageSettings } = useQuery<StorageSettings>({
+    queryKey: ["storage-settings"],
+    queryFn: () => settingsApi.getStorageSettings(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -473,22 +505,28 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <SettingRow
                 label="Storage Backend"
-                value="Local Filesystem"
+                value={formatStorageBackend(storageSettings?.storage_backend)}
                 description="The type of storage backend used for artifact data."
               />
               <Separator />
               <SettingRow
                 label="Storage Path"
-                value="/data/artifacts"
-                description="The filesystem path where artifact files are stored."
+                value={storageSettings?.storage_path ?? "Loading..."}
+                description="The filesystem path where artifact files are stored (when storage backend is local)."
               />
               <Separator />
               <SettingRow
                 label="Max Upload Size"
-                value="5 GB"
+                value={formatBytes(storageSettings?.max_upload_size_bytes)}
                 description="Maximum allowed size for a single artifact upload."
               />
               <Separator />
+              {/*
+                Deduplication is currently a build-time invariant (always SHA-256 content
+                addressing). Once the backend exposes it on /api/v1/admin/settings, swap
+                this hardcoded value for storageSettings?.deduplication. Tracked alongside
+                the issue this PR addresses.
+              */}
               <SettingRow
                 label="Deduplication"
                 value="Enabled (SHA-256)"

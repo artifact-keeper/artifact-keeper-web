@@ -33,6 +33,7 @@ vi.mock("@/lib/api/admin", () => ({
 vi.mock("@/lib/api/settings", () => ({
   settingsApi: {
     getPasswordPolicy: vi.fn(),
+    getStorageSettings: vi.fn(),
     getSmtpConfig: vi.fn(),
     updateSmtpConfig: vi.fn(),
     sendTestEmail: vi.fn(),
@@ -257,6 +258,103 @@ describe("SettingsPage", () => {
     expect(webInput).toBeDefined();
   });
 
+  // ---------------------------------------------------------------------------
+  // Storage tab tests
+  // ---------------------------------------------------------------------------
+
+  it("populates Storage fields from loaded settings", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+
+    let queryCallIndex = 0;
+    mockUseQuery.mockImplementation(() => {
+      queryCallIndex++;
+      // 3rd call is storage-settings (after health, password-policy)
+      if (queryCallIndex === 3) {
+        return {
+          data: {
+            storage_backend: "s3",
+            storage_path: "/data/storage",
+            max_upload_size_bytes: 1_073_741_824,
+          },
+          isLoading: false,
+        };
+      }
+      return { data: undefined, isLoading: false };
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "S3")).toBeDefined();
+    expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
+    expect(inputs.find((i) => i.value === "1.0 GB")).toBeDefined();
+  });
+
+  it("renders friendly storage backend labels", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+
+    let queryCallIndex = 0;
+    mockUseQuery.mockImplementation(() => {
+      queryCallIndex++;
+      if (queryCallIndex === 3) {
+        return {
+          data: {
+            storage_backend: "filesystem",
+            storage_path: "/var/lib/ak",
+            max_upload_size_bytes: 0,
+          },
+          isLoading: false,
+        };
+      }
+      return { data: undefined, isLoading: false };
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "Local Filesystem")).toBeDefined();
+    // 0 bytes is treated as "Unlimited" (matches backend semantics)
+    expect(inputs.find((i) => i.value === "Unlimited")).toBeDefined();
+  });
+
+  it("falls back to raw storage backend value when label is unknown", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+
+    let queryCallIndex = 0;
+    mockUseQuery.mockImplementation(() => {
+      queryCallIndex++;
+      if (queryCallIndex === 3) {
+        return {
+          data: {
+            storage_backend: "minio",
+            storage_path: "/data/minio",
+            max_upload_size_bytes: 5_368_709_120,
+          },
+          isLoading: false,
+        };
+      }
+      return { data: undefined, isLoading: false };
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "minio")).toBeDefined();
+    expect(inputs.find((i) => i.value === "5.0 GB")).toBeDefined();
+  });
+
+  it("shows Loading… in Storage fields while data is undefined", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockUseQuery.mockReturnValue({ data: undefined, isLoading: true });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    // formatStorageBackend / formatBytes return "Loading..." for undefined
+    const loadingInputs = inputs.filter((i) => i.value === "Loading...");
+    expect(loadingInputs.length).toBeGreaterThanOrEqual(3);
+  });
+
   it("renders the Email tab trigger", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
 
@@ -305,8 +403,8 @@ describe("SettingsPage", () => {
     let queryCallIndex = 0;
     mockUseQuery.mockImplementation(() => {
       queryCallIndex++;
-      // Third useQuery call is for smtp-config
-      if (queryCallIndex === 3) {
+      // useQuery call order: 1=health, 2=password-policy, 3=storage-settings, 4=smtp-config
+      if (queryCallIndex === 4) {
         return {
           data: {
             host: "mail.example.com",

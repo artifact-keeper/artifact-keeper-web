@@ -32,6 +32,32 @@ export interface SendTestEmailResponse {
 }
 
 /**
+ * Storage configuration surfaced on the admin Settings → Storage tab.
+ *
+ * `storage_backend` is one of "filesystem", "s3", "gcs", "azure" (the same
+ * values the backend's STORAGE_BACKEND env var accepts). UI components are
+ * responsible for translating to a friendly display label.
+ *
+ * `max_upload_size_bytes` is in bytes; UI components format for display.
+ */
+export interface StorageSettings {
+  storage_backend: string;
+  storage_path: string;
+  max_upload_size_bytes: number;
+}
+
+/**
+ * Defaults used when the server doesn't expose storage fields or the
+ * settings endpoint is unavailable. These match the backend defaults
+ * defined in the Rust configuration.
+ */
+const DEFAULT_STORAGE_SETTINGS: StorageSettings = {
+  storage_backend: "filesystem",
+  storage_path: "/data/artifacts",
+  max_upload_size_bytes: 5 * 1024 * 1024 * 1024, // 5 GiB
+};
+
+/**
  * Default password policy used when the server doesn't expose policy
  * fields or the settings endpoint is unavailable. These match the
  * backend defaults defined in the Rust configuration.
@@ -47,6 +73,47 @@ const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
 
 export const settingsApi = {
   DEFAULT_PASSWORD_POLICY,
+  DEFAULT_STORAGE_SETTINGS,
+
+  /**
+   * Fetch storage configuration from system settings.
+   *
+   * The /api/v1/admin/settings response includes `storage_backend`,
+   * `storage_path`, and `max_upload_size_bytes` directly (the backend
+   * sources `storage_backend` and `storage_path` from the in-process
+   * config struct, which is loaded from STORAGE_BACKEND / STORAGE_PATH
+   * env vars at startup; `max_upload_size_bytes` is read from the
+   * `system_settings` DB row that the same endpoint manages).
+   *
+   * The current SDK type definition doesn't yet declare these fields, so
+   * we extract them from the raw response with type guards and fall back
+   * to defaults — the same pattern used by getPasswordPolicy / getSmtpConfig.
+   */
+  getStorageSettings: async (): Promise<StorageSettings> => {
+    try {
+      const { data, error } = await getSettings();
+      if (error) return DEFAULT_STORAGE_SETTINGS;
+
+      const raw = data as unknown as Record<string, unknown>;
+
+      return {
+        storage_backend:
+          typeof raw?.storage_backend === "string"
+            ? raw.storage_backend
+            : DEFAULT_STORAGE_SETTINGS.storage_backend,
+        storage_path:
+          typeof raw?.storage_path === "string"
+            ? raw.storage_path
+            : DEFAULT_STORAGE_SETTINGS.storage_path,
+        max_upload_size_bytes:
+          typeof raw?.max_upload_size_bytes === "number"
+            ? raw.max_upload_size_bytes
+            : DEFAULT_STORAGE_SETTINGS.max_upload_size_bytes,
+      };
+    } catch {
+      return DEFAULT_STORAGE_SETTINGS;
+    }
+  },
 
   /**
    * Fetch the password policy from system settings.
@@ -201,6 +268,6 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig = {
   tls_mode: "starttls",
 };
 
-export { DEFAULT_SMTP_CONFIG };
+export { DEFAULT_SMTP_CONFIG, DEFAULT_STORAGE_SETTINGS };
 
 export default settingsApi;
