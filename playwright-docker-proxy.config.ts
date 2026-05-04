@@ -40,22 +40,22 @@ export default defineConfig({
       env: { FIXTURE_PORT: String(FIXTURE_PORT) },
     },
     {
-      // `next start` (not `next dev`) — middleware behavior under dev mode
-      // diverges from production; this suite exists specifically to verify
-      // the production rewrite path. The "next start does not work with
-      // output: standalone" warning emitted at startup is benign for our
-      // purposes: middleware still runs and rewrites are followed; the
-      // warning concerns asset/image caching paths which we don't exercise.
-      // --hostname 127.0.0.1 keeps the Next process off the runner's external
-      // interfaces — no reason for this short-lived test server to be reachable
-      // beyond loopback.
-      command: `npm run build && npx next start --hostname 127.0.0.1 --port ${WEB_PORT}`,
+      // Run the standalone server (`node .next/standalone/server.js`) — same
+      // entry point the production Docker image uses. `next start` was the
+      // initial choice but it explicitly does not work with
+      // `output: "standalone"` (see next.config.ts) and may exercise a
+      // different middleware/proxy code path than production. HOSTNAME is
+      // pinned to 127.0.0.1 so the test server isn't reachable beyond
+      // loopback on shared CI runners.
+      command: `npm run build && node .next/standalone/server.js`,
       url: BASE_URL,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 240_000,
       env: {
         BACKEND_URL: `http://127.0.0.1:${FIXTURE_PORT}`,
         NODE_ENV: "production",
+        PORT: String(WEB_PORT),
+        HOSTNAME: "127.0.0.1",
       },
     },
   ],

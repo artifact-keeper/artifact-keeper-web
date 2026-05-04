@@ -172,6 +172,44 @@ test.describe("Docker /v2/* header forwarding through Next.js middleware", () =>
   }
 
   // ------------------------------------------------------------------
+  // Hop-by-hop header characterization (RFC 7230 §6.1).
+  //
+  // We don't prescribe whether the middleware proxy strips or forwards
+  // hop-by-hop headers — undici and Next's fetch internals decide. The
+  // test captures the CURRENT behavior so that if a future refactor
+  // changes it, a deliberate decision must be made. If you change this,
+  // verify production parity (e.g. docker push with HTTP/1.1 keep-alive)
+  // before flipping the assertion.
+  // ------------------------------------------------------------------
+  test("characterizes hop-by-hop request headers reaching the backend", async () => {
+    const path = "/v2/test-repo/manifests/hop-by-hop-req";
+    await setFixtureResponse(control, path, { status: 200 });
+
+    await client.get(path, {
+      headers: {
+        Connection: "close",
+        "Keep-Alive": "timeout=5",
+        TE: "trailers",
+      },
+    });
+
+    const recorded = await getRecordedRequests(control);
+    const seen = recorded.find((r) => r.path === path);
+    expect(seen).toBeDefined();
+    // Observed behavior as of 2026-05: Next.js's middleware proxy forwards
+    // hop-by-hop request headers to the backend verbatim. RFC 7230 §6.1
+    // says intermediaries SHOULD strip these (Connection, Keep-Alive, TE,
+    // and the headers named in Connection), but Next considers itself a
+    // server rather than an intermediary. The docker client doesn't depend
+    // on any of this either way, so the test pins the status quo. If a
+    // future refactor adds proper hop-by-hop stripping, update these
+    // assertions deliberately and confirm a real `docker push` still works.
+    expect(seen!.headers["connection"]).toBe("close");
+    expect(seen!.headers["keep-alive"]).toBe("timeout=5");
+    expect(seen!.headers["te"]).toBe("trailers");
+  });
+
+  // ------------------------------------------------------------------
   // Realistic flow: docker login pings /v2/, gets WWW-Authenticate,
   // then follows up to a token endpoint. This is the exact sequence
   // #1007 was trying to fix; we verify the proxy hand-off works.
