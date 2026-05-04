@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
   output: "standalone",
   devIndicators: false,
   transpilePackages: ["@artifact-keeper/sdk"],
+  // Docker Registry HTTP API v2 requires a trailing-slash on the version-check
+  // endpoint (`GET /v2/`). Next.js's default trailing-slash redirect would
+  // turn that into a 308 → `/v2`, which the docker client treats as a failed
+  // auth challenge (the `WWW-Authenticate` header on the 308 is ignored, so
+  // it never proceeds to the token realm). Disabling the redirect lets the
+  // middleware proxy forward `/v2/` verbatim to the backend. See #1007.
+  skipTrailingSlashRedirect: true,
   experimental: {
     // The default proxyClientMaxBodySize is 10 MB, which blocks artifact
     // uploads larger than that through the middleware rewrite proxy. The
