@@ -62,6 +62,21 @@ describe("middleware", () => {
     expect(result).toEqual({ type: "next" });
   });
 
+  it("skips SSE event stream path with trailing slash variant", async () => {
+    // skipTrailingSlashRedirect (set in next.config.ts for /v2/) means
+    // `/api/v1/events/stream/` reaches middleware verbatim instead of being
+    // 308'd to the canonical form. The early-return must treat both forms
+    // equivalently, otherwise SSE gets proxy-rewritten and the long-lived
+    // connection breaks. See #337.
+    const { middleware } = await import("../middleware");
+    const request = createMockNextRequest("/api/v1/events/stream/");
+    const result = middleware(request);
+
+    expect(mockNext).toHaveBeenCalled();
+    expect(mockRewrite).not.toHaveBeenCalled();
+    expect(result).toEqual({ type: "next" });
+  });
+
   it("rewrites other API paths to backend", async () => {
     const { middleware } = await import("../middleware");
     const request = createMockNextRequest("/api/v1/users", "?page=1");
