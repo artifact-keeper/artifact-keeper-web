@@ -31,6 +31,16 @@ pull_request_rules:
           - needs-review
           - major-update
 
+  - name: Flag Dependabot PRs targeting maintenance branches
+    conditions:
+      - author=dependabot[bot]
+      - "base!=main"
+    actions:
+      label:
+        add:
+          - needs-review
+          - maintenance-branch
+
   - name: Require E2E for page changes
     conditions:
       - "files~=^src/app/"
