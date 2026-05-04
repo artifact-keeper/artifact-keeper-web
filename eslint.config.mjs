@@ -22,6 +22,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Git worktrees, test reports, and coverage output
     ".worktrees/**",
+    ".claude/worktrees/**",
     "playwright-report/**",
     "coverage/**",
   ]),
