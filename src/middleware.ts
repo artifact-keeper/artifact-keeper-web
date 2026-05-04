@@ -11,8 +11,10 @@ export function middleware(request: NextRequest) {
 
   // SSE event stream uses a dedicated App Router route handler for proper
   // streaming support. Middleware rewrites gzip-compress and close the
-  // connection, which breaks long-lived SSE connections.
-  if (pathname === "/api/v1/events/stream") {
+  // connection, which breaks long-lived SSE connections. Trailing-slash
+  // variants must match too: `skipTrailingSlashRedirect` (next.config.ts)
+  // means `/api/v1/events/stream/` reaches us verbatim. See #337.
+  if (pathname.replace(/\/+$/, "") === "/api/v1/events/stream") {
     return NextResponse.next();
   }
 
