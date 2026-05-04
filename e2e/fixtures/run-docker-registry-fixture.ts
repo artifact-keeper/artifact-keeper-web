@@ -15,16 +15,20 @@ async function main(): Promise<void> {
   const fixture = await createFixtureRegistry({ port });
   process.stdout.write(`docker-registry-fixture listening on ${fixture.url}\n`);
 
+  let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
-    await fixture.close();
-    process.exit(0);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      await fixture.close();
+      process.exit(0);
+    } catch (err) {
+      process.stderr.write(`fixture close failed: ${String(err)}\n`);
+      process.exit(1);
+    }
   };
-  process.on("SIGTERM", () => {
-    void shutdown();
-  });
-  process.on("SIGINT", () => {
-    void shutdown();
-  });
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGINT", () => void shutdown());
 }
 
 main().catch((err: unknown) => {

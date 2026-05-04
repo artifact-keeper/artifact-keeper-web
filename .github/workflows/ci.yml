@@ -397,12 +397,13 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      # No docker compose stack — this suite uses an in-process Node fixture
-      # registry to verify the Next.js middleware proxy preserves Docker
-      # request/response headers end to end. See issue #336.
+      # This suite uses Playwright's `request` API only — no browser is
+      # launched, so we skip `playwright install --with-deps` (saves ~90s
+      # plus chromium dependency install bandwidth).
+      #
+      # No docker compose stack either — the suite uses an in-process Node
+      # fixture registry to verify the Next.js middleware proxy preserves
+      # Docker request/response headers end to end. See issue #336.
       - name: Run Docker /v2/* header-forwarding tests
         run: npm run test:e2e:docker-proxy
 

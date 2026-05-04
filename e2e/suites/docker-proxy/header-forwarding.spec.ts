@@ -66,12 +66,26 @@ test.describe("Docker /v2/* header forwarding through Next.js middleware", () =>
     await resetFixture(control);
   });
 
+  // The fixture instance is shared by all tests in this describe; per-test
+  // isolation depends on `workers: 1` + `fullyParallel: false` in
+  // playwright-docker-proxy.config.ts plus the `beforeEach(reset)` above.
+  // If parallelism is ever enabled, these tests would observe each other's
+  // recorded requests — flip the spec to filter by a per-test correlation
+  // header (e.g. `x-test-id`) before relaxing the worker count.
+
   // ------------------------------------------------------------------
-  // Request headers (web --> backend) — issue #336
+  // Request headers (web --> backend) — issue #336.
+  //
+  // Note on Content-Length: it isn't covered here because Next.js's fetch
+  // path recomputes it for the upstream request — asserting a literal value
+  // tests undici, not the middleware. The body-bearing POST test below
+  // covers Content-Length forwarding indirectly (length implied by body).
   // ------------------------------------------------------------------
   const requestHeaderCases: Array<{ name: string; value: string }> = [
+    // Lock-in: middleware MUST forward Authorization for Docker login to
+    // work. If a future hardening pass strips auth defensively, replace
+    // this assertion with a path-allow-list check rather than removing it.
     { name: "Authorization", value: "Bearer test-token-abc123" },
-    { name: "Content-Length", value: "0" },
     { name: "Content-Range", value: "bytes 0-1023/2048" },
     { name: "Content-Type", value: "application/vnd.docker.distribution.manifest.v2+json" },
     { name: "Docker-Distribution-API-Version", value: "registry/2.0" },
@@ -92,6 +106,42 @@ test.describe("Docker /v2/* header forwarding through Next.js middleware", () =>
       expect(seen!.headers[name.toLowerCase()]).toBe(value);
     });
   }
+
+  // ------------------------------------------------------------------
+  // Body forwarding on PATCH blob upload — exercises the realistic Docker
+  // push code path. This is where Content-Length and Content-Range matter:
+  // the Docker client streams blob chunks via PATCH /v2/<name>/blobs/uploads/<uuid>
+  // with `Content-Range: bytes <start>-<end>/<total>`. If middleware drops
+  // either header (or mangles the body), the upload never completes.
+  // ------------------------------------------------------------------
+  test("forwards request body, Content-Length, and Content-Range on PATCH blob upload", async () => {
+    const path = "/v2/test-repo/blobs/uploads/blob-upload-uuid-1";
+    await setFixtureResponse(control, path, {
+      status: 202,
+      headers: { "Docker-Upload-UUID": "blob-upload-uuid-1", Range: "0-1023" },
+    });
+
+    const chunk = Buffer.alloc(1024, 0xab);
+    const res = await client.fetch(path, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Range": "bytes 0-1023/2048",
+      },
+      data: chunk,
+    });
+    expect(res.status()).toBe(202);
+
+    const recorded = await getRecordedRequests(control);
+    const seen = recorded.find((r) => r.path === path);
+    expect(seen, `fixture should have observed ${path}`).toBeDefined();
+    expect(seen!.method).toBe("PATCH");
+    expect(seen!.headers["content-range"]).toBe("bytes 0-1023/2048");
+    // Content-Length is set by the HTTP layer; assert it's a positive number
+    // matching the body length rather than a literal string we passed.
+    expect(Number(seen!.headers["content-length"])).toBe(chunk.length);
+    expect(Buffer.from(seen!.bodyBase64, "base64").length).toBe(chunk.length);
+  });
 
   // ------------------------------------------------------------------
   // Response headers (backend --> web --> client) — issue #336

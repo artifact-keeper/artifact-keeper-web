@@ -46,7 +46,10 @@ export default defineConfig({
       // output: standalone" warning emitted at startup is benign for our
       // purposes: middleware still runs and rewrites are followed; the
       // warning concerns asset/image caching paths which we don't exercise.
-      command: `npm run build && npx next start --port ${WEB_PORT}`,
+      // --hostname 127.0.0.1 keeps the Next process off the runner's external
+      // interfaces — no reason for this short-lived test server to be reachable
+      // beyond loopback.
+      command: `npm run build && npx next start --hostname 127.0.0.1 --port ${WEB_PORT}`,
       url: BASE_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 240_000,
