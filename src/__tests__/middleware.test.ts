@@ -104,6 +104,25 @@ describe("middleware", () => {
     }
   });
 
+  it("rewrites Docker Registry v2 ping endpoint (bare /v2/) to backend", async () => {
+    // The docker client hits `GET /v2/` (with trailing slash) for the API
+    // version check during `docker login`. The proxy must forward this verbatim
+    // so the backend's `WWW-Authenticate` challenge reaches the client. See
+    // #1007 — combined with `skipTrailingSlashRedirect` in next.config.ts.
+    const { middleware } = await import("../middleware");
+
+    middleware(createMockNextRequest("/v2/"));
+    expect(mockRewrite).toHaveBeenCalledTimes(1);
+    const url = mockRewrite.mock.calls[0][0] as URL;
+    expect(url.pathname).toBe("/v2/");
+    expect(url.origin).toBe("http://backend:8080");
+
+    mockRewrite.mockClear();
+    middleware(createMockNextRequest("/v2"));
+    expect(mockRewrite).toHaveBeenCalledTimes(1);
+    expect((mockRewrite.mock.calls[0][0] as URL).pathname).toBe("/v2");
+  });
+
   it("exports matcher config for API, health, and native format routes", async () => {
     const { config } = await import("../middleware");
     expect(config.matcher).toContain("/api/:path*");
@@ -111,6 +130,7 @@ describe("middleware", () => {
     expect(config.matcher).toContain("/pypi/:path*");
     expect(config.matcher).toContain("/npm/:path*");
     expect(config.matcher).toContain("/maven/:path*");
+    expect(config.matcher).toContain("/v2");
     expect(config.matcher).toContain("/v2/:path*");
     expect(config.matcher.length).toBeGreaterThan(30);
   });
