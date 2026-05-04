@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
+import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -73,22 +74,8 @@ const STORAGE_BACKEND_LABELS: Record<string, string> = {
   azure: "Azure Blob Storage",
 };
 
-function formatStorageBackend(backend: string | undefined): string {
-  if (!backend) return "Loading...";
+function formatStorageBackend(backend: string): string {
   return STORAGE_BACKEND_LABELS[backend] ?? backend;
-}
-
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return "Loading...";
-  if (bytes <= 0) return "Unlimited";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = bytes;
-  let unitIdx = 0;
-  while (size >= 1024 && unitIdx < units.length - 1) {
-    size /= 1024;
-    unitIdx++;
-  }
-  return `${size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unitIdx]}`;
 }
 
 // -- SMTP settings tab --
@@ -384,12 +371,24 @@ export default function SettingsPage() {
     retry: false,
   });
 
-  const { data: storageSettings } = useQuery<StorageSettings>({
+  const {
+    data: storageSettings,
+    isError: storageError,
+    isLoading: storageLoading,
+  } = useQuery<StorageSettings>({
     queryKey: ["storage-settings"],
     queryFn: () => settingsApi.getStorageSettings(),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+
+  // Render the storage row value, distinguishing loading from error so an
+  // API failure doesn't silently fall back to placeholder strings (#334).
+  const storageValue = (format: (s: StorageSettings) => string): string => {
+    if (storageLoading) return "Loading...";
+    if (storageError || !storageSettings) return "Unavailable";
+    return format(storageSettings);
+  };
 
   if (!user?.is_admin) {
     return (
@@ -505,28 +504,25 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <SettingRow
                 label="Storage Backend"
-                value={formatStorageBackend(storageSettings?.storage_backend)}
+                value={storageValue((s) => formatStorageBackend(s.storage_backend))}
                 description="The type of storage backend used for artifact data."
               />
               <Separator />
               <SettingRow
                 label="Storage Path"
-                value={storageSettings?.storage_path ?? "Loading..."}
+                value={storageValue((s) => s.storage_path)}
                 description="The filesystem path where artifact files are stored (when storage backend is local)."
               />
               <Separator />
               <SettingRow
                 label="Max Upload Size"
-                value={formatBytes(storageSettings?.max_upload_size_bytes)}
+                value={storageValue((s) => formatBytes(s.max_upload_size_bytes))}
                 description="Maximum allowed size for a single artifact upload."
               />
               <Separator />
-              {/*
-                Deduplication is currently a build-time invariant (always SHA-256 content
-                addressing). Once the backend exposes it on /api/v1/admin/settings, swap
-                this hardcoded value for storageSettings?.deduplication. Tracked alongside
-                the issue this PR addresses.
-              */}
+              {/* TODO(#334): swap for storageSettings.deduplication once the backend
+                  exposes it on /api/v1/admin/settings. Until then this row is a
+                  build-time invariant (always SHA-256 content addressing). */}
               <SettingRow
                 label="Deduplication"
                 value="Enabled (SHA-256)"

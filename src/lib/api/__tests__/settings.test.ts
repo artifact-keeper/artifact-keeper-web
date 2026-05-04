@@ -259,17 +259,18 @@ describe("settingsApi", () => {
     expect(settings.max_upload_size_bytes).toBe(1_073_741_824);
   });
 
-  it("getStorageSettings falls back to defaults when fields are missing", async () => {
+  it("getStorageSettings throws when fields are missing", async () => {
     mockGetSettings.mockResolvedValue({
       data: { unrelated: "value" },
       error: undefined,
     });
     const mod = await import("../settings");
-    const settings = await mod.settingsApi.getStorageSettings();
-    expect(settings).toEqual(mod.DEFAULT_STORAGE_SETTINGS);
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /missing/i
+    );
   });
 
-  it("getStorageSettings ignores fields with wrong types", async () => {
+  it("getStorageSettings throws on fields with wrong types", async () => {
     mockGetSettings.mockResolvedValue({
       data: {
         storage_backend: 123,
@@ -279,25 +280,28 @@ describe("settingsApi", () => {
       error: undefined,
     });
     const mod = await import("../settings");
-    const settings = await mod.settingsApi.getStorageSettings();
-    expect(settings).toEqual(mod.DEFAULT_STORAGE_SETTINGS);
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /missing/i
+    );
   });
 
-  it("getStorageSettings returns defaults on SDK error", async () => {
+  it("getStorageSettings throws on SDK error", async () => {
     mockGetSettings.mockResolvedValue({
       data: undefined,
       error: "unauthorized",
     });
     const mod = await import("../settings");
-    const settings = await mod.settingsApi.getStorageSettings();
-    expect(settings).toEqual(mod.DEFAULT_STORAGE_SETTINGS);
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /Failed to load storage settings/
+    );
   });
 
-  it("getStorageSettings returns defaults when SDK throws", async () => {
+  it("getStorageSettings propagates SDK rejection", async () => {
     mockGetSettings.mockRejectedValue(new Error("network error"));
     const mod = await import("../settings");
-    const settings = await mod.settingsApi.getStorageSettings();
-    expect(settings).toEqual(mod.DEFAULT_STORAGE_SETTINGS);
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      "network error"
+    );
   });
 
   // -------------------------------------------------------------------------

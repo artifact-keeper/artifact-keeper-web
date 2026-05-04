@@ -47,17 +47,6 @@ export interface StorageSettings {
 }
 
 /**
- * Defaults used when the server doesn't expose storage fields or the
- * settings endpoint is unavailable. These match the backend defaults
- * defined in the Rust configuration.
- */
-const DEFAULT_STORAGE_SETTINGS: StorageSettings = {
-  storage_backend: "filesystem",
-  storage_path: "/data/artifacts",
-  max_upload_size_bytes: 5 * 1024 * 1024 * 1024, // 5 GiB
-};
-
-/**
  * Default password policy used when the server doesn't expose policy
  * fields or the settings endpoint is unavailable. These match the
  * backend defaults defined in the Rust configuration.
@@ -73,7 +62,6 @@ const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
 
 export const settingsApi = {
   DEFAULT_PASSWORD_POLICY,
-  DEFAULT_STORAGE_SETTINGS,
 
   /**
    * Fetch storage configuration from system settings.
@@ -85,34 +73,34 @@ export const settingsApi = {
    * env vars at startup; `max_upload_size_bytes` is read from the
    * `system_settings` DB row that the same endpoint manages).
    *
-   * The current SDK type definition doesn't yet declare these fields, so
-   * we extract them from the raw response with type guards and fall back
-   * to defaults — the same pattern used by getPasswordPolicy / getSmtpConfig.
+   * Throws on SDK error or when the response is missing the required
+   * fields (or has them as the wrong type). Callers are expected to
+   * surface the error state to the UI — silently returning placeholder
+   * defaults here would re-create the bug this endpoint was wired up
+   * to fix (see issue #334).
    */
   getStorageSettings: async (): Promise<StorageSettings> => {
-    try {
-      const { data, error } = await getSettings();
-      if (error) return DEFAULT_STORAGE_SETTINGS;
-
-      const raw = data as unknown as Record<string, unknown>;
-
-      return {
-        storage_backend:
-          typeof raw?.storage_backend === "string"
-            ? raw.storage_backend
-            : DEFAULT_STORAGE_SETTINGS.storage_backend,
-        storage_path:
-          typeof raw?.storage_path === "string"
-            ? raw.storage_path
-            : DEFAULT_STORAGE_SETTINGS.storage_path,
-        max_upload_size_bytes:
-          typeof raw?.max_upload_size_bytes === "number"
-            ? raw.max_upload_size_bytes
-            : DEFAULT_STORAGE_SETTINGS.max_upload_size_bytes,
-      };
-    } catch {
-      return DEFAULT_STORAGE_SETTINGS;
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load storage settings: ${String(error)}`);
     }
+
+    const raw = data as unknown as Record<string, unknown>;
+    const storage_backend = raw?.storage_backend;
+    const storage_path = raw?.storage_path;
+    const max_upload_size_bytes = raw?.max_upload_size_bytes;
+
+    if (
+      typeof storage_backend !== "string" ||
+      typeof storage_path !== "string" ||
+      typeof max_upload_size_bytes !== "number"
+    ) {
+      throw new Error(
+        "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
+      );
+    }
+
+    return { storage_backend, storage_path, max_upload_size_bytes };
   },
 
   /**
@@ -268,6 +256,6 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig = {
   tls_mode: "starttls",
 };
 
-export { DEFAULT_SMTP_CONFIG, DEFAULT_STORAGE_SETTINGS };
+export { DEFAULT_SMTP_CONFIG };
 
 export default settingsApi;
