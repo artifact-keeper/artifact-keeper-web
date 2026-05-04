@@ -39,6 +39,18 @@ function createMockNextRequest(pathname: string, search = "") {
   } as unknown as import("next/server").NextRequest;
 }
 
+/**
+ * Asserts that the most recent NextResponse.rewrite() call targeted the given
+ * path on the given backend origin (defaults to the docker-compose default).
+ */
+function expectRewriteTo(pathname: string, origin = "http://backend:8080") {
+  expect(mockRewrite).toHaveBeenCalledTimes(1);
+  const url = mockRewrite.mock.calls[0][0] as URL;
+  expect(url.pathname).toBe(pathname);
+  expect(url.origin).toBe(origin);
+  return url;
+}
+
 describe("middleware", () => {
   it("skips SSE event stream path and calls NextResponse.next()", async () => {
     const { middleware } = await import("../middleware");
@@ -111,16 +123,11 @@ describe("middleware", () => {
     // #1007 — combined with `skipTrailingSlashRedirect` in next.config.ts.
     const { middleware } = await import("../middleware");
 
-    middleware(createMockNextRequest("/v2/"));
-    expect(mockRewrite).toHaveBeenCalledTimes(1);
-    const url = mockRewrite.mock.calls[0][0] as URL;
-    expect(url.pathname).toBe("/v2/");
-    expect(url.origin).toBe("http://backend:8080");
-
-    mockRewrite.mockClear();
-    middleware(createMockNextRequest("/v2"));
-    expect(mockRewrite).toHaveBeenCalledTimes(1);
-    expect((mockRewrite.mock.calls[0][0] as URL).pathname).toBe("/v2");
+    for (const path of ["/v2/", "/v2"]) {
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expectRewriteTo(path);
+    }
   });
 
   it("exports matcher config for API, health, and native format routes", async () => {
