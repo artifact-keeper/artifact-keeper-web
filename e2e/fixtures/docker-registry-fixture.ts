@@ -14,6 +14,17 @@ export interface RecordedRequest {
 }
 
 /**
+ * Wire shape returned by the GET /__fixture/requests control endpoint. Body is
+ * base64-encoded so binary blobs round-trip through JSON unchanged.
+ */
+export interface SerializedRecordedRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  bodyBase64: string;
+}
+
+/**
  * Configurable response for a given path. Headers passed here are written on
  * the response verbatim; tests rely on this to verify Docker-specific response
  * headers survive the Next.js proxy layer.
@@ -63,9 +74,15 @@ export function createFixtureRegistry(options: CreateOptions = {}): Promise<Fixt
     // Registry namespace, which is rooted at /v2.
     if (url.startsWith("/__fixture/")) {
       if (req.method === "GET" && url === "/__fixture/requests") {
+        const serialized: SerializedRecordedRequest[] = recordedRequests.map((r) => ({
+          method: r.method,
+          path: r.path,
+          headers: r.headers,
+          bodyBase64: r.body.toString("base64"),
+        }));
         res.statusCode = 200;
         res.setHeader("content-type", "application/json");
-        res.end(JSON.stringify(recordedRequests.map(serializeRecorded)));
+        res.end(JSON.stringify(serialized));
         return;
       }
       if (req.method === "POST" && url === "/__fixture/reset") {
@@ -81,11 +98,7 @@ export function createFixtureRegistry(options: CreateOptions = {}): Promise<Fixt
           path: string;
           spec: FixtureResponseSpec & { body?: string };
         };
-        responseMap.set(parsed.path, {
-          status: parsed.spec.status,
-          headers: parsed.spec.headers,
-          body: parsed.spec.body,
-        });
+        responseMap.set(parsed.path, parsed.spec);
         res.statusCode = 204;
         res.end();
         return;
@@ -133,20 +146,6 @@ export function createFixtureRegistry(options: CreateOptions = {}): Promise<Fixt
       res.end();
     }
   };
-
-  function serializeRecorded(r: RecordedRequest): {
-    method: string;
-    path: string;
-    headers: Record<string, string>;
-    bodyBase64: string;
-  } {
-    return {
-      method: r.method,
-      path: r.path,
-      headers: r.headers,
-      bodyBase64: r.body.toString("base64"),
-    };
-  }
 
   const server: Server = createServer((req, res) => {
     handler(req, res).catch((err: unknown) => {

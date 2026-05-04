@@ -1,5 +1,7 @@
 import { test, expect, request as pwRequest, type APIRequestContext } from "@playwright/test";
 
+import type { SerializedRecordedRequest } from "../../fixtures/docker-registry-fixture";
+
 /**
  * End-to-end coverage for issue #336 — verify that the Next.js middleware
  * proxy preserves Docker-Distribution-API headers in both directions.
@@ -10,13 +12,6 @@ import { test, expect, request as pwRequest, type APIRequestContext } from "@pla
  * point a real Next.js (next start) at a fixture HTTP server and observe
  * what the fixture sees and what the client receives.
  */
-
-interface RecordedRequestSerialized {
-  method: string;
-  path: string;
-  headers: Record<string, string>;
-  bodyBase64: string;
-}
 
 const FIXTURE_PORT = Number(process.env.FIXTURE_PORT ?? 4500);
 const FIXTURE_URL = `http://127.0.0.1:${FIXTURE_PORT}`;
@@ -40,10 +35,10 @@ async function resetFixture(control: APIRequestContext): Promise<void> {
 
 async function getRecordedRequests(
   control: APIRequestContext,
-): Promise<RecordedRequestSerialized[]> {
+): Promise<SerializedRecordedRequest[]> {
   const res = await control.get(`${FIXTURE_URL}/__fixture/requests`);
   expect(res.status(), "fixture requests").toBe(200);
-  return (await res.json()) as RecordedRequestSerialized[];
+  return (await res.json()) as SerializedRecordedRequest[];
 }
 
 test.describe("Docker /v2/* header forwarding through Next.js middleware", () => {
@@ -100,7 +95,6 @@ test.describe("Docker /v2/* header forwarding through Next.js middleware", () =>
       expect(res.status()).toBe(200);
 
       const recorded = await getRecordedRequests(control);
-      expect(recorded.length).toBeGreaterThanOrEqual(1);
       const seen = recorded.find((r) => r.path === path);
       expect(seen, `fixture should have observed ${path}`).toBeDefined();
       expect(seen!.headers[name.toLowerCase()]).toBe(value);
