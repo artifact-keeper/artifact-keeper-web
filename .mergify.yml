@@ -12,6 +12,11 @@ pull_request_rules:
       - check-success=build
       - check-success=e2e
       - "#approved-reviews-by>=1"
+      # Scope auto-merge to PRs targeting main only. Maintenance branches
+      # (release/1.1.x and similar) overwrite floating dev tags on push,
+      # so dependency bumps onto them must go through human review even
+      # if they pass CI. See #320 / #331.
+      - base=main
     actions:
       queue:
         name: default
@@ -25,6 +30,16 @@ pull_request_rules:
         add:
           - needs-review
           - major-update
+
+  - name: Flag Dependabot PRs targeting maintenance branches
+    conditions:
+      - author=dependabot[bot]
+      - "base!=main"
+    actions:
+      label:
+        add:
+          - needs-review
+          - maintenance-branch
 
   - name: Require E2E for page changes
     conditions:
