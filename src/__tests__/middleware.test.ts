@@ -62,6 +62,25 @@ describe("middleware", () => {
     expect(result).toEqual({ type: "next" });
   });
 
+  it.each([
+    ["/api/v1/events/stream/", "single trailing slash"],
+    ["/api/v1/events/stream///", "multiple trailing slashes"],
+  ])("skips SSE event stream path with %s variant (%s)", async (path) => {
+    // skipTrailingSlashRedirect (set in next.config.ts) means trailing-slash
+    // variants reach middleware verbatim instead of being 308'd to the
+    // canonical form. The early-return must treat all variants equivalently,
+    // otherwise SSE gets proxy-rewritten and the long-lived connection
+    // breaks. The multi-slash case locks in the regex `/\/+$/` against
+    // accidental refactors to a single-slash variant. See #337.
+    const { middleware } = await import("../middleware");
+    const request = createMockNextRequest(path);
+    const result = middleware(request);
+
+    expect(mockNext).toHaveBeenCalled();
+    expect(mockRewrite).not.toHaveBeenCalled();
+    expect(result).toEqual({ type: "next" });
+  });
+
   it("rewrites other API paths to backend", async () => {
     const { middleware } = await import("../middleware");
     const request = createMockNextRequest("/api/v1/users", "?page=1");
