@@ -39,10 +39,41 @@ function createMockNextRequest(pathname: string, search = "") {
   } as unknown as import("next/server").NextRequest;
 }
 
+/**
+ * Asserts that the most recent NextResponse.rewrite() call targeted the given
+ * path on the given backend origin (defaults to the docker-compose default).
+ */
+function expectRewriteTo(pathname: string, origin = "http://backend:8080") {
+  expect(mockRewrite).toHaveBeenCalledTimes(1);
+  const url = mockRewrite.mock.calls[0][0] as URL;
+  expect(url.pathname).toBe(pathname);
+  expect(url.origin).toBe(origin);
+  return url;
+}
+
 describe("middleware", () => {
   it("skips SSE event stream path and calls NextResponse.next()", async () => {
     const { middleware } = await import("../middleware");
     const request = createMockNextRequest("/api/v1/events/stream");
+    const result = middleware(request);
+
+    expect(mockNext).toHaveBeenCalled();
+    expect(mockRewrite).not.toHaveBeenCalled();
+    expect(result).toEqual({ type: "next" });
+  });
+
+  it.each([
+    ["/api/v1/events/stream/", "single trailing slash"],
+    ["/api/v1/events/stream///", "multiple trailing slashes"],
+  ])("skips SSE event stream path with %s variant (%s)", async (path) => {
+    // skipTrailingSlashRedirect (set in next.config.ts) means trailing-slash
+    // variants reach middleware verbatim instead of being 308'd to the
+    // canonical form. The early-return must treat all variants equivalently,
+    // otherwise SSE gets proxy-rewritten and the long-lived connection
+    // breaks. The multi-slash case locks in the regex `/\/+$/` against
+    // accidental refactors to a single-slash variant. See #337.
+    const { middleware } = await import("../middleware");
+    const request = createMockNextRequest(path);
     const result = middleware(request);
 
     expect(mockNext).toHaveBeenCalled();
@@ -104,6 +135,20 @@ describe("middleware", () => {
     }
   });
 
+  it("rewrites Docker Registry v2 ping endpoint (bare /v2/) to backend", async () => {
+    // The docker client hits `GET /v2/` (with trailing slash) for the API
+    // version check during `docker login`. The proxy must forward this verbatim
+    // so the backend's `WWW-Authenticate` challenge reaches the client. See
+    // #1007 — combined with `skipTrailingSlashRedirect` in next.config.ts.
+    const { middleware } = await import("../middleware");
+
+    for (const path of ["/v2/", "/v2"]) {
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expectRewriteTo(path);
+    }
+  });
+
   it("exports matcher config for API, health, and native format routes", async () => {
     const { config } = await import("../middleware");
     expect(config.matcher).toContain("/api/:path*");
@@ -111,6 +156,7 @@ describe("middleware", () => {
     expect(config.matcher).toContain("/pypi/:path*");
     expect(config.matcher).toContain("/npm/:path*");
     expect(config.matcher).toContain("/maven/:path*");
+    expect(config.matcher).toContain("/v2");
     expect(config.matcher).toContain("/v2/:path*");
     expect(config.matcher.length).toBeGreaterThan(30);
   });

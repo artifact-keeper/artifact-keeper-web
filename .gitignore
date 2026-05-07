@@ -49,3 +49,6 @@ next-env.d.ts
 
 # tutorial recordings
 e2e/tutorials/output/
+
+# Worktrees created by Claude Code agents
+.claude/worktrees/
