@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
+import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,7 +26,7 @@ import {
 } from "@/components/ui/select";
 
 import { PageHeader } from "@/components/common/page-header";
-import type { PasswordPolicy, SmtpConfig, SmtpTlsMode } from "@/lib/api/settings";
+import type { PasswordPolicy, SmtpConfig, SmtpTlsMode, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
 
@@ -64,6 +65,17 @@ function formatPasswordPolicy(policy: PasswordPolicy | undefined): string {
     parts.push(`${policy.history_count} password history`);
   }
   return parts.join("; ");
+}
+
+const STORAGE_BACKEND_LABELS: Record<string, string> = {
+  filesystem: "Local Filesystem",
+  s3: "S3",
+  gcs: "Google Cloud Storage",
+  azure: "Azure Blob Storage",
+};
+
+function formatStorageBackend(backend: string): string {
+  return STORAGE_BACKEND_LABELS[backend] ?? backend;
 }
 
 // -- SMTP settings tab --
@@ -359,6 +371,25 @@ export default function SettingsPage() {
     retry: false,
   });
 
+  const {
+    data: storageSettings,
+    isError: storageError,
+    isLoading: storageLoading,
+  } = useQuery<StorageSettings>({
+    queryKey: ["storage-settings"],
+    queryFn: () => settingsApi.getStorageSettings(),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  // Render the storage row value, distinguishing loading from error so an
+  // API failure doesn't silently fall back to placeholder strings (#334).
+  const storageValue = (format: (s: StorageSettings) => string): string => {
+    if (storageLoading) return "Loading...";
+    if (storageError || !storageSettings) return "Unavailable";
+    return format(storageSettings);
+  };
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -473,22 +504,25 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <SettingRow
                 label="Storage Backend"
-                value="Local Filesystem"
+                value={storageValue((s) => formatStorageBackend(s.storage_backend))}
                 description="The type of storage backend used for artifact data."
               />
               <Separator />
               <SettingRow
                 label="Storage Path"
-                value="/data/artifacts"
-                description="The filesystem path where artifact files are stored."
+                value={storageValue((s) => s.storage_path)}
+                description="The filesystem path where artifact files are stored (when storage backend is local)."
               />
               <Separator />
               <SettingRow
                 label="Max Upload Size"
-                value="5 GB"
+                value={storageValue((s) => formatBytes(s.max_upload_size_bytes))}
                 description="Maximum allowed size for a single artifact upload."
               />
               <Separator />
+              {/* TODO(#334): swap for storageSettings.deduplication once the backend
+                  exposes it on /api/v1/admin/settings. Until then this row is a
+                  build-time invariant (always SHA-256 content addressing). */}
               <SettingRow
                 label="Deduplication"
                 value="Enabled (SHA-256)"

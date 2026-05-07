@@ -33,6 +33,7 @@ vi.mock("@/lib/api/admin", () => ({
 vi.mock("@/lib/api/settings", () => ({
   settingsApi: {
     getPasswordPolicy: vi.fn(),
+    getStorageSettings: vi.fn(),
     getSmtpConfig: vi.fn(),
     updateSmtpConfig: vi.fn(),
     sendTestEmail: vi.fn(),
@@ -257,6 +258,123 @@ describe("SettingsPage", () => {
     expect(webInput).toBeDefined();
   });
 
+  // ---------------------------------------------------------------------------
+  // Storage tab tests
+  // ---------------------------------------------------------------------------
+
+  // Mock useQuery's return value based on which queryKey it's called with,
+  // instead of relying on a fragile call-order index. Order is:
+  // health, password-policy, storage-settings, smtp-config (in SettingsPage).
+  function mockQueriesByKey(
+    overrides: Record<string, ReturnType<typeof mockUseQuery>>
+  ) {
+    mockUseQuery.mockImplementation((opts: { queryKey: unknown[] }) => {
+      const key = String(opts?.queryKey?.[0] ?? "");
+      return (
+        overrides[key] ?? { data: undefined, isLoading: false, isError: false }
+      );
+    });
+  }
+
+  it("populates Storage fields from loaded settings", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "storage-settings": {
+        data: {
+          storage_backend: "s3",
+          storage_path: "/data/storage",
+          max_upload_size_bytes: 1_073_741_824,
+        },
+        isLoading: false,
+        isError: false,
+      },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "S3")).toBeDefined();
+    expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
+    // formatBytes from @/lib/utils renders 1 GiB as "1 GB" (no trailing .0).
+    expect(inputs.find((i) => i.value === "1 GB")).toBeDefined();
+  });
+
+  it("renders friendly storage backend labels", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "storage-settings": {
+        data: {
+          storage_backend: "filesystem",
+          storage_path: "/var/lib/ak",
+          max_upload_size_bytes: 0,
+        },
+        isLoading: false,
+        isError: false,
+      },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "Local Filesystem")).toBeDefined();
+    // 0 bytes renders literally as "0 B" — we no longer invent an
+    // "Unlimited" semantic that isn't in the API contract.
+    expect(inputs.find((i) => i.value === "0 B")).toBeDefined();
+  });
+
+  it("falls back to raw storage backend value when label is unknown", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "storage-settings": {
+        data: {
+          storage_backend: "minio",
+          storage_path: "/data/minio",
+          max_upload_size_bytes: 5_368_709_120,
+        },
+        isLoading: false,
+        isError: false,
+      },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    expect(inputs.find((i) => i.value === "minio")).toBeDefined();
+    expect(inputs.find((i) => i.value === "5 GB")).toBeDefined();
+  });
+
+  it("shows Loading… in Storage fields while the query is loading", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "storage-settings": { data: undefined, isLoading: true, isError: false },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    // The three storage rows all show "Loading...".
+    const loadingInputs = inputs.filter((i) => i.value === "Loading...");
+    expect(loadingInputs.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows Unavailable in Storage fields when the query errors", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "storage-settings": { data: undefined, isLoading: false, isError: true },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    const unavailableInputs = inputs.filter((i) => i.value === "Unavailable");
+    // All three storage rows surface the failure rather than silently
+    // falling back to the placeholder strings called out in #334.
+    expect(unavailableInputs.length).toBe(3);
+    // Critically: the buggy placeholders must NOT appear on error.
+    expect(inputs.find((i) => i.value === "Local Filesystem")).toBeUndefined();
+    expect(inputs.find((i) => i.value === "/data/artifacts")).toBeUndefined();
+  });
+
   it("renders the Email tab trigger", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
 
@@ -301,25 +419,18 @@ describe("SettingsPage", () => {
 
   it("populates SMTP fields from loaded config", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-
-    let queryCallIndex = 0;
-    mockUseQuery.mockImplementation(() => {
-      queryCallIndex++;
-      // Third useQuery call is for smtp-config
-      if (queryCallIndex === 3) {
-        return {
-          data: {
-            host: "mail.example.com",
-            port: 465,
-            username: "sender",
-            password: "secret",
-            from_address: "no-reply@example.com",
-            tls_mode: "tls" as const,
-          },
-          isLoading: false,
-        };
-      }
-      return { data: undefined, isLoading: false };
+    mockQueriesByKey({
+      "smtp-config": {
+        data: {
+          host: "mail.example.com",
+          port: 465,
+          username: "sender",
+          password: "secret",
+          from_address: "no-reply@example.com",
+          tls_mode: "tls" as const,
+        },
+        isLoading: false,
+      },
     });
 
     render(<SettingsPage />);

@@ -240,6 +240,71 @@ describe("settingsApi", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Storage settings tests
+  // -------------------------------------------------------------------------
+
+  it("getStorageSettings extracts storage_backend, storage_path, and max_upload_size_bytes", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "s3",
+        storage_path: "/data/storage",
+        max_upload_size_bytes: 1_073_741_824,
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    const settings = await mod.settingsApi.getStorageSettings();
+    expect(settings.storage_backend).toBe("s3");
+    expect(settings.storage_path).toBe("/data/storage");
+    expect(settings.max_upload_size_bytes).toBe(1_073_741_824);
+  });
+
+  it("getStorageSettings throws when fields are missing", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { unrelated: "value" },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /missing/i
+    );
+  });
+
+  it("getStorageSettings throws on fields with wrong types", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: 123,
+        storage_path: ["/wrong"],
+        max_upload_size_bytes: "not-a-number",
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /missing/i
+    );
+  });
+
+  it("getStorageSettings throws on SDK error", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: undefined,
+      error: "unauthorized",
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /Failed to load storage settings/
+    );
+  });
+
+  it("getStorageSettings propagates SDK rejection", async () => {
+    mockGetSettings.mockRejectedValue(new Error("network error"));
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      "network error"
+    );
+  });
+
+  // -------------------------------------------------------------------------
   // updateSmtpConfig tests
   // -------------------------------------------------------------------------
 

@@ -32,6 +32,21 @@ export interface SendTestEmailResponse {
 }
 
 /**
+ * Storage configuration surfaced on the admin Settings → Storage tab.
+ *
+ * `storage_backend` is one of "filesystem", "s3", "gcs", "azure" (the same
+ * values the backend's STORAGE_BACKEND env var accepts). UI components are
+ * responsible for translating to a friendly display label.
+ *
+ * `max_upload_size_bytes` is in bytes; UI components format for display.
+ */
+export interface StorageSettings {
+  storage_backend: string;
+  storage_path: string;
+  max_upload_size_bytes: number;
+}
+
+/**
  * Default password policy used when the server doesn't expose policy
  * fields or the settings endpoint is unavailable. These match the
  * backend defaults defined in the Rust configuration.
@@ -47,6 +62,46 @@ const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
 
 export const settingsApi = {
   DEFAULT_PASSWORD_POLICY,
+
+  /**
+   * Fetch storage configuration from system settings.
+   *
+   * The /api/v1/admin/settings response includes `storage_backend`,
+   * `storage_path`, and `max_upload_size_bytes` directly (the backend
+   * sources `storage_backend` and `storage_path` from the in-process
+   * config struct, which is loaded from STORAGE_BACKEND / STORAGE_PATH
+   * env vars at startup; `max_upload_size_bytes` is read from the
+   * `system_settings` DB row that the same endpoint manages).
+   *
+   * Throws on SDK error or when the response is missing the required
+   * fields (or has them as the wrong type). Callers are expected to
+   * surface the error state to the UI — silently returning placeholder
+   * defaults here would re-create the bug this endpoint was wired up
+   * to fix (see issue #334).
+   */
+  getStorageSettings: async (): Promise<StorageSettings> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load storage settings: ${String(error)}`);
+    }
+
+    const raw = data as unknown as Record<string, unknown>;
+    const storage_backend = raw?.storage_backend;
+    const storage_path = raw?.storage_path;
+    const max_upload_size_bytes = raw?.max_upload_size_bytes;
+
+    if (
+      typeof storage_backend !== "string" ||
+      typeof storage_path !== "string" ||
+      typeof max_upload_size_bytes !== "number"
+    ) {
+      throw new Error(
+        "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
+      );
+    }
+
+    return { storage_backend, storage_path, max_upload_size_bytes };
+  },
 
   /**
    * Fetch the password policy from system settings.
