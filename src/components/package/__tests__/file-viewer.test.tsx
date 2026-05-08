@@ -123,7 +123,7 @@ describe("FileViewer", () => {
     // Formatted size (2 KB)
     expect(screen.getByText("2 KB")).toBeInTheDocument();
     // Download link
-    const downloadLink = screen.getByRole("link", { name: /download file/i });
+    const downloadLink = screen.getByRole("link", { name: /download .+/i });
     expect(downloadLink).toBeInTheDocument();
     expect(downloadLink).toHaveAttribute(
       "href",
@@ -264,7 +264,7 @@ describe("FileViewer", () => {
       fileName: "index.js",
     });
 
-    const downloadLink = screen.getByRole("link", { name: /download file/i });
+    const downloadLink = screen.getByRole("link", { name: /download .+/i });
     expect(downloadLink.tagName).toBe("A");
     expect(downloadLink).toHaveAttribute(
       "href",

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **`release/1.1.x` maintenance branch + `:1.1-dev` Docker tag rule** (#331) - mirrors `artifact-keeper#890`; pushes to `release/1.1.x` now publish `ghcr.io/artifact-keeper/artifact-keeper-web:1.1-dev` so the v1.1.x release-gate can test a true v1.1.x web/backend pair.
 
+### Accessibility
+- **Aria attribute coverage on admin pages** (#208) - replaced `title` with `aria-label` on icon-only buttons (lifecycle, monitoring, quality-gates, sso, telemetry, groups, security/scans, file-viewer); paired form inputs with labels via `htmlFor`/`id`; added accessible names to `Switch` components. Per-row table action buttons (SSO providers, quality gates, lifecycle policies, telemetry crash reports, users, monitoring suppress) now interpolate the row's identifying name into the aria-label so screen readers can disambiguate. Newly accessible-named `Refresh` buttons on approvals, security, and migration pages.
+
 ### Security
 - **Pin third-party GitHub Actions to commit SHAs** (#205) - every third-party `uses:` line in `codeql.yml`, `dependency-review.yml`, `docker-publish.yml`, and `stale.yml` is now pinned to a specific commit SHA (with a version comment) so an upstream tag rewrite cannot silently swap action code. `ci.yml` was already pinned and is the model. The same-org reusable workflow `artifact-keeper/artifact-keeper-test/.github/workflows/release-gate.yml@main` (docker-publish.yml line 191) is intentionally tracked on `main` — same-org workflows inherit the org's branch-protection trust boundary, and pinning a reusable workflow to a SHA is operationally heavier. Dependabot is configured for `github-actions`, so bumps continue to flow through review.
 

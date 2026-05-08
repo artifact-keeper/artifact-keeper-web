@@ -299,7 +299,7 @@ export function FileViewer({
           </span>
         )}
         <Button variant="ghost" size="icon-xs" asChild>
-          <a href={downloadUrl} aria-label="Download file">
+          <a href={downloadUrl} aria-label={`Download ${fileName}`}>
             <Download className="size-3.5" />
           </a>
         </Button>

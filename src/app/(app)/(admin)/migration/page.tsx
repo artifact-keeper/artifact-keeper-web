@@ -667,6 +667,7 @@ export default function MigrationPage() {
               <Button
                 variant="outline"
                 size="icon"
+                aria-label="Refresh migration data"
                 onClick={() => {
                   queryClient.invalidateQueries({
                     queryKey: ["migration"],

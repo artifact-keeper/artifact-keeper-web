@@ -332,6 +332,7 @@ export default function SecurityDashboardPage() {
             <Button
               variant="outline"
               size="icon"
+              aria-label="Refresh security data"
               onClick={() =>
                 queryClient.invalidateQueries({ queryKey: ["security"] })
               }
