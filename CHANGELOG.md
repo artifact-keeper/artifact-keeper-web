@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **`release/1.1.x` maintenance branch + `:1.1-dev` Docker tag rule** (#331) - mirrors `artifact-keeper#890`; pushes to `release/1.1.x` now publish `ghcr.io/artifact-keeper/artifact-keeper-web:1.1-dev` so the v1.1.x release-gate can test a true v1.1.x web/backend pair.
 
+### Security
+- **Pin third-party GitHub Actions to commit SHAs** (#205) - all `uses:` lines in `codeql.yml`, `dependency-review.yml`, `docker-publish.yml`, and `stale.yml` are now pinned to specific commit SHAs (with version comments) so an upstream tag rewrite cannot silently swap action code. `ci.yml` was already pinned and is the model. Dependabot is configured for `github-actions`, so bumps continue to flow through review.
+
 ### Notes
 - **v1.1.8 web image is permanently unavailable** (#320) - the web release process stopped at v1.1.3 while the backend continued through v1.1.8. There is no v1.1.8 source ref to rebuild from; backfilling would falsify provenance. See [docs/release-history/v1.1.8-web-postmortem.md](docs/release-history/v1.1.8-web-postmortem.md). Recurrence is prevented by `artifact-keeper#882` (image-publish gate).
 
