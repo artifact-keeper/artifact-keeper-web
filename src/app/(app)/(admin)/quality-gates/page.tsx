@@ -418,6 +418,7 @@ function GateFormDialog({
                   </p>
                 </div>
                 <Switch
+                  aria-label="Enforce on Promotion"
                   checked={form.enforce_on_promotion}
                   onCheckedChange={(checked) =>
                     setForm({ ...form, enforce_on_promotion: checked })
@@ -432,6 +433,7 @@ function GateFormDialog({
                   </p>
                 </div>
                 <Switch
+                  aria-label="Enforce on Download"
                   checked={form.enforce_on_download}
                   onCheckedChange={(checked) =>
                     setForm({ ...form, enforce_on_download: checked })
@@ -856,6 +858,7 @@ export default function QualityGatesPage() {
                     </TableCell>
                     <TableCell>
                       <Switch
+                        aria-label={gate.is_enabled ? "Disable gate" : "Enable gate"}
                         checked={gate.is_enabled}
                         onCheckedChange={(checked) =>
                           toggleMutation.mutate({

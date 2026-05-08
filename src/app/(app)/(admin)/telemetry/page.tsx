@@ -219,7 +219,7 @@ export default function TelemetryPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm font-medium">
+                  <Label htmlFor="telemetry-enabled" className="text-sm font-medium">
                     Enable Telemetry
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -227,6 +227,7 @@ export default function TelemetryPage() {
                   </p>
                 </div>
                 <Switch
+                  id="telemetry-enabled"
                   checked={settings.enabled}
                   onCheckedChange={(v) => handleToggle("enabled", v)}
                 />
@@ -234,7 +235,7 @@ export default function TelemetryPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm font-medium">
+                  <Label htmlFor="telemetry-review-before-send" className="text-sm font-medium">
                     Review Before Send
                   </Label>
                   <p className="text-xs text-muted-foreground">
@@ -242,6 +243,7 @@ export default function TelemetryPage() {
                   </p>
                 </div>
                 <Switch
+                  id="telemetry-review-before-send"
                   checked={settings.review_before_send}
                   onCheckedChange={(v) =>
                     handleToggle("review_before_send", v)
@@ -251,12 +253,13 @@ export default function TelemetryPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm font-medium">Include Logs</Label>
+                  <Label htmlFor="telemetry-include-logs" className="text-sm font-medium">Include Logs</Label>
                   <p className="text-xs text-muted-foreground">
                     Attach recent log lines to crash reports.
                   </p>
                 </div>
                 <Switch
+                  id="telemetry-include-logs"
                   checked={settings.include_logs}
                   onCheckedChange={(v) => handleToggle("include_logs", v)}
                 />
