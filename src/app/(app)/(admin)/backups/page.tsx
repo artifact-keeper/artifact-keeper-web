@@ -30,6 +30,7 @@ import {
   deleteBackup,
 } from "@artifact-keeper/sdk";
 import { useAuth } from "@/providers/auth-provider";
+import { toUserMessage } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -180,7 +181,9 @@ export default function BackupsPage() {
       setCreateOpen(false);
       setBackupType("full");
     },
-    onError: () => toast.error("Failed to create backup"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create backup"));
+    },
   });
 
   const executeMutation = useMutation({
@@ -192,7 +195,9 @@ export default function BackupsPage() {
       toast.success("Backup started");
       queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
-    onError: () => toast.error("Failed to start backup"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to start backup"));
+    },
   });
 
   const cancelMutation = useMutation({
@@ -204,7 +209,9 @@ export default function BackupsPage() {
       toast.success("Backup cancelled");
       queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
-    onError: () => toast.error("Failed to cancel backup"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to cancel backup"));
+    },
   });
 
   const restoreMutation = useMutation({
@@ -221,7 +228,9 @@ export default function BackupsPage() {
       setRestoreOpen(false);
       setSelectedBackup(null);
     },
-    onError: () => toast.error("Failed to start restore"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to start restore"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -235,7 +244,9 @@ export default function BackupsPage() {
       setDeleteOpen(false);
       setSelectedBackup(null);
     },
-    onError: () => toast.error("Failed to delete backup"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete backup"));
+    },
   });
 
   // -- handlers --

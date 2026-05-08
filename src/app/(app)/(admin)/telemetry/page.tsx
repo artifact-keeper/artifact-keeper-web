@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import telemetryApi from "@/lib/api/telemetry";
+import { toUserMessage } from "@/lib/error-utils";
 import type { CrashReport, TelemetrySettings } from "@/types/telemetry";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
@@ -103,7 +104,9 @@ export default function TelemetryPage() {
       toast.success("Settings updated");
       queryClient.invalidateQueries({ queryKey: ["telemetry-settings"] });
     },
-    onError: () => toast.error("Failed to update settings"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update settings"));
+    },
   });
 
   const submitMutation = useMutation({
@@ -113,7 +116,9 @@ export default function TelemetryPage() {
       queryClient.invalidateQueries({ queryKey: ["telemetry-crashes"] });
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
     },
-    onError: () => toast.error("Failed to submit crash reports"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to submit crash reports"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -124,7 +129,9 @@ export default function TelemetryPage() {
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
       setDeleteTarget(null);
     },
-    onError: () => toast.error("Failed to delete crash report"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete crash report"));
+    },
   });
 
   function handleToggle(field: keyof TelemetrySettings, value: boolean) {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import lifecycleApi from "@/lib/api/lifecycle";
+import { toUserMessage } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
   LifecyclePolicy,
@@ -113,7 +114,9 @@ export default function LifecyclePage() {
       setCreateOpen(false);
       resetForm();
     },
-    onError: () => toast.error("Failed to create policy"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create policy"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -123,7 +126,9 @@ export default function LifecyclePage() {
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
       setDeleteTarget(null);
     },
-    onError: () => toast.error("Failed to delete policy"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete policy"));
+    },
   });
 
   const toggleMutation = useMutation({
@@ -132,7 +137,9 @@ export default function LifecyclePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: () => toast.error("Failed to update policy"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update policy"));
+    },
   });
 
   const executeMutation = useMutation({
@@ -143,13 +150,17 @@ export default function LifecyclePage() {
       );
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: () => toast.error("Execution failed"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Execution failed"));
+    },
   });
 
   const previewMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.preview(id),
     onSuccess: (result) => setPreviewResult(result),
-    onError: () => toast.error("Preview failed"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Preview failed"));
+    },
   });
 
   const executeAllMutation = useMutation({
@@ -165,7 +176,9 @@ export default function LifecyclePage() {
       );
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: () => toast.error("Execute all failed"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Execute all failed"));
+    },
   });
 
   function resetForm() {

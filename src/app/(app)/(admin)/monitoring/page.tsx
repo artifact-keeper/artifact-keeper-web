@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import monitoringApi from "@/lib/api/monitoring";
+import { toUserMessage } from "@/lib/error-utils";
 import type { AlertState } from "@/types/monitoring";
 import { PageHeader } from "@/components/common/page-header";
 import { EmptyState } from "@/components/common/empty-state";
@@ -106,7 +107,9 @@ export default function MonitoringPage() {
       queryClient.invalidateQueries({ queryKey: ["monitoring-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["monitoring-log"] });
     },
-    onError: () => toast.error("Health check failed"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Health check failed"));
+    },
   });
 
   const suppressMutation = useMutation({
@@ -117,7 +120,9 @@ export default function MonitoringPage() {
       queryClient.invalidateQueries({ queryKey: ["monitoring-alerts"] });
       setSuppressTarget(null);
     },
-    onError: () => toast.error("Failed to suppress alert"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to suppress alert"));
+    },
   });
 
   function handleSuppress() {
