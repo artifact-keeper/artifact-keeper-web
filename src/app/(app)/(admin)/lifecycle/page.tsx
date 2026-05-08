@@ -354,7 +354,7 @@ export default function LifecyclePage() {
                               enabled: !policy.enabled,
                             })
                           }
-                          aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
+                          aria-label={`${policy.enabled ? "Disable" : "Enable"} policy ${policy.name}`}
                         >
                           {policy.enabled ? (
                             <XCircle className="size-4" />
@@ -367,7 +367,7 @@ export default function LifecyclePage() {
                           size="sm"
                           onClick={() => previewMutation.mutate(policy.id)}
                           disabled={previewMutation.isPending}
-                          aria-label="Preview policy (dry run)"
+                          aria-label={`Preview policy ${policy.name} (dry run)`}
                         >
                           <Eye className="size-4" />
                         </Button>
@@ -376,7 +376,7 @@ export default function LifecyclePage() {
                           size="sm"
                           onClick={() => executeMutation.mutate(policy.id)}
                           disabled={executeMutation.isPending}
-                          aria-label="Execute policy"
+                          aria-label={`Execute policy ${policy.name}`}
                         >
                           <Play className="size-4" />
                         </Button>
@@ -384,7 +384,7 @@ export default function LifecyclePage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(policy)}
-                          aria-label="Delete policy"
+                          aria-label={`Delete policy ${policy.name}`}
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>

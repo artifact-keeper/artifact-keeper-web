@@ -867,7 +867,7 @@ export default function QualityGatesPage() {
                     </TableCell>
                     <TableCell>
                       <Switch
-                        aria-label={gate.is_enabled ? "Disable gate" : "Enable gate"}
+                        aria-label={`${gate.is_enabled ? "Disable" : "Enable"} gate ${gate.name}`}
                         checked={gate.is_enabled}
                         onCheckedChange={(checked) =>
                           toggleMutation.mutate({
@@ -884,7 +884,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEdit(gate)}
-                          aria-label="Edit gate"
+                          aria-label={`Edit gate ${gate.name}`}
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -892,7 +892,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(gate)}
-                          aria-label="Delete gate"
+                          aria-label={`Delete gate ${gate.name}`}
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
