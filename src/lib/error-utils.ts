@@ -9,9 +9,10 @@
  *  1. Standard Error instances (from apiFetch and manual throws)
  *  2. SDK error objects with an `.error` string property
  *  3. SDK error objects with a `.message` string property
- *  4. Objects with a `.body.message` or `.body.error` string (wrapped HTTP errors)
- *  5. Plain strings
- *  6. Anything else falls back to the provided default message
+ *  4. FastAPI-style errors with a `.detail` string property
+ *  5. Objects with `.body.message`, `.body.error`, or `.body.detail` (wrapped HTTP errors)
+ *  6. Plain strings
+ *  7. Anything else falls back to the provided default message
  */
 
 /** Return the value if it is a non-empty string, otherwise undefined. */
@@ -91,13 +92,22 @@ export function toUserMessage(error: unknown, fallback: string): string {
   const messageField = nonEmptyString(error.message);
   if (messageField) return messageField;
 
-  // Wrapped HTTP errors: { body: { message: "..." } } or { body: { error: "..." } }
+  // FastAPI's default error shape is { detail: "..." }. The plugins install
+  // path on the backend uses this; without explicit handling the toast falls
+  // through to the fallback even when the backend supplied a useful message.
+  const detailField = nonEmptyString(error.detail);
+  if (detailField) return detailField;
+
+  // Wrapped HTTP errors: { body: { message | error | detail: "..." } }
   if (isPlainObject(error.body)) {
     const bodyMessage = nonEmptyString(error.body.message);
     if (bodyMessage) return bodyMessage;
 
     const bodyError = nonEmptyString(error.body.error);
     if (bodyError) return bodyError;
+
+    const bodyDetail = nonEmptyString(error.body.detail);
+    if (bodyDetail) return bodyDetail;
   }
 
   return fallback;

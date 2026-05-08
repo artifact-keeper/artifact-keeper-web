@@ -138,10 +138,10 @@ function OidcTab() {
       enabled ? ssoApi.disableOidc(id) : ssoApi.enableOidc(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("Provider status updated");
+      toast.success("OIDC provider status updated");
     },
     onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle provider"));
+      toast.error(toUserMessage(err, "Failed to toggle OIDC provider"));
     },
   });
 
@@ -586,10 +586,10 @@ function LdapTab() {
       enabled ? ssoApi.disableLdap(id) : ssoApi.enableLdap(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("Provider status updated");
+      toast.success("LDAP provider status updated");
     },
     onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle provider"));
+      toast.error(toUserMessage(err, "Failed to toggle LDAP provider"));
     },
   });
 
@@ -1125,10 +1125,10 @@ function SamlTab() {
       enabled ? ssoApi.disableSaml(id) : ssoApi.enableSaml(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("Provider status updated");
+      toast.success("SAML provider status updated");
     },
     onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle provider"));
+      toast.error(toUserMessage(err, "Failed to toggle SAML provider"));
     },
   });
 
