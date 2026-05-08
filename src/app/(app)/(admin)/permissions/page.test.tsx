@@ -527,9 +527,28 @@ describe("PermissionsPage", () => {
       });
     });
 
-    it("falls back to generic message when error is not an Error instance", async () => {
+    it("surfaces raw string errors directly via toUserMessage", async () => {
       const user = userEvent.setup();
       mockPermissionsApi.create.mockRejectedValue("raw string error");
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      const selects = getFormSelects();
+      await user.selectOptions(selects[1], "user-2");
+      await user.selectOptions(selects[3], "repo-1");
+
+      const submitBtns = screen.getAllByText(/Create Permission/);
+      await user.click(submitBtns[submitBtns.length - 1]);
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith("raw string error");
+      });
+    });
+
+    it("falls back to generic message when error shape is unrecognized", async () => {
+      const user = userEvent.setup();
+      mockPermissionsApi.create.mockRejectedValue(42);
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
