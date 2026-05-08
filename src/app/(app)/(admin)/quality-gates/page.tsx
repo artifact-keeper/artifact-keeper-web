@@ -261,8 +261,9 @@ function GateFormDialog({
         <div className="space-y-5 py-2">
           {/* Name */}
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label htmlFor="gate-name">Name</Label>
             <Input
+              id="gate-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g., Production Release Gate"
@@ -271,8 +272,9 @@ function GateFormDialog({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label htmlFor="gate-description">Description</Label>
             <Input
+              id="gate-description"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Optional description"
@@ -284,8 +286,9 @@ function GateFormDialog({
             <Label className="text-sm font-medium">Minimum Score Thresholds (0-100)</Label>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Health Score</Label>
+                <Label htmlFor="gate-min-health-score" className="text-xs text-muted-foreground">Health Score</Label>
                 <Input
+                  id="gate-min-health-score"
                   type="number"
                   min={0}
                   max={100}
@@ -295,8 +298,9 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Security Score</Label>
+                <Label htmlFor="gate-min-security-score" className="text-xs text-muted-foreground">Security Score</Label>
                 <Input
+                  id="gate-min-security-score"
                   type="number"
                   min={0}
                   max={100}
@@ -306,8 +310,9 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Quality Score</Label>
+                <Label htmlFor="gate-min-quality-score" className="text-xs text-muted-foreground">Quality Score</Label>
                 <Input
+                  id="gate-min-quality-score"
                   type="number"
                   min={0}
                   max={100}
@@ -317,8 +322,9 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Metadata Score</Label>
+                <Label htmlFor="gate-min-metadata-score" className="text-xs text-muted-foreground">Metadata Score</Label>
                 <Input
+                  id="gate-min-metadata-score"
                   type="number"
                   min={0}
                   max={100}
@@ -335,8 +341,9 @@ function GateFormDialog({
             <Label className="text-sm font-medium">Maximum Issue Counts</Label>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Critical</Label>
+                <Label htmlFor="gate-max-critical" className="text-xs text-muted-foreground">Critical</Label>
                 <Input
+                  id="gate-max-critical"
                   type="number"
                   min={0}
                   value={form.max_critical_issues}
@@ -345,8 +352,9 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">High</Label>
+                <Label htmlFor="gate-max-high" className="text-xs text-muted-foreground">High</Label>
                 <Input
+                  id="gate-max-high"
                   type="number"
                   min={0}
                   value={form.max_high_issues}
@@ -355,8 +363,9 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Medium</Label>
+                <Label htmlFor="gate-max-medium" className="text-xs text-muted-foreground">Medium</Label>
                 <Input
+                  id="gate-max-medium"
                   type="number"
                   min={0}
                   value={form.max_medium_issues}

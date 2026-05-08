@@ -551,8 +551,9 @@ export default function SecurityScanDetailPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Notes (optional)</Label>
+              <Label htmlFor="ack-notes">Notes (optional)</Label>
               <Textarea
+                id="ack-notes"
                 rows={3}
                 placeholder="Additional context for acknowledging this finding..."
                 value={ackNotes}

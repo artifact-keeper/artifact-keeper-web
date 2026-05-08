@@ -430,23 +430,25 @@ export default function LifecyclePage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label htmlFor="lifecycle-name">Name</Label>
               <Input
+                id="lifecycle-name"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="e.g., Cleanup old snapshots"
               />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label htmlFor="lifecycle-description">Description</Label>
               <Input
+                id="lifecycle-description"
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
                 placeholder="Optional description"
               />
             </div>
             <div className="space-y-2">
-              <Label>Policy Type</Label>
+              <Label htmlFor="lifecycle-type">Policy Type</Label>
               <Select
                 value={formType}
                 onValueChange={(v) => {
@@ -454,7 +456,7 @@ export default function LifecyclePage() {
                   setFormConfig(POLICY_CONFIG_HINTS[v] ?? "{}");
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger id="lifecycle-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -467,8 +469,9 @@ export default function LifecyclePage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Config (JSON)</Label>
+              <Label htmlFor="lifecycle-config">Config (JSON)</Label>
               <Textarea
+                id="lifecycle-config"
                 value={formConfig}
                 onChange={(e) => setFormConfig(e.target.value)}
                 className="font-mono text-sm"

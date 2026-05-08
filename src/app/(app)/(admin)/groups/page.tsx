@@ -540,6 +540,7 @@ export default function GroupsPage() {
                 <div className="relative w-48">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <Input
+                    aria-label="Filter members"
                     placeholder="Filter members..."
                     className="pl-8 h-8 text-xs"
                     value={memberSearch}
