@@ -13,6 +13,7 @@ import {
   listScanConfigs,
 } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
+import { toUserMessage } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
@@ -176,6 +177,9 @@ export default function SecurityScansPage() {
       setSelectedArtifactId(undefined);
       setScanMode("repo");
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+    },
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to trigger scan"));
     },
   });
 

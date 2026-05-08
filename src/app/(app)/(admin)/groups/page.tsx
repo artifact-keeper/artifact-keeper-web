@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { groupsApi } from "@/lib/api/groups";
 import { adminApi } from "@/lib/api/admin";
+import { toUserMessage } from "@/lib/error-utils";
 import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { Group, GroupMember } from "@/types/groups";
@@ -112,7 +113,9 @@ export default function GroupsPage() {
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: () => toast.error("Failed to create group"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create group"));
+    },
   });
 
   const updateMutation = useMutation({
@@ -124,7 +127,9 @@ export default function GroupsPage() {
       setEditOpen(false);
       setSelectedGroup(null);
     },
-    onError: () => toast.error("Failed to update group"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update group"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -135,7 +140,9 @@ export default function GroupsPage() {
       setDeleteOpen(false);
       setSelectedGroup(null);
     },
-    onError: () => toast.error("Failed to delete group"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete group"));
+    },
   });
 
   const addMemberMutation = useMutation({
@@ -149,7 +156,9 @@ export default function GroupsPage() {
       invalidateGroup(queryClient, "groups");
       setAddUserId("");
     },
-    onError: () => toast.error("Failed to add member"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to add member"));
+    },
   });
 
   const removeMemberMutation = useMutation({
@@ -162,7 +171,9 @@ export default function GroupsPage() {
       });
       invalidateGroup(queryClient, "groups");
     },
-    onError: () => toast.error("Failed to remove member"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to remove member"));
+    },
   });
 
   // -- handlers --

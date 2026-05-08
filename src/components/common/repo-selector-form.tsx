@@ -3,12 +3,14 @@
 import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Search, Plus, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { toUserMessage } from "@/lib/error-utils";
 import type { RepoSelector, MatchedRepository } from "@/lib/api/service-accounts";
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
 
@@ -42,6 +44,9 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
       serviceAccountsApi.previewRepoSelector(selector),
     onSuccess: (data) => {
       setPreviewResults(data.matched_repositories);
+    },
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to preview repository selector"));
     },
   });
 

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import qualityGatesApi from "@/lib/api/quality-gates";
+import { toUserMessage } from "@/lib/error-utils";
 import type {
   QualityGate,
   CreateQualityGateRequest,
@@ -492,7 +493,9 @@ export default function QualityGatesPage() {
       setCreateOpen(false);
       setCreateForm(emptyForm);
     },
-    onError: () => toast.error("Failed to create quality gate"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create quality gate"));
+    },
   });
 
   const updateMutation = useMutation({
@@ -503,7 +506,9 @@ export default function QualityGatesPage() {
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
       setEditTarget(null);
     },
-    onError: () => toast.error("Failed to update quality gate"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update quality gate"));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -513,7 +518,9 @@ export default function QualityGatesPage() {
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
       setDeleteTarget(null);
     },
-    onError: () => toast.error("Failed to delete quality gate"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete quality gate"));
+    },
   });
 
   const toggleMutation = useMutation({
@@ -522,7 +529,9 @@ export default function QualityGatesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
     },
-    onError: () => toast.error("Failed to update quality gate"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update quality gate"));
+    },
   });
 
   // -- Helpers --
