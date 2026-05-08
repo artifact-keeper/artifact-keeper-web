@@ -400,7 +400,7 @@ export default function TelemetryPage() {
                             onClick={() =>
                               submitMutation.mutate([crash.id])
                             }
-                            title="Submit"
+                            aria-label="Submit crash report"
                           >
                             <Send className="size-4" />
                           </Button>
@@ -409,7 +409,7 @@ export default function TelemetryPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(crash)}
-                          title="Delete"
+                          aria-label="Delete crash report"
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>

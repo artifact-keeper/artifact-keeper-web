@@ -872,7 +872,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEdit(gate)}
-                          title="Edit"
+                          aria-label="Edit gate"
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -880,7 +880,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(gate)}
-                          title="Delete"
+                          aria-label="Delete gate"
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>

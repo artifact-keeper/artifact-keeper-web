@@ -231,7 +231,7 @@ export default function MonitoringPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSuppressTarget(alert)}
-                        title="Suppress alerts"
+                        aria-label="Suppress alerts"
                       >
                         <BellOff className="size-4" />
                       </Button>

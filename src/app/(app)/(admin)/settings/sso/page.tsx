@@ -281,7 +281,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={config.is_enabled ? "Disable OIDC provider" : "Enable OIDC provider"}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -299,6 +299,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label="Edit OIDC provider"
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -307,6 +308,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label="Delete OIDC provider"
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -751,7 +753,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title="Test Connection"
+                          aria-label="Test LDAP connection"
                           disabled={testingId === config.id}
                           onClick={() => testMutation.mutate(config.id)}
                         >
@@ -765,7 +767,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={config.is_enabled ? "Disable LDAP provider" : "Enable LDAP provider"}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -783,6 +785,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label="Edit LDAP provider"
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -791,6 +794,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label="Delete LDAP provider"
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -1258,7 +1262,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={config.is_enabled ? "Disable SAML provider" : "Enable SAML provider"}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -1276,6 +1280,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label="Edit SAML provider"
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -1284,6 +1289,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label="Delete SAML provider"
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
