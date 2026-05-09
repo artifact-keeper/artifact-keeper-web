@@ -344,3 +344,53 @@ describe("SetupPage - CI/CD platforms", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("SetupPage - repo key sanitization for Gradle property names (#362)", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("repoKeyToGradleId converts kebab-case to camelCase", async () => {
+    const { repoKeyToGradleId } = await import("./page");
+    expect(repoKeyToGradleId("my-jvm-repo")).toBe("myJvmRepo");
+    expect(repoKeyToGradleId("acme-libs")).toBe("acmeLibs");
+  });
+
+  it("repoKeyToGradleId converts dot/underscore separators to camelCase", async () => {
+    const { repoKeyToGradleId } = await import("./page");
+    expect(repoKeyToGradleId("com.example.libs")).toBe("comExampleLibs");
+    expect(repoKeyToGradleId("snake_case_repo")).toBe("snakeCaseRepo");
+  });
+
+  it("repoKeyToGradleId strips remaining non-alphanumerics", async () => {
+    const { repoKeyToGradleId } = await import("./page");
+    expect(repoKeyToGradleId("repo@with#symbols")).toBe("repowithsymbols");
+  });
+
+  it("repoKeyToGradleId returns 'repo' for empty or all-symbol input", async () => {
+    const { repoKeyToGradleId } = await import("./page");
+    expect(repoKeyToGradleId("")).toBe("repo");
+    expect(repoKeyToGradleId("@@@")).toBe("repo");
+  });
+
+  it("Gradle credentials block uses sanitized property names", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "gradle", key: "my-jvm-repo" }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Gradle (Groovy)" }));
+    const panel = screen.getByRole("tabpanel", { name: "Gradle (Groovy)" });
+    const text = panel.textContent ?? "";
+    // Sanitized to camelCase — kebab-case property names look broken to readers.
+    expect(text).toContain("myJvmRepoUsername");
+    expect(text).toContain("myJvmRepoPassword");
+    expect(text).not.toContain("my-jvm-repoUsername");
+  });
+
+  it("URL paths still contain the raw repo key (only property names sanitize)", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "gradle", key: "my-jvm-repo" }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Gradle (Groovy)" }));
+    const panel = screen.getByRole("tabpanel", { name: "Gradle (Groovy)" });
+    const text = panel.textContent ?? "";
+    // The URL keeps the raw kebab-case key (URL paths permit hyphens).
+    expect(text).toMatch(/\/maven\/my-jvm-repo\//);
+  });
+});
