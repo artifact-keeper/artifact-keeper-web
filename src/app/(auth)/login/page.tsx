@@ -42,6 +42,23 @@ type SelectedProvider =
   | { type: "local" }
   | { type: "ldap"; id: string; name: string };
 
+// Names admins commonly leave at their default / placeholder value. When the
+// provider's display name is one of these, "Sign in with {name}" reads as
+// gibberish ("Sign in with default") — see issue #351. Match case-insensitively.
+const GENERIC_PROVIDER_NAMES = new Set(["default", "primary", "main", "sso"]);
+
+export function ssoButtonLabel(provider: SsoProvider): string {
+  const name = provider.name?.trim();
+  if (!name || GENERIC_PROVIDER_NAMES.has(name.toLowerCase())) {
+    // Generic / unconfigured name — fall back to a label that at least tells
+    // the user which protocol they're authenticating with.
+    if (provider.provider_type === "oidc") return "Sign in with SSO (OIDC)";
+    if (provider.provider_type === "saml") return "Sign in with SSO (SAML)";
+    return "Sign in with SSO";
+  }
+  return `Sign in with ${name}`;
+}
+
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -397,7 +414,7 @@ function LoginContent() {
                     }}
                   >
                     <LogIn className="size-4 mr-2" />
-                    Sign in with {provider.name}
+                    {ssoButtonLabel(provider)}
                   </Button>
                 ))}
               </div>
