@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
+import { toUserMessage } from "@/lib/error-utils";
 import { isScanIncomplete } from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
 
@@ -148,6 +149,9 @@ export default function SecurityScanDetailPage() {
       setAckFindingId(null);
       toast.success("Finding acknowledged.");
     },
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to acknowledge finding"));
+    },
   });
 
   const revokeMutation = useMutation({
@@ -160,6 +164,9 @@ export default function SecurityScanDetailPage() {
       setRevokeOpen(false);
       setRevokeFindingId(null);
       toast.success("Acknowledgment revoked.");
+    },
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to revoke acknowledgment"));
     },
   });
 

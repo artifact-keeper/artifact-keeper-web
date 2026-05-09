@@ -54,6 +54,11 @@ vi.mock("@/lib/api/service-accounts", () => ({
   },
 }));
 
+const mockToastError = vi.fn();
+vi.mock("sonner", () => ({
+  toast: { error: (...args: any[]) => mockToastError(...args) },
+}));
+
 // ---------------------------------------------------------------------------
 // Component under test (imported AFTER all vi.mock calls)
 // ---------------------------------------------------------------------------
@@ -539,6 +544,27 @@ describe("RepoSelectorForm", () => {
     await capturedMutationOpts.mutationFn(selector);
 
     expect(mockPreviewRepoSelector).toHaveBeenCalledWith(selector);
+  });
+
+  // onError surfaces the backend error via toUserMessage (#207)
+  it("surfaces backend error message in a toast when preview fails", () => {
+    mockToastError.mockClear();
+    render(<RepoSelectorForm value={{}} onChange={vi.fn()} />);
+
+    expect(capturedMutationOpts.onError).toBeDefined();
+    capturedMutationOpts.onError(new Error("backend rejected: invalid selector"));
+
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+    expect(mockToastError).toHaveBeenCalledWith("backend rejected: invalid selector");
+  });
+
+  it("falls back to the action label when the error has no message", () => {
+    mockToastError.mockClear();
+    render(<RepoSelectorForm value={{}} onChange={vi.fn()} />);
+
+    capturedMutationOpts.onError(42);
+
+    expect(mockToastError).toHaveBeenCalledWith("Failed to preview repository selector");
   });
 
   // Label merging with existing labels

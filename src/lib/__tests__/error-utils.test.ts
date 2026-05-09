@@ -57,7 +57,25 @@ describe("toUserMessage", () => {
     expect(toUserMessage({ message: "" }, FALLBACK)).toBe(FALLBACK);
   });
 
-  // ---- 5. Wrapped HTTP errors: { body: { message | error } } ----
+  // ---- 5a. FastAPI-style errors with .detail ----
+
+  it("extracts .detail string from a FastAPI-style error", () => {
+    expect(
+      toUserMessage({ detail: "plugin requires npm 18+" }, FALLBACK)
+    ).toBe("plugin requires npm 18+");
+  });
+
+  it("falls back when .detail is an empty string", () => {
+    expect(toUserMessage({ detail: "" }, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("prefers .error over .detail when both are present", () => {
+    expect(
+      toUserMessage({ error: "from error", detail: "from detail" }, FALLBACK)
+    ).toBe("from error");
+  });
+
+  // ---- 5b. Wrapped HTTP errors: { body: { message | error | detail } } ----
 
   it("extracts body.message from a wrapped HTTP error", () => {
     expect(
@@ -71,18 +89,24 @@ describe("toUserMessage", () => {
     ).toBe("Internal Server Error");
   });
 
-  it("prefers body.message over body.error", () => {
+  it("extracts body.detail from a wrapped FastAPI error", () => {
     expect(
-      toUserMessage(
-        { body: { message: "primary msg", error: "fallback msg" } },
-        FALLBACK
-      )
-    ).toBe("primary msg");
+      toUserMessage({ body: { detail: "validation failed" } }, FALLBACK)
+    ).toBe("validation failed");
   });
 
-  it("falls back when body.message and body.error are both empty", () => {
+  it("prefers body.message over body.error and body.detail", () => {
     expect(
-      toUserMessage({ body: { message: "", error: "" } }, FALLBACK)
+      toUserMessage(
+        { body: { message: "primary", error: "secondary", detail: "tertiary" } },
+        FALLBACK
+      )
+    ).toBe("primary");
+  });
+
+  it("falls back when body.message, body.error, and body.detail are all empty", () => {
+    expect(
+      toUserMessage({ body: { message: "", error: "", detail: "" } }, FALLBACK)
     ).toBe(FALLBACK);
   });
 

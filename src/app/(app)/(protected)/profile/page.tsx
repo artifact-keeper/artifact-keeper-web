@@ -85,7 +85,9 @@ export default function ProfilePage() {
       refreshUser();
       toast.success("Profile updated successfully");
     },
-    onError: () => toast.error("Failed to update profile"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update profile"));
+    },
   });
 
   const [passwordError, setPasswordError] = useState<string | null>(null);

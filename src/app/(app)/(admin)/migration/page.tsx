@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 
 import { migrationApi } from "@/lib/api/migration";
+import { toUserMessage } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
   SourceConnection,
@@ -227,7 +228,9 @@ export default function MigrationPage() {
       });
       toast.success("Connection created");
     },
-    onError: () => toast.error("Failed to create connection"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create connection"));
+    },
   });
 
   const deleteConnMutation = useMutation({
@@ -239,7 +242,9 @@ export default function MigrationPage() {
       setDeleteConnId(null);
       toast.success("Connection deleted");
     },
-    onError: () => toast.error("Failed to delete connection"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete connection"));
+    },
   });
 
   const testConnMutation = useMutation({
@@ -253,7 +258,9 @@ export default function MigrationPage() {
         toast.error(`Connection failed: ${result.message}`);
       }
     },
-    onError: () => toast.error("Failed to test connection"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to test connection"));
+    },
   });
 
   // -- Migration mutations --
@@ -270,7 +277,9 @@ export default function MigrationPage() {
       });
       toast.success("Migration job created");
     },
-    onError: () => toast.error("Failed to create migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create migration"));
+    },
   });
 
   const startMigMutation = useMutation({
@@ -280,7 +289,9 @@ export default function MigrationPage() {
       startStream(job.id);
       toast.success("Migration started");
     },
-    onError: () => toast.error("Failed to start migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to start migration"));
+    },
   });
 
   const pauseMigMutation = useMutation({
@@ -289,7 +300,9 @@ export default function MigrationPage() {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       toast.success("Migration paused");
     },
-    onError: () => toast.error("Failed to pause migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to pause migration"));
+    },
   });
 
   const resumeMigMutation = useMutation({
@@ -299,7 +312,9 @@ export default function MigrationPage() {
       startStream(job.id);
       toast.success("Migration resumed");
     },
-    onError: () => toast.error("Failed to resume migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to resume migration"));
+    },
   });
 
   const cancelMigMutation = useMutation({
@@ -308,7 +323,9 @@ export default function MigrationPage() {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       toast.success("Migration cancelled");
     },
-    onError: () => toast.error("Failed to cancel migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to cancel migration"));
+    },
   });
 
   const deleteMigMutation = useMutation({
@@ -318,7 +335,9 @@ export default function MigrationPage() {
       setDeleteMigId(null);
       toast.success("Migration deleted");
     },
-    onError: () => toast.error("Failed to delete migration"),
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete migration"));
+    },
   });
 
   // -- Connection columns --

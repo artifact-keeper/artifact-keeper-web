@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import dtApi from "@/lib/api/dependency-track";
+import { toUserMessage } from "@/lib/error-utils";
 import type {
   DtFinding,
   DtComponentFull,
@@ -127,8 +128,8 @@ function FindingTriageRow({
       queryClient.invalidateQueries({ queryKey: ["dt", "project-findings", projectUuid] });
       queryClient.invalidateQueries({ queryKey: ["dt", "project-metrics", projectUuid] });
     },
-    onError: () => {
-      toast.error("Failed to update analysis state");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update analysis state"));
     },
   });
 
@@ -462,8 +463,8 @@ export default function DtProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["dt", "project-findings", uuid] });
       queryClient.invalidateQueries({ queryKey: ["dt", "project-metrics", uuid] });
     },
-    onError: () => {
-      toast.error("Failed to update some findings");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update some findings"));
     },
   });
 

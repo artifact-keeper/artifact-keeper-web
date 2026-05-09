@@ -26,6 +26,7 @@ import {
 } from "@artifact-keeper/sdk";
 import { adminApi } from "@/lib/api/admin";
 import type { ApiKey } from "@/lib/api/profile";
+import { toUserMessage } from "@/lib/error-utils";
 import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, CreateUserResponse } from "@/types";
@@ -160,8 +161,8 @@ export default function UsersPage() {
         toast.success("User created successfully");
       }
     },
-    onError: () => {
-      toast.error("Failed to create user");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to create user"));
     },
   });
 
@@ -185,8 +186,8 @@ export default function UsersPage() {
       setEditOpen(false);
       setSelectedUser(null);
     },
-    onError: () => {
-      toast.error("Failed to update user");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update user"));
     },
   });
 
@@ -202,8 +203,8 @@ export default function UsersPage() {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
       invalidateGroup(queryClient, "users");
     },
-    onError: () => {
-      toast.error("Failed to update user status");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to update user status"));
     },
   });
 
@@ -222,8 +223,8 @@ export default function UsersPage() {
       setPasswordOpen(true);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => {
-      toast.error("Failed to reset password");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to reset password"));
     },
   });
 
@@ -238,8 +239,8 @@ export default function UsersPage() {
       setDeleteOpen(false);
       setSelectedUser(null);
     },
-    onError: () => {
-      toast.error("Failed to delete user");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to delete user"));
     },
   });
 
@@ -264,8 +265,8 @@ export default function UsersPage() {
       });
       setRevokeTokenId(null);
     },
-    onError: () => {
-      toast.error("Failed to revoke token");
+    onError: (err: unknown) => {
+      toast.error(toUserMessage(err, "Failed to revoke token"));
     },
   });
 
