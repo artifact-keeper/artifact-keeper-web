@@ -172,12 +172,17 @@ export const profileApi = {
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
     // Omit `scopes` entirely when the caller didn't pass it — the backend
     // treats `[]` and "not provided" differently for token creation.
-    const body: SdkCreateApiTokenRequest = {
+    type SdkCreateApiTokenRequestPartial = Omit<SdkCreateApiTokenRequest, 'scopes'> & {
+      scopes?: string[];
+    };
+    const body: SdkCreateApiTokenRequestPartial = {
       name: reqData.name,
       expires_in_days: reqData.expires_in_days,
       ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
     };
-    const { data, error } = await sdkCreateApiToken({ body });
+    // SDK type marks `scopes` required, but the backend treats omission as
+    // "no scopes" — we want that signal preserved when the caller didn't pass it.
+    const { data, error } = await sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest });
     if (error) throw error;
     return adaptCreateApiKey(assertData(data, 'profileApi.createApiKey'));
   },
