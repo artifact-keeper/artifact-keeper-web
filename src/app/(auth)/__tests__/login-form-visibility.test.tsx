@@ -256,4 +256,65 @@ describe("LoginPage username/password form visibility", () => {
     // OIDC button should still render alongside.
     expect(screen.getByText(/Sign in with Corp SSO/i)).toBeInTheDocument();
   });
+
+  it("shows the form when ?fallback=local is in the URL (operator escape hatch)", async () => {
+    mockListProviders.mockResolvedValue([oidcProvider]);
+    // Simulate operator hitting /login?fallback=local to recover when admin
+    // bypass is enabled but no LDAP provider is configured.
+    const originalSearch = window.location.search;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, search: "?fallback=local" },
+      writable: true,
+    });
+
+    try {
+      await renderAndWaitForProviders();
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText("Enter your username")
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.getByPlaceholderText("Enter your password")
+      ).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, search: originalSearch },
+        writable: true,
+      });
+    }
+  });
+
+  it("shows a loading indicator while SSO providers are being fetched", async () => {
+    // Hold the providers fetch open so we can observe the loading state.
+    let resolve: ((v: SsoProvider[]) => void) | null = null;
+    mockListProviders.mockReturnValueOnce(
+      new Promise<SsoProvider[]>((r) => {
+        resolve = r;
+      })
+    );
+    authState.setupRequired = false;
+
+    const { default: LoginPage } = await import("../login/page");
+    await act(async () => {
+      render(<LoginPage />);
+    });
+
+    // While loading: no form visible, loading indicator present.
+    expect(
+      screen.queryByPlaceholderText("Enter your username")
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("icon-Loader2")).toBeInTheDocument();
+
+    // Resolve and verify form decision happens after.
+    await act(async () => {
+      resolve?.([oidcProvider]);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByPlaceholderText("Enter your username")
+      ).not.toBeInTheDocument();
+    });
+  });
 });

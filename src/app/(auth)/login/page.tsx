@@ -50,12 +50,21 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [totpCode, setTotpCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>({
     type: "local",
   });
 
   useEffect(() => {
-    ssoApi.listProviders().then(setSsoProviders).catch(() => {});
+    ssoApi
+      .listProviders()
+      .then(setSsoProviders)
+      .catch(() => {
+        // Swallow the error: an unreachable SSO endpoint shouldn't block local
+        // login. providersLoaded still flips so the form can render its
+        // fail-safe state (showing the local form).
+      })
+      .finally(() => setProvidersLoaded(true));
   }, []);
 
   const ldapProviders = useMemo(
@@ -78,8 +87,22 @@ export default function LoginPage() {
   // fields don't go anywhere — see issue #350. We still surface the form
   // during first-time setup so an admin can complete the initial password
   // change with the bootstrap admin account.
+  //
+  // STOPGAP: this is a heuristic. The "admin bypass" toggle is a backend-side
+  // setting with no public flag in the SDK, so we infer from the SSO providers
+  // list (no LDAP + redirect providers exist => password fields have no
+  // consumer). If admin bypass is enabled, an operator can recover via
+  // `?fallback=local` to force the form open. Tracked to make precise once
+  // the backend exposes a public `local_auth_enabled` flag.
+  const forceLocalFallback = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("fallback") === "local";
+  }, []);
   const showLocalForm =
-    setupRequired || ldapProviders.length > 0 || redirectProviders.length === 0;
+    forceLocalFallback ||
+    setupRequired ||
+    ldapProviders.length > 0 ||
+    redirectProviders.length === 0;
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -284,7 +307,17 @@ export default function LoginPage() {
             </div>
           )}
 
-          {showLocalForm && (
+          {!providersLoaded && (
+            // While the SSO providers list is in flight we can't decide whether
+            // to render the form. A skeleton avoids the visible flicker where
+            // the form briefly renders then disappears once OIDC providers
+            // resolve.
+            <div className="flex items-center justify-center py-8" aria-busy="true">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {providersLoaded && showLocalForm && (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -343,7 +376,7 @@ export default function LoginPage() {
             </Form>
           )}
 
-          {redirectProviders.length > 0 && (
+          {providersLoaded && redirectProviders.length > 0 && (
             <>
               {showLocalForm && (
                 <div className="relative my-4">
