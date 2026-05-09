@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -42,7 +42,7 @@ type SelectedProvider =
   | { type: "local" }
   | { type: "ldap"; id: string; name: string };
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, refreshUser, setupRequired, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
@@ -95,7 +95,7 @@ export default function LoginPage() {
   // consumer). If admin bypass is enabled, an operator can recover via
   // `?fallback=local` to force the form open. Tracked to make precise once
   // the backend exposes a public `local_auth_enabled` flag.
-  const forceLocalFallback = searchParams?.get("fallback") === "local";
+  const forceLocalFallback = searchParams?.get("fallback")?.toLowerCase() === "local";
   const showLocalForm =
     forceLocalFallback ||
     setupRequired ||
@@ -311,6 +311,7 @@ export default function LoginPage() {
             // resolve.
             <div className="flex items-center justify-center py-8" aria-busy="true">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="sr-only">Loading sign-in options</span>
             </div>
           )}
 
@@ -406,5 +407,22 @@ export default function LoginPage() {
       </Card>
       )}
     </>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary for static prerendering;
+// wrap the inner content so /login can be statically generated. The fallback
+// is a brief skeleton matching the eventual loading spinner inside the form.
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8" aria-busy="true">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
