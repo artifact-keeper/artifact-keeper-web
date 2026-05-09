@@ -147,6 +147,7 @@ const validCreateConnReq = {
   name: "n",
   url: "https://x",
   auth_type: "api_token" as const,
+  source_type: "artifactory" as const,
   credentials: {},
 };
 const validCreateMigrationReq = {
@@ -168,6 +169,7 @@ describe("migrationApi", () => {
         name: "n",
         url: "https://x",
         auth_type: "api_token",
+        source_type: "artifactory",
         created_at: "2025-01-01",
         verified_at: undefined,
       },
@@ -186,6 +188,7 @@ describe("migrationApi", () => {
         name: "n",
         url: "https://x",
         auth_type: "basic_auth",
+        source_type: "artifactory",
         created_at: "2025-01-01",
         verified_at: undefined,
       },
@@ -196,6 +199,43 @@ describe("migrationApi", () => {
     mockListConnections.mockResolvedValue({ data: undefined, error: "fail" });
     const { migrationApi } = await import("../migration");
     await expect(migrationApi.listConnections()).rejects.toBe("fail");
+  });
+
+  it("listConnections preserves source_type=nexus from the SDK response", async () => {
+    mockListConnections.mockResolvedValue({
+      data: [sdkConnection({ source_type: "nexus" })],
+      error: undefined,
+    });
+    const { migrationApi } = await import("../migration");
+    const result = await migrationApi.listConnections();
+    expect(result[0].source_type).toBe("nexus");
+  });
+
+  it("listConnections defaults unknown source_type to 'artifactory'", async () => {
+    mockListConnections.mockResolvedValue({
+      data: [sdkConnection({ source_type: "future-registry" })],
+      error: undefined,
+    });
+    const { migrationApi } = await import("../migration");
+    const result = await migrationApi.listConnections();
+    expect(result[0].source_type).toBe("artifactory");
+  });
+
+  it("createConnection forwards source_type to the SDK call", async () => {
+    mockCreateConnection.mockResolvedValue({
+      data: sdkConnection({ source_type: "nexus" }),
+      error: undefined,
+    });
+    const { migrationApi } = await import("../migration");
+    await migrationApi.createConnection({
+      ...validCreateConnReq,
+      source_type: "nexus",
+    });
+    expect(mockCreateConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ source_type: "nexus" }),
+      }),
+    );
   });
 
   it("createConnection returns connection", async () => {
@@ -209,6 +249,7 @@ describe("migrationApi", () => {
       name: "n",
       url: "https://x",
       auth_type: "api_token",
+      source_type: "artifactory",
       created_at: "2025-01-01",
       verified_at: undefined,
     });
@@ -228,6 +269,7 @@ describe("migrationApi", () => {
       name: "n",
       url: "https://x",
       auth_type: "api_token",
+      source_type: "artifactory",
       created_at: "2025-01-01",
       verified_at: undefined,
     });

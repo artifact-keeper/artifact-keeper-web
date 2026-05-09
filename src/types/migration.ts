@@ -1,5 +1,9 @@
 export type AuthType = 'api_token' | 'basic_auth';
 
+// Source registry types the backend's CreateConnectionRequest accepts.
+// Per the SDK contract: "artifactory" (default) or "nexus".
+export type SourceType = 'artifactory' | 'nexus';
+
 export type MigrationJobStatus =
   | 'pending'
   | 'assessing'
@@ -34,6 +38,7 @@ export interface SourceConnection {
   name: string;
   url: string;
   auth_type: AuthType;
+  source_type: SourceType;
   created_at: string;
   verified_at?: string;
 }
@@ -42,6 +47,7 @@ export interface CreateConnectionRequest {
   name: string;
   url: string;
   auth_type: AuthType;
+  source_type: SourceType;
   credentials: ConnectionCredentials;
 }
 

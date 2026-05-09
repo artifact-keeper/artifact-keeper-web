@@ -123,6 +123,9 @@ export default function MigrationPage() {
     name: "",
     url: "",
     auth_type: "api_token" as "api_token" | "basic_auth",
+    // Default to Artifactory to preserve the prior backend default behavior;
+    // the user can switch to Nexus before submitting.
+    source_type: "artifactory" as "artifactory" | "nexus",
     username: "",
     token: "",
   });
@@ -223,6 +226,7 @@ export default function MigrationPage() {
         name: "",
         url: "",
         auth_type: "api_token",
+        source_type: "artifactory",
         username: "",
         token: "",
       });
@@ -806,6 +810,7 @@ export default function MigrationPage() {
               name: "",
               url: "",
               auth_type: "api_token",
+              source_type: "artifactory",
               username: "",
               token: "",
             });
@@ -826,6 +831,7 @@ export default function MigrationPage() {
                 name: connForm.name,
                 url: connForm.url,
                 auth_type: connForm.auth_type,
+                source_type: connForm.source_type,
                 credentials:
                   connForm.auth_type === "api_token"
                     ? { token: connForm.token }
@@ -860,6 +866,26 @@ export default function MigrationPage() {
                 placeholder="https://artifactory.example.com"
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Source Type</Label>
+              <Select
+                value={connForm.source_type}
+                onValueChange={(v) =>
+                  setConnForm((f) => ({
+                    ...f,
+                    source_type: v as "artifactory" | "nexus",
+                  }))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="artifactory">Artifactory</SelectItem>
+                  <SelectItem value="nexus">Nexus</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Authentication Type</Label>

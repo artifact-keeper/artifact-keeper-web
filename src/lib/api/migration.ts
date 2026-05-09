@@ -36,6 +36,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type {
   SourceConnection,
+  SourceType,
   CreateConnectionRequest,
   ConnectionTestResult,
   SourceRepository,
@@ -64,12 +65,21 @@ function narrowAuthType(v: string): SourceConnection['auth_type'] {
   return v === 'basic_auth' ? 'basic_auth' : 'api_token';
 }
 
+// Same approach for source_type. The backend currently accepts "artifactory"
+// (default) or "nexus"; unknown values fall back to 'artifactory' so existing
+// connections keep rendering if a new registry type is added server-side
+// before the UI is updated.
+function narrowSourceType(v: string): SourceType {
+  return v === 'nexus' ? 'nexus' : 'artifactory';
+}
+
 function adaptSourceConnection(sdk: SdkConnectionResponse): SourceConnection {
   return {
     id: sdk.id,
     name: sdk.name,
     url: sdk.url,
     auth_type: narrowAuthType(sdk.auth_type),
+    source_type: narrowSourceType(sdk.source_type),
     created_at: sdk.created_at,
     verified_at: sdk.verified_at ?? undefined,
   };
@@ -233,6 +243,7 @@ function toSdkCreateConnectionRequest(req: CreateConnectionRequest): SdkCreateCo
     name: req.name,
     url: req.url,
     auth_type: req.auth_type,
+    source_type: req.source_type,
     credentials: {
       token: req.credentials.token,
       username: req.credentials.username,
