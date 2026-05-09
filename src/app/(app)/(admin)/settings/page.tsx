@@ -99,11 +99,11 @@ function SmtpSettingsTab() {
     );
   }
 
-  if (isError || !smtpConfig) {
+  if (isError) {
     return (
       <Card>
         <CardContent className="py-6">
-          <Alert variant="destructive" data-testid="smtp-error">
+          <Alert variant="destructive">
             <AlertTitle>SMTP configuration unavailable</AlertTitle>
             <AlertDescription>
               {error instanceof Error

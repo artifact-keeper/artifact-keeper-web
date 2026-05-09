@@ -100,6 +100,25 @@ describe("settingsApi", () => {
     );
   });
 
+  it("getPasswordPolicy throws when response is not an object (#347)", async () => {
+    mockGetSettings.mockResolvedValue({ data: "not-an-object", error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
+  it("getPasswordPolicy throws on type-mismatched nested field (#347)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { password_policy: { min_length: "eight" } },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
   it("nested password_policy takes precedence over flat fields", async () => {
     mockGetSettings.mockResolvedValue({
       data: {
@@ -221,6 +240,25 @@ describe("settingsApi", () => {
     const mod = await import("../settings");
     await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
       "network error"
+    );
+  });
+
+  it("getSmtpConfig throws when response is not an object (#347)", async () => {
+    mockGetSettings.mockResolvedValue({ data: 42, error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
+  it("getSmtpConfig throws on type-mismatched nested field (#347)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { smtp_config: { port: "587" } },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /response did not match expected shape/
     );
   });
 

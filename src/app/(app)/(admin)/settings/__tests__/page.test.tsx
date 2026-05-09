@@ -444,8 +444,26 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     expect(screen.getByText("SMTP configuration unavailable")).toBeDefined();
+    // The thrown Error's message is rendered so an operator sees the
+    // actual cause (not a generic placeholder).
+    expect(
+      screen.getByText("Failed to load SMTP config: unauthorized")
+    ).toBeDefined();
     // The buggy default form placeholders must NOT render on error.
     expect(screen.queryByTestId("smtp-host")).toBeNull();
+  });
+
+  it("shows loader in SMTP tab while smtp-config is loading (#347)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "smtp-config": { data: undefined, isLoading: true, isError: false },
+    });
+
+    render(<SettingsPage />);
+
+    // Neither the form nor the error alert should render during loading.
+    expect(screen.queryByTestId("smtp-host")).toBeNull();
+    expect(screen.queryByText("SMTP configuration unavailable")).toBeNull();
   });
 
   it("renders the Email tab trigger", () => {
