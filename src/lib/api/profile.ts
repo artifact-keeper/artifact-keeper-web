@@ -160,7 +160,11 @@ export const profileApi = {
     const meData = assertData(me, 'profileApi.listApiKeys.me');
     const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
     if (error) throw error;
-    return (data?.items ?? []).map(adaptApiKey);
+    // The SDK contract is { items: ApiTokenResponse[] } — use assertData to
+    // surface a missing wrapper (empty body, network proxy strip, etc.) and
+    // tolerate a wrapper with no `items` field as an empty list.
+    const wrapper = assertData(data, 'profileApi.listApiKeys');
+    return (wrapper.items ?? []).map(adaptApiKey);
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
@@ -191,7 +195,8 @@ export const profileApi = {
     const meData = assertData(me, 'profileApi.listAccessTokens.me');
     const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
     if (error) throw error;
-    return (data?.items ?? []).map(adaptAccessToken);
+    const wrapper = assertData(data, 'profileApi.listAccessTokens');
+    return (wrapper.items ?? []).map(adaptAccessToken);
   },
 
   createAccessToken: async (

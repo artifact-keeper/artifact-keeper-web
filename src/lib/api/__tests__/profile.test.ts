@@ -196,15 +196,15 @@ describe("profileApi", () => {
     expect(result).toEqual([]);
   });
 
-  it("listApiKeys returns empty array when data is null", async () => {
+  it("listApiKeys throws when data is null (empty body)", async () => {
     const mockUser = { id: "user-1" };
     mockGetCurrentUser.mockResolvedValue({ data: mockUser, error: undefined });
     mockListUserTokens.mockResolvedValue({ data: null, error: undefined });
 
     const { profileApi } = await import("../profile");
-    const result = await profileApi.listApiKeys();
-
-    expect(result).toEqual([]);
+    await expect(profileApi.listApiKeys()).rejects.toThrow(
+      /Empty response body for profileApi\.listApiKeys/
+    );
   });
 
   it("listApiKeys throws when getCurrentUser fails", async () => {
