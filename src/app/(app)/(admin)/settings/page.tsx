@@ -82,7 +82,7 @@ function formatStorageBackend(backend: string): string {
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  const { data: smtpConfig, isLoading, dataUpdatedAt } = useQuery({
+  const { data: smtpConfig, isLoading, isError, error, dataUpdatedAt } = useQuery({
     queryKey: ["smtp-config"],
     queryFn: () => settingsApi.getSmtpConfig(),
     staleTime: 5 * 60 * 1000,
@@ -94,6 +94,23 @@ function SmtpSettingsTab() {
       <Card>
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError || !smtpConfig) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <Alert variant="destructive" data-testid="smtp-error">
+            <AlertTitle>SMTP configuration unavailable</AlertTitle>
+            <AlertDescription>
+              {error instanceof Error
+                ? error.message
+                : "Unable to load SMTP configuration from the server."}
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     );
@@ -365,7 +382,11 @@ export default function SettingsPage() {
     queryFn: () => adminApi.getHealth(),
   });
 
-  const { data: passwordPolicy } = useQuery({
+  const {
+    data: passwordPolicy,
+    isError: passwordPolicyError,
+    isLoading: passwordPolicyLoading,
+  } = useQuery({
     queryKey: ["password-policy"],
     queryFn: () => settingsApi.getPasswordPolicy(),
     staleTime: 5 * 60 * 1000,
@@ -562,7 +583,13 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Password Policy"
-                value={formatPasswordPolicy(passwordPolicy)}
+                value={
+                  passwordPolicyLoading
+                    ? "Loading..."
+                    : passwordPolicyError || !passwordPolicy
+                      ? "Unavailable"
+                      : formatPasswordPolicy(passwordPolicy)
+                }
                 description="Minimum password requirements for user accounts."
               />
             </CardContent>
