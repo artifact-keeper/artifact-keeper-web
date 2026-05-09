@@ -42,7 +42,7 @@ describe("formatBytes", () => {
   // ---- Hardening (#348) ----
   // formatBytes accepts any `number`; the original implementation produced
   // nonsense like "NaN undefined" / "Infinity undefined" / "-1 B" for
-  // pathological inputs. The hardened version returns a single sentinel "—"
+  // pathological inputs. The hardened version returns a single sentinel "--"
   // for everything that isn't a finite, non-negative byte count.
 
   it("returns the missing-value sentinel for NaN", () => {
