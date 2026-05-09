@@ -136,6 +136,14 @@ vi.mock("@/components/common/page-header", () => ({
 
 import SettingsPage from "../page";
 import type { AdminSettings, SmtpConfig } from "@/lib/api/settings";
+import { ADMIN_SETTINGS_QUERY_KEY } from "@/hooks/use-admin-settings";
+
+// Lock the mock map key to the same constant the production code uses.
+// If the queryKey ever drifts, every test that pins admin-settings would
+// silently fall back to the default-undefined mock and most assertions
+// would still pass (e.g. "all rows show Unavailable") — a real silent-
+// failure mode caught by R3 (#349).
+const ADMIN_SETTINGS_KEY = String(ADMIN_SETTINGS_QUERY_KEY[0]);
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -312,7 +320,7 @@ describe("SettingsPage", () => {
     bundle: AdminSettings = DEFAULT_ADMIN_SETTINGS
   ) {
     mockQueriesByKey({
-      "admin-settings": {
+      [ADMIN_SETTINGS_KEY]: {
         data: bundle,
         isLoading: false,
         isError: false,
@@ -381,7 +389,7 @@ describe("SettingsPage", () => {
   it("shows Loading… in Storage fields while admin-settings is loading (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "admin-settings": { data: undefined, isLoading: true, isError: false },
+      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: true, isError: false },
     });
 
     render(<SettingsPage />);
@@ -395,7 +403,7 @@ describe("SettingsPage", () => {
   it("shows Unavailable in all settings rows when admin-settings errors (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "admin-settings": { data: undefined, isLoading: false, isError: true },
+      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: false, isError: true },
     });
 
     render(<SettingsPage />);
@@ -413,7 +421,7 @@ describe("SettingsPage", () => {
   it("shows error alert in SMTP tab when admin-settings errors (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "admin-settings": {
+      [ADMIN_SETTINGS_KEY]: {
         data: undefined,
         isLoading: false,
         isError: true,
@@ -436,7 +444,7 @@ describe("SettingsPage", () => {
   it("shows loader in SMTP tab while admin-settings is loading (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "admin-settings": { data: undefined, isLoading: true, isError: false },
+      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: true, isError: false },
     });
 
     render(<SettingsPage />);

@@ -220,6 +220,14 @@ export const settingsApi = {
    *
    * Throws on SDK error. Each slice's parser may also throw if its part
    * of the response is malformed.
+   *
+   * **All-or-nothing failure**: a single slice's parse failure throws the
+   * whole bundle, so the admin Settings page renders "Unavailable" on all
+   * three tabs even when only (e.g.) SMTP is malformed. Pre-#349 each slice
+   * had its own query and could fail independently. Acceptable here because
+   * all three slices come from the same endpoint, but if per-slice fault
+   * isolation matters we can refactor this to return
+   * `{ passwordPolicy: Result<…>, … }` and let the page degrade per tab.
    */
   getAllSettings: async (): Promise<AdminSettings> => {
     const { data, error } = await getSettings();
