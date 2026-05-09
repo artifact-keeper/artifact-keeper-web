@@ -30,7 +30,7 @@ import {
   installFromGit,
   installFromZip,
 } from "@artifact-keeper/sdk";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,9 +188,7 @@ export default function PluginsPage() {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin enabled");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to enable plugin"));
-    },
+    onError: mutationErrorToast("Failed to enable plugin"),
   });
 
   const disableMutation = useMutation({
@@ -202,9 +200,7 @@ export default function PluginsPage() {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       toast.success("Plugin disabled");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to disable plugin"));
-    },
+    onError: mutationErrorToast("Failed to disable plugin"),
   });
 
   const uninstallMutation = useMutation({
@@ -217,9 +213,7 @@ export default function PluginsPage() {
       setUninstallId(null);
       toast.success("Plugin uninstalled");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to uninstall plugin"));
-    },
+    onError: mutationErrorToast("Failed to uninstall plugin"),
   });
 
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
@@ -242,9 +236,7 @@ export default function PluginsPage() {
       queryClient.invalidateQueries({ queryKey: ["plugin-config"] });
       toast.success("Configuration saved");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to save configuration"));
-    },
+    onError: mutationErrorToast("Failed to save configuration"),
   });
 
   const resetInstallForm = () => {
@@ -270,9 +262,7 @@ export default function PluginsPage() {
         `Plugin "${data?.name ?? "unknown"}" installed successfully`,
       );
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to install plugin from Git"));
-    },
+    onError: mutationErrorToast("Failed to install plugin from Git"),
   });
 
   const installZipMutation = useMutation({
@@ -293,9 +283,7 @@ export default function PluginsPage() {
         `Plugin "${data?.name ?? "unknown"}" installed successfully`,
       );
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to install plugin from ZIP"));
-    },
+    onError: mutationErrorToast("Failed to install plugin from ZIP"),
   });
 
   const isInstalling =

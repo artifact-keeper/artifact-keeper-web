@@ -17,7 +17,7 @@ import {
 import { toast } from "sonner";
 
 import { webhooksApi } from "@/lib/api/webhooks";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   Webhook as WebhookType,
   WebhookDelivery,
@@ -148,9 +148,7 @@ export default function WebhooksPage() {
       resetForm();
       toast.success("Webhook created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create webhook"));
-    },
+    onError: mutationErrorToast("Failed to create webhook"),
   });
 
   const deleteMutation = useMutation({
@@ -160,9 +158,7 @@ export default function WebhooksPage() {
       setDeleteId(null);
       toast.success("Webhook deleted");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete webhook"));
-    },
+    onError: mutationErrorToast("Failed to delete webhook"),
   });
 
   const enableMutation = useMutation({
@@ -171,9 +167,7 @@ export default function WebhooksPage() {
       queryClient.invalidateQueries({ queryKey: ["webhooks"] });
       toast.success("Webhook enabled");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to enable webhook"));
-    },
+    onError: mutationErrorToast("Failed to enable webhook"),
   });
 
   const disableMutation = useMutation({
@@ -182,9 +176,7 @@ export default function WebhooksPage() {
       queryClient.invalidateQueries({ queryKey: ["webhooks"] });
       toast.success("Webhook disabled");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to disable webhook"));
-    },
+    onError: mutationErrorToast("Failed to disable webhook"),
   });
 
   const testMutation = useMutation({
@@ -199,9 +191,7 @@ export default function WebhooksPage() {
       }
       queryClient.invalidateQueries({ queryKey: ["webhook-deliveries"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to send test"));
-    },
+    onError: mutationErrorToast("Failed to send test"),
   });
 
   const redeliverMutation = useMutation({
@@ -216,9 +206,7 @@ export default function WebhooksPage() {
       toast.success("Redelivery sent");
       queryClient.invalidateQueries({ queryKey: ["webhook-deliveries"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to redeliver"));
-    },
+    onError: mutationErrorToast("Failed to redeliver"),
   });
 
   const resetForm = () => {

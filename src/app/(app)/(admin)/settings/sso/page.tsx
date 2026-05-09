@@ -20,7 +20,7 @@ import {
 
 import { useAuth } from "@/providers/auth-provider";
 import { ssoApi } from "@/lib/api/sso";
-import { toUserMessage } from "@/lib/error-utils";
+import { toUserMessage, mutationErrorToast } from "@/lib/error-utils";
 import type {
   OidcConfig,
   LdapConfig,
@@ -103,9 +103,7 @@ function OidcTab() {
       toast.success("OIDC provider created successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create OIDC provider"));
-    },
+    onError: mutationErrorToast("Failed to create OIDC provider"),
   });
 
   const updateMutation = useMutation({
@@ -116,9 +114,7 @@ function OidcTab() {
       toast.success("OIDC provider updated successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update OIDC provider"));
-    },
+    onError: mutationErrorToast("Failed to update OIDC provider"),
   });
 
   const deleteMutation = useMutation({
@@ -128,9 +124,7 @@ function OidcTab() {
       toast.success("OIDC provider deleted");
       setDeleteTarget(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete OIDC provider"));
-    },
+    onError: mutationErrorToast("Failed to delete OIDC provider"),
   });
 
   const toggleMutation = useMutation({
@@ -140,9 +134,7 @@ function OidcTab() {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("OIDC provider status updated");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle OIDC provider"));
-    },
+    onError: mutationErrorToast("Failed to toggle OIDC provider"),
   });
 
   function resetForm() {
@@ -554,9 +546,7 @@ function LdapTab() {
       toast.success("LDAP provider created successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create LDAP provider"));
-    },
+    onError: mutationErrorToast("Failed to create LDAP provider"),
   });
 
   const updateMutation = useMutation({
@@ -567,9 +557,7 @@ function LdapTab() {
       toast.success("LDAP provider updated successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update LDAP provider"));
-    },
+    onError: mutationErrorToast("Failed to update LDAP provider"),
   });
 
   const deleteMutation = useMutation({
@@ -579,9 +567,7 @@ function LdapTab() {
       toast.success("LDAP provider deleted");
       setDeleteTarget(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete LDAP provider"));
-    },
+    onError: mutationErrorToast("Failed to delete LDAP provider"),
   });
 
   const toggleMutation = useMutation({
@@ -591,9 +577,7 @@ function LdapTab() {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("LDAP provider status updated");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle LDAP provider"));
-    },
+    onError: mutationErrorToast("Failed to toggle LDAP provider"),
   });
 
   const testMutation = useMutation({
@@ -1095,9 +1079,7 @@ function SamlTab() {
       toast.success("SAML provider created successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create SAML provider"));
-    },
+    onError: mutationErrorToast("Failed to create SAML provider"),
   });
 
   const updateMutation = useMutation({
@@ -1108,9 +1090,7 @@ function SamlTab() {
       toast.success("SAML provider updated successfully");
       closeDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update SAML provider"));
-    },
+    onError: mutationErrorToast("Failed to update SAML provider"),
   });
 
   const deleteMutation = useMutation({
@@ -1120,9 +1100,7 @@ function SamlTab() {
       toast.success("SAML provider deleted");
       setDeleteTarget(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete SAML provider"));
-    },
+    onError: mutationErrorToast("Failed to delete SAML provider"),
   });
 
   const toggleMutation = useMutation({
@@ -1132,9 +1110,7 @@ function SamlTab() {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
       toast.success("SAML provider status updated");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle SAML provider"));
-    },
+    onError: mutationErrorToast("Failed to toggle SAML provider"),
   });
 
   function resetForm() {

@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   ServiceAccount,
   ServiceAccountToken,
@@ -146,9 +146,7 @@ export default function ServiceAccountsPage() {
       setCreateDescription("");
       toast.success("Service account created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create service account"));
-    },
+    onError: mutationErrorToast("Failed to create service account"),
   });
 
   const updateMutation = useMutation({
@@ -167,9 +165,7 @@ export default function ServiceAccountsPage() {
       setEditAccount(null);
       toast.success("Service account updated");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update service account"));
-    },
+    onError: mutationErrorToast("Failed to update service account"),
   });
 
   const deleteMutation = useMutation({
@@ -180,9 +176,7 @@ export default function ServiceAccountsPage() {
       setDeleteAccount(null);
       toast.success("Service account deleted");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete service account"));
-    },
+    onError: mutationErrorToast("Failed to delete service account"),
   });
 
   const createTokenMutation = useMutation({
@@ -200,9 +194,7 @@ export default function ServiceAccountsPage() {
       setTokenRepoSelector({});
       toast.success("Token created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create token"));
-    },
+    onError: mutationErrorToast("Failed to create token"),
   });
 
   const revokeTokenMutation = useMutation({
@@ -216,9 +208,7 @@ export default function ServiceAccountsPage() {
       setRevokeTokenId(null);
       toast.success("Token revoked");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to revoke token"));
-    },
+    onError: mutationErrorToast("Failed to revoke token"),
   });
 
   // Handlers

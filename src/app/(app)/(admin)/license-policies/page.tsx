@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import type {
   LicensePolicy,
@@ -121,9 +121,7 @@ export default function LicensePoliciesPage() {
       setForm(EMPTY_FORM);
       toast.success(selectedPolicy ? "Policy updated" : "Policy created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to save policy"));
-    },
+    onError: mutationErrorToast("Failed to save policy"),
   });
 
   const deleteMutation = useMutation({
@@ -134,9 +132,7 @@ export default function LicensePoliciesPage() {
       setSelectedPolicy(null);
       toast.success("Policy deleted");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete policy"));
-    },
+    onError: mutationErrorToast("Failed to delete policy"),
   });
 
   const toggleMutation = useMutation({
@@ -155,9 +151,7 @@ export default function LicensePoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["license-policies"] });
       toast.success(`Policy ${policy.is_enabled ? "disabled" : "enabled"}`);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to toggle policy"));
-    },
+    onError: mutationErrorToast("Failed to toggle policy"),
   });
 
   // -- handlers --

@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
 
@@ -132,9 +132,7 @@ function SmtpSettingsForm({
       queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
       setFormDirty(false);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to save SMTP configuration"));
-    },
+    onError: mutationErrorToast("Failed to save SMTP configuration"),
   });
 
   const testMutation = useMutation({
@@ -146,9 +144,7 @@ function SmtpSettingsForm({
         toast.error(result.message || "Test email failed");
       }
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to send test email"));
-    },
+    onError: mutationErrorToast("Failed to send test email"),
   });
 
   function handleFieldChange<T>(setter: (v: T) => void) {

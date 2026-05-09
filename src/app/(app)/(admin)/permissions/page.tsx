@@ -16,7 +16,7 @@ import type {
 import { groupsApi } from "@/lib/api/groups";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { adminApi } from "@/lib/api/admin";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, Repository } from "@/types";
 import type { Group } from "@/types/groups";
@@ -166,9 +166,7 @@ export default function PermissionsPage() {
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create permission"));
-    },
+    onError: mutationErrorToast("Failed to create permission"),
   });
 
   const updateMutation = useMutation({
@@ -185,9 +183,7 @@ export default function PermissionsPage() {
       setEditOpen(false);
       setSelectedPermission(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update permission"));
-    },
+    onError: mutationErrorToast("Failed to update permission"),
   });
 
   const deleteMutation = useMutation({
@@ -198,9 +194,7 @@ export default function PermissionsPage() {
       setDeleteOpen(false);
       setSelectedPermission(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete permission"));
-    },
+    onError: mutationErrorToast("Failed to delete permission"),
   });
 
   // -- handlers --

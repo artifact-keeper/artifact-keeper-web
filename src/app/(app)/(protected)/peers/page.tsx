@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance } from "@/lib/api/replication";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes, isSafeUrl } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -123,9 +123,7 @@ export default function PeersPage() {
       setForm({ name: "", endpoint_url: "", region: "", api_key: "" });
       toast.success("Peer registered successfully");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to register peer"));
-    },
+    onError: mutationErrorToast("Failed to register peer"),
   });
 
   const unregisterMutation = useMutation({
@@ -135,9 +133,7 @@ export default function PeersPage() {
       setDeleteId(null);
       toast.success("Peer unregistered");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to unregister peer"));
-    },
+    onError: mutationErrorToast("Failed to unregister peer"),
   });
 
   const syncMutation = useMutation({
@@ -146,9 +142,7 @@ export default function PeersPage() {
       queryClient.invalidateQueries({ queryKey: ["peers"] });
       toast.success("Sync triggered");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to trigger sync"));
-    },
+    onError: mutationErrorToast("Failed to trigger sync"),
   });
 
   // -- columns --

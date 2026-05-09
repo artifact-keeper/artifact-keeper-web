@@ -22,7 +22,7 @@ import {
 import { repositoriesApi } from "@/lib/api/repositories";
 import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { isActivelyQuarantined } from "@/lib/quarantine";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
@@ -144,9 +144,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       setSelectedArtifact(null);
       toast.success("Artifact deleted");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete artifact"));
-    },
+    onError: mutationErrorToast("Failed to delete artifact"),
   });
 
   const scanArtifactMutation = useMutation({
@@ -155,9 +153,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onSuccess: (res) => {
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to trigger scan"));
-    },
+    onError: mutationErrorToast("Failed to trigger scan"),
   });
 
   const scanRepoMutation = useMutation({
@@ -166,9 +162,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onSuccess: (res) => {
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to trigger scan"));
-    },
+    onError: mutationErrorToast("Failed to trigger scan"),
   });
 
   const updateSecurityMutation = useMutation({
@@ -179,9 +173,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       setSecForm(null); // reset to refetched defaults
       toast.success("Security settings saved");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to save security settings"));
-    },
+    onError: mutationErrorToast("Failed to save security settings"),
   });
 
   // --- handlers ---

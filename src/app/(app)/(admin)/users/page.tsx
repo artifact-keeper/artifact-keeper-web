@@ -26,7 +26,7 @@ import {
 } from "@artifact-keeper/sdk";
 import { adminApi } from "@/lib/api/admin";
 import type { ApiKey } from "@/lib/api/profile";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { invalidateGroup } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, CreateUserResponse } from "@/types";
@@ -161,9 +161,7 @@ export default function UsersPage() {
         toast.success("User created successfully");
       }
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create user"));
-    },
+    onError: mutationErrorToast("Failed to create user"),
   });
 
   const updateMutation = useMutation({
@@ -186,9 +184,7 @@ export default function UsersPage() {
       setEditOpen(false);
       setSelectedUser(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update user"));
-    },
+    onError: mutationErrorToast("Failed to update user"),
   });
 
   const toggleStatusMutation = useMutation({
@@ -203,9 +199,7 @@ export default function UsersPage() {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
       invalidateGroup(queryClient, "users");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update user status"));
-    },
+    onError: mutationErrorToast("Failed to update user status"),
   });
 
   const resetPasswordMutation = useMutation({
@@ -223,9 +217,7 @@ export default function UsersPage() {
       setPasswordOpen(true);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to reset password"));
-    },
+    onError: mutationErrorToast("Failed to reset password"),
   });
 
   const deleteMutation = useMutation({
@@ -239,9 +231,7 @@ export default function UsersPage() {
       setDeleteOpen(false);
       setSelectedUser(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete user"));
-    },
+    onError: mutationErrorToast("Failed to delete user"),
   });
 
   // -- user tokens query (for the selected user) --
@@ -265,9 +255,7 @@ export default function UsersPage() {
       });
       setRevokeTokenId(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to revoke token"));
-    },
+    onError: mutationErrorToast("Failed to revoke token"),
   });
 
   // -- handlers --
