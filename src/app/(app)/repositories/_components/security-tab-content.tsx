@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import sbomApi from "@/lib/api/sbom";
 import securityApi from "@/lib/api/security";
 import dtApi from "@/lib/api/dependency-track";
+import { useAuth } from "@/providers/auth-provider";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { ScanResult } from "@/types/security";
@@ -124,6 +125,8 @@ function resolveDtProjectUuid(
 
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = isAuthenticated && (user?.is_admin ?? false);
   const [page, setPage] = useState(1);
   const [dtFindingsPage, setDtFindingsPage] = useState(1);
 
@@ -139,16 +142,21 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   // -------------------------------------------------------------------------
   // Per-artifact scan results (scan_results / scan_findings tables)
   // -------------------------------------------------------------------------
-  // These are distinct from `cve-history` (SBOM-derived) and Dependency-Track
-  // findings. They surface results from the in-tree scanners (image_scanner,
-  // package_scanner) that write into `scan_results`. Without this query the
-  // per-artifact Security tab silently omits the most direct data point a
-  // user looks for: "what did the scanner find for THIS artifact?"
-  const { data: artifactScansResp } = useQuery({
+  // Distinct from `cve-history` (SBOM-derived) and Dependency-Track findings.
+  // Surfaces results from in-tree scanners (image_scanner, package_scanner)
+  // that write into `scan_results`.
+  const {
+    data: artifactScansResp,
+    isLoading: artifactScansLoading,
+    isError: artifactScansError,
+  } = useQuery({
     queryKey: ["artifact-scans", artifact.id],
     queryFn: () => securityApi.listArtifactScans(artifact.id, { per_page: 25 }),
+    staleTime: 60_000,
+    retry: false,
   });
   const artifactScans: ScanResult[] = artifactScansResp?.items ?? [];
+  const artifactScansTotal = artifactScansResp?.total ?? artifactScans.length;
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ cveId, status, reason }: { cveId: string; status: CveStatus; reason?: string }) =>
@@ -613,7 +621,13 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       {/* Image / Package Scans (in-tree scanner results) */}
       {/* ----------------------------------------------------------------- */}
       <Separator />
-      <ArtifactScansSection scans={artifactScans} />
+      <ArtifactScansSection
+        scans={artifactScans}
+        total={artifactScansTotal}
+        isLoading={artifactScansLoading}
+        isError={artifactScansError}
+        isAdmin={isAdmin}
+      />
 
       {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Findings Section */}
@@ -719,20 +733,52 @@ const SCAN_STATUS_BADGE: Record<string, string> = {
   error: "text-red-600 bg-red-100 dark:bg-red-950/40",
 };
 
-function ArtifactScansSection({ scans }: { scans: ScanResult[] }) {
+function ArtifactScansSection({
+  scans,
+  total,
+  isLoading,
+  isError,
+  isAdmin,
+}: {
+  scans: ScanResult[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+  isAdmin: boolean;
+}) {
+  // The detail route /security/scans/[id] lives under the (admin) route group.
+  // Showing the link to non-admins would render a click-target that 403s.
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Bug className="size-5 text-muted-foreground" />
         <h3 className="text-sm font-medium">Image / Package Scans</h3>
-        {scans.length > 0 && (
+        {!isLoading && !isError && total > 0 && (
           <Badge variant="secondary" className="text-xs">
-            {scans.length} total
+            {total} total
           </Badge>
         )}
       </div>
 
-      {scans.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : isError ? (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
+          <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+              Could not load scan results
+            </p>
+            <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+              The scan service is unreachable or returned an error. Retry by
+              reloading the page; scans already on disk are unaffected.
+            </p>
+          </div>
+        </div>
+      ) : scans.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <ShieldCheck className="size-10 text-muted-foreground/50 mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -786,13 +832,22 @@ function ArtifactScansSection({ scans }: { scans: ScanResult[] }) {
                   )}
                 </p>
               </div>
-              <Link
-                href={`/security/scans/${s.id}`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
-              >
-                View details
-                <ExternalLink className="size-3" />
-              </Link>
+              {isAdmin ? (
+                <Link
+                  href={`/security/scans/${s.id}`}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                >
+                  View details
+                  <ExternalLink className="size-3" />
+                </Link>
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground shrink-0"
+                  title="Scan details are visible to administrators"
+                >
+                  Admin only
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -100,6 +100,10 @@ vi.mock("@/providers/auth-provider", () => ({
 
 vi.mock("@/lib/error-utils", () => ({
   toUserMessage: (_e: unknown, fallback: string) => fallback,
+  mutationErrorToast: (label: string) => () => {
+    /* swallow */
+    void label;
+  },
 }));
 
 // DataTable stub — invokes each column's `cell` renderer for each row so the
