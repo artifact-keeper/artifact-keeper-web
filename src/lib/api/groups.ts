@@ -72,16 +72,20 @@ export const groupsApi = {
 
   update: async (groupId: string, input: Partial<CreateGroupRequest>): Promise<Group> => {
     // SDK updateGroup requires the full CreateGroupRequest (with `name`); the
-    // existing API exposes Partial<> for compatibility with callers that only
-    // change description. Coerce missing name to '' — the backend ignores it
-    // when not present in the original schema. Pages that pass name-less
-    // updates rely on this and break under stricter typing — leave behavior
-    // unchanged for this refactor.
-    const body: CreateGroupRequest = {
-      name: input.name ?? '',
-      description: input.description,
+    // existing API exposes Partial<> for description-only updates. Build a
+    // body type that allows omitting `name` — sending '' would overwrite the
+    // group name to blank — then cast at the SDK boundary.
+    type UpdateGroupBodyPartial = Omit<CreateGroupRequest, 'name'> & { name?: string };
+    const body: UpdateGroupBodyPartial = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
     };
-    const { data, error } = await updateGroup({ path: { id: groupId }, body });
+    // SDK marks `name` required for PUT, but the backend treats omission as
+    // "leave unchanged" — we want that semantic for description-only edits.
+    const { data, error } = await updateGroup({
+      path: { id: groupId },
+      body: body as CreateGroupRequest,
+    });
     if (error) throw error;
     return adaptGroup(assertData(data, 'groupsApi.update'));
   },
