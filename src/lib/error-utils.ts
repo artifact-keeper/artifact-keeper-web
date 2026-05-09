@@ -67,7 +67,32 @@ export function isAccountLocked(error: unknown): boolean {
 }
 
 /**
+ * Extract an HTTP status code from common error shapes (`error.status`,
+ * `error.statusCode`, or `error.body.status`). Returns undefined when no
+ * usable status is present. Restricted to standard HTTP status range
+ * (100-599) so a stray `status: "active"` field doesn't pollute the prefix.
+ */
+function extractHttpStatus(error: Record<string, unknown>): number | undefined {
+  const candidates: unknown[] = [error.status, error.statusCode];
+  if (isPlainObject(error.body)) {
+    candidates.push(error.body.status, error.body.statusCode);
+  }
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && candidate >= 100 && candidate < 600) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Extract a human-readable message from an unknown thrown value.
+ *
+ * When the error carries an HTTP status (e.g. `error.status === 409`) but
+ * no useful body message, the fallback is prefixed with `(HTTP <status>)` so
+ * a 409 Conflict reads differently from a 500 Internal Server Error in
+ * toast text. If the backend already supplied a message, that message is
+ * shown verbatim (no double-decoration). See #355.
  *
  * @param error  - The caught value (could be anything)
  * @param fallback - Fallback message when the error shape is unrecognized
@@ -110,6 +135,13 @@ export function toUserMessage(error: unknown, fallback: string): string {
 
     const bodyDetail = nonEmptyString(error.body.detail);
     if (bodyDetail) return bodyDetail;
+  }
+
+  // No useful body message — prefix the fallback with the HTTP status when
+  // we can determine one, so different errors don't render identically.
+  const status = extractHttpStatus(error);
+  if (status !== undefined) {
+    return `(HTTP ${status}) ${fallback}`;
   }
 
   return fallback;

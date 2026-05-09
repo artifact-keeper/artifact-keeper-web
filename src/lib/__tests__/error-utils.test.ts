@@ -167,6 +167,48 @@ describe("toUserMessage", () => {
   it("returns fallback for an array", () => {
     expect(toUserMessage(["something"], FALLBACK)).toBe(FALLBACK);
   });
+
+  // ---- 8. HTTP status prefix on fallback (#355) ----
+  // When the body has no useful message but the error carries an HTTP status,
+  // prefix the fallback with "(HTTP <status>)" so a 409 Conflict reads
+  // differently from a 500 Internal Server Error in toast text.
+
+  it("prepends HTTP status to fallback when error.status is present", () => {
+    expect(toUserMessage({ status: 500 }, FALLBACK)).toBe(`(HTTP 500) ${FALLBACK}`);
+  });
+
+  it("prepends HTTP status to fallback when error.statusCode is present", () => {
+    expect(toUserMessage({ statusCode: 503 }, FALLBACK)).toBe(`(HTTP 503) ${FALLBACK}`);
+  });
+
+  it("prepends HTTP status to fallback when error.body.status is present", () => {
+    expect(toUserMessage({ body: { status: 409 } }, FALLBACK)).toBe(`(HTTP 409) ${FALLBACK}`);
+  });
+
+  it("does NOT prepend status when backend gave a useful message", () => {
+    // Even if status is present, prefer the backend's message verbatim.
+    expect(
+      toUserMessage({ status: 409, error: "Permission already exists" }, FALLBACK)
+    ).toBe("Permission already exists");
+  });
+
+  it("does NOT prepend status to a plain string error", () => {
+    // Plain strings already came from somewhere with context; don't decorate.
+    expect(toUserMessage("Disk full", FALLBACK)).toBe("Disk full");
+  });
+
+  it("does NOT prepend status when status is non-numeric or out of range", () => {
+    expect(toUserMessage({ status: "oops" }, FALLBACK)).toBe(FALLBACK);
+    expect(toUserMessage({ status: 99 }, FALLBACK)).toBe(FALLBACK);
+    expect(toUserMessage({ status: 600 }, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it("does NOT prepend status for AbortError", () => {
+    // AbortError has no useful HTTP status; treat as plain Error.
+    const err = new Error("The operation was aborted.");
+    err.name = "AbortError";
+    expect(toUserMessage(err, FALLBACK)).toBe("The operation was aborted.");
+  });
 });
 
 describe("isAccountLocked", () => {
