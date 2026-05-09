@@ -3,6 +3,10 @@ import type {
   ServiceHealthEntry,
   AlertState,
 } from "@/types/monitoring";
+import type {
+  ServiceHealthEntry as SdkServiceHealthEntry,
+  AlertState as SdkAlertState,
+} from "@artifact-keeper/sdk";
 
 vi.mock("@/lib/sdk-client", () => ({}));
 
@@ -18,7 +22,9 @@ vi.mock("@artifact-keeper/sdk", () => ({
   runHealthCheck: (...args: unknown[]) => mockRunHealthCheck(...args),
 }));
 
-const SDK_HEALTH_ENTRY = {
+// Typed as the SDK type so a future schema drift breaks the fixture at
+// typecheck rather than silently shipping stale shape coverage (R1 #359).
+const SDK_HEALTH_ENTRY: SdkServiceHealthEntry = {
   service_name: "db",
   status: "ok",
   previous_status: "degraded",
@@ -36,7 +42,7 @@ const EXPECTED_HEALTH_ENTRY: ServiceHealthEntry = {
   checked_at: "2026-05-01T00:00:00Z",
 };
 
-const SDK_ALERT_STATE = {
+const SDK_ALERT_STATE: SdkAlertState = {
   service_name: "db",
   current_status: "down",
   consecutive_failures: 3,
@@ -156,5 +162,11 @@ describe("monitoringApi", () => {
     mockRunHealthCheck.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../monitoring");
     await expect(mod.default.triggerCheck()).rejects.toBe("fail");
+  });
+
+  it("getHealthLog throws Empty response body when SDK returns no data (#359)", async () => {
+    mockGetHealthLog.mockResolvedValue({ data: undefined, error: undefined });
+    const mod = await import("../monitoring");
+    await expect(mod.default.getHealthLog()).rejects.toThrow(/Empty response body/);
   });
 });

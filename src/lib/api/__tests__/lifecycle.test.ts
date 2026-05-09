@@ -3,6 +3,10 @@ import type {
   LifecyclePolicy,
   PolicyExecutionResult,
 } from "@/types/lifecycle";
+import type {
+  LifecyclePolicy as SdkLifecyclePolicy,
+  PolicyExecutionResult as SdkPolicyExecutionResult,
+} from "@artifact-keeper/sdk";
 
 vi.mock("@/lib/sdk-client", () => ({}));
 
@@ -28,7 +32,10 @@ vi.mock("@artifact-keeper/sdk", () => ({
 
 // Realistic SDK fixture with all fields populated; the adapter must
 // pass these through with optional+nullable fields normalized to null.
-const SDK_POLICY = {
+// Typed as SdkLifecyclePolicy so a future SDK schema drift (new required
+// field) breaks the fixture at typecheck rather than silently shipping
+// stale shape coverage (R1 #359).
+const SDK_POLICY: SdkLifecyclePolicy = {
   id: "p1",
   repository_id: "repo-a",
   name: "cleanup",
@@ -58,7 +65,7 @@ const EXPECTED_POLICY: LifecyclePolicy = {
   updated_at: "2026-05-01T00:00:00Z",
 };
 
-const SDK_EXECUTION_RESULT = {
+const SDK_EXECUTION_RESULT: SdkPolicyExecutionResult = {
   policy_id: "p1",
   policy_name: "cleanup",
   dry_run: false,
@@ -137,6 +144,32 @@ describe("lifecycleApi", () => {
     ).toEqual(EXPECTED_POLICY);
   });
 
+  it("create forwards local body shape to SDK (#359)", async () => {
+    // Locks the adapter contract: even though the SDK declares the body
+    // type as security-policy CreatePolicyRequest (an SDK type leak), the
+    // wire payload must be the local lifecycle CreateLifecyclePolicyRequest.
+    mockCreate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
+    const mod = await import("../lifecycle");
+    await mod.default.create({
+      name: "cleanup",
+      policy_type: "max_age_days",
+      config: { days: 30 },
+      repository_id: "repo-a",
+      description: "test",
+      priority: 50,
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      body: {
+        name: "cleanup",
+        policy_type: "max_age_days",
+        config: { days: 30 },
+        repository_id: "repo-a",
+        description: "test",
+        priority: 50,
+      },
+    });
+  });
+
   it("create throws on error", async () => {
     mockCreate.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
@@ -161,6 +194,25 @@ describe("lifecycleApi", () => {
     mockUpdate.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
     await expect(mod.default.update("p1", {})).rejects.toBe("fail");
+  });
+
+  it("get throws Empty response body when SDK returns success with no data (#359)", async () => {
+    // Pre-#359 the `data as never` would have silently returned undefined.
+    // Post-#359 assertData flips that into a thrown error so the failure is
+    // observable instead of propagating undefined into rendering code.
+    mockGet.mockResolvedValue({ data: undefined, error: undefined });
+    const mod = await import("../lifecycle");
+    await expect(mod.default.get("p1")).rejects.toThrow(/Empty response body/);
+  });
+
+  it("execute returns result with non-empty errors array (#359)", async () => {
+    mockExecute.mockResolvedValue({
+      data: { ...SDK_EXECUTION_RESULT, errors: ["disk full", "permission denied"] },
+      error: undefined,
+    });
+    const mod = await import("../lifecycle");
+    const out = await mod.default.execute("p1");
+    expect(out.errors).toEqual(["disk full", "permission denied"]);
   });
 
   it("delete calls SDK", async () => {
