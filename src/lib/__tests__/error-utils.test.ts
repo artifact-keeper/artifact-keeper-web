@@ -209,6 +209,47 @@ describe("toUserMessage", () => {
     err.name = "AbortError";
     expect(toUserMessage(err, FALLBACK)).toBe("The operation was aborted.");
   });
+
+  // ---- 9. Truncation of overlong messages (#356) ----
+  // Backends can return 50KB stack traces or HTML 500 pages; rendering them
+  // verbatim in a toast produces a wall of text. Cap at 240 characters with
+  // an ellipsis + truncated-count suffix so the toast stays readable.
+
+  it("returns short messages unchanged", () => {
+    const short = "x".repeat(240);
+    expect(toUserMessage(short, FALLBACK)).toBe(short);
+  });
+
+  it("truncates messages longer than the cap", () => {
+    const long = "x".repeat(500);
+    const out = toUserMessage(long, FALLBACK);
+    expect(out.length).toBeLessThan(long.length);
+    expect(out.endsWith("…")).toBe(true);
+    // The truncated-count suffix carries the number of characters dropped.
+    expect(out).toContain("260 more");
+  });
+
+  it("truncates a long Error.message", () => {
+    const err = new Error("y".repeat(1000));
+    const out = toUserMessage(err, FALLBACK);
+    expect(out.length).toBeLessThan(1000);
+    expect(out).toContain("…");
+    expect(out).toContain("more");
+  });
+
+  it("truncates a long body.message but does not crash", () => {
+    const huge = "z".repeat(50_000);
+    const out = toUserMessage({ body: { message: huge } }, FALLBACK);
+    // Cap is 240 + suffix; total length should be well under 320.
+    expect(out.length).toBeLessThan(320);
+    expect(out).toContain("…");
+  });
+
+  it("does NOT truncate the fallback string itself", () => {
+    // The fallback labels are author-controlled; trust them.
+    const longFallback = "Long deliberate fallback ".repeat(20);
+    expect(toUserMessage(undefined, longFallback)).toBe(longFallback);
+  });
 });
 
 describe("isAccountLocked", () => {
