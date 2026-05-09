@@ -236,7 +236,7 @@ export default function MonitoringPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSuppressTarget(alert)}
-                        title="Suppress alerts"
+                        aria-label={`Suppress alerts for ${alert.service_name}`}
                       >
                         <BellOff className="size-4" />
                       </Button>
@@ -383,8 +383,9 @@ export default function MonitoringPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label>Suppress for (hours)</Label>
+            <Label htmlFor="suppress-hours">Suppress for (hours)</Label>
             <Input
+              id="suppress-hours"
               type="number"
               min={1}
               max={168}

@@ -123,14 +123,14 @@ describe("FileViewer", () => {
     // Formatted size (2 KB)
     expect(screen.getByText("2 KB")).toBeInTheDocument();
     // Download link
-    const downloadLink = screen.getByTitle("Download");
+    const downloadLink = screen.getByRole("link", { name: /download .+/i });
     expect(downloadLink).toBeInTheDocument();
     expect(downloadLink).toHaveAttribute(
       "href",
       "/api/v1/repositories/my-repo/download/src/index.js"
     );
     // Close button
-    expect(screen.getByTitle("Close")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /close file viewer/i })).toBeInTheDocument();
   });
 
   // ---- Loading state ----
@@ -249,7 +249,7 @@ describe("FileViewer", () => {
     const { props } = renderFileViewer();
     const user = userEvent.setup();
 
-    await user.click(screen.getByTitle("Close"));
+    await user.click(screen.getByRole("button", { name: /close file viewer/i }));
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -264,7 +264,7 @@ describe("FileViewer", () => {
       fileName: "index.js",
     });
 
-    const downloadLink = screen.getByTitle("Download");
+    const downloadLink = screen.getByRole("link", { name: /download .+/i });
     expect(downloadLink.tagName).toBe("A");
     expect(downloadLink).toHaveAttribute(
       "href",

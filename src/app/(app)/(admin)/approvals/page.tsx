@@ -365,6 +365,7 @@ export default function ApprovalsPage() {
           <Button
             variant="outline"
             size="icon"
+            aria-label="Refresh approvals"
             onClick={() =>
               queryClient.invalidateQueries({ queryKey: ["approvals"] })
             }

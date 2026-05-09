@@ -290,7 +290,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} OIDC provider ${config.name}`}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -308,6 +308,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label={`Edit OIDC provider ${config.name}`}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -316,6 +317,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label={`Delete OIDC provider ${config.name}`}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -414,12 +416,13 @@ function OidcTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Auto Create Users</Label>
+                <Label htmlFor="oidc-auto-create-users">Auto Create Users</Label>
                 <p className="text-xs text-muted-foreground">
                   Automatically create user accounts on first login.
                 </p>
               </div>
               <Switch
+                id="oidc-auto-create-users"
                 checked={autoCreateUsers}
                 onCheckedChange={setAutoCreateUsers}
               />
@@ -768,7 +771,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title="Test Connection"
+                          aria-label={`Test LDAP connection ${config.name}`}
                           disabled={testingId === config.id}
                           onClick={() => testMutation.mutate(config.id)}
                         >
@@ -782,7 +785,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} LDAP provider ${config.name}`}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -800,6 +803,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label={`Edit LDAP provider ${config.name}`}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -808,6 +812,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label={`Delete LDAP provider ${config.name}`}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -916,12 +921,12 @@ function LdapTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Use STARTTLS</Label>
+                <Label htmlFor="ldap-use-starttls">Use STARTTLS</Label>
                 <p className="text-xs text-muted-foreground">
                   Upgrade the connection to TLS after connecting.
                 </p>
               </div>
-              <Switch checked={useStarttls} onCheckedChange={setUseStarttls} />
+              <Switch id="ldap-use-starttls" checked={useStarttls} onCheckedChange={setUseStarttls} />
             </div>
 
             <Separator />
@@ -1283,7 +1288,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          title={config.is_enabled ? "Disable" : "Enable"}
+                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} SAML provider ${config.name}`}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -1301,6 +1306,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label={`Edit SAML provider ${config.name}`}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -1309,6 +1315,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label={`Delete SAML provider ${config.name}`}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -1440,22 +1447,23 @@ function SamlTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Sign Requests</Label>
+                <Label htmlFor="saml-sign-requests">Sign Requests</Label>
                 <p className="text-xs text-muted-foreground">
                   Sign authentication requests sent to the IdP.
                 </p>
               </div>
-              <Switch checked={signRequests} onCheckedChange={setSignRequests} />
+              <Switch id="saml-sign-requests" checked={signRequests} onCheckedChange={setSignRequests} />
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Require Signed Assertions</Label>
+                <Label htmlFor="saml-require-signed-assertions">Require Signed Assertions</Label>
                 <p className="text-xs text-muted-foreground">
                   Require the IdP to sign SAML assertions.
                 </p>
               </div>
               <Switch
+                id="saml-require-signed-assertions"
                 checked={requireSignedAssertions}
                 onCheckedChange={setRequireSignedAssertions}
               />
