@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import sbomApi from "@/lib/api/sbom";
 import dtApi from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
+import { ArtifactScansSection } from "./artifact-scans-section";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -589,6 +590,13 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
           />
         </>
       )}
+
+      {/* Native scan_findings (#368) — pre-#368 the per-artifact Security
+          tab never queried scan_findings, so a user who triggered a scan
+          had to navigate to /security/scans to find it. Mounting the
+          dedicated section here makes the tab a true single-pane-of-glass. */}
+      <Separator />
+      <ArtifactScansSection artifactId={artifact.id} />
 
       {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Findings Section */}
