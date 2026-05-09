@@ -70,7 +70,7 @@ function narrowAuthType(v: string): SourceConnection['auth_type'] {
 // type is added server-side before the UI is updated.
 const SOURCE_TYPES: ReadonlySet<SourceType> = new Set(['artifactory', 'nexus']);
 function narrowSourceType(v: string): SourceType {
-  return narrowEnum<SourceType>(v, SOURCE_TYPES, 'artifactory');
+  return narrowEnum<SourceType>(v, SOURCE_TYPES, 'artifactory', 'unknown source_type');
 }
 
 function adaptSourceConnection(sdk: SdkConnectionResponse): SourceConnection {
