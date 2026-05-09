@@ -151,7 +151,15 @@ describe("permissionsApi", () => {
   it("update throws on error", async () => {
     mockUpdatePermission.mockResolvedValue({ data: undefined, error: "fail" });
     const { permissionsApi } = await import("../permissions");
-    await expect(permissionsApi.update("perm1", {})).rejects.toBe("fail");
+    await expect(
+      permissionsApi.update("perm1", {
+        principal_type: "user",
+        principal_id: "u1",
+        target_type: "repository",
+        target_id: "r1",
+        actions: ["read"],
+      })
+    ).rejects.toBe("fail");
   });
 
   it("delete calls SDK", async () => {
