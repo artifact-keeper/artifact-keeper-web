@@ -45,11 +45,26 @@ function narrowStatus(v: string): BuildStatus {
 // SDK BuildModule: { id, name, artifacts: BuildArtifact[] }
 // Local BuildModule: { id, build_id, module_name, name, path, checksum_sha256,
 // size_bytes, created_at }. The SDK shape is a parent record holding its
-// artifacts; the local shape was modeled per-artifact-row. For now flatten
-// SDK BuildModule into a single local BuildModule per group, taking the first
-// artifact for the leaf fields. Pages that iterate per-artifact need to use
-// `modules[i].artifacts` directly via the SDK type — that's a follow-up.
+// artifacts; the local shape was modeled per-artifact-row.
+//
+// INTENTIONAL LOSS: this adapter collapses an N-artifact SDK module to a
+// single local BuildModule by keeping only `artifacts[0]`. Pages that need
+// per-artifact data should consume the SDK shape directly via
+// `BuildResponse.modules[i].artifacts`. Pending: rework the local BuildModule
+// type to carry an `artifacts` array so the collapse can be removed (#206
+// follow-up).
+//
+// While the local type still drops siblings, log a warning when a module
+// arrives with multiple artifacts so the regression is observable rather
+// than silent.
 function adaptBuildModule(sdk: SdkBuildModule, buildId: string): BuildModule {
+  if (sdk.artifacts.length > 1) {
+    console.warn(
+      `buildsApi: collapsing SDK BuildModule "${sdk.name}" (${sdk.artifacts.length} artifacts) ` +
+        `to a single local BuildModule entry — extra artifacts are dropped. ` +
+        `Pages that need full per-artifact data must consume modules[i].artifacts directly.`
+    );
+  }
   const first = sdk.artifacts[0];
   return {
     id: sdk.id,

@@ -137,4 +137,25 @@ describe("buildsApi", () => {
     const { buildsApi } = await import("../builds");
     await expect(buildsApi.diff("b1", "b2")).rejects.toBe("fail");
   });
+
+  it("warns when adaptBuildModule collapses a multi-artifact module", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const moduleWithTwoArtifacts = {
+      id: "mod1",
+      name: "mod-a",
+      artifacts: [
+        { name: "a1", path: "/a1", checksum_sha256: "sha-a1", size_bytes: 10 },
+        { name: "a2", path: "/a2", checksum_sha256: "sha-a2", size_bytes: 20 },
+      ],
+    };
+    mockGetBuild.mockResolvedValue({
+      data: buildFixture({ modules: [moduleWithTwoArtifacts] }),
+      error: undefined,
+    });
+    const { buildsApi } = await import("../builds");
+    const result = await buildsApi.get("b1");
+    expect(result.modules?.[0].name).toBe("a1");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/collapsing SDK BuildModule/));
+    warn.mockRestore();
+  });
 });
