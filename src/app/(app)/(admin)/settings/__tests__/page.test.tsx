@@ -135,6 +135,7 @@ vi.mock("@/components/common/page-header", () => ({
 // ---------------------------------------------------------------------------
 
 import SettingsPage from "../page";
+import type { SmtpConfig } from "@/lib/api/settings";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -276,6 +277,35 @@ describe("SettingsPage", () => {
     });
   }
 
+  // Default SMTP data for tests that exercise the form (not the error/loading
+  // state). After #347, getSmtpConfig throws on load failure rather than
+  // silently falling back to defaults, so the page now renders an error
+  // state when smtp-config is undefined — tests that want the form must
+  // supply concrete data. Typed as SmtpConfig so a future schema change
+  // (new required field) breaks this fixture rather than silently rendering
+  // stale shapes — the `useQuery: (opts: any)` mock would otherwise hide
+  // shape drift entirely (R3 finding, #347).
+  const DEFAULT_SMTP_DATA: SmtpConfig = {
+    host: "",
+    port: 587,
+    username: "",
+    password: "",
+    from_address: "",
+    tls_mode: "starttls",
+  };
+  function mockSmtpForm(
+    overrides: Record<string, ReturnType<typeof mockUseQuery>> = {}
+  ) {
+    mockQueriesByKey({
+      "smtp-config": {
+        data: DEFAULT_SMTP_DATA,
+        isLoading: false,
+        isError: false,
+      },
+      ...overrides,
+    });
+  }
+
   it("populates Storage fields from loaded settings", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
@@ -360,6 +390,21 @@ describe("SettingsPage", () => {
   it("shows Unavailable in Storage fields when the query errors", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
+      // Pin password-policy to a real value so the only Unavailable rows
+      // counted below come from storage. Password policy gets its own
+      // assertion in the next test (#347).
+      "password-policy": {
+        data: {
+          min_length: 8,
+          require_uppercase: true,
+          require_lowercase: true,
+          require_digit: true,
+          require_special: false,
+          history_count: 5,
+        },
+        isLoading: false,
+        isError: false,
+      },
       "storage-settings": { data: undefined, isLoading: false, isError: true },
     });
 
@@ -375,6 +420,70 @@ describe("SettingsPage", () => {
     expect(inputs.find((i) => i.value === "/data/artifacts")).toBeUndefined();
   });
 
+  it("shows Unavailable in Password Policy when the query errors (#347)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    // Pin storage-settings to a successful response so the only Unavailable
+    // row counted below comes from password-policy. Without this pin,
+    // storage rows would also render Unavailable (3 of them) and the
+    // assertion below would pass even if the password-policy logic were
+    // broken — a load-bearing-by-accident test (caught by R3, #347).
+    mockQueriesByKey({
+      "password-policy": { data: undefined, isLoading: false, isError: true },
+      "storage-settings": {
+        data: {
+          storage_backend: "filesystem",
+          storage_path: "/data/storage",
+          max_upload_size_bytes: 1_073_741_824,
+        },
+        isLoading: false,
+        isError: false,
+      },
+    });
+
+    render(<SettingsPage />);
+
+    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
+    const unavailableInputs = inputs.filter((i) => i.value === "Unavailable");
+    // Exactly one Unavailable row — the password policy.
+    expect(unavailableInputs.length).toBe(1);
+  });
+
+  it("shows error alert in SMTP tab when the query errors (#347)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "smtp-config": {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error("Failed to load SMTP config: unauthorized"),
+      },
+    });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("SMTP configuration unavailable")).toBeDefined();
+    // The thrown Error's message is rendered so an operator sees the
+    // actual cause (not a generic placeholder).
+    expect(
+      screen.getByText("Failed to load SMTP config: unauthorized")
+    ).toBeDefined();
+    // The buggy default form placeholders must NOT render on error.
+    expect(screen.queryByTestId("smtp-host")).toBeNull();
+  });
+
+  it("shows loader in SMTP tab while smtp-config is loading (#347)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      "smtp-config": { data: undefined, isLoading: true, isError: false },
+    });
+
+    render(<SettingsPage />);
+
+    // Neither the form nor the error alert should render during loading.
+    expect(screen.queryByTestId("smtp-host")).toBeNull();
+    expect(screen.queryByText("SMTP configuration unavailable")).toBeNull();
+  });
+
   it("renders the Email tab trigger", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
 
@@ -385,7 +494,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP Configuration heading", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -394,7 +503,7 @@ describe("SettingsPage", () => {
 
   it("renders Send Test Email heading", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -405,7 +514,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP form fields with placeholders", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -454,7 +563,7 @@ describe("SettingsPage", () => {
 
   it("disables Save button when form is not dirty", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -464,7 +573,7 @@ describe("SettingsPage", () => {
 
   it("enables Save button after editing a field", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -479,7 +588,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -506,7 +615,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -534,7 +643,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for empty host on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -549,7 +658,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for empty from address on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -564,7 +673,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for invalid port on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -583,7 +692,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for non-numeric port on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -605,7 +714,7 @@ describe("SettingsPage", () => {
     // Both mutations use the same mutate so we can verify calls regardless of order
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -624,7 +733,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error when sending test email without recipient", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -639,7 +748,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP field labels", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -653,7 +762,7 @@ describe("SettingsPage", () => {
 
   it("renders the test recipient input", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -666,7 +775,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -693,7 +802,7 @@ describe("SettingsPage", () => {
 
   it("password field is type=password", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -703,7 +812,7 @@ describe("SettingsPage", () => {
 
   it("renders TLS mode options", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -715,7 +824,7 @@ describe("SettingsPage", () => {
   it("disables Save button when mutation is pending", () => {
     mockUseMutation.mockReturnValue(createMutationMock({ isPending: true }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 
@@ -733,7 +842,7 @@ describe("SettingsPage", () => {
       return createMutationMock();
     });
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockUseQuery.mockReturnValue({ data: undefined, isLoading: false });
+    mockSmtpForm();
 
     render(<SettingsPage />);
 

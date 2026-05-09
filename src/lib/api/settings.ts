@@ -82,28 +82,24 @@ const PasswordPolicyExtSchema = z
   })
   .passthrough();
 
+// Shared shape for both `smtp_config` and `smtp` (the backend uses two
+// different keys for the same payload depending on version). Defining it
+// once avoids drift between the two branches when fields are added.
+const SmtpFieldsSchema = z
+  .object({
+    host: z.string().optional(),
+    port: z.number().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    from_address: z.string().optional(),
+    tls_mode: z.string().optional(),
+  })
+  .optional();
+
 const SmtpExtSchema = z
   .object({
-    smtp_config: z
-      .object({
-        host: z.string().optional(),
-        port: z.number().optional(),
-        username: z.string().optional(),
-        password: z.string().optional(),
-        from_address: z.string().optional(),
-        tls_mode: z.string().optional(),
-      })
-      .optional(),
-    smtp: z
-      .object({
-        host: z.string().optional(),
-        port: z.number().optional(),
-        username: z.string().optional(),
-        password: z.string().optional(),
-        from_address: z.string().optional(),
-        tls_mode: z.string().optional(),
-      })
-      .optional(),
+    smtp_config: SmtpFieldsSchema,
+    smtp: SmtpFieldsSchema,
     smtp_host: z.string().optional(),
     smtp_port: z.number().optional(),
     smtp_username: z.string().optional(),
@@ -159,81 +155,90 @@ export const settingsApi = {
   /**
    * Fetch the password policy from system settings.
    *
-   * The /api/v1/admin/settings endpoint returns a SystemSettings object.
-   * The backend may include password_policy fields in the response even
-   * though the current SDK type definition doesn't declare them. We
-   * extract those fields if present and merge with defaults.
+   * Throws on SDK error or unparseable response. Callers (the admin
+   * Settings page) are expected to surface the error state to the UI;
+   * silently returning defaults would hide a backend outage and render
+   * plausible-looking placeholder values, which is the failure mode
+   * #334 was filed to fix. The "merge server fields with defaults"
+   * behaviour is preserved for the success path because the SDK type
+   * doesn't model password_policy fields yet (some are optional).
    */
   getPasswordPolicy: async (): Promise<PasswordPolicy> => {
-    try {
-      const { data, error } = await getSettings();
-      if (error) return DEFAULT_PASSWORD_POLICY;
-
-      const parsed = PasswordPolicyExtSchema.safeParse(data);
-      if (!parsed.success) return DEFAULT_PASSWORD_POLICY;
-      const ext = parsed.data;
-      const serverPolicy = ext.password_policy ?? {};
-
-      return {
-        min_length:
-          serverPolicy.min_length ??
-          ext.password_min_length ??
-          DEFAULT_PASSWORD_POLICY.min_length,
-        require_uppercase:
-          serverPolicy.require_uppercase ?? DEFAULT_PASSWORD_POLICY.require_uppercase,
-        require_lowercase:
-          serverPolicy.require_lowercase ?? DEFAULT_PASSWORD_POLICY.require_lowercase,
-        require_digit:
-          serverPolicy.require_digit ?? DEFAULT_PASSWORD_POLICY.require_digit,
-        require_special:
-          serverPolicy.require_special ?? DEFAULT_PASSWORD_POLICY.require_special,
-        history_count:
-          serverPolicy.history_count ??
-          ext.password_history_count ??
-          DEFAULT_PASSWORD_POLICY.history_count,
-      };
-    } catch {
-      return DEFAULT_PASSWORD_POLICY;
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load password policy: ${String(error)}`);
     }
+
+    const parsed = PasswordPolicyExtSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new Error(
+        `Failed to load password policy: response did not match expected shape`
+      );
+    }
+    const ext = parsed.data;
+    const serverPolicy = ext.password_policy ?? {};
+
+    return {
+      min_length:
+        serverPolicy.min_length ??
+        ext.password_min_length ??
+        DEFAULT_PASSWORD_POLICY.min_length,
+      require_uppercase:
+        serverPolicy.require_uppercase ?? DEFAULT_PASSWORD_POLICY.require_uppercase,
+      require_lowercase:
+        serverPolicy.require_lowercase ?? DEFAULT_PASSWORD_POLICY.require_lowercase,
+      require_digit:
+        serverPolicy.require_digit ?? DEFAULT_PASSWORD_POLICY.require_digit,
+      require_special:
+        serverPolicy.require_special ?? DEFAULT_PASSWORD_POLICY.require_special,
+      history_count:
+        serverPolicy.history_count ??
+        ext.password_history_count ??
+        DEFAULT_PASSWORD_POLICY.history_count,
+    };
   },
 
   /**
    * Fetch the SMTP configuration from system settings.
    *
-   * The backend includes SMTP fields in the /api/v1/admin/settings response
-   * but the SDK type definition does not yet declare them. We extract the
-   * smtp_config object (or individual smtp_* fields) from the raw response
-   * and merge with defaults.
+   * Throws on SDK error or unparseable response. The SMTP tab handles
+   * the error state explicitly (see #347); silently returning defaults
+   * would surface a blank form that looked like "no SMTP configured"
+   * even when the backend was unreachable. The default-merge behaviour
+   * is preserved for the success path because the SDK type doesn't
+   * model the smtp_config / smtp_* fields yet.
    */
   getSmtpConfig: async (): Promise<SmtpConfig> => {
-    try {
-      const { data, error } = await getSettings();
-      if (error) return DEFAULT_SMTP_CONFIG;
-
-      const parsed = SmtpExtSchema.safeParse(data);
-      if (!parsed.success) return DEFAULT_SMTP_CONFIG;
-      const ext = parsed.data;
-      const serverSmtp = ext.smtp_config ?? ext.smtp ?? {};
-
-      return {
-        host: serverSmtp.host ?? ext.smtp_host ?? DEFAULT_SMTP_CONFIG.host,
-        port: serverSmtp.port ?? ext.smtp_port ?? DEFAULT_SMTP_CONFIG.port,
-        username:
-          serverSmtp.username ?? ext.smtp_username ?? DEFAULT_SMTP_CONFIG.username,
-        password: serverSmtp.password ?? DEFAULT_SMTP_CONFIG.password,
-        from_address:
-          serverSmtp.from_address ??
-          ext.smtp_from_address ??
-          DEFAULT_SMTP_CONFIG.from_address,
-        tls_mode: isValidTlsMode(serverSmtp.tls_mode)
-          ? serverSmtp.tls_mode
-          : isValidTlsMode(ext.smtp_tls_mode)
-            ? ext.smtp_tls_mode
-            : DEFAULT_SMTP_CONFIG.tls_mode,
-      };
-    } catch {
-      return DEFAULT_SMTP_CONFIG;
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load SMTP config: ${String(error)}`);
     }
+
+    const parsed = SmtpExtSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new Error(
+        `Failed to load SMTP config: response did not match expected shape`
+      );
+    }
+    const ext = parsed.data;
+    const serverSmtp = ext.smtp_config ?? ext.smtp ?? {};
+
+    return {
+      host: serverSmtp.host ?? ext.smtp_host ?? DEFAULT_SMTP_CONFIG.host,
+      port: serverSmtp.port ?? ext.smtp_port ?? DEFAULT_SMTP_CONFIG.port,
+      username:
+        serverSmtp.username ?? ext.smtp_username ?? DEFAULT_SMTP_CONFIG.username,
+      password: serverSmtp.password ?? DEFAULT_SMTP_CONFIG.password,
+      from_address:
+        serverSmtp.from_address ??
+        ext.smtp_from_address ??
+        DEFAULT_SMTP_CONFIG.from_address,
+      tls_mode: isValidTlsMode(serverSmtp.tls_mode)
+        ? serverSmtp.tls_mode
+        : isValidTlsMode(ext.smtp_tls_mode)
+          ? ext.smtp_tls_mode
+          : DEFAULT_SMTP_CONFIG.tls_mode,
+    };
   },
 
   /**
