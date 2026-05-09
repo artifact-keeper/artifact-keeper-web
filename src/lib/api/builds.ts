@@ -53,7 +53,11 @@ const BUILD_STATUSES = new Set<BuildStatus>([
 // While the local type still drops siblings, log a warning when a module
 // arrives with multiple artifacts so the regression is observable rather
 // than silent.
-function adaptBuildModule(sdk: SdkBuildModule, buildId: string): BuildModule {
+function adaptBuildModule(
+  sdk: SdkBuildModule,
+  buildId: string,
+  buildCreatedAt: string,
+): BuildModule {
   if (sdk.artifacts.length > 1) {
     console.warn(
       `buildsApi: collapsing SDK BuildModule "${sdk.name}" (${sdk.artifacts.length} artifacts) ` +
@@ -70,7 +74,11 @@ function adaptBuildModule(sdk: SdkBuildModule, buildId: string): BuildModule {
     path: first?.path ?? '',
     checksum_sha256: first?.checksum_sha256 ?? '',
     size_bytes: first?.size_bytes ?? 0,
-    created_at: '',
+    // SDK's BuildModule has no per-module timestamp. Falling back to the parent
+    // build's created_at gives the UI a valid date to render (vs '' which
+    // produces "Invalid Date"). Modules are scoped to a build so this is a
+    // reasonable approximation until the SDK exposes a real field.
+    created_at: buildCreatedAt,
   };
 }
 
@@ -87,7 +95,9 @@ function adaptBuild(sdk: BuildResponse): Build {
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
     artifact_count: sdk.artifact_count ?? undefined,
-    modules: sdk.modules ? sdk.modules.map((m) => adaptBuildModule(m, sdk.id)) : undefined,
+    modules: sdk.modules
+      ? sdk.modules.map((m) => adaptBuildModule(m, sdk.id, sdk.created_at))
+      : undefined,
     vcs_url: sdk.vcs_url ?? undefined,
     vcs_revision: sdk.vcs_revision ?? undefined,
     vcs_branch: sdk.vcs_branch ?? undefined,
