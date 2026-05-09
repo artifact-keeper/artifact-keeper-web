@@ -45,21 +45,21 @@ describe("formatBytes", () => {
   // pathological inputs. The hardened version returns a single sentinel "—"
   // for everything that isn't a finite, non-negative byte count.
 
-  it("returns the em-dash sentinel for NaN", () => {
-    expect(formatBytes(NaN)).toBe("—");
+  it("returns the missing-value sentinel for NaN", () => {
+    expect(formatBytes(NaN)).toBe("--");
   });
 
-  it("returns the em-dash sentinel for Infinity", () => {
-    expect(formatBytes(Infinity)).toBe("—");
+  it("returns the missing-value sentinel for Infinity", () => {
+    expect(formatBytes(Infinity)).toBe("--");
   });
 
-  it("returns the em-dash sentinel for -Infinity", () => {
-    expect(formatBytes(-Infinity)).toBe("—");
+  it("returns the missing-value sentinel for -Infinity", () => {
+    expect(formatBytes(-Infinity)).toBe("--");
   });
 
-  it("returns the em-dash sentinel for negative byte counts", () => {
-    expect(formatBytes(-1)).toBe("—");
-    expect(formatBytes(-1024)).toBe("—");
+  it("returns the missing-value sentinel for negative byte counts", () => {
+    expect(formatBytes(-1)).toBe("--");
+    expect(formatBytes(-1024)).toBe("--");
   });
 
   it("formats multi-petabyte values without overflowing the unit table", () => {

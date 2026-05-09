@@ -8,14 +8,16 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Format a byte count into a human-readable string (e.g. "1.5 MB").
  *
- * Returns "—" (em dash) for non-finite or negative inputs (NaN, Infinity,
- * -Infinity, negative numbers) so a misbehaving backend can't render
- * "NaN undefined" or similar in a settings panel — see #348.
+ * Returns "--" for non-finite or negative inputs (NaN, Infinity, -Infinity,
+ * negative numbers) so a misbehaving backend can't render "NaN undefined" or
+ * similar in a settings panel — see #348. Matches the missing-data sentinel
+ * already in use across the package/search rendering paths.
  */
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+const MISSING_VALUE_SENTINEL = "--";
 
 export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  if (!Number.isFinite(bytes) || bytes < 0) return MISSING_VALUE_SENTINEL;
   if (bytes === 0) return "0 B";
   const k = 1024;
   const rawIndex = Math.floor(Math.log(bytes) / Math.log(k));
