@@ -255,19 +255,41 @@ function toSdkCreateMigrationRequest(req: CreateMigrationRequest): SdkCreateMigr
 
 // SDK declares list endpoints as `Array<T>`, but historically some deployments
 // returned `{ items: [...] }`. Honor both shapes; treat anything else as empty.
+// Warn on unrecognized non-null/undefined shapes so a backend regression is
+// observable instead of silently producing an empty list.
 function coerceItemsArray<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw as T[];
-  return (raw as { items?: T[] } | null | undefined)?.items ?? [];
+  if (raw == null) return [];
+  const wrapped = raw as { items?: T[] };
+  if (Array.isArray(wrapped.items)) return wrapped.items;
+  console.warn(
+    `[migration] coerceItemsArray: expected array or { items: [] }, got ${typeof raw} ` +
+      `— treating as empty. The backend may have changed its response shape.`,
+  );
+  return [];
 }
 
 // Some paginated endpoints surface either a bare array or a `{ items, pagination }`
 // wrapper. Synthesize a single-page pagination block when the response is bare.
+//
+// CAVEAT: when the backend returns a bare array, we have no way to know whether
+// it's the full result or page-1-of-many. We optimistically synthesize
+// `total_pages: 1` and `total: items.length`, which is correct for endpoints
+// that return everything in one shot and incorrect for paged endpoints that
+// elided the wrapper. UI consumers that depend on accurate `total` for
+// "load more" pagination should pass an explicit `{ items, pagination }` from
+// the backend rather than relying on this synthesis.
 function coercePaginated<TSdk, TLocal>(
   raw: unknown,
   adapt: (sdk: TSdk) => TLocal,
 ): PaginatedResponse<TLocal> {
   if (Array.isArray(raw)) {
     const items = (raw as TSdk[]).map(adapt);
+    console.warn(
+      `[migration] coercePaginated: synthesizing pagination for bare-array response ` +
+        `(${items.length} items). UIs that rely on accurate total/total_pages will ` +
+        `not see additional pages — backend should return { items, pagination }.`,
+    );
     return {
       items,
       pagination: { page: 1, per_page: items.length, total: items.length, total_pages: 1 },
