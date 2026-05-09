@@ -6,7 +6,14 @@ import {
   updatePermission,
   deletePermission,
 } from '@artifact-keeper/sdk';
+import type {
+  PermissionResponse,
+  PermissionListResponse,
+  CreatedPermissionRow,
+  CreatePermissionRequest as SdkCreatePermissionRequest,
+} from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
+import { assertData } from '@/lib/api/fetch';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
 export type PermissionTargetType = 'repository' | 'group' | 'artifact';
@@ -42,35 +49,91 @@ export interface ListPermissionsParams {
   target_id?: string;
 }
 
+const PRINCIPAL_TYPES = new Set<PermissionPrincipalType>(['user', 'group']);
+const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'artifact']);
+const ACTIONS = new Set<PermissionAction>(['read', 'write', 'delete', 'admin']);
+
+function narrowPrincipal(v: string): PermissionPrincipalType {
+  return PRINCIPAL_TYPES.has(v as PermissionPrincipalType)
+    ? (v as PermissionPrincipalType)
+    : 'user';
+}
+function narrowTarget(v: string): PermissionTargetType {
+  return TARGET_TYPES.has(v as PermissionTargetType)
+    ? (v as PermissionTargetType)
+    : 'repository';
+}
+function narrowActions(actions: string[]): PermissionAction[] {
+  return actions.filter((a): a is PermissionAction => ACTIONS.has(a as PermissionAction));
+}
+
+function adaptPermission(sdk: PermissionResponse | CreatedPermissionRow): Permission {
+  const created_at = sdk.created_at;
+  // CreatedPermissionRow lacks updated_at and *_name fields; default updated_at
+  // to created_at and leave name fields undefined.
+  const updated_at = 'updated_at' in sdk ? sdk.updated_at : created_at;
+  const principal_name = 'principal_name' in sdk ? (sdk.principal_name ?? undefined) : undefined;
+  const target_name = 'target_name' in sdk ? (sdk.target_name ?? undefined) : undefined;
+  return {
+    id: sdk.id,
+    principal_type: narrowPrincipal(sdk.principal_type),
+    principal_id: sdk.principal_id,
+    principal_name,
+    target_type: narrowTarget(sdk.target_type),
+    target_id: sdk.target_id,
+    target_name,
+    actions: narrowActions(sdk.actions),
+    created_at,
+    updated_at,
+  };
+}
+
+function adaptPermissionList(sdk: PermissionListResponse): PaginatedResponse<Permission> {
+  return {
+    items: sdk.items.map(adaptPermission),
+    pagination: sdk.pagination,
+  };
+}
+
+function toSdkRequest(req: CreatePermissionRequest): SdkCreatePermissionRequest {
+  return {
+    principal_type: req.principal_type,
+    principal_id: req.principal_id,
+    target_type: req.target_type,
+    target_id: req.target_id,
+    actions: req.actions,
+  };
+}
+
 export const permissionsApi = {
   list: async (params: ListPermissionsParams = {}): Promise<PaginatedResponse<Permission>> => {
-    const { data, error } = await listPermissions({ query: params as never });
+    const { data, error } = await listPermissions({ query: params });
     if (error) throw error;
-    return data as unknown as PaginatedResponse<Permission>;
+    return adaptPermissionList(assertData(data, 'permissionsApi.list'));
   },
 
   get: async (permissionId: string): Promise<Permission> => {
     const { data, error } = await getPermission({ path: { id: permissionId } });
     if (error) throw error;
-    return data as unknown as Permission;
+    return adaptPermission(assertData(data, 'permissionsApi.get'));
   },
 
-  create: async (data: CreatePermissionRequest): Promise<Permission> => {
-    const { data: result, error } = await createPermission({ body: data as never });
+  create: async (input: CreatePermissionRequest): Promise<Permission> => {
+    const { data, error } = await createPermission({ body: toSdkRequest(input) });
     if (error) throw error;
-    return result as unknown as Permission;
+    return adaptPermission(assertData(data, 'permissionsApi.create'));
   },
 
   update: async (
     permissionId: string,
-    data: CreatePermissionRequest
+    input: CreatePermissionRequest
   ): Promise<Permission> => {
-    const { data: result, error } = await updatePermission({
+    const { data, error } = await updatePermission({
       path: { id: permissionId },
-      body: data as never,
+      body: toSdkRequest(input),
     });
     if (error) throw error;
-    return result as unknown as Permission;
+    return adaptPermission(assertData(data, 'permissionsApi.update'));
   },
 
   delete: async (permissionId: string): Promise<void> => {
