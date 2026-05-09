@@ -38,6 +38,49 @@ describe("formatBytes", () => {
     // 1.23 MB
     expect(formatBytes(1289748)).toBe("1.23 MB");
   });
+
+  // ---- Hardening (#348) ----
+  // formatBytes accepts any `number`; the original implementation produced
+  // nonsense like "NaN undefined" / "Infinity undefined" / "-1 B" for
+  // pathological inputs. The hardened version returns a single sentinel "--"
+  // for everything that isn't a finite, non-negative byte count.
+
+  it("returns the missing-value sentinel for NaN", () => {
+    expect(formatBytes(NaN)).toBe("--");
+  });
+
+  it("returns the missing-value sentinel for Infinity", () => {
+    expect(formatBytes(Infinity)).toBe("--");
+  });
+
+  it("returns the missing-value sentinel for -Infinity", () => {
+    expect(formatBytes(-Infinity)).toBe("--");
+  });
+
+  it("returns the missing-value sentinel for negative byte counts", () => {
+    expect(formatBytes(-1)).toBe("--");
+    expect(formatBytes(-1024)).toBe("--");
+  });
+
+  it("formats multi-petabyte values without overflowing the unit table", () => {
+    // 1 PB = 1024^5. Original units stop at TB; values larger than ~1 PB
+    // would index off the end of the array and render "X undefined".
+    // The hardened version clamps the unit index so very large values still
+    // render as TB.
+    expect(formatBytes(1125899906842624)).toBe("1024 TB");
+  });
+
+  it("handles non-integer byte counts", () => {
+    // Real backends sometimes report fractional bytes (e.g. averages).
+    expect(formatBytes(1024.5)).toBe("1 KB");
+  });
+
+  it("handles sub-byte fractional values without overflowing the unit table", () => {
+    // 0 < bytes < 1 produces a negative rawIndex; the clamp must floor it
+    // at 0 (B) so we don't index off the front of the units table.
+    expect(formatBytes(0.5)).toBe("0.5 B");
+    expect(formatBytes(0.1)).toBe("0.1 B");
+  });
 });
 
 describe("formatDate", () => {
