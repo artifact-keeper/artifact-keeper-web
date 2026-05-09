@@ -868,7 +868,7 @@ export default function MigrationPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Source Type</Label>
+              <Label htmlFor="conn-source-type">Source Type</Label>
               <Select
                 value={connForm.source_type}
                 onValueChange={(v) =>
@@ -878,7 +878,7 @@ export default function MigrationPage() {
                   }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="conn-source-type" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
