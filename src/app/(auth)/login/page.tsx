@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,20 +42,30 @@ type SelectedProvider =
   | { type: "local" }
   | { type: "ldap"; id: string; name: string };
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, refreshUser, setupRequired, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [accountLocked, setAccountLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [totpCode, setTotpCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>({
     type: "local",
   });
 
   useEffect(() => {
-    ssoApi.listProviders().then(setSsoProviders).catch(() => {});
+    ssoApi
+      .listProviders()
+      .then(setSsoProviders)
+      .catch(() => {
+        // Swallow the error: an unreachable SSO endpoint shouldn't block local
+        // login. providersLoaded still flips so the form can render its
+        // fail-safe state (showing the local form).
+      })
+      .finally(() => setProvidersLoaded(true));
   }, []);
 
   const ldapProviders = useMemo(
@@ -70,6 +80,27 @@ export default function LoginPage() {
       ),
     [ssoProviders]
   );
+
+  // The local username/password form is consumed by either local password
+  // login (the built-in admin account / "admin bypass") or LDAP. When the
+  // admin has configured an SSO provider that is button-driven (OIDC/SAML)
+  // and no LDAP provider exists, showing the form is misleading because the
+  // fields don't go anywhere — see issue #350. We still surface the form
+  // during first-time setup so an admin can complete the initial password
+  // change with the bootstrap admin account.
+  //
+  // STOPGAP: this is a heuristic. The "admin bypass" toggle is a backend-side
+  // setting with no public flag in the SDK, so we infer from the SSO providers
+  // list (no LDAP + redirect providers exist => password fields have no
+  // consumer). If admin bypass is enabled, an operator can recover via
+  // `?fallback=local` to force the form open. Tracked to make precise once
+  // the backend exposes a public `local_auth_enabled` flag.
+  const forceLocalFallback = searchParams?.get("fallback")?.toLowerCase() === "local";
+  const showLocalForm =
+    forceLocalFallback ||
+    setupRequired ||
+    ldapProviders.length > 0 ||
+    redirectProviders.length === 0;
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -107,11 +138,10 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
+      // accountLocked and error were both reset above; only set the branch we hit.
       if (isAccountLocked(err)) {
         setAccountLocked(true);
-        setError(null);
       } else {
-        setAccountLocked(false);
         setError(toUserMessage(err, "Login failed. Please check your credentials."));
       }
     } finally {
@@ -274,71 +304,86 @@ export default function LoginPage() {
             </div>
           )}
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="username"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Username</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="Enter your username"
-                        autoComplete="username"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder="Enter your password"
-                        autoComplete="current-password"
-                        disabled={isLoading}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-            </form>
-          </Form>
+          {!providersLoaded && (
+            // While the SSO providers list is in flight we can't decide whether
+            // to render the form. A skeleton avoids the visible flicker where
+            // the form briefly renders then disappears once OIDC providers
+            // resolve.
+            <div className="flex items-center justify-center py-8" aria-busy="true">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <span className="sr-only">Loading sign-in options</span>
+            </div>
+          )}
 
-          {redirectProviders.length > 0 && (
+          {providersLoaded && showLocalForm && (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Enter your username"
+                          autoComplete="username"
+                          disabled={isLoading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="Enter your password"
+                          autoComplete="current-password"
+                          disabled={isLoading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
+                </Button>
+              </form>
+            </Form>
+          )}
+
+          {providersLoaded && redirectProviders.length > 0 && (
             <>
-              <div className="relative my-4">
-                <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                  or continue with
-                </span>
-              </div>
+              {showLocalForm && (
+                <div className="relative my-4">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                    or continue with
+                  </span>
+                </div>
+              )}
               <div className="space-y-2">
                 {redirectProviders.map((provider) => (
                   <Button
@@ -362,5 +407,22 @@ export default function LoginPage() {
       </Card>
       )}
     </>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary for static prerendering;
+// wrap the inner content so /login can be statically generated. The fallback
+// is a brief skeleton matching the eventual loading spinner inside the form.
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8" aria-busy="true">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

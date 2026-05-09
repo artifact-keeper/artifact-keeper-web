@@ -11,6 +11,7 @@ import React from "react";
 const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/image", () => {
@@ -146,7 +147,7 @@ describe("LoginPage lockout UI", () => {
     render(<LoginPage />);
 
     // Fill in username and password using the actual react-hook-form bindings
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -178,7 +179,7 @@ describe("LoginPage lockout UI", () => {
 
     render(<LoginPage />);
 
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -206,7 +207,7 @@ describe("LoginPage lockout UI", () => {
 
     render(<LoginPage />);
 
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -237,7 +238,7 @@ describe("LoginPage lockout UI", () => {
 
     render(<LoginPage />);
 
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -272,10 +273,10 @@ describe("LoginPage lockout UI", () => {
     });
   });
 
-  it("shows the sign in form with username and password fields", () => {
+  it("shows the sign in form with username and password fields", async () => {
     render(<LoginPage />);
 
-    expect(screen.getByText("Username")).toBeInTheDocument();
+    expect(await screen.findByText("Username")).toBeInTheDocument();
     expect(screen.getByText("Password")).toBeInTheDocument();
     expect(screen.getByText("Sign In")).toBeInTheDocument();
   });
@@ -317,7 +318,7 @@ describe("LoginPage lockout UI", () => {
 
     render(<LoginPage />);
 
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -340,7 +341,7 @@ describe("LoginPage lockout UI", () => {
 
     render(<LoginPage />);
 
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -468,7 +469,7 @@ describe("LoginPage lockout UI", () => {
     });
 
     // Fill credentials and submit
-    const usernameInput = screen.getByPlaceholderText("Enter your username");
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
 
     await act(async () => {
@@ -501,7 +502,10 @@ describe("LoginPage lockout UI", () => {
       expect(screen.getByText("Sign in with Okta SSO")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("or continue with")).toBeInTheDocument();
+    // When only OIDC is configured (no LDAP, no setup-required), the local
+    // username/password form is hidden — see issue #350 — so there is no
+    // need for the "or continue with" divider above the provider button.
+    expect(screen.queryByText("or continue with")).not.toBeInTheDocument();
   });
 
   it("redirects when clicking an OIDC provider button with relative login_url", async () => {
