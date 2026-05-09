@@ -5,7 +5,7 @@ import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { TreeNodeType, TreeNode } from '@/types/tree';
-import type { TreeNode, TreeNodeType } from '@/types/tree';
+import type { TreeNode, TreeNodeType, TreeNodeMetadata } from '@/types/tree';
 
 export interface GetChildrenParams {
   repository_key?: string;
@@ -26,6 +26,14 @@ const TREE_NODE_TYPES = new Set<TreeNodeType>([
 // SDK TreeNodeResponse.type is `string`; narrow to local TreeNodeType,
 // defaulting unknown values to 'folder' so the UI stays renderable.
 function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
+  // SDK type doesn't model `metadata`, but the backend returns it when
+  // `include_metadata=true` and tree pages render it. Read via passthrough
+  // and trust the shape — the UI defensively handles missing inner fields.
+  const passthrough = sdk as unknown as Record<string, unknown>;
+  const metadata =
+    passthrough.metadata && typeof passthrough.metadata === 'object'
+      ? (passthrough.metadata as TreeNodeMetadata)
+      : undefined;
   return {
     id: sdk.id,
     name: sdk.name,
@@ -33,6 +41,7 @@ function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
     path: sdk.path,
     has_children: sdk.has_children,
     children_count: sdk.children_count ?? undefined,
+    metadata,
   };
 }
 
