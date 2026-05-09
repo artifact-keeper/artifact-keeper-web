@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockApiFetch = vi.fn();
+const mockAssertData = vi.fn(<T,>(d: T) => d);
 vi.mock("../fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+  assertData: <T,>(d: T) => mockAssertData(d),
 }));
 
 // Mock the SDK imports that repositoriesApi uses for other methods
+const mockGetRepository = vi.fn();
 vi.mock("@artifact-keeper/sdk", () => ({
   listRepositories: vi.fn(),
-  getRepository: vi.fn(),
+  getRepository: (...args: unknown[]) => mockGetRepository(...args),
   createRepository: vi.fn(),
   updateRepository: vi.fn(),
   deleteRepository: vi.fn(),
@@ -164,5 +167,41 @@ describe("repositoriesApi.testUpstream", () => {
     await expect(
       repositoriesApi.testUpstream("npm-proxy")
     ).rejects.toThrow("API error 500: Internal Server Error");
+  });
+});
+
+describe("repositoriesApi.narrowFormat (via get)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("warns and defaults to 'generic' when SDK reports an unknown format", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetRepository.mockResolvedValue({
+      data: {
+        id: "r1",
+        key: "test-repo",
+        name: "Test",
+        description: null,
+        format: "shiny-new-format",
+        repo_type: "local",
+        is_public: false,
+        storage_used_bytes: 0,
+        quota_bytes: null,
+        upstream_url: null,
+        upstream_auth_type: null,
+        upstream_auth_configured: false,
+        created_at: "2025-01-01",
+        updated_at: "2025-01-01",
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.get("test-repo");
+    expect(result.format).toBe("generic");
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/unknown repository format "shiny-new-format"/)
+    );
+    warn.mockRestore();
   });
 });

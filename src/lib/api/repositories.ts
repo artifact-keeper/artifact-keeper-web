@@ -49,16 +49,78 @@ export interface UpstreamAuthPayload {
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
 
+const REPO_FORMATS = new Set<RepositoryFormat>([
+  'maven',
+  'gradle',
+  'pypi',
+  'npm',
+  'docker',
+  'helm',
+  'rpm',
+  'debian',
+  'go',
+  'nuget',
+  'rubygems',
+  'conan',
+  'cargo',
+  'generic',
+  'podman',
+  'buildx',
+  'oras',
+  'wasm_oci',
+  'helm_oci',
+  'poetry',
+  'conda',
+  'yarn',
+  'bower',
+  'pnpm',
+  'chocolatey',
+  'powershell',
+  'terraform',
+  'opentofu',
+  'alpine',
+  'conda_native',
+  'composer',
+  'hex',
+  'cocoapods',
+  'swift',
+  'pub',
+  'sbt',
+  'chef',
+  'puppet',
+  'ansible',
+  'gitlfs',
+  'vscode',
+  'jetbrains',
+  'huggingface',
+  'mlmodel',
+  'cran',
+  'vagrant',
+  'opkg',
+  'p2',
+  'bazel',
+  'protobuf',
+  'incus',
+  'lxc',
+]);
+
 function narrowRepoType(v: string): RepositoryType {
   return REPO_TYPES.has(v as RepositoryType) ? (v as RepositoryType) : 'local';
 }
 
 // SDK uses `format: string`; the local RepositoryFormat is a long narrow union.
-// Pass the value through unchanged — the union covers every string the backend
-// emits, and an unknown value is a real divergence we want to see (cast `as
-// RepositoryFormat` rather than defaulting silently).
+// Validate against the known set so an unknown backend value (e.g. a newly
+// added format the SDK / web hasn't picked up yet) is observable instead of
+// silently coerced. Default to 'generic' which the UI knows how to render.
 function narrowFormat(v: string): RepositoryFormat {
-  return v as RepositoryFormat;
+  if (REPO_FORMATS.has(v as RepositoryFormat)) {
+    return v as RepositoryFormat;
+  }
+  console.warn(
+    `repositoriesApi: unknown repository format "${v}" — defaulting to 'generic'. ` +
+      `This likely means the backend added a format the SDK hasn't picked up yet.`
+  );
+  return 'generic';
 }
 
 function adaptRepository(sdk: RepositoryResponse): Repository {
