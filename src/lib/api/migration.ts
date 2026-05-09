@@ -21,6 +21,11 @@ import {
   createDownloadTicket as sdkCreateDownloadTicket,
 } from '@artifact-keeper/sdk';
 import type {
+  ConnectionResponse as SdkConnectionResponse,
+  SourceRepository as SdkSourceRepository,
+  TicketResponse,
+} from '@artifact-keeper/sdk';
+import type {
   SourceConnection,
   CreateConnectionRequest,
   ConnectionTestResult,
@@ -32,14 +37,52 @@ import type {
   AssessmentResult,
   PaginatedResponse,
 } from '@/types';
+import { assertData } from '@/lib/api/fetch';
+
+// SDK ConnectionResponse exposes auth_type as `string`; the local AuthType is
+// a narrowed union. Default unrecognized values to 'api_token' rather than
+// throwing — list endpoints should still render even with stale enum entries.
+function narrowAuthType(v: string): SourceConnection['auth_type'] {
+  return v === 'basic_auth' ? 'basic_auth' : 'api_token';
+}
+
+function adaptSourceConnection(sdk: SdkConnectionResponse): SourceConnection {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    url: sdk.url,
+    auth_type: narrowAuthType(sdk.auth_type),
+    created_at: sdk.created_at,
+    verified_at: sdk.verified_at ?? undefined,
+  };
+}
+
+function narrowSourceRepoType(v: string): SourceRepository['type'] {
+  return v === 'remote' || v === 'virtual' ? v : 'local';
+}
+
+function adaptSourceRepository(sdk: SdkSourceRepository): SourceRepository {
+  return {
+    key: sdk.key,
+    type: narrowSourceRepoType(sdk.type),
+    package_type: sdk.package_type,
+    url: sdk.url,
+    description: sdk.description ?? undefined,
+  };
+}
 
 export const migrationApi = {
   // Source Connections
   listConnections: async (): Promise<SourceConnection[]> => {
     const { data, error } = await sdkListConnections();
     if (error) throw error;
-    const response = data as unknown as { items?: SourceConnection[] };
-    return response?.items ?? (data as unknown as SourceConnection[]);
+    // SDK declares the response as Array<ConnectionResponse>, but historically
+    // some deployments returned `{ items: [...] }`. Honor both shapes.
+    const raw: unknown = data;
+    const arr: SdkConnectionResponse[] = Array.isArray(raw)
+      ? (raw as SdkConnectionResponse[])
+      : ((raw as { items?: SdkConnectionResponse[] } | undefined)?.items ?? []);
+    return arr.map(adaptSourceConnection);
   },
 
   createConnection: async (
@@ -72,8 +115,12 @@ export const migrationApi = {
   ): Promise<SourceRepository[]> => {
     const { data, error } = await sdkListSourceRepositories({ path: { id: connectionId } });
     if (error) throw error;
-    const response = data as unknown as { items?: SourceRepository[] };
-    return response?.items ?? (data as unknown as SourceRepository[]);
+    // SDK declares an Array; defensively accept `{ items: [] }` for older servers.
+    const raw: unknown = data;
+    const arr: SdkSourceRepository[] = Array.isArray(raw)
+      ? (raw as SdkSourceRepository[])
+      : ((raw as { items?: SdkSourceRepository[] } | undefined)?.items ?? []);
+    return arr.map(adaptSourceRepository);
   },
 
   // Migration Jobs
@@ -172,7 +219,7 @@ export const migrationApi = {
       body: { purpose: 'stream', resource_path: `migration/${jobId}` } as never,
     });
     if (error) throw error;
-    return (data as unknown as { ticket: string }).ticket;
+    return assertData(data as TicketResponse | undefined, 'migrationApi.createStreamTicket').ticket;
   },
 
   // SSE Stream for progress — kept as native EventSource (not SDK)
