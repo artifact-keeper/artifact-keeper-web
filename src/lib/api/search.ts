@@ -58,6 +58,24 @@ const SEARCH_RESULT_TYPES = new Set<SearchResult['type']>(['artifact', 'package'
 // back to 'artifact' for unrecognized values rather than throwing — search
 // UIs should still render unknown items.
 function adaptSearchResult(sdk: SearchResultItem): SearchResult {
+  // SDK type doesn't model quarantine fields yet, but the backend returns them
+  // and the search UI renders <QuarantineBadge> from them. Read via passthrough
+  // and narrow each field to its declared local type.
+  const passthrough = sdk as unknown as Record<string, unknown>;
+  const isQuarantined =
+    typeof passthrough.is_quarantined === 'boolean' ? passthrough.is_quarantined : undefined;
+  const quarantineUntil =
+    typeof passthrough.quarantine_until === 'string'
+      ? passthrough.quarantine_until
+      : passthrough.quarantine_until === null
+        ? null
+        : undefined;
+  const quarantineReason =
+    typeof passthrough.quarantine_reason === 'string'
+      ? passthrough.quarantine_reason
+      : passthrough.quarantine_reason === null
+        ? null
+        : undefined;
   return {
     id: sdk.id,
     type: narrowEnum(sdk.type, SEARCH_RESULT_TYPES, 'artifact'),
@@ -67,6 +85,9 @@ function adaptSearchResult(sdk: SearchResultItem): SearchResult {
     format: sdk.format ?? undefined,
     version: sdk.version ?? undefined,
     size_bytes: sdk.size_bytes ?? undefined,
+    is_quarantined: isQuarantined,
+    quarantine_until: quarantineUntil,
+    quarantine_reason: quarantineReason,
     created_at: sdk.created_at,
     highlights: sdk.highlights ?? undefined,
   };
