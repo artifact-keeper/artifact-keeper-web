@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import telemetryApi from "@/lib/api/telemetry";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type { CrashReport, TelemetrySettings } from "@/types/telemetry";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
@@ -104,9 +104,7 @@ export default function TelemetryPage() {
       toast.success("Settings updated");
       queryClient.invalidateQueries({ queryKey: ["telemetry-settings"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update settings"));
-    },
+    onError: mutationErrorToast("Failed to update settings"),
   });
 
   const submitMutation = useMutation({
@@ -116,9 +114,7 @@ export default function TelemetryPage() {
       queryClient.invalidateQueries({ queryKey: ["telemetry-crashes"] });
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to submit crash reports"));
-    },
+    onError: mutationErrorToast("Failed to submit crash reports"),
   });
 
   const deleteMutation = useMutation({
@@ -129,9 +125,7 @@ export default function TelemetryPage() {
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
       setDeleteTarget(null);
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete crash report"));
-    },
+    onError: mutationErrorToast("Failed to delete crash report"),
   });
 
   function handleToggle(field: keyof TelemetrySettings, value: boolean) {

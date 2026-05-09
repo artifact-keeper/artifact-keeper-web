@@ -22,7 +22,7 @@ import type {
   WebhookEvent,
   CreateWebhookRequest,
 } from "@/lib/api/webhooks";
-import { toUserMessage } from "@/lib/error-utils";
+import { toUserMessage, mutationErrorToast } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,9 +153,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       resetForm();
       toast.success("Webhook created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create webhook"));
-    },
+    onError: mutationErrorToast("Failed to create webhook"),
   });
 
   const deleteMutation = useMutation({

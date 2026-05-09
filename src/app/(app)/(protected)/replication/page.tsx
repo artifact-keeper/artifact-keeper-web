@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { repositoriesApi } from "@/lib/api/repositories";
 import type { Repository } from "@/types";
@@ -143,9 +143,7 @@ export default function ReplicationPage() {
       });
       toast.success("Replication settings updated");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update replication settings"));
-    },
+    onError: mutationErrorToast("Failed to update replication settings"),
   });
 
   // -- subscription repo columns --

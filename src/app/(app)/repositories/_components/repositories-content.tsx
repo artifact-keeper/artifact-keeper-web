@@ -35,7 +35,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { FORMAT_GROUPS, TYPE_OPTIONS } from "../_lib/constants";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
@@ -107,9 +107,7 @@ export function RepositoriesContent() {
         toast.success("Repository created");
       }
     },
-    onError: (err) => {
-      toast.error(toUserMessage(err, "Failed to create repository"));
-    },
+    onError: mutationErrorToast("Failed to create repository"),
   });
 
   const updateMutation = useMutation({
@@ -128,9 +126,7 @@ export function RepositoriesContent() {
       }
       toast.success("Repository updated");
     },
-    onError: (err) => {
-      toast.error(toUserMessage(err, "Failed to update repository"));
-    },
+    onError: mutationErrorToast("Failed to update repository"),
   });
 
   const deleteMutation = useMutation({
@@ -142,9 +138,7 @@ export function RepositoriesContent() {
       if (selectedKey === deletedKey) setSelectedKey(null);
       toast.success("Repository deleted");
     },
-    onError: (err) => {
-      toast.error(toUserMessage(err, "Failed to delete repository"));
-    },
+    onError: mutationErrorToast("Failed to delete repository"),
   });
 
   const upstreamAuthMutation = useMutation({
@@ -154,9 +148,7 @@ export function RepositoriesContent() {
       invalidateAllRepoQueries();
       toast.success("Upstream authentication updated");
     },
-    onError: (err) => {
-      toast.error(toUserMessage(err, "Failed to update upstream authentication"));
-    },
+    onError: mutationErrorToast("Failed to update upstream authentication"),
   });
 
   // --- handlers ---

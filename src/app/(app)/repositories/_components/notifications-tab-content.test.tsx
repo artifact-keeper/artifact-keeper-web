@@ -75,6 +75,9 @@ vi.mock("@/lib/api/webhooks", () => ({
 
 vi.mock("@/lib/error-utils", () => ({
   toUserMessage: (_err: unknown, fallback: string) => fallback,
+  mutationErrorToast: (label: string) => () => {
+    mockToastError(label);
+  },
 }));
 
 // Stub out radix tooltip/dialog to avoid portal issues in jsdom

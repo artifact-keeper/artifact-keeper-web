@@ -19,12 +19,10 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { toast } from "sonner";
-
 import "@/lib/sdk-client";
 import { listRepositories } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import dtApi from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
 import type { RepoSecurityScore } from "@/types/security";
@@ -233,9 +231,7 @@ export default function SecurityDashboardPage() {
       setSelectedArtifactId(undefined);
       setScanMode("repo");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to trigger scan"));
-    },
+    onError: mutationErrorToast("Failed to trigger scan"),
   });
 
   // -- table columns --

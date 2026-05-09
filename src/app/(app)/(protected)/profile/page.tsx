@@ -23,6 +23,7 @@ import {
   toUserMessage,
   isPasswordReuseError,
   PASSWORD_REUSE_MESSAGE,
+  mutationErrorToast,
 } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
@@ -85,9 +86,7 @@ export default function ProfilePage() {
       refreshUser();
       toast.success("Profile updated successfully");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to update profile"));
-    },
+    onError: mutationErrorToast("Failed to update profile"),
   });
 
   const [passwordError, setPasswordError] = useState<string | null>(null);

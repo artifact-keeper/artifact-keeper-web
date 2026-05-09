@@ -87,13 +87,19 @@ vi.mock("@/hooks/use-mobile", () => ({
   useIsMobile: () => mockUseIsMobile(),
 }));
 
-vi.mock("@/lib/error-utils", () => ({
-  toUserMessage: (err: unknown, fallback: string) => {
+vi.mock("@/lib/error-utils", () => {
+  const toUserMessage = (err: unknown, fallback: string) => {
     if (err instanceof Error) return err.message;
     if (err && typeof err === "object" && "error" in err) return (err as any).error;
     return fallback;
-  },
-}));
+  };
+  return {
+    toUserMessage,
+    mutationErrorToast: (label: string) => (err: unknown) => {
+      mockToastError(toUserMessage(err, label));
+    },
+  };
+});
 
 vi.mock("lucide-react", () => {
   const stub = (name: string) => {

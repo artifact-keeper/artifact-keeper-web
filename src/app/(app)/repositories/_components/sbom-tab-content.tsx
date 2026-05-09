@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type { SbomComponent, SbomFormat, CveHistoryEntry } from "@/types/sbom";
 import type { Artifact } from "@/types";
 
@@ -94,9 +94,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
       queryClient.invalidateQueries({ queryKey: ["sboms", artifact.id] });
       toast.success("SBOM generated successfully");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to generate SBOM"));
-    },
+    onError: mutationErrorToast("Failed to generate SBOM"),
   });
 
   // Download SBOM as JSON

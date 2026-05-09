@@ -6,7 +6,7 @@ import { ArrowRight, AlertTriangle, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { promotionApi } from "@/lib/api/promotion";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type { StagingArtifact, BulkPromoteRequest, PolicyViolation } from "@/types/promotion";
 import type { Repository } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
@@ -103,9 +103,7 @@ export function PromotionDialog({
       setSkipPolicyCheck(false);
       onSuccess?.();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Promotion failed"));
-    },
+    onError: mutationErrorToast("Promotion failed"),
   });
 
   const handlePromote = () => {

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import lifecycleApi from "@/lib/api/lifecycle";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
 import type { LifecyclePolicy, PolicyType } from "@/types/lifecycle";
@@ -132,9 +132,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       setQuotaOverrides({});
       toast.success("Repository settings saved");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to save repository settings"));
-    },
+    onError: mutationErrorToast("Failed to save repository settings"),
   });
 
   const handleSave = useCallback(() => {
@@ -175,9 +173,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       });
       toast.success("Cleanup policy deleted");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to delete cleanup policy"));
-    },
+    onError: mutationErrorToast("Failed to delete cleanup policy"),
   });
 
   const executePolicyMutation = useMutation({
@@ -191,9 +187,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         `Policy executed: ${result.artifacts_removed} artifact(s) removed, ${formatBytes(result.bytes_freed)} freed`
       );
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to execute cleanup policy"));
-    },
+    onError: mutationErrorToast("Failed to execute cleanup policy"),
   });
 
   const previewPolicyMutation = useMutation({
@@ -203,9 +197,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         `Preview: ${result.artifacts_matched} artifact(s) would be removed (${formatBytes(result.bytes_freed)})`
       );
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to preview cleanup policy"));
-    },
+    onError: mutationErrorToast("Failed to preview cleanup policy"),
   });
 
   return (

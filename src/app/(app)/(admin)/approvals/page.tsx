@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import approvalsApi from "@/lib/api/approvals";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type { ApprovalRequest } from "@/types/promotion";
 import { APPROVAL_STATUS_COLORS } from "@/types/promotion";
 import { formatDate } from "@/lib/utils";
@@ -166,9 +166,7 @@ export default function ApprovalsPage() {
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       resetActionDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to approve request"));
-    },
+    onError: mutationErrorToast("Failed to approve request"),
   });
 
   const rejectMutation = useMutation({
@@ -179,9 +177,7 @@ export default function ApprovalsPage() {
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       resetActionDialog();
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to reject request"));
-    },
+    onError: mutationErrorToast("Failed to reject request"),
   });
 
   const isActioning = approveMutation.isPending || rejectMutation.isPending;

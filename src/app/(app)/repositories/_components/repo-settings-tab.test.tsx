@@ -58,9 +58,15 @@ vi.mock("@/lib/api/lifecycle", () => ({
 }));
 
 // Mock error utils
-vi.mock("@/lib/error-utils", () => ({
-  toUserMessage: (_err: unknown, fallback: string) => fallback,
-}));
+vi.mock("@/lib/error-utils", async () => {
+  const { toast } = await import("sonner");
+  return {
+    toUserMessage: (_err: unknown, fallback: string) => fallback,
+    mutationErrorToast: (label: string) => () => {
+      toast.error(label);
+    },
+  };
+});
 
 // Mock utils
 vi.mock("@/lib/utils", () => ({

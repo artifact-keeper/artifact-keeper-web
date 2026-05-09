@@ -11,7 +11,7 @@ import {
 import { toast } from "sonner";
 
 import { profileApi } from "@/lib/api/profile";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   ApiKey,
   AccessToken,
@@ -157,9 +157,7 @@ export default function AccessTokensPage() {
       setKeyExpiry("90");
       toast.success("API key created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create API key"));
-    },
+    onError: mutationErrorToast("Failed to create API key"),
   });
 
   const revokeKeyMutation = useMutation({
@@ -169,9 +167,7 @@ export default function AccessTokensPage() {
       setRevokeKeyId(null);
       toast.success("API key revoked");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to revoke API key"));
-    },
+    onError: mutationErrorToast("Failed to revoke API key"),
   });
 
   const createTokenMutation = useMutation({
@@ -188,9 +184,7 @@ export default function AccessTokensPage() {
       setTokenRepoSelector({});
       toast.success("Access token created");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to create access token"));
-    },
+    onError: mutationErrorToast("Failed to create access token"),
   });
 
   const revokeTokenMutation = useMutation({
@@ -202,9 +196,7 @@ export default function AccessTokensPage() {
       setRevokeTokenId(null);
       toast.success("Access token revoked");
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to revoke access token"));
-    },
+    onError: mutationErrorToast("Failed to revoke access token"),
   });
 
   // Column definitions

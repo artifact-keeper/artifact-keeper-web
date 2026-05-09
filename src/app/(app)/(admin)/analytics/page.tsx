@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import analyticsApi from "@/lib/api/analytics";
-import { toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
@@ -40,7 +40,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle } from "@/components/ui/alert";
-
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
@@ -84,9 +83,7 @@ export default function AnalyticsPage() {
       queryClient.invalidateQueries({ queryKey: ["analytics-growth"] });
       queryClient.invalidateQueries({ queryKey: ["analytics-trend"] });
     },
-    onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to capture snapshot"));
-    },
+    onError: mutationErrorToast("Failed to capture snapshot"),
   });
 
   if (!user?.is_admin) {
