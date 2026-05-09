@@ -10,8 +10,10 @@ import type { SsoProvider } from "@/types/sso";
 // ---------------------------------------------------------------------------
 
 const mockPush = vi.fn();
+let mockSearchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockSearchParams,
 }));
 
 vi.mock("next/image", () => {
@@ -261,11 +263,7 @@ describe("LoginPage username/password form visibility", () => {
     mockListProviders.mockResolvedValue([oidcProvider]);
     // Simulate operator hitting /login?fallback=local to recover when admin
     // bypass is enabled but no LDAP provider is configured.
-    const originalSearch = window.location.search;
-    Object.defineProperty(window, "location", {
-      value: { ...window.location, search: "?fallback=local" },
-      writable: true,
-    });
+    mockSearchParams = new URLSearchParams("?fallback=local");
 
     try {
       await renderAndWaitForProviders();
@@ -279,10 +277,7 @@ describe("LoginPage username/password form visibility", () => {
         screen.getByPlaceholderText("Enter your password")
       ).toBeInTheDocument();
     } finally {
-      Object.defineProperty(window, "location", {
-        value: { ...window.location, search: originalSearch },
-        writable: true,
-      });
+      mockSearchParams = new URLSearchParams();
     }
   });
 
@@ -294,9 +289,7 @@ describe("LoginPage username/password form visibility", () => {
         resolve = r;
       })
     );
-    authState.setupRequired = false;
 
-    const { default: LoginPage } = await import("../login/page");
     await act(async () => {
       render(<LoginPage />);
     });

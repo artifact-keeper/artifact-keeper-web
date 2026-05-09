@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,6 +44,7 @@ type SelectedProvider =
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, refreshUser, setupRequired, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [accountLocked, setAccountLocked] = useState(false);
@@ -94,10 +95,7 @@ export default function LoginPage() {
   // consumer). If admin bypass is enabled, an operator can recover via
   // `?fallback=local` to force the form open. Tracked to make precise once
   // the backend exposes a public `local_auth_enabled` flag.
-  const forceLocalFallback = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("fallback") === "local";
-  }, []);
+  const forceLocalFallback = searchParams?.get("fallback") === "local";
   const showLocalForm =
     forceLocalFallback ||
     setupRequired ||
@@ -140,11 +138,10 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
+      // accountLocked and error were both reset above; only set the branch we hit.
       if (isAccountLocked(err)) {
         setAccountLocked(true);
-        setError(null);
       } else {
-        setAccountLocked(false);
         setError(toUserMessage(err, "Login failed. Please check your credentials."));
       }
     } finally {
