@@ -82,28 +82,24 @@ const PasswordPolicyExtSchema = z
   })
   .passthrough();
 
+// Shared shape for both `smtp_config` and `smtp` (the backend uses two
+// different keys for the same payload depending on version). Defining it
+// once avoids drift between the two branches when fields are added.
+const SmtpFieldsSchema = z
+  .object({
+    host: z.string().optional(),
+    port: z.number().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    from_address: z.string().optional(),
+    tls_mode: z.string().optional(),
+  })
+  .optional();
+
 const SmtpExtSchema = z
   .object({
-    smtp_config: z
-      .object({
-        host: z.string().optional(),
-        port: z.number().optional(),
-        username: z.string().optional(),
-        password: z.string().optional(),
-        from_address: z.string().optional(),
-        tls_mode: z.string().optional(),
-      })
-      .optional(),
-    smtp: z
-      .object({
-        host: z.string().optional(),
-        port: z.number().optional(),
-        username: z.string().optional(),
-        password: z.string().optional(),
-        from_address: z.string().optional(),
-        tls_mode: z.string().optional(),
-      })
-      .optional(),
+    smtp_config: SmtpFieldsSchema,
+    smtp: SmtpFieldsSchema,
     smtp_host: z.string().optional(),
     smtp_port: z.number().optional(),
     smtp_username: z.string().optional(),
