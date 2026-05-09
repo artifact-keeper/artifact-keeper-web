@@ -18,7 +18,7 @@ import type {
   VirtualMemberResponse,
   VirtualMembersListResponse,
 } from '@artifact-keeper/sdk';
-import { apiFetch, assertData } from '@/lib/api/fetch';
+import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 import type {
   Repository,
   CreateRepositoryRequest,
@@ -104,33 +104,23 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
   'lxc',
 ]);
 
-function narrowRepoType(v: string): RepositoryType {
-  return REPO_TYPES.has(v as RepositoryType) ? (v as RepositoryType) : 'local';
-}
-
-// SDK uses `format: string`; the local RepositoryFormat is a long narrow union.
-// Validate against the known set so an unknown backend value (e.g. a newly
-// added format the SDK / web hasn't picked up yet) is observable instead of
-// silently coerced. Default to 'generic' which the UI knows how to render.
-function narrowFormat(v: string): RepositoryFormat {
-  if (REPO_FORMATS.has(v as RepositoryFormat)) {
-    return v as RepositoryFormat;
-  }
-  console.warn(
-    `repositoriesApi: unknown repository format "${v}" — defaulting to 'generic'. ` +
-      `This likely means the backend added a format the SDK hasn't picked up yet.`
-  );
-  return 'generic';
-}
-
 function adaptRepository(sdk: RepositoryResponse): Repository {
   return {
     id: sdk.id,
     key: sdk.key,
     name: sdk.name,
     description: sdk.description ?? undefined,
-    format: narrowFormat(sdk.format),
-    repo_type: narrowRepoType(sdk.repo_type),
+    // SDK uses `format: string`; the local RepositoryFormat is a long narrow union.
+    // Warn on unknown values so a newly-added backend format is observable rather
+    // than silently coerced. 'generic' is the safe default the UI can render.
+    format: narrowEnum(
+      sdk.format,
+      REPO_FORMATS,
+      'generic',
+      `repositoriesApi: unknown repository format "${sdk.format}" — defaulting to 'generic'. ` +
+        `This likely means the backend added a format the SDK hasn't picked up yet.`,
+    ),
+    repo_type: narrowEnum(sdk.repo_type, REPO_TYPES, 'local'),
     is_public: sdk.is_public,
     storage_used_bytes: sdk.storage_used_bytes,
     quota_bytes: sdk.quota_bytes ?? undefined,

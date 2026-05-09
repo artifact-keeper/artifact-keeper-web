@@ -78,6 +78,7 @@ function adaptUser(sdk: SdkUserResponse | AdminUserResponse): User {
   const is_active = 'is_active' in sdk ? sdk.is_active : undefined;
   const must_change_password = 'must_change_password' in sdk ? sdk.must_change_password : undefined;
   const auth_provider = 'auth_provider' in sdk ? sdk.auth_provider : undefined;
+  const totp_enabled = 'totp_enabled' in sdk ? sdk.totp_enabled : undefined;
   return {
     id: sdk.id,
     username: sdk.username,
@@ -87,6 +88,7 @@ function adaptUser(sdk: SdkUserResponse | AdminUserResponse): User {
     is_active,
     must_change_password,
     auth_provider,
+    totp_enabled,
   };
 }
 
@@ -168,16 +170,13 @@ export const profileApi = {
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
+    // Omit `scopes` entirely when the caller didn't pass it — the backend
+    // treats `[]` and "not provided" differently for token creation.
     const body: SdkCreateApiTokenRequest = {
       name: reqData.name,
-      scopes: reqData.scopes ?? [],
       expires_in_days: reqData.expires_in_days,
+      ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
     };
-    // Default empty scopes to [] only when omitted; the test expects the call
-    // body to omit `scopes` entirely when caller didn't pass it.
-    if (reqData.scopes === undefined) {
-      delete (body as { scopes?: unknown }).scopes;
-    }
     const { data, error } = await sdkCreateApiToken({ body });
     if (error) throw error;
     return adaptCreateApiKey(assertData(data, 'profileApi.createApiKey'));

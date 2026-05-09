@@ -15,7 +15,7 @@ import type {
   UpdateBuildRequest as SdkUpdateBuildRequest,
 } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
-import { assertData } from '@/lib/api/fetch';
+import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
@@ -37,10 +37,6 @@ const BUILD_STATUSES = new Set<BuildStatus>([
   'failed',
   'cancelled',
 ]);
-
-function narrowStatus(v: string): BuildStatus {
-  return BUILD_STATUSES.has(v as BuildStatus) ? (v as BuildStatus) : 'pending';
-}
 
 // SDK BuildModule: { id, name, artifacts: BuildArtifact[] }
 // Local BuildModule: { id, build_id, module_name, name, path, checksum_sha256,
@@ -83,7 +79,7 @@ function adaptBuild(sdk: BuildResponse): Build {
     id: sdk.id,
     name: sdk.name,
     number: sdk.number,
-    status: narrowStatus(sdk.status),
+    status: narrowEnum(sdk.status, BUILD_STATUSES, 'pending'),
     started_at: sdk.started_at ?? undefined,
     finished_at: sdk.finished_at ?? undefined,
     duration_ms: sdk.duration_ms ?? undefined,

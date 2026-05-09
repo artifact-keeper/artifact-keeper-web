@@ -55,7 +55,7 @@ import type {
   CreateMigrationRequest,
   PaginatedResponse,
 } from '@/types';
-import { assertData } from '@/lib/api/fetch';
+import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 // SDK ConnectionResponse exposes auth_type as `string`; the local AuthType is
 // a narrowed union. Default unrecognized values to 'api_token' rather than
@@ -77,23 +77,17 @@ function adaptSourceConnection(sdk: SdkConnectionResponse): SourceConnection {
 
 const SOURCE_REPO_TYPES = new Set<SourceRepository['type']>(['local', 'remote', 'virtual']);
 
-function narrowSourceRepoType(v: string): SourceRepository['type'] {
-  if (SOURCE_REPO_TYPES.has(v as SourceRepository['type'])) {
-    return v as SourceRepository['type'];
-  }
-  // Default to 'local' but make the fallback observable: if the upstream
-  // registry adds a new repo classification ('federated', etc.) we want a
-  // flag in the console rather than silently misrendering it.
-  console.warn(
-    `migrationApi: unknown source repository type "${v}" — defaulting to 'local'.`
-  );
-  return 'local';
-}
-
 function adaptSourceRepository(sdk: SdkSourceRepository): SourceRepository {
   return {
     key: sdk.key,
-    type: narrowSourceRepoType(sdk.type),
+    // Default to 'local' but warn so a new upstream classification ('federated', etc.)
+    // surfaces in the console instead of silently misrendering.
+    type: narrowEnum(
+      sdk.type,
+      SOURCE_REPO_TYPES,
+      'local',
+      `migrationApi: unknown source repository type "${sdk.type}" — defaulting to 'local'.`,
+    ),
     package_type: sdk.package_type,
     url: sdk.url,
     description: sdk.description ?? undefined,
@@ -110,21 +104,7 @@ const MIGRATION_JOB_STATUSES = new Set<MigrationJobStatus>([
   'failed',
   'cancelled',
 ]);
-
-function narrowJobStatus(v: string): MigrationJobStatus {
-  return MIGRATION_JOB_STATUSES.has(v as MigrationJobStatus)
-    ? (v as MigrationJobStatus)
-    : 'pending';
-}
-
 const MIGRATION_JOB_TYPES = new Set<MigrationJobType>(['full', 'incremental', 'assessment']);
-
-function narrowJobType(v: string): MigrationJobType {
-  return MIGRATION_JOB_TYPES.has(v as MigrationJobType)
-    ? (v as MigrationJobType)
-    : 'full';
-}
-
 const MIGRATION_ITEM_TYPES = new Set<MigrationItemType>([
   'repository',
   'artifact',
@@ -133,13 +113,6 @@ const MIGRATION_ITEM_TYPES = new Set<MigrationItemType>([
   'permission',
   'property',
 ]);
-
-function narrowItemType(v: string): MigrationItemType {
-  return MIGRATION_ITEM_TYPES.has(v as MigrationItemType)
-    ? (v as MigrationItemType)
-    : 'artifact';
-}
-
 const MIGRATION_ITEM_STATUSES = new Set<MigrationItemStatus>([
   'pending',
   'in_progress',
@@ -148,26 +121,15 @@ const MIGRATION_ITEM_STATUSES = new Set<MigrationItemStatus>([
   'skipped',
 ]);
 
-function narrowItemStatus(v: string): MigrationItemStatus {
-  return MIGRATION_ITEM_STATUSES.has(v as MigrationItemStatus)
-    ? (v as MigrationItemStatus)
-    : 'pending';
-}
-
-// SDK config is a free-form record; the local MigrationConfig models the
-// fields this UI knows how to render. Every field is optional, so a permissive
-// cast is safe: unknown keys are simply ignored at the boundary.
-function adaptMigrationConfig(config: { [key: string]: unknown }): MigrationConfig {
-  return config as MigrationConfig;
-}
-
 function adaptMigrationJob(sdk: SdkMigrationJobResponse): MigrationJob {
   return {
     id: sdk.id,
     source_connection_id: sdk.source_connection_id,
-    status: narrowJobStatus(sdk.status),
-    job_type: narrowJobType(sdk.job_type),
-    config: adaptMigrationConfig(sdk.config),
+    status: narrowEnum(sdk.status, MIGRATION_JOB_STATUSES, 'pending'),
+    job_type: narrowEnum(sdk.job_type, MIGRATION_JOB_TYPES, 'full'),
+    // SDK config is a free-form record; the local MigrationConfig models the
+    // fields this UI knows how to render. Unknown keys are ignored at the boundary.
+    config: sdk.config as MigrationConfig,
     total_items: sdk.total_items,
     completed_items: sdk.completed_items,
     failed_items: sdk.failed_items,
@@ -187,10 +149,10 @@ function adaptMigrationItem(sdk: SdkMigrationItemResponse): MigrationItem {
   return {
     id: sdk.id,
     job_id: sdk.job_id,
-    item_type: narrowItemType(sdk.item_type),
+    item_type: narrowEnum(sdk.item_type, MIGRATION_ITEM_TYPES, 'artifact'),
     source_path: sdk.source_path,
     target_path: sdk.target_path ?? undefined,
-    status: narrowItemStatus(sdk.status),
+    status: narrowEnum(sdk.status, MIGRATION_ITEM_STATUSES, 'pending'),
     size_bytes: sdk.size_bytes,
     checksum_source: sdk.checksum_source ?? undefined,
     checksum_target: sdk.checksum_target ?? undefined,
@@ -218,21 +180,13 @@ const REPO_COMPATIBILITY = new Set<RepositoryAssessment['compatibility']>([
 ]);
 
 function adaptRepositoryAssessment(sdk: SdkRepositoryAssessment): RepositoryAssessment {
-  const type = REPO_ASSESSMENT_TYPES.has(sdk.type as RepositoryAssessment['type'])
-    ? (sdk.type as RepositoryAssessment['type'])
-    : 'local';
-  const compatibility = REPO_COMPATIBILITY.has(
-    sdk.compatibility as RepositoryAssessment['compatibility']
-  )
-    ? (sdk.compatibility as RepositoryAssessment['compatibility'])
-    : 'unsupported';
   return {
     key: sdk.key,
-    type,
+    type: narrowEnum(sdk.type, REPO_ASSESSMENT_TYPES, 'local'),
     package_type: sdk.package_type,
     artifact_count: sdk.artifact_count,
     total_size_bytes: sdk.total_size_bytes,
-    compatibility,
+    compatibility: narrowEnum(sdk.compatibility, REPO_COMPATIBILITY, 'unsupported'),
     warnings: sdk.warnings,
   };
 }
@@ -299,18 +253,46 @@ function toSdkCreateMigrationRequest(req: CreateMigrationRequest): SdkCreateMigr
   };
 }
 
+// SDK declares list endpoints as `Array<T>`, but historically some deployments
+// returned `{ items: [...] }`. Honor both shapes; treat anything else as empty.
+function coerceItemsArray<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[];
+  return (raw as { items?: T[] } | null | undefined)?.items ?? [];
+}
+
+// Some paginated endpoints surface either a bare array or a `{ items, pagination }`
+// wrapper. Synthesize a single-page pagination block when the response is bare.
+function coercePaginated<TSdk, TLocal>(
+  raw: unknown,
+  adapt: (sdk: TSdk) => TLocal,
+): PaginatedResponse<TLocal> {
+  if (Array.isArray(raw)) {
+    const items = (raw as TSdk[]).map(adapt);
+    return {
+      items,
+      pagination: { page: 1, per_page: items.length, total: items.length, total_pages: 1 },
+    };
+  }
+  const wrapped = raw as {
+    items?: TSdk[];
+    pagination?: PaginatedResponse<TLocal>['pagination'];
+  };
+  const items = (wrapped.items ?? []).map(adapt);
+  const pagination = wrapped.pagination ?? {
+    page: 1,
+    per_page: items.length,
+    total: items.length,
+    total_pages: 1,
+  };
+  return { items, pagination };
+}
+
 export const migrationApi = {
   // Source Connections
   listConnections: async (): Promise<SourceConnection[]> => {
     const { data, error } = await sdkListConnections();
     if (error) throw error;
-    // SDK declares the response as Array<ConnectionResponse>, but historically
-    // some deployments returned `{ items: [...] }`. Honor both shapes.
-    const raw: unknown = data;
-    const arr: SdkConnectionResponse[] = Array.isArray(raw)
-      ? (raw as SdkConnectionResponse[])
-      : ((raw as { items?: SdkConnectionResponse[] } | undefined)?.items ?? []);
-    return arr.map(adaptSourceConnection);
+    return coerceItemsArray<SdkConnectionResponse>(data).map(adaptSourceConnection);
   },
 
   createConnection: async (
@@ -345,12 +327,7 @@ export const migrationApi = {
   ): Promise<SourceRepository[]> => {
     const { data, error } = await sdkListSourceRepositories({ path: { id: connectionId } });
     if (error) throw error;
-    // SDK declares an Array; defensively accept `{ items: [] }` for older servers.
-    const raw: unknown = data;
-    const arr: SdkSourceRepository[] = Array.isArray(raw)
-      ? (raw as SdkSourceRepository[])
-      : ((raw as { items?: SdkSourceRepository[] } | undefined)?.items ?? []);
-    return arr.map(adaptSourceRepository);
+    return coerceItemsArray<SdkSourceRepository>(data).map(adaptSourceRepository);
   },
 
   // Migration Jobs
@@ -365,33 +342,9 @@ export const migrationApi = {
     const { data, error } = await sdkListMigrations({ query: params });
     if (error) throw error;
     // SDK declares Array<MigrationJobResponse>; some deployments wrap in
-    // { items, pagination } — accept both. When the response is a bare array,
-    // synthesize empty pagination so the caller still gets a PaginatedResponse.
-    const raw: unknown = assertData(data, 'migrationApi.listMigrations');
-    if (Array.isArray(raw)) {
-      const arr = raw as SdkMigrationJobResponse[];
-      return {
-        items: arr.map(adaptMigrationJob),
-        pagination: {
-          page: 1,
-          per_page: arr.length,
-          total: arr.length,
-          total_pages: 1,
-        },
-      };
-    }
-    const wrapped = raw as {
-      items?: SdkMigrationJobResponse[];
-      pagination?: PaginatedResponse<MigrationJob>['pagination'];
-    };
-    const items = (wrapped.items ?? []).map(adaptMigrationJob);
-    const pagination = wrapped.pagination ?? {
-      page: 1,
-      per_page: items.length,
-      total: items.length,
-      total_pages: 1,
-    };
-    return { items, pagination };
+    // { items, pagination } — accept both. Bare arrays get synthesized pagination.
+    const raw = assertData(data, 'migrationApi.listMigrations');
+    return coercePaginated<SdkMigrationJobResponse, MigrationJob>(raw, adaptMigrationJob);
   },
 
   createMigration: async (
@@ -454,31 +407,8 @@ export const migrationApi = {
     });
     if (error) throw error;
     // Same dual-shape handling as listMigrations.
-    const raw: unknown = assertData(data, 'migrationApi.listMigrationItems');
-    if (Array.isArray(raw)) {
-      const arr = raw as SdkMigrationItemResponse[];
-      return {
-        items: arr.map(adaptMigrationItem),
-        pagination: {
-          page: 1,
-          per_page: arr.length,
-          total: arr.length,
-          total_pages: 1,
-        },
-      };
-    }
-    const wrapped = raw as {
-      items?: SdkMigrationItemResponse[];
-      pagination?: PaginatedResponse<MigrationItem>['pagination'];
-    };
-    const items = (wrapped.items ?? []).map(adaptMigrationItem);
-    const pagination = wrapped.pagination ?? {
-      page: 1,
-      per_page: items.length,
-      total: items.length,
-      total_pages: 1,
-    };
-    return { items, pagination };
+    const raw = assertData(data, 'migrationApi.listMigrationItems');
+    return coercePaginated<SdkMigrationItemResponse, MigrationItem>(raw, adaptMigrationItem);
   },
 
   getMigrationReport: async (

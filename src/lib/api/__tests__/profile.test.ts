@@ -49,6 +49,7 @@ describe("profileApi", () => {
       is_active: undefined,
       must_change_password: undefined,
       auth_provider: undefined,
+      totp_enabled: false,
     });
   });
 
@@ -98,6 +99,7 @@ describe("profileApi", () => {
       is_active: undefined,
       must_change_password: undefined,
       auth_provider: undefined,
+      totp_enabled: false,
     });
   });
 

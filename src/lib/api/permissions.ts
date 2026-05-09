@@ -13,7 +13,7 @@ import type {
   CreatePermissionRequest as SdkCreatePermissionRequest,
 } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
-import { assertData } from '@/lib/api/fetch';
+import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
 export type PermissionTargetType = 'repository' | 'group' | 'artifact';
@@ -53,28 +53,26 @@ const PRINCIPAL_TYPES = new Set<PermissionPrincipalType>(['user', 'group']);
 const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'artifact']);
 const ACTIONS = new Set<PermissionAction>(['read', 'write', 'delete', 'admin']);
 
+// A new backend principal_type variant (e.g. 'service_account') would otherwise
+// silently flatten to 'user' and show up under the wrong ACL row — warn so the
+// regression is observable.
 function narrowPrincipal(v: string): PermissionPrincipalType {
-  if (PRINCIPAL_TYPES.has(v as PermissionPrincipalType)) {
-    return v as PermissionPrincipalType;
-  }
-  // A new backend principal_type variant (e.g. 'service_account') would otherwise
-  // silently flatten to 'user' and show up under the wrong ACL row. Surface it
-  // so the regression is observable.
-  console.warn(
+  return narrowEnum(
+    v,
+    PRINCIPAL_TYPES,
+    'user',
     `permissionsApi: unknown principal_type "${v}" — defaulting to 'user'. ` +
-      `This likely means the backend introduced a new principal kind the web hasn't picked up yet.`
+      `This likely means the backend introduced a new principal kind the web hasn't picked up yet.`,
   );
-  return 'user';
 }
 function narrowTarget(v: string): PermissionTargetType {
-  if (TARGET_TYPES.has(v as PermissionTargetType)) {
-    return v as PermissionTargetType;
-  }
-  console.warn(
+  return narrowEnum(
+    v,
+    TARGET_TYPES,
+    'repository',
     `permissionsApi: unknown target_type "${v}" — defaulting to 'repository'. ` +
-      `This likely means the backend introduced a new permission target kind.`
+      `This likely means the backend introduced a new permission target kind.`,
   );
-  return 'repository';
 }
 function narrowActions(actions: string[]): PermissionAction[] {
   const narrowed = actions.filter((a): a is PermissionAction =>

@@ -1,7 +1,7 @@
 import '@/lib/sdk-client';
 import { getTree } from '@artifact-keeper/sdk';
 import type { TreeNodeResponse } from '@artifact-keeper/sdk';
-import { assertData } from '@/lib/api/fetch';
+import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { TreeNodeType, TreeNode } from '@/types/tree';
@@ -23,17 +23,13 @@ const TREE_NODE_TYPES = new Set<TreeNodeType>([
   'metadata',
 ]);
 
-function isTreeNodeType(v: string): v is TreeNodeType {
-  return TREE_NODE_TYPES.has(v as TreeNodeType);
-}
-
 // SDK TreeNodeResponse.type is `string`; narrow to local TreeNodeType,
 // defaulting unknown values to 'folder' so the UI stays renderable.
 function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
   return {
     id: sdk.id,
     name: sdk.name,
-    type: isTreeNodeType(sdk.type) ? sdk.type : 'folder',
+    type: narrowEnum(sdk.type, TREE_NODE_TYPES, 'folder'),
     path: sdk.path,
     has_children: sdk.has_children,
     children_count: sdk.children_count ?? undefined,

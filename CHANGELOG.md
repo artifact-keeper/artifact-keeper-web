@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **`release/1.1.x` maintenance branch + `:1.1-dev` Docker tag rule** (#331) - mirrors `artifact-keeper#890`; pushes to `release/1.1.x` now publish `ghcr.io/artifact-keeper/artifact-keeper-web:1.1-dev` so the v1.1.x release-gate can test a true v1.1.x web/backend pair.
 
+### Changed
+- **Type-safe API layer — replace double-casts with adapters and zod** (#206) - removed all `as unknown as T` and `as never` casts in 15 of `src/lib/api/*.ts` files. Each SDK call now goes through an adapter function or a Set-backed narrowing helper that warns on unknown enum values. `assertData` (new in `fetch.ts`) rejects empty body responses with a contextual error. `settings.ts` uses zod `.safeParse()` at the trust boundary for `getPasswordPolicy`/`getSmtpConfig`. Public `xxxApi` return types unchanged so consumer code is untouched.
+
 ### Fixed
 - **Mutation errors now surface backend details instead of generic placeholders** (#207) - audited every TanStack Query `useMutation` and replaced opaque `onError: () => toast.error("Failed to ...")` callbacks with `toUserMessage(err, fallback)`-driven toasts. 91 callsites across 27 files. Also adds `onError` to 8 previously-silent mutations (security/policies/scans + repo-selector preview), and disambiguates the SSO toggle toasts per provider (OIDC/LDAP/SAML). `toUserMessage` now also reads FastAPI-style `.detail` fields so plugin-install errors (and any other FastAPI-shaped backend error) surface their server-side message.
 

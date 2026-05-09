@@ -6,7 +6,7 @@ import type {
   ChecksumArtifact,
 } from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
-import { assertData } from '@/lib/api/fetch';
+import { assertData, narrowEnum } from '@/lib/api/fetch';
 
 export interface SearchResult {
   id: string;
@@ -52,18 +52,15 @@ export interface ChecksumSearchParams {
   algorithm?: 'sha256' | 'sha1' | 'md5';
 }
 
-function isSearchResultType(v: string): v is SearchResult['type'] {
-  return v === 'artifact' || v === 'package' || v === 'repository';
-}
+const SEARCH_RESULT_TYPES = new Set<SearchResult['type']>(['artifact', 'package', 'repository']);
 
 // SDK's SearchResultItem.type is `string`; narrow to the local union, falling
 // back to 'artifact' for unrecognized values rather than throwing — search
 // UIs should still render unknown items.
 function adaptSearchResult(sdk: SearchResultItem): SearchResult {
-  const t: SearchResult['type'] = isSearchResultType(sdk.type) ? sdk.type : 'artifact';
   return {
     id: sdk.id,
-    type: t,
+    type: narrowEnum(sdk.type, SEARCH_RESULT_TYPES, 'artifact'),
     name: sdk.name,
     path: sdk.path ?? undefined,
     repository_key: sdk.repository_key,

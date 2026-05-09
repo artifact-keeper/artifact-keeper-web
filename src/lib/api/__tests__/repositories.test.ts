@@ -5,6 +5,16 @@ const mockAssertData = vi.fn(<T,>(d: T) => d);
 vi.mock("../fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
   assertData: <T,>(d: T) => mockAssertData(d),
+  narrowEnum: <T extends string>(
+    value: string,
+    allowed: ReadonlySet<T>,
+    fallback: T,
+    warn?: string,
+  ): T => {
+    if (allowed.has(value as T)) return value as T;
+    if (warn) console.warn(warn);
+    return fallback;
+  },
 }));
 
 // Mock the SDK imports that repositoriesApi uses for other methods
