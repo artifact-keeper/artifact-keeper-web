@@ -4,8 +4,13 @@ import {
   deleteArtifact,
   createDownloadTicket,
 } from '@artifact-keeper/sdk';
+import type {
+  ArtifactResponse,
+  ArtifactListResponse,
+} from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 import type { Artifact, PaginatedResponse } from '@/types';
+import { assertData } from '@/lib/api/fetch';
 
 export interface ListArtifactsParams {
   page?: number;
@@ -16,14 +21,40 @@ export interface ListArtifactsParams {
   search?: string;
 }
 
+// Local Artifact extends ArtifactResponse with quarantine fields the SDK
+// doesn't model yet — leave those undefined and let callers fetch detail
+// endpoints if they need quarantine state.
+function adaptArtifact(sdk: ArtifactResponse): Artifact {
+  return {
+    id: sdk.id,
+    repository_key: sdk.repository_key,
+    path: sdk.path,
+    name: sdk.name,
+    version: sdk.version ?? undefined,
+    size_bytes: sdk.size_bytes,
+    checksum_sha256: sdk.checksum_sha256,
+    content_type: sdk.content_type,
+    download_count: sdk.download_count,
+    created_at: sdk.created_at,
+    metadata: sdk.metadata ?? undefined,
+  };
+}
+
+function adaptArtifactList(sdk: ArtifactListResponse): PaginatedResponse<Artifact> {
+  return {
+    items: sdk.items.map(adaptArtifact),
+    pagination: sdk.pagination,
+  };
+}
+
 export const artifactsApi = {
   list: async (repoKey: string, params: ListArtifactsParams = {}): Promise<PaginatedResponse<Artifact>> => {
     // Map 'search' to 'q' for backwards compat
     const { search, ...rest } = params;
     const query = { ...rest, q: params.q || search || undefined };
-    const { data, error } = await listArtifacts({ path: { key: repoKey }, query: query as never });
+    const { data, error } = await listArtifacts({ path: { key: repoKey }, query });
     if (error) throw error;
-    return data as unknown as PaginatedResponse<Artifact>;
+    return adaptArtifactList(assertData(data, 'artifactsApi.list'));
   },
 
   get: async (repoKey: string, artifactPath: string): Promise<Artifact> => {
@@ -53,10 +84,10 @@ export const artifactsApi = {
 
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
     const { data, error } = await createDownloadTicket({
-      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` } as never,
+      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` },
     });
     if (error) throw error;
-    return (data as unknown as { ticket: string }).ticket;
+    return assertData(data, 'artifactsApi.createDownloadTicket').ticket;
   },
 
   upload: async (

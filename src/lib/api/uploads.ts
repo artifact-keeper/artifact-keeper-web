@@ -13,6 +13,7 @@ import type {
   CompleteResponse,
 } from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import { assertData } from '@/lib/api/fetch';
 
 // --- Re-export SDK types under the names the rest of the codebase expects ---
 
@@ -67,7 +68,7 @@ export async function createUploadSession(
   if (error) {
     throw new Error(`Failed to create upload session: ${errorMessage(error)}`);
   }
-  return data as unknown as CreateSessionResponse;
+  return assertData(data, 'createUploadSession');
 }
 
 /**
@@ -116,7 +117,7 @@ export async function getUploadSession(
       `Failed to get upload session: ${errorMessage(error)}`
     );
   }
-  return data as unknown as UploadSession;
+  return assertData(data, 'getUploadSession');
 }
 
 export async function completeUploadSession(
@@ -136,7 +137,7 @@ export async function completeUploadSession(
       `Failed to finalize upload: ${errorMessage(error)}`
     );
   }
-  return data as unknown as CompleteResult;
+  return assertData(data, 'completeUploadSession');
 }
 
 export async function cancelUploadSession(

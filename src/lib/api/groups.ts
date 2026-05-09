@@ -8,7 +8,13 @@ import {
   addMembers,
   removeMembers,
 } from '@artifact-keeper/sdk';
+import type {
+  GroupResponse,
+  GroupListResponse,
+  CreatedGroupRow,
+} from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
+import { assertData } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { Group, GroupMember, CreateGroupRequest } from '@/types/groups';
@@ -20,29 +26,68 @@ export interface ListGroupsParams {
   search?: string;
 }
 
+// SDK GroupResponse / CreatedGroupRow don't surface auto_join or is_external.
+// Default them to false so the local Group contract is satisfied; pages that
+// rely on real values for these will need a backend/SDK update.
+// CreatedGroupRow (returned from createGroup) lacks member_count — default 0.
+function adaptGroup(sdk: GroupResponse | CreatedGroupRow): Group {
+  const memberCount = 'member_count' in sdk ? sdk.member_count : 0;
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    description: sdk.description ?? undefined,
+    auto_join: false,
+    member_count: memberCount,
+    is_external: false,
+    created_at: sdk.created_at,
+    updated_at: sdk.updated_at,
+  };
+}
+
+function adaptGroupList(sdk: GroupListResponse): PaginatedResponse<Group> {
+  return {
+    items: sdk.items.map(adaptGroup),
+    pagination: sdk.pagination,
+  };
+}
+
 export const groupsApi = {
   list: async (params: ListGroupsParams = {}): Promise<PaginatedResponse<Group>> => {
-    const { data, error } = await listGroups({ query: params as never });
+    const { data, error } = await listGroups({ query: params });
     if (error) throw error;
-    return data as unknown as PaginatedResponse<Group>;
+    return adaptGroupList(assertData(data, 'groupsApi.list'));
   },
 
   get: async (groupId: string): Promise<Group> => {
     const { data, error } = await getGroup({ path: { id: groupId } });
     if (error) throw error;
-    return data as unknown as Group;
+    return adaptGroup(assertData(data, 'groupsApi.get'));
   },
 
-  create: async (data: CreateGroupRequest): Promise<Group> => {
-    const { data: result, error } = await createGroup({ body: data as never });
+  create: async (input: CreateGroupRequest): Promise<Group> => {
+    const { data, error } = await createGroup({ body: input });
     if (error) throw error;
-    return result as unknown as Group;
+    return adaptGroup(assertData(data, 'groupsApi.create'));
   },
 
-  update: async (groupId: string, data: Partial<CreateGroupRequest>): Promise<Group> => {
-    const { data: result, error } = await updateGroup({ path: { id: groupId }, body: data as never });
+  update: async (groupId: string, input: Partial<CreateGroupRequest>): Promise<Group> => {
+    // SDK updateGroup requires the full CreateGroupRequest (with `name`); the
+    // existing API exposes Partial<> for description-only updates. Build a
+    // body type that allows omitting `name` — sending '' would overwrite the
+    // group name to blank — then cast at the SDK boundary.
+    type UpdateGroupBodyPartial = Omit<CreateGroupRequest, 'name'> & { name?: string };
+    const body: UpdateGroupBodyPartial = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+    };
+    // SDK marks `name` required for PUT, but the backend treats omission as
+    // "leave unchanged" — we want that semantic for description-only edits.
+    const { data, error } = await updateGroup({
+      path: { id: groupId },
+      body: body as CreateGroupRequest,
+    });
     if (error) throw error;
-    return result as unknown as Group;
+    return adaptGroup(assertData(data, 'groupsApi.update'));
   },
 
   delete: async (groupId: string): Promise<void> => {
@@ -53,7 +98,7 @@ export const groupsApi = {
   addMembers: async (groupId: string, userIds: string[]): Promise<void> => {
     const { error } = await addMembers({
       path: { id: groupId },
-      body: { user_ids: userIds } as never,
+      body: { user_ids: userIds },
     });
     if (error) throw error;
   },
@@ -61,7 +106,7 @@ export const groupsApi = {
   removeMembers: async (groupId: string, userIds: string[]): Promise<void> => {
     const { error } = await removeMembers({
       path: { id: groupId },
-      body: { user_ids: userIds } as never,
+      body: { user_ids: userIds },
     });
     if (error) throw error;
   },

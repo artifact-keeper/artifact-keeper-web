@@ -7,7 +7,7 @@ vi.mock("@/lib/sdk-client", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-import { apiFetch } from "../fetch";
+import { apiFetch, assertData } from "../fetch";
 
 function mockResponse(options: {
   ok?: boolean;
@@ -264,5 +264,46 @@ describe("apiFetch", () => {
     expect(headers).toBeInstanceOf(Headers);
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(result).toEqual({ items: [] });
+  });
+});
+
+describe("assertData", () => {
+  it("throws with the context name when data is undefined", () => {
+    expect(() => assertData(undefined, "ctx")).toThrow(
+      /Empty response body for ctx/
+    );
+  });
+
+  it("throws when data is null", () => {
+    expect(() => assertData(null as unknown as undefined, "ctx")).toThrow(
+      /Empty response body for ctx/
+    );
+  });
+
+  it("throws when data is an empty string", () => {
+    // An empty string body is almost always a misconfigured proxy or a 200
+    // with no JSON; treat it as an empty response and refuse to silently
+    // hand `""` to downstream consumers.
+    expect(() => assertData("" as unknown as undefined, "ctx")).toThrow(
+      /Empty response body for ctx/
+    );
+  });
+
+  it("returns 0 unchanged (zero is valid data)", () => {
+    expect(assertData(0, "ctx")).toBe(0);
+  });
+
+  it("returns false unchanged (boolean false is valid data)", () => {
+    expect(assertData(false, "ctx")).toBe(false);
+  });
+
+  it("returns objects unchanged", () => {
+    const obj = { foo: 1 };
+    expect(assertData(obj, "ctx")).toBe(obj);
+  });
+
+  it("returns empty arrays unchanged", () => {
+    const arr: number[] = [];
+    expect(assertData(arr, "ctx")).toBe(arr);
   });
 });

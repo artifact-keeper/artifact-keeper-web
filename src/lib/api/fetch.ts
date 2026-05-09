@@ -1,6 +1,41 @@
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 
 /**
+ * Throw if a successful SDK response had no body when the caller expects one.
+ * SDK response types model `data` as `T | undefined` so the success-path needs
+ * an explicit assertion for callers that aren't OK with `undefined`.
+ *
+ * Rejects `undefined`, `null`, and `''` (an empty string body almost never
+ * represents a meaningful payload — it's typically a proxy or misconfigured
+ * endpoint returning 200 with no JSON). Other falsy values like `0`, `false`,
+ * and `[]` are valid payloads and are returned unchanged.
+ */
+export function assertData<T>(data: T | undefined, context: string): T {
+  if (data === undefined || data === null || (data as unknown) === '') {
+    throw new Error(`Empty response body for ${context}`);
+  }
+  return data;
+}
+
+/**
+ * Narrow a free-form `string` from the SDK to a known string-literal union.
+ * Returns `fallback` for unrecognized values. Use this at the SDK-to-local
+ * type boundary so a backend value the web doesn't model yet renders as the
+ * fallback rather than crashing. Pass `warn` to surface unknown values in
+ * the console — recommended whenever the fallback could mask a real bug.
+ */
+export function narrowEnum<T extends string>(
+  value: string,
+  allowed: ReadonlySet<T>,
+  fallback: T,
+  warn?: string,
+): T {
+  if (allowed.has(value as T)) return value as T;
+  if (warn) console.warn(warn);
+  return fallback;
+}
+
+/**
  * Shared fetch wrapper for API modules that don't use the generated SDK.
  * Adds base URL resolution, JSON headers, credentials, and error handling.
  */

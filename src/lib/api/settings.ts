@@ -1,6 +1,7 @@
 import "@/lib/sdk-client";
 import { getSettings } from "@artifact-keeper/sdk";
-import { apiFetch } from "@/lib/api/fetch";
+import { z } from "zod";
+import { apiFetch, assertData } from "@/lib/api/fetch";
 
 export interface PasswordPolicy {
   min_length: number;
@@ -60,6 +61,57 @@ const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
   history_count: 5,
 };
 
+// Zod schemas for the password-policy and SMTP fields the backend appends to
+// the SystemSettings response but the SDK doesn't yet model. The settings
+// endpoint is a real trust boundary (admin-supplied config that drives email
+// + password rules) so runtime validation pays for itself here.
+const PasswordPolicyExtSchema = z
+  .object({
+    password_policy: z
+      .object({
+        min_length: z.number().optional(),
+        require_uppercase: z.boolean().optional(),
+        require_lowercase: z.boolean().optional(),
+        require_digit: z.boolean().optional(),
+        require_special: z.boolean().optional(),
+        history_count: z.number().optional(),
+      })
+      .optional(),
+    password_min_length: z.number().optional(),
+    password_history_count: z.number().optional(),
+  })
+  .passthrough();
+
+const SmtpExtSchema = z
+  .object({
+    smtp_config: z
+      .object({
+        host: z.string().optional(),
+        port: z.number().optional(),
+        username: z.string().optional(),
+        password: z.string().optional(),
+        from_address: z.string().optional(),
+        tls_mode: z.string().optional(),
+      })
+      .optional(),
+    smtp: z
+      .object({
+        host: z.string().optional(),
+        port: z.number().optional(),
+        username: z.string().optional(),
+        password: z.string().optional(),
+        from_address: z.string().optional(),
+        tls_mode: z.string().optional(),
+      })
+      .optional(),
+    smtp_host: z.string().optional(),
+    smtp_port: z.number().optional(),
+    smtp_username: z.string().optional(),
+    smtp_from_address: z.string().optional(),
+    smtp_tls_mode: z.string().optional(),
+  })
+  .passthrough();
+
 export const settingsApi = {
   DEFAULT_PASSWORD_POLICY,
 
@@ -84,23 +136,24 @@ export const settingsApi = {
     if (error) {
       throw new Error(`Failed to load storage settings: ${String(error)}`);
     }
-
-    const raw = data as unknown as Record<string, unknown>;
-    const storage_backend = raw?.storage_backend;
-    const storage_path = raw?.storage_path;
-    const max_upload_size_bytes = raw?.max_upload_size_bytes;
-
+    const settings = assertData(data, "settingsApi.getStorageSettings");
+    // Backend has historically returned wrongly-shaped responses for this
+    // endpoint (see issue #334), so guard at the trust boundary even though
+    // the SDK types claim the shape is correct.
     if (
-      typeof storage_backend !== "string" ||
-      typeof storage_path !== "string" ||
-      typeof max_upload_size_bytes !== "number"
+      typeof settings.storage_backend !== "string" ||
+      typeof settings.storage_path !== "string" ||
+      typeof settings.max_upload_size_bytes !== "number"
     ) {
       throw new Error(
         "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
       );
     }
-
-    return { storage_backend, storage_path, max_upload_size_bytes };
+    return {
+      storage_backend: settings.storage_backend,
+      storage_path: settings.storage_path,
+      max_upload_size_bytes: settings.max_upload_size_bytes,
+    };
   },
 
   /**
@@ -110,51 +163,34 @@ export const settingsApi = {
    * The backend may include password_policy fields in the response even
    * though the current SDK type definition doesn't declare them. We
    * extract those fields if present and merge with defaults.
-   *
-   * TODO: Once the backend exposes password_policy as a typed field in
-   * the OpenAPI spec and the SDK regenerates, replace the `as unknown`
-   * cast with proper typed access.
    */
   getPasswordPolicy: async (): Promise<PasswordPolicy> => {
     try {
       const { data, error } = await getSettings();
       if (error) return DEFAULT_PASSWORD_POLICY;
 
-      // The backend may return password policy fields that aren't yet
-      // typed in the SDK. Safely extract them from the raw response.
-      const raw = data as unknown as Record<string, unknown>;
-      const serverPolicy =
-        (raw?.password_policy as Partial<PasswordPolicy>) ?? {};
+      const parsed = PasswordPolicyExtSchema.safeParse(data);
+      if (!parsed.success) return DEFAULT_PASSWORD_POLICY;
+      const ext = parsed.data;
+      const serverPolicy = ext.password_policy ?? {};
 
       return {
         min_length:
-          typeof serverPolicy.min_length === "number"
-            ? serverPolicy.min_length
-            : (typeof raw?.password_min_length === "number"
-                ? raw.password_min_length
-                : DEFAULT_PASSWORD_POLICY.min_length),
+          serverPolicy.min_length ??
+          ext.password_min_length ??
+          DEFAULT_PASSWORD_POLICY.min_length,
         require_uppercase:
-          typeof serverPolicy.require_uppercase === "boolean"
-            ? serverPolicy.require_uppercase
-            : DEFAULT_PASSWORD_POLICY.require_uppercase,
+          serverPolicy.require_uppercase ?? DEFAULT_PASSWORD_POLICY.require_uppercase,
         require_lowercase:
-          typeof serverPolicy.require_lowercase === "boolean"
-            ? serverPolicy.require_lowercase
-            : DEFAULT_PASSWORD_POLICY.require_lowercase,
+          serverPolicy.require_lowercase ?? DEFAULT_PASSWORD_POLICY.require_lowercase,
         require_digit:
-          typeof serverPolicy.require_digit === "boolean"
-            ? serverPolicy.require_digit
-            : DEFAULT_PASSWORD_POLICY.require_digit,
+          serverPolicy.require_digit ?? DEFAULT_PASSWORD_POLICY.require_digit,
         require_special:
-          typeof serverPolicy.require_special === "boolean"
-            ? serverPolicy.require_special
-            : DEFAULT_PASSWORD_POLICY.require_special,
+          serverPolicy.require_special ?? DEFAULT_PASSWORD_POLICY.require_special,
         history_count:
-          typeof serverPolicy.history_count === "number"
-            ? serverPolicy.history_count
-            : (typeof raw?.password_history_count === "number"
-                ? raw.password_history_count
-                : DEFAULT_PASSWORD_POLICY.history_count),
+          serverPolicy.history_count ??
+          ext.password_history_count ??
+          DEFAULT_PASSWORD_POLICY.history_count,
       };
     } catch {
       return DEFAULT_PASSWORD_POLICY;
@@ -174,47 +210,26 @@ export const settingsApi = {
       const { data, error } = await getSettings();
       if (error) return DEFAULT_SMTP_CONFIG;
 
-      const raw = data as unknown as Record<string, unknown>;
-      const serverSmtp =
-        (raw?.smtp_config as Partial<SmtpConfig>) ??
-        (raw?.smtp as Partial<SmtpConfig>) ??
-        {};
+      const parsed = SmtpExtSchema.safeParse(data);
+      if (!parsed.success) return DEFAULT_SMTP_CONFIG;
+      const ext = parsed.data;
+      const serverSmtp = ext.smtp_config ?? ext.smtp ?? {};
 
       return {
-        host:
-          typeof serverSmtp.host === "string"
-            ? serverSmtp.host
-            : (typeof raw?.smtp_host === "string"
-                ? raw.smtp_host
-                : DEFAULT_SMTP_CONFIG.host),
-        port:
-          typeof serverSmtp.port === "number"
-            ? serverSmtp.port
-            : (typeof raw?.smtp_port === "number"
-                ? raw.smtp_port
-                : DEFAULT_SMTP_CONFIG.port),
+        host: serverSmtp.host ?? ext.smtp_host ?? DEFAULT_SMTP_CONFIG.host,
+        port: serverSmtp.port ?? ext.smtp_port ?? DEFAULT_SMTP_CONFIG.port,
         username:
-          typeof serverSmtp.username === "string"
-            ? serverSmtp.username
-            : (typeof raw?.smtp_username === "string"
-                ? raw.smtp_username
-                : DEFAULT_SMTP_CONFIG.username),
-        password:
-          typeof serverSmtp.password === "string"
-            ? serverSmtp.password
-            : DEFAULT_SMTP_CONFIG.password,
+          serverSmtp.username ?? ext.smtp_username ?? DEFAULT_SMTP_CONFIG.username,
+        password: serverSmtp.password ?? DEFAULT_SMTP_CONFIG.password,
         from_address:
-          typeof serverSmtp.from_address === "string"
-            ? serverSmtp.from_address
-            : (typeof raw?.smtp_from_address === "string"
-                ? raw.smtp_from_address
-                : DEFAULT_SMTP_CONFIG.from_address),
-        tls_mode:
-          isValidTlsMode(serverSmtp.tls_mode)
-            ? serverSmtp.tls_mode
-            : (isValidTlsMode(raw?.smtp_tls_mode)
-                ? (raw.smtp_tls_mode as SmtpTlsMode)
-                : DEFAULT_SMTP_CONFIG.tls_mode),
+          serverSmtp.from_address ??
+          ext.smtp_from_address ??
+          DEFAULT_SMTP_CONFIG.from_address,
+        tls_mode: isValidTlsMode(serverSmtp.tls_mode)
+          ? serverSmtp.tls_mode
+          : isValidTlsMode(ext.smtp_tls_mode)
+            ? ext.smtp_tls_mode
+            : DEFAULT_SMTP_CONFIG.tls_mode,
       };
     } catch {
       return DEFAULT_SMTP_CONFIG;

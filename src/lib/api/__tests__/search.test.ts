@@ -67,8 +67,15 @@ describe("searchApi", () => {
 
   describe("advancedSearch", () => {
     it("calls SDK with search params", async () => {
+      const sdkItem = {
+        id: "1",
+        name: "lodash",
+        type: "package",
+        repository_key: "npm-public",
+        created_at: "2025-01-01",
+      };
       const response = {
-        items: [{ id: "1", name: "lodash" }],
+        items: [sdkItem],
         pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
       };
       mockAdvancedSearch.mockResolvedValue({ data: response, error: undefined });
@@ -88,7 +95,23 @@ describe("searchApi", () => {
           format: "npm",
         },
       });
-      expect(result).toEqual(response);
+      expect(result).toEqual({
+        items: [
+          {
+            id: "1",
+            type: "package",
+            name: "lodash",
+            path: undefined,
+            repository_key: "npm-public",
+            format: undefined,
+            version: undefined,
+            size_bytes: undefined,
+            created_at: "2025-01-01",
+            highlights: undefined,
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      });
     });
 
     it("throws on SDK error", async () => {
@@ -104,10 +127,18 @@ describe("searchApi", () => {
 
   describe("checksumSearch", () => {
     it("calls SDK with checksum and algorithm", async () => {
-      const artifacts = [
-        { id: "a1", name: "react.tgz", path: "react/react.tgz" },
-      ];
-      mockChecksumSearch.mockResolvedValue({ data: { artifacts }, error: undefined });
+      // ChecksumArtifact (subset of full Artifact).
+      const sdkArtifact = {
+        id: "a1",
+        name: "react.tgz",
+        path: "react/react.tgz",
+        repository_key: "npm",
+        size_bytes: 100,
+      };
+      mockChecksumSearch.mockResolvedValue({
+        data: { artifacts: [sdkArtifact] },
+        error: undefined,
+      });
 
       const result = await searchApi.checksumSearch({
         checksum: "abc123",
@@ -120,7 +151,20 @@ describe("searchApi", () => {
           algorithm: "sha1",
         },
       });
-      expect(result).toEqual(artifacts);
+      expect(result).toEqual([
+        {
+          id: "a1",
+          repository_key: "npm",
+          path: "react/react.tgz",
+          name: "react.tgz",
+          version: undefined,
+          size_bytes: 100,
+          checksum_sha256: "",
+          content_type: "",
+          download_count: 0,
+          created_at: "",
+        },
+      ]);
     });
 
     it("defaults algorithm to sha256 when not provided", async () => {

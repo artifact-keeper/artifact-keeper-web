@@ -20,14 +20,43 @@ vi.mock("@artifact-keeper/sdk", () => ({
   removeMembers: (...args: unknown[]) => mockRemoveMembers(...args),
 }));
 
+function sdkGroupFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "g1",
+    name: "devs",
+    description: null,
+    member_count: 5,
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    ...overrides,
+  };
+}
+
+function adaptedGroupFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "g1",
+    name: "devs",
+    description: undefined,
+    auto_join: false,
+    member_count: 5,
+    is_external: false,
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    ...overrides,
+  };
+}
+
 describe("groupsApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("list returns paginated groups", async () => {
-    const data = { items: [{ id: "g1" }], pagination: { total: 1 } };
+    const data = { items: [sdkGroupFixture()], pagination: { total: 1 } };
     mockListGroups.mockResolvedValue({ data, error: undefined });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.list()).toEqual(data);
+    expect(await groupsApi.list()).toEqual({
+      items: [adaptedGroupFixture()],
+      pagination: { total: 1 },
+    });
   });
 
   it("list throws on error", async () => {
@@ -37,10 +66,9 @@ describe("groupsApi", () => {
   });
 
   it("get returns a single group", async () => {
-    const group = { id: "g1", name: "devs" };
-    mockGetGroup.mockResolvedValue({ data: group, error: undefined });
+    mockGetGroup.mockResolvedValue({ data: sdkGroupFixture(), error: undefined });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.get("g1")).toEqual(group);
+    expect(await groupsApi.get("g1")).toEqual(adaptedGroupFixture());
   });
 
   it("get throws on error", async () => {
@@ -50,10 +78,22 @@ describe("groupsApi", () => {
   });
 
   it("create returns created group", async () => {
-    const group = { id: "g2", name: "ops" };
-    mockCreateGroup.mockResolvedValue({ data: group, error: undefined });
+    // CreatedGroupRow shape — no member_count.
+    mockCreateGroup.mockResolvedValue({
+      data: { id: "g2", name: "ops", description: null, created_at: "x", updated_at: "x" },
+      error: undefined,
+    });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.create({ name: "ops" } as any)).toEqual(group);
+    expect(await groupsApi.create({ name: "ops" } as any)).toEqual({
+      id: "g2",
+      name: "ops",
+      description: undefined,
+      auto_join: false,
+      member_count: 0,
+      is_external: false,
+      created_at: "x",
+      updated_at: "x",
+    });
   });
 
   it("create throws on error", async () => {
@@ -63,10 +103,14 @@ describe("groupsApi", () => {
   });
 
   it("update returns updated group", async () => {
-    const group = { id: "g1", name: "devs-updated" };
-    mockUpdateGroup.mockResolvedValue({ data: group, error: undefined });
+    mockUpdateGroup.mockResolvedValue({
+      data: sdkGroupFixture({ name: "devs-updated" }),
+      error: undefined,
+    });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.update("g1", { name: "devs-updated" } as any)).toEqual(group);
+    expect(await groupsApi.update("g1", { name: "devs-updated" } as any)).toEqual(
+      adaptedGroupFixture({ name: "devs-updated" })
+    );
   });
 
   it("update throws on error", async () => {

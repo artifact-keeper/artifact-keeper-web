@@ -22,8 +22,14 @@ describe("authApi", () => {
   });
 
   it("login calls SDK with credentials", async () => {
-    const mockResponse = { access_token: "abc", user: { id: "1" } };
-    mockLogin.mockResolvedValue({ data: mockResponse, error: undefined });
+    const sdkResponse = {
+      access_token: "abc",
+      refresh_token: "ref",
+      expires_in: 3600,
+      token_type: "Bearer",
+      must_change_password: false,
+    };
+    mockLogin.mockResolvedValue({ data: sdkResponse, error: undefined });
 
     const { authApi } = await import("../auth");
     const result = await authApi.login({ username: "admin", password: "pass" });
@@ -31,7 +37,15 @@ describe("authApi", () => {
     expect(mockLogin).toHaveBeenCalledWith({
       body: { username: "admin", password: "pass" },
     });
-    expect(result).toEqual(mockResponse);
+    expect(result).toEqual({
+      access_token: "abc",
+      refresh_token: "ref",
+      expires_in: 3600,
+      token_type: "Bearer",
+      must_change_password: false,
+      totp_required: undefined,
+      totp_token: undefined,
+    });
   });
 
   it("login throws on SDK error", async () => {
@@ -52,9 +66,15 @@ describe("authApi", () => {
   });
 
   it("refreshToken calls SDK with empty body", async () => {
-    const mockResponse = { access_token: "new-token" };
+    const sdkResponse = {
+      access_token: "new-token",
+      refresh_token: "ref",
+      expires_in: 3600,
+      token_type: "Bearer",
+      must_change_password: false,
+    };
     mockRefreshToken.mockResolvedValue({
-      data: mockResponse,
+      data: sdkResponse,
       error: undefined,
     });
 
@@ -62,19 +82,40 @@ describe("authApi", () => {
     const result = await authApi.refreshToken();
 
     expect(mockRefreshToken).toHaveBeenCalledWith({ body: expect.anything() });
-    expect(result).toEqual(mockResponse);
+    expect(result).toEqual({
+      access_token: "new-token",
+      refresh_token: "ref",
+      expires_in: 3600,
+      token_type: "Bearer",
+      must_change_password: false,
+      totp_required: undefined,
+      totp_token: undefined,
+    });
   });
 
   it("getCurrentUser returns user data", async () => {
-    const mockUser = { id: "1", username: "admin", role: "admin" };
+    const sdkUser = {
+      id: "1",
+      username: "admin",
+      email: "admin@example.com",
+      is_admin: true,
+      totp_enabled: false,
+    };
     mockGetCurrentUser.mockResolvedValue({
-      data: mockUser,
+      data: sdkUser,
       error: undefined,
     });
 
     const { authApi } = await import("../auth");
     const result = await authApi.getCurrentUser();
-    expect(result).toEqual(mockUser);
+    expect(result).toEqual({
+      id: "1",
+      username: "admin",
+      email: "admin@example.com",
+      is_admin: true,
+      totp_enabled: false,
+      display_name: undefined,
+    });
   });
 
   // --- Error paths for logout, refreshToken, getCurrentUser ---
