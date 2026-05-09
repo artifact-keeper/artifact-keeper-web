@@ -54,17 +54,40 @@ const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'arti
 const ACTIONS = new Set<PermissionAction>(['read', 'write', 'delete', 'admin']);
 
 function narrowPrincipal(v: string): PermissionPrincipalType {
-  return PRINCIPAL_TYPES.has(v as PermissionPrincipalType)
-    ? (v as PermissionPrincipalType)
-    : 'user';
+  if (PRINCIPAL_TYPES.has(v as PermissionPrincipalType)) {
+    return v as PermissionPrincipalType;
+  }
+  // A new backend principal_type variant (e.g. 'service_account') would otherwise
+  // silently flatten to 'user' and show up under the wrong ACL row. Surface it
+  // so the regression is observable.
+  console.warn(
+    `permissionsApi: unknown principal_type "${v}" — defaulting to 'user'. ` +
+      `This likely means the backend introduced a new principal kind the web hasn't picked up yet.`
+  );
+  return 'user';
 }
 function narrowTarget(v: string): PermissionTargetType {
-  return TARGET_TYPES.has(v as PermissionTargetType)
-    ? (v as PermissionTargetType)
-    : 'repository';
+  if (TARGET_TYPES.has(v as PermissionTargetType)) {
+    return v as PermissionTargetType;
+  }
+  console.warn(
+    `permissionsApi: unknown target_type "${v}" — defaulting to 'repository'. ` +
+      `This likely means the backend introduced a new permission target kind.`
+  );
+  return 'repository';
 }
 function narrowActions(actions: string[]): PermissionAction[] {
-  return actions.filter((a): a is PermissionAction => ACTIONS.has(a as PermissionAction));
+  const narrowed = actions.filter((a): a is PermissionAction =>
+    ACTIONS.has(a as PermissionAction)
+  );
+  if (narrowed.length !== actions.length) {
+    const dropped = actions.filter((a) => !ACTIONS.has(a as PermissionAction));
+    console.warn(
+      `permissionsApi: dropping unknown action(s) ${JSON.stringify(dropped)} — ` +
+        `the backend may have added a new permission action.`
+    );
+  }
+  return narrowed;
 }
 
 function adaptPermission(sdk: PermissionResponse | CreatedPermissionRow): Permission {

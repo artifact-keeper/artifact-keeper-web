@@ -166,4 +166,45 @@ describe("permissionsApi", () => {
     const { permissionsApi } = await import("../permissions");
     await expect(permissionsApi.delete("perm1")).rejects.toBe("fail");
   });
+
+  // ---- Narrowing fallback warnings ----
+
+  it("warns and defaults principal_type to 'user' on unknown variant", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetPermission.mockResolvedValue({
+      data: sdkPermissionFixture({ principal_type: "service_account" }),
+      error: undefined,
+    });
+    const { permissionsApi } = await import("../permissions");
+    const result = await permissionsApi.get("perm1");
+    expect(result.principal_type).toBe("user");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/unknown principal_type/));
+    warn.mockRestore();
+  });
+
+  it("warns and defaults target_type to 'repository' on unknown variant", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetPermission.mockResolvedValue({
+      data: sdkPermissionFixture({ target_type: "namespace" }),
+      error: undefined,
+    });
+    const { permissionsApi } = await import("../permissions");
+    const result = await permissionsApi.get("perm1");
+    expect(result.target_type).toBe("repository");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/unknown target_type/));
+    warn.mockRestore();
+  });
+
+  it("warns when narrowActions filters unknown values", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetPermission.mockResolvedValue({
+      data: sdkPermissionFixture({ actions: ["read", "approve"] }),
+      error: undefined,
+    });
+    const { permissionsApi } = await import("../permissions");
+    const result = await permissionsApi.get("perm1");
+    expect(result.actions).toEqual(["read"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropping unknown action/));
+    warn.mockRestore();
+  });
 });
