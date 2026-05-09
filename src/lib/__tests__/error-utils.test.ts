@@ -224,9 +224,10 @@ describe("toUserMessage", () => {
     const long = "x".repeat(500);
     const out = toUserMessage(long, FALLBACK);
     expect(out.length).toBeLessThan(long.length);
-    expect(out.endsWith("…")).toBe(true);
-    // The truncated-count suffix carries the number of characters dropped.
+    // Output is `<first 240 chars>… [truncated, N more chars]`.
+    expect(out).toContain("…");
     expect(out).toContain("260 more");
+    expect(out).toMatch(/\[truncated, \d+ more chars\]$/);
   });
 
   it("truncates a long Error.message", () => {
