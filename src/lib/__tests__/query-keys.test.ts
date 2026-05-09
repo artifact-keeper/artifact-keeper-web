@@ -23,7 +23,7 @@ function createMockQueryClient() {
 // ---------------------------------------------------------------------------
 
 describe("QUERY_KEYS", () => {
-  const expectedKeys: Record<string, string[]> = {
+  const expectedKeys: Record<string, string[] | (string | undefined)[]> = {
     ADMIN_STATS: ["admin-stats"],
     RECENT_REPOS: ["recent-repositories"],
     REPOSITORIES: ["repositories"],
@@ -36,10 +36,15 @@ describe("QUERY_KEYS", () => {
     ADMIN_GROUPS: ["admin-groups"],
     ADMIN_PERMISSIONS: ["admin-permissions"],
     SERVICE_ACCOUNTS: ["service-accounts"],
+    WEBHOOKS: ["webhooks"],
+    WEBHOOK_DELIVERIES: ["webhook-deliveries"],
+    BACKUPS: ["backups"],
+    SECURITY: ["security"],
+    PLUGINS: ["plugins"],
   };
 
-  it("has 12 key constants", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(12);
+  it("has 17 key constants (#213)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(17);
   });
 
   it.each(Object.entries(expectedKeys))(
@@ -64,15 +69,19 @@ describe("QUERY_KEYS", () => {
 // ---------------------------------------------------------------------------
 
 describe("INVALIDATION_GROUPS", () => {
-  it("has all expected groups", () => {
+  it("has all expected groups (#213)", () => {
     expect(Object.keys(INVALIDATION_GROUPS).sort((a, b) => a.localeCompare(b))).toEqual([
+      "backups",
       "dashboard",
       "groups",
       "permissions",
+      "plugins",
       "qualityGates",
       "repositories",
+      "security",
       "serviceAccounts",
       "users",
+      "webhooks",
     ]);
   });
 
@@ -118,8 +127,8 @@ describe("INVALIDATION_GROUPS", () => {
 // ---------------------------------------------------------------------------
 
 describe("EVENT_TYPE_MAP", () => {
-  it("maps 20 event types", () => {
-    expect(Object.keys(EVENT_TYPE_MAP)).toHaveLength(20);
+  it("maps 39 event types (#213)", () => {
+    expect(Object.keys(EVENT_TYPE_MAP)).toHaveLength(39);
   });
 
   it.each([
@@ -143,6 +152,31 @@ describe("EVENT_TYPE_MAP", () => {
     ["quality_gate.created", "qualityGates"],
     ["quality_gate.updated", "qualityGates"],
     ["quality_gate.deleted", "qualityGates"],
+    // Webhooks (#213)
+    ["webhook.created", "webhooks"],
+    ["webhook.updated", "webhooks"],
+    ["webhook.deleted", "webhooks"],
+    ["webhook.delivery", "webhooks"],
+    // Artifacts — invalidate repository lists since artifact CRUD changes
+    // counts shown on repo cards (#213)
+    ["artifact.uploaded", "repositories"],
+    ["artifact.deleted", "repositories"],
+    // Scans (#213)
+    ["scan.started", "security"],
+    ["scan.completed", "security"],
+    ["scan.failed", "security"],
+    ["finding.acknowledged", "security"],
+    ["finding.acknowledgment_revoked", "security"],
+    // Backups (#213)
+    ["backup.created", "backups"],
+    ["backup.completed", "backups"],
+    ["backup.failed", "backups"],
+    ["backup.restored", "backups"],
+    // Plugins (#213)
+    ["plugin.installed", "plugins"],
+    ["plugin.uninstalled", "plugins"],
+    ["plugin.enabled", "plugins"],
+    ["plugin.disabled", "plugins"],
   ])("%s maps to %s group", (eventType, expectedGroup) => {
     expect(EVENT_TYPE_MAP[eventType]).toBe(expectedGroup);
   });

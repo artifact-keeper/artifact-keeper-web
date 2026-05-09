@@ -23,6 +23,14 @@ export const QUERY_KEYS = {
   ADMIN_GROUPS: ["admin-groups"],
   ADMIN_PERMISSIONS: ["admin-permissions"],
   SERVICE_ACCOUNTS: ["service-accounts"],
+  WEBHOOKS: ["webhooks"],
+  WEBHOOK_DELIVERIES: ["webhook-deliveries"],
+  BACKUPS: ["backups"],
+  // Single root key — TanStack invalidates by prefix, so any cache entry
+  // whose key starts with ["security", ...] (dashboard, scores, scans,
+  // findings, policies, scan-configs) gets invalidated. See #213.
+  SECURITY: ["security"],
+  PLUGINS: ["plugins"],
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -44,6 +52,10 @@ export const INVALIDATION_GROUPS: Record<string, readonly (readonly string[])[]>
   serviceAccounts: [QUERY_KEYS.SERVICE_ACCOUNTS],
   permissions: [QUERY_KEYS.ADMIN_PERMISSIONS],
   qualityGates: [QUERY_KEYS.QUALITY_GATES, QUERY_KEYS.QUALITY_HEALTH],
+  webhooks: [QUERY_KEYS.WEBHOOKS, QUERY_KEYS.WEBHOOK_DELIVERIES],
+  backups: [QUERY_KEYS.BACKUPS],
+  security: [QUERY_KEYS.SECURITY],
+  plugins: [QUERY_KEYS.PLUGINS],
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +83,33 @@ export const EVENT_TYPE_MAP: Record<string, string> = {
   "quality_gate.created": "qualityGates",
   "quality_gate.updated": "qualityGates",
   "quality_gate.deleted": "qualityGates",
+  // Webhooks — list view + per-delivery panel both stale on these (#213)
+  "webhook.created": "webhooks",
+  "webhook.updated": "webhooks",
+  "webhook.deleted": "webhooks",
+  "webhook.delivery": "webhooks",
+  // Artifact CRUD bumps the artifact_count shown on repo cards/lists, so
+  // map to repositories rather than introducing a separate artifacts group
+  // (no consumer queries `["artifacts"]` directly today). (#213)
+  "artifact.uploaded": "repositories",
+  "artifact.deleted": "repositories",
+  // Scans + finding triage — security dashboard, scan list, per-scan
+  // findings all live under the ["security", ...] prefix (#213)
+  "scan.started": "security",
+  "scan.completed": "security",
+  "scan.failed": "security",
+  "finding.acknowledged": "security",
+  "finding.acknowledgment_revoked": "security",
+  // Backups (#213)
+  "backup.created": "backups",
+  "backup.completed": "backups",
+  "backup.failed": "backups",
+  "backup.restored": "backups",
+  // Plugins (#213)
+  "plugin.installed": "plugins",
+  "plugin.uninstalled": "plugins",
+  "plugin.enabled": "plugins",
+  "plugin.disabled": "plugins",
 };
 
 // ---------------------------------------------------------------------------
