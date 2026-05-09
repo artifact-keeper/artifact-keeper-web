@@ -79,14 +79,25 @@ function makeRepo(overrides: Partial<Repository> = {}): Repository {
   };
 }
 
-async function renderPageWithRepos(repos: Repository[]) {
+async function renderPageWithRepos(repos: Repository[]): Promise<void> {
   mockUseQuery.mockReturnValue({
     data: { items: repos, pagination: { total: repos.length } },
     isLoading: false,
   });
   const mod = await import("./page");
   const Page = mod.default;
-  return render(<Page />);
+  render(<Page />);
+}
+
+/** Render the page with a single repo and click its card to open the setup
+ *  dialog. Returns the userEvent instance for further interaction. */
+async function openRepoDialog(repo: Repository): Promise<ReturnType<typeof userEvent.setup>> {
+  const user = userEvent.setup();
+  await renderPageWithRepos([repo]);
+  const card = screen.getByText(repo.key).closest("div[data-slot='card']");
+  expect(card).toBeTruthy();
+  await user.click(card!);
+  return user;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,13 +114,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("renders Maven, Gradle (Groovy), Gradle (Kotlin), and SBT tabs for a maven repo", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "maven" })]);
-
-    // Open the setup dialog by clicking the repo card
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    expect(card).toBeTruthy();
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "maven" }));
 
     // Dialog title appears
     expect(await screen.findByText(/Set Up: my-jvm-repo/i)).toBeTruthy();
@@ -122,11 +127,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("shows pom.xml snippet on the Maven tab (the default for maven format)", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "maven", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "maven", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     // For a maven-format repo, Maven tab is selected by default
@@ -138,11 +139,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("opens on the Gradle (Groovy) tab for a gradle-format repo", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "gradle", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "gradle", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     // For a gradle-format repo, Gradle (Groovy) is selected by default
@@ -155,22 +152,14 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("opens on the SBT tab for an sbt-format repo", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "sbt", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "sbt", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     expect(screen.getByRole("tab", { name: "SBT", selected: true })).toBeTruthy();
   });
 
   it("shows Groovy DSL snippet on the Gradle (Groovy) tab", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "gradle", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    const user = await openRepoDialog(makeRepo({ format: "gradle", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("tab", { name: "Gradle (Groovy)" }));
@@ -186,11 +175,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("shows Kotlin DSL snippet on the Gradle (Kotlin) tab", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "gradle", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    const user = await openRepoDialog(makeRepo({ format: "gradle", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("tab", { name: "Gradle (Kotlin)" }));
@@ -206,11 +191,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("shows SBT snippet on the SBT tab", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "sbt", key: "my-jvm-repo" })]);
-
-    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
-    await user.click(card!);
+    const user = await openRepoDialog(makeRepo({ format: "sbt", key: "my-jvm-repo" }));
 
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("tab", { name: "SBT" }));
@@ -223,11 +204,7 @@ describe("SetupPage - JVM client variants", () => {
   });
 
   it("interpolates the repo key into all JVM variant snippets", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "maven", key: "acme-libs" })]);
-
-    const card = screen.getByText("acme-libs").closest("div[data-slot='card']");
-    await user.click(card!);
+    const user = await openRepoDialog(makeRepo({ format: "maven", key: "acme-libs" }));
 
     const dialog = await screen.findByRole("dialog");
     // Maven tab is open by default and should mention the key
@@ -250,11 +227,7 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
   });
 
   it("renders npm steps as a flat list, not tabs", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "npm", key: "my-npm" })]);
-
-    const card = screen.getByText("my-npm").closest("div[data-slot='card']");
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "npm", key: "my-npm" }));
 
     const dialog = await screen.findByRole("dialog");
     // npm snippet text should be present
@@ -266,11 +239,7 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
   });
 
   it("renders docker steps as a flat list, not tabs", async () => {
-    const user = userEvent.setup();
-    await renderPageWithRepos([makeRepo({ format: "docker", key: "my-docker" })]);
-
-    const card = screen.getByText("my-docker").closest("div[data-slot='card']");
-    await user.click(card!);
+    await openRepoDialog(makeRepo({ format: "docker", key: "my-docker" }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain("docker login");

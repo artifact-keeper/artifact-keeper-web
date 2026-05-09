@@ -86,6 +86,14 @@ const REGISTRY_HOST =
  *  surface tabs for each. */
 function getJvmClientVariants(repoKey: string): SetupClientVariant[] {
   const repoUrl = `${REGISTRY_URL}/maven/${repoKey}/`;
+  const gradleCredentials: SetupStep = {
+    title: "Configure credentials",
+    description: "Add to ~/.gradle/gradle.properties:",
+    code: `${repoKey}Username=YOUR_USERNAME
+${repoKey}Password=YOUR_TOKEN`,
+  };
+  const gradlePublish: SetupStep = { title: "Publish artifacts", code: "gradle publish" };
+
   return [
     {
       key: "maven",
@@ -125,12 +133,7 @@ function getJvmClientVariants(repoKey: string): SetupClientVariant[] {
       key: "gradle-groovy",
       label: "Gradle (Groovy)",
       steps: [
-        {
-          title: "Configure credentials",
-          description: "Add to ~/.gradle/gradle.properties:",
-          code: `${repoKey}Username=YOUR_USERNAME
-${repoKey}Password=YOUR_TOKEN`,
-        },
+        gradleCredentials,
         {
           title: "Add repository to build.gradle",
           code: `repositories {
@@ -146,19 +149,14 @@ dependencies {
     implementation 'com.example:your-artifact:1.0.0'
 }`,
         },
-        { title: "Publish artifacts", code: "gradle publish" },
+        gradlePublish,
       ],
     },
     {
       key: "gradle-kotlin",
       label: "Gradle (Kotlin)",
       steps: [
-        {
-          title: "Configure credentials",
-          description: "Add to ~/.gradle/gradle.properties:",
-          code: `${repoKey}Username=YOUR_USERNAME
-${repoKey}Password=YOUR_TOKEN`,
-        },
+        gradleCredentials,
         {
           title: "Add repository to build.gradle.kts",
           code: `repositories {
@@ -174,7 +172,7 @@ dependencies {
     implementation("com.example:your-artifact:1.0.0")
 }`,
         },
-        { title: "Publish artifacts", code: "gradle publish" },
+        gradlePublish,
       ],
     },
     {
@@ -201,18 +199,25 @@ libraryDependencies += "com.example" %% "your-artifact" % "1.0.0"`,
   ];
 }
 
+/** Default JVM-variant tab keyed by the repo's declared format. A "Gradle" repo
+ *  opens on Gradle (Groovy DSL is the more common variant in the wild) so the
+ *  user doesn't have to click an extra tab to reach their tooling. */
+const JVM_DEFAULT_VARIANT: Record<"maven" | "gradle" | "sbt", string> = {
+  maven: "maven",
+  gradle: "gradle-groovy",
+  sbt: "sbt",
+};
+
 /** Generate repo-specific setup content based on format. JVM formats return a
  *  set of client variants (rendered as tabs); all other formats return a flat
  *  list of steps. */
 function getRepoSetupContent(repo: Repository): RepoSetupContent {
   if (repo.format === "maven" || repo.format === "gradle" || repo.format === "sbt") {
-    // Default to the tab matching the repo's declared format so a "Gradle" repo
-    // opens on Gradle (Groovy DSL is the more common variant in the wild).
-    const defaultKey =
-      repo.format === "gradle" ? "gradle-groovy" :
-      repo.format === "sbt" ? "sbt" :
-      "maven";
-    return { kind: "variants", variants: getJvmClientVariants(repo.key), defaultKey };
+    return {
+      kind: "variants",
+      variants: getJvmClientVariants(repo.key),
+      defaultKey: JVM_DEFAULT_VARIANT[repo.format],
+    };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
 }
