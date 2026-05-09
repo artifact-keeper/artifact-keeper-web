@@ -108,18 +108,127 @@ const SmtpExtSchema = z
   })
   .passthrough();
 
+/**
+ * Bundled response shape returned by `getAllSettings`. Each slice is parsed
+ * by the same logic the per-getter API uses, just sharing one HTTP round
+ * trip. See #349.
+ */
+export interface AdminSettings {
+  passwordPolicy: PasswordPolicy;
+  storageSettings: StorageSettings;
+  smtpConfig: SmtpConfig;
+}
+
+// ---- Pure parsers (#349 — extracted so getAllSettings can reuse them) ----
+
+function parseStorageSettings(data: unknown): StorageSettings {
+  const settings = assertData(data, "settingsApi.getStorageSettings") as
+    | Record<string, unknown>
+    | null;
+  // Backend has historically returned wrongly-shaped responses for this
+  // endpoint (see issue #334), so guard at the trust boundary even though
+  // the SDK types claim the shape is correct.
+  if (
+    !settings ||
+    typeof settings.storage_backend !== "string" ||
+    typeof settings.storage_path !== "string" ||
+    typeof settings.max_upload_size_bytes !== "number"
+  ) {
+    throw new Error(
+      "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
+    );
+  }
+  return {
+    storage_backend: settings.storage_backend,
+    storage_path: settings.storage_path,
+    max_upload_size_bytes: settings.max_upload_size_bytes,
+  };
+}
+
+function parsePasswordPolicy(data: unknown): PasswordPolicy {
+  const parsed = PasswordPolicyExtSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(
+      `Failed to load password policy: response did not match expected shape`
+    );
+  }
+  const ext = parsed.data;
+  const serverPolicy = ext.password_policy ?? {};
+
+  return {
+    min_length:
+      serverPolicy.min_length ??
+      ext.password_min_length ??
+      DEFAULT_PASSWORD_POLICY.min_length,
+    require_uppercase:
+      serverPolicy.require_uppercase ?? DEFAULT_PASSWORD_POLICY.require_uppercase,
+    require_lowercase:
+      serverPolicy.require_lowercase ?? DEFAULT_PASSWORD_POLICY.require_lowercase,
+    require_digit:
+      serverPolicy.require_digit ?? DEFAULT_PASSWORD_POLICY.require_digit,
+    require_special:
+      serverPolicy.require_special ?? DEFAULT_PASSWORD_POLICY.require_special,
+    history_count:
+      serverPolicy.history_count ??
+      ext.password_history_count ??
+      DEFAULT_PASSWORD_POLICY.history_count,
+  };
+}
+
+function parseSmtpConfig(data: unknown): SmtpConfig {
+  const parsed = SmtpExtSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(
+      `Failed to load SMTP config: response did not match expected shape`
+    );
+  }
+  const ext = parsed.data;
+  const serverSmtp = ext.smtp_config ?? ext.smtp ?? {};
+
+  return {
+    host: serverSmtp.host ?? ext.smtp_host ?? DEFAULT_SMTP_CONFIG.host,
+    port: serverSmtp.port ?? ext.smtp_port ?? DEFAULT_SMTP_CONFIG.port,
+    username:
+      serverSmtp.username ?? ext.smtp_username ?? DEFAULT_SMTP_CONFIG.username,
+    password: serverSmtp.password ?? DEFAULT_SMTP_CONFIG.password,
+    from_address:
+      serverSmtp.from_address ??
+      ext.smtp_from_address ??
+      DEFAULT_SMTP_CONFIG.from_address,
+    tls_mode: isValidTlsMode(serverSmtp.tls_mode)
+      ? serverSmtp.tls_mode
+      : isValidTlsMode(ext.smtp_tls_mode)
+        ? ext.smtp_tls_mode
+        : DEFAULT_SMTP_CONFIG.tls_mode,
+  };
+}
+
 export const settingsApi = {
   DEFAULT_PASSWORD_POLICY,
 
   /**
-   * Fetch storage configuration from system settings.
+   * Fetch all admin settings slices (password policy, storage, SMTP) in a
+   * single HTTP round trip. The admin Settings page used to call
+   * `/api/v1/admin/settings` three times via separate useQuery hooks (one
+   * per slice); this collapses to one. See #349.
    *
-   * The /api/v1/admin/settings response includes `storage_backend`,
-   * `storage_path`, and `max_upload_size_bytes` directly (the backend
-   * sources `storage_backend` and `storage_path` from the in-process
-   * config struct, which is loaded from STORAGE_BACKEND / STORAGE_PATH
-   * env vars at startup; `max_upload_size_bytes` is read from the
-   * `system_settings` DB row that the same endpoint manages).
+   * Throws on SDK error. Each slice's parser may also throw if its part
+   * of the response is malformed.
+   */
+  getAllSettings: async (): Promise<AdminSettings> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load admin settings: ${String(error)}`);
+    }
+    return {
+      passwordPolicy: parsePasswordPolicy(data),
+      storageSettings: parseStorageSettings(data),
+      smtpConfig: parseSmtpConfig(data),
+    };
+  },
+
+  /**
+   * Fetch storage configuration from system settings.
    *
    * Throws on SDK error or when the response is missing the required
    * fields (or has them as the wrong type). Callers are expected to
@@ -132,113 +241,35 @@ export const settingsApi = {
     if (error) {
       throw new Error(`Failed to load storage settings: ${String(error)}`);
     }
-    const settings = assertData(data, "settingsApi.getStorageSettings");
-    // Backend has historically returned wrongly-shaped responses for this
-    // endpoint (see issue #334), so guard at the trust boundary even though
-    // the SDK types claim the shape is correct.
-    if (
-      typeof settings.storage_backend !== "string" ||
-      typeof settings.storage_path !== "string" ||
-      typeof settings.max_upload_size_bytes !== "number"
-    ) {
-      throw new Error(
-        "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
-      );
-    }
-    return {
-      storage_backend: settings.storage_backend,
-      storage_path: settings.storage_path,
-      max_upload_size_bytes: settings.max_upload_size_bytes,
-    };
+    return parseStorageSettings(data);
   },
 
   /**
    * Fetch the password policy from system settings.
    *
-   * Throws on SDK error or unparseable response. Callers (the admin
-   * Settings page) are expected to surface the error state to the UI;
-   * silently returning defaults would hide a backend outage and render
-   * plausible-looking placeholder values, which is the failure mode
-   * #334 was filed to fix. The "merge server fields with defaults"
-   * behaviour is preserved for the success path because the SDK type
-   * doesn't model password_policy fields yet (some are optional).
+   * Throws on SDK error or unparseable response. See #347 for why we
+   * surface failures rather than silently returning defaults.
    */
   getPasswordPolicy: async (): Promise<PasswordPolicy> => {
     const { data, error } = await getSettings();
     if (error) {
       throw new Error(`Failed to load password policy: ${String(error)}`);
     }
-
-    const parsed = PasswordPolicyExtSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new Error(
-        `Failed to load password policy: response did not match expected shape`
-      );
-    }
-    const ext = parsed.data;
-    const serverPolicy = ext.password_policy ?? {};
-
-    return {
-      min_length:
-        serverPolicy.min_length ??
-        ext.password_min_length ??
-        DEFAULT_PASSWORD_POLICY.min_length,
-      require_uppercase:
-        serverPolicy.require_uppercase ?? DEFAULT_PASSWORD_POLICY.require_uppercase,
-      require_lowercase:
-        serverPolicy.require_lowercase ?? DEFAULT_PASSWORD_POLICY.require_lowercase,
-      require_digit:
-        serverPolicy.require_digit ?? DEFAULT_PASSWORD_POLICY.require_digit,
-      require_special:
-        serverPolicy.require_special ?? DEFAULT_PASSWORD_POLICY.require_special,
-      history_count:
-        serverPolicy.history_count ??
-        ext.password_history_count ??
-        DEFAULT_PASSWORD_POLICY.history_count,
-    };
+    return parsePasswordPolicy(data);
   },
 
   /**
    * Fetch the SMTP configuration from system settings.
    *
-   * Throws on SDK error or unparseable response. The SMTP tab handles
-   * the error state explicitly (see #347); silently returning defaults
-   * would surface a blank form that looked like "no SMTP configured"
-   * even when the backend was unreachable. The default-merge behaviour
-   * is preserved for the success path because the SDK type doesn't
-   * model the smtp_config / smtp_* fields yet.
+   * Throws on SDK error or unparseable response. See #347 for why we
+   * surface failures rather than silently returning defaults.
    */
   getSmtpConfig: async (): Promise<SmtpConfig> => {
     const { data, error } = await getSettings();
     if (error) {
       throw new Error(`Failed to load SMTP config: ${String(error)}`);
     }
-
-    const parsed = SmtpExtSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new Error(
-        `Failed to load SMTP config: response did not match expected shape`
-      );
-    }
-    const ext = parsed.data;
-    const serverSmtp = ext.smtp_config ?? ext.smtp ?? {};
-
-    return {
-      host: serverSmtp.host ?? ext.smtp_host ?? DEFAULT_SMTP_CONFIG.host,
-      port: serverSmtp.port ?? ext.smtp_port ?? DEFAULT_SMTP_CONFIG.port,
-      username:
-        serverSmtp.username ?? ext.smtp_username ?? DEFAULT_SMTP_CONFIG.username,
-      password: serverSmtp.password ?? DEFAULT_SMTP_CONFIG.password,
-      from_address:
-        serverSmtp.from_address ??
-        ext.smtp_from_address ??
-        DEFAULT_SMTP_CONFIG.from_address,
-      tls_mode: isValidTlsMode(serverSmtp.tls_mode)
-        ? serverSmtp.tls_mode
-        : isValidTlsMode(ext.smtp_tls_mode)
-          ? ext.smtp_tls_mode
-          : DEFAULT_SMTP_CONFIG.tls_mode,
-    };
+    return parseSmtpConfig(data);
   },
 
   /**

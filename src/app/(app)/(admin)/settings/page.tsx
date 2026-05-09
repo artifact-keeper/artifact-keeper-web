@@ -82,12 +82,17 @@ function formatStorageBackend(backend: string): string {
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  const { data: smtpConfig, isLoading, isError, error, dataUpdatedAt } = useQuery({
-    queryKey: ["smtp-config"],
-    queryFn: () => settingsApi.getSmtpConfig(),
+  // Reads from the shared `admin-settings` cache populated by SettingsPage's
+  // top-level useQuery — same queryKey + same queryFn so react-query dedups
+  // to a single HTTP round trip (#349). The sub-component pulls the SMTP
+  // slice off the bundle.
+  const { data: settings, isLoading, isError, error, dataUpdatedAt } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: () => settingsApi.getAllSettings(),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+  const smtpConfig = settings?.smtpConfig;
 
   if (isLoading) {
     return (
@@ -150,7 +155,7 @@ function SmtpSettingsForm({
     mutationFn: (config: SmtpConfig) => settingsApi.updateSmtpConfig(config),
     onSuccess: () => {
       toast.success("SMTP configuration saved");
-      queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       setFormDirty(false);
     },
     onError: mutationErrorToast("Failed to save SMTP configuration"),
@@ -386,33 +391,28 @@ export default function SettingsPage() {
     queryFn: () => adminApi.getHealth(),
   });
 
+  // One useQuery for /api/v1/admin/settings instead of three separate
+  // queries (one per slice). Each tab derives its data from the shared
+  // bundle. See #349.
   const {
-    data: passwordPolicy,
-    isError: passwordPolicyError,
-    isLoading: passwordPolicyLoading,
+    data: adminSettings,
+    isError: settingsError,
+    isLoading: settingsLoading,
   } = useQuery({
-    queryKey: ["password-policy"],
-    queryFn: () => settingsApi.getPasswordPolicy(),
+    queryKey: ["admin-settings"],
+    queryFn: () => settingsApi.getAllSettings(),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
 
-  const {
-    data: storageSettings,
-    isError: storageError,
-    isLoading: storageLoading,
-  } = useQuery<StorageSettings>({
-    queryKey: ["storage-settings"],
-    queryFn: () => settingsApi.getStorageSettings(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  const passwordPolicy = adminSettings?.passwordPolicy;
+  const storageSettings = adminSettings?.storageSettings;
 
   // Render the storage row value, distinguishing loading from error so an
   // API failure doesn't silently fall back to placeholder strings (#334).
   const storageValue = (format: (s: StorageSettings) => string): string => {
-    if (storageLoading) return "Loading...";
-    if (storageError || !storageSettings) return "Unavailable";
+    if (settingsLoading) return "Loading...";
+    if (settingsError || !storageSettings) return "Unavailable";
     return format(storageSettings);
   };
 
@@ -420,8 +420,8 @@ export default function SettingsPage() {
   // password-policy row so a backend outage shows "Unavailable" instead
   // of plausible-looking default policy text (#347).
   function passwordPolicyValue(): string {
-    if (passwordPolicyLoading) return "Loading...";
-    if (passwordPolicyError || !passwordPolicy) return "Unavailable";
+    if (settingsLoading) return "Loading...";
+    if (settingsError || !passwordPolicy) return "Unavailable";
     return formatPasswordPolicy(passwordPolicy);
   }
 

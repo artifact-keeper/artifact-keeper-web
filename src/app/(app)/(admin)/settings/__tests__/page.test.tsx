@@ -135,7 +135,7 @@ vi.mock("@/components/common/page-header", () => ({
 // ---------------------------------------------------------------------------
 
 import SettingsPage from "../page";
-import type { SmtpConfig } from "@/lib/api/settings";
+import type { AdminSettings, SmtpConfig } from "@/lib/api/settings";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -264,8 +264,8 @@ describe("SettingsPage", () => {
   // ---------------------------------------------------------------------------
 
   // Mock useQuery's return value based on which queryKey it's called with,
-  // instead of relying on a fragile call-order index. Order is:
-  // health, password-policy, storage-settings, smtp-config (in SettingsPage).
+  // instead of relying on a fragile call-order index. Keys in SettingsPage:
+  //   ["health"], ["admin-settings"]   — the latter is shared by SmtpSettingsTab.
   function mockQueriesByKey(
     overrides: Record<string, ReturnType<typeof mockUseQuery>>
   ) {
@@ -277,14 +277,11 @@ describe("SettingsPage", () => {
     });
   }
 
-  // Default SMTP data for tests that exercise the form (not the error/loading
-  // state). After #347, getSmtpConfig throws on load failure rather than
-  // silently falling back to defaults, so the page now renders an error
-  // state when smtp-config is undefined — tests that want the form must
-  // supply concrete data. Typed as SmtpConfig so a future schema change
-  // (new required field) breaks this fixture rather than silently rendering
-  // stale shapes — the `useQuery: (opts: any)` mock would otherwise hide
-  // shape drift entirely (R3 finding, #347).
+  // Typed defaults for a fully-populated AdminSettings bundle. Tests that
+  // override one slice merge their override on top; this lets a test pin
+  // (e.g.) storage data without spelling out the SMTP and password-policy
+  // shapes, while still typing the result as AdminSettings so a schema
+  // drift breaks the fixture rather than rendering stale shapes (#347/#349).
   const DEFAULT_SMTP_DATA: SmtpConfig = {
     host: "",
     port: 587,
@@ -293,30 +290,48 @@ describe("SettingsPage", () => {
     from_address: "",
     tls_mode: "starttls",
   };
-  function mockSmtpForm(
-    overrides: Record<string, ReturnType<typeof mockUseQuery>> = {}
+  const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
+    passwordPolicy: {
+      min_length: 8,
+      require_uppercase: true,
+      require_lowercase: true,
+      require_digit: true,
+      require_special: false,
+      history_count: 5,
+    },
+    storageSettings: {
+      storage_backend: "filesystem",
+      storage_path: "/data/storage",
+      max_upload_size_bytes: 1_073_741_824,
+    },
+    smtpConfig: DEFAULT_SMTP_DATA,
+  };
+
+  /** Mocks the shared `admin-settings` query for a given bundle (or default). */
+  function mockAdminSettings(
+    bundle: AdminSettings = DEFAULT_ADMIN_SETTINGS
   ) {
     mockQueriesByKey({
-      "smtp-config": {
-        data: DEFAULT_SMTP_DATA,
+      "admin-settings": {
+        data: bundle,
         isLoading: false,
         isError: false,
       },
-      ...overrides,
     });
+  }
+  /** Shorthand: render the SMTP form with default data. */
+  function mockSmtpForm() {
+    mockAdminSettings();
   }
 
   it("populates Storage fields from loaded settings", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      "storage-settings": {
-        data: {
-          storage_backend: "s3",
-          storage_path: "/data/storage",
-          max_upload_size_bytes: 1_073_741_824,
-        },
-        isLoading: false,
-        isError: false,
+    mockAdminSettings({
+      ...DEFAULT_ADMIN_SETTINGS,
+      storageSettings: {
+        storage_backend: "s3",
+        storage_path: "/data/storage",
+        max_upload_size_bytes: 1_073_741_824,
       },
     });
 
@@ -331,15 +346,12 @@ describe("SettingsPage", () => {
 
   it("renders friendly storage backend labels", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      "storage-settings": {
-        data: {
-          storage_backend: "filesystem",
-          storage_path: "/var/lib/ak",
-          max_upload_size_bytes: 0,
-        },
-        isLoading: false,
-        isError: false,
+    mockAdminSettings({
+      ...DEFAULT_ADMIN_SETTINGS,
+      storageSettings: {
+        storage_backend: "filesystem",
+        storage_path: "/var/lib/ak",
+        max_upload_size_bytes: 0,
       },
     });
 
@@ -354,15 +366,12 @@ describe("SettingsPage", () => {
 
   it("falls back to raw storage backend value when label is unknown", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      "storage-settings": {
-        data: {
-          storage_backend: "minio",
-          storage_path: "/data/minio",
-          max_upload_size_bytes: 5_368_709_120,
-        },
-        isLoading: false,
-        isError: false,
+    mockAdminSettings({
+      ...DEFAULT_ADMIN_SETTINGS,
+      storageSettings: {
+        storage_backend: "minio",
+        storage_path: "/data/minio",
+        max_upload_size_bytes: 5_368_709_120,
       },
     });
 
@@ -373,89 +382,46 @@ describe("SettingsPage", () => {
     expect(inputs.find((i) => i.value === "5 GB")).toBeDefined();
   });
 
-  it("shows Loading… in Storage fields while the query is loading", () => {
+  it("shows Loading… in Storage fields while admin-settings is loading (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "storage-settings": { data: undefined, isLoading: true, isError: false },
+      "admin-settings": { data: undefined, isLoading: true, isError: false },
     });
 
     render(<SettingsPage />);
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
-    // The three storage rows all show "Loading...".
+    // Three storage rows + password-policy row all show "Loading...".
     const loadingInputs = inputs.filter((i) => i.value === "Loading...");
-    expect(loadingInputs.length).toBeGreaterThanOrEqual(3);
+    expect(loadingInputs.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("shows Unavailable in Storage fields when the query errors", () => {
+  it("shows Unavailable in all settings rows when admin-settings errors (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      // Pin password-policy to a real value so the only Unavailable rows
-      // counted below come from storage. Password policy gets its own
-      // assertion in the next test (#347).
-      "password-policy": {
-        data: {
-          min_length: 8,
-          require_uppercase: true,
-          require_lowercase: true,
-          require_digit: true,
-          require_special: false,
-          history_count: 5,
-        },
-        isLoading: false,
-        isError: false,
-      },
-      "storage-settings": { data: undefined, isLoading: false, isError: true },
+      "admin-settings": { data: undefined, isLoading: false, isError: true },
     });
 
     render(<SettingsPage />);
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     const unavailableInputs = inputs.filter((i) => i.value === "Unavailable");
-    // All three storage rows surface the failure rather than silently
-    // falling back to the placeholder strings called out in #334.
-    expect(unavailableInputs.length).toBe(3);
+    // 3 storage rows + 1 password-policy row, all surface the failure
+    // rather than falling back to the buggy placeholder strings (#334/#347).
+    expect(unavailableInputs.length).toBe(4);
     // Critically: the buggy placeholders must NOT appear on error.
     expect(inputs.find((i) => i.value === "Local Filesystem")).toBeUndefined();
     expect(inputs.find((i) => i.value === "/data/artifacts")).toBeUndefined();
   });
 
-  it("shows Unavailable in Password Policy when the query errors (#347)", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    // Pin storage-settings to a successful response so the only Unavailable
-    // row counted below comes from password-policy. Without this pin,
-    // storage rows would also render Unavailable (3 of them) and the
-    // assertion below would pass even if the password-policy logic were
-    // broken — a load-bearing-by-accident test (caught by R3, #347).
-    mockQueriesByKey({
-      "password-policy": { data: undefined, isLoading: false, isError: true },
-      "storage-settings": {
-        data: {
-          storage_backend: "filesystem",
-          storage_path: "/data/storage",
-          max_upload_size_bytes: 1_073_741_824,
-        },
-        isLoading: false,
-        isError: false,
-      },
-    });
-
-    render(<SettingsPage />);
-
-    const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
-    const unavailableInputs = inputs.filter((i) => i.value === "Unavailable");
-    // Exactly one Unavailable row — the password policy.
-    expect(unavailableInputs.length).toBe(1);
-  });
-
-  it("shows error alert in SMTP tab when the query errors (#347)", () => {
+  it("shows error alert in SMTP tab when admin-settings errors (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "smtp-config": {
+      "admin-settings": {
         data: undefined,
         isLoading: false,
         isError: true,
-        error: new Error("Failed to load SMTP config: unauthorized"),
+        error: new Error("Failed to load admin settings: unauthorized"),
       },
     });
 
@@ -465,16 +431,16 @@ describe("SettingsPage", () => {
     // The thrown Error's message is rendered so an operator sees the
     // actual cause (not a generic placeholder).
     expect(
-      screen.getByText("Failed to load SMTP config: unauthorized")
+      screen.getByText("Failed to load admin settings: unauthorized")
     ).toBeDefined();
     // The buggy default form placeholders must NOT render on error.
     expect(screen.queryByTestId("smtp-host")).toBeNull();
   });
 
-  it("shows loader in SMTP tab while smtp-config is loading (#347)", () => {
+  it("shows loader in SMTP tab while admin-settings is loading (#349)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockQueriesByKey({
-      "smtp-config": { data: undefined, isLoading: true, isError: false },
+      "admin-settings": { data: undefined, isLoading: true, isError: false },
     });
 
     render(<SettingsPage />);
@@ -528,17 +494,15 @@ describe("SettingsPage", () => {
 
   it("populates SMTP fields from loaded config", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      "smtp-config": {
-        data: {
-          host: "mail.example.com",
-          port: 465,
-          username: "sender",
-          password: "secret",
-          from_address: "no-reply@example.com",
-          tls_mode: "tls" as const,
-        },
-        isLoading: false,
+    mockAdminSettings({
+      ...DEFAULT_ADMIN_SETTINGS,
+      smtpConfig: {
+        host: "mail.example.com",
+        port: 465,
+        username: "sender",
+        password: "secret",
+        from_address: "no-reply@example.com",
+        tls_mode: "tls",
       },
     });
 
