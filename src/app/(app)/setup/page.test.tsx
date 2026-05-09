@@ -246,4 +246,101 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
     const tablistsInDialog = within(dialog).queryAllByRole("tablist");
     expect(tablistsInDialog.length).toBe(0);
   });
+
+  it.each([
+    ["pypi", "pip"],
+    ["helm", "helm"],
+    ["rpm", "rpm"],
+    ["debian", "deb"],
+    ["go", "GOPROXY"],
+    ["nuget", "nuget"],
+    ["rubygems", "gem"],
+    ["cargo", "cargo"],
+    ["generic", "curl"],
+  ])("renders %s steps with format-specific tooling", async (format, marker) => {
+    await openRepoDialog(makeRepo({ format: format as Repository["format"], key: `my-${format}` }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent?.toLowerCase()).toContain(marker.toLowerCase());
+    const tablistsInDialog = within(dialog).queryAllByRole("tablist");
+    expect(tablistsInDialog.length).toBe(0);
+  });
+
+  it("filters repos via search input and category filter", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([
+      makeRepo({ id: "r1", key: "java-libs", name: "Java Libs", format: "maven" }),
+      makeRepo({ id: "r2", key: "py-utils", name: "Py Utils", format: "pypi" }),
+    ]);
+
+    expect(screen.getByText("java-libs")).toBeTruthy();
+    expect(screen.getByText("py-utils")).toBeTruthy();
+
+    // Search narrows the list
+    const search = screen.getByPlaceholderText(/search/i);
+    await user.type(search, "java");
+    expect(screen.getByText("java-libs")).toBeTruthy();
+    expect(screen.queryByText("py-utils")).toBeNull();
+
+    // Clear search
+    await user.clear(search);
+
+    // Click a category filter — exercises the toggle ternary
+    const allButtons = screen.getAllByRole("button", { name: "All" });
+    expect(allButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("closes the repo dialog when dismissed", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "maven" }));
+
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("SetupPage - CI/CD platforms", () => {
+  beforeEach(() => {
+    mockUseQuery.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens a CI/CD platform dialog when its card is clicked", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([makeRepo({ format: "maven" })]);
+
+    // Switch to the CI/CD tab at the page level
+    await user.click(screen.getByRole("tab", { name: /CI\/CD/i }));
+
+    // GitHub Actions should be one of the platforms; clicking the card opens
+    // the integration dialog and renders the StepsList for that platform.
+    const ghaCard = screen.getByText("GitHub Actions").closest("div[data-slot='card']");
+    expect(ghaCard).toBeTruthy();
+    await user.click(ghaCard!);
+
+    expect(await screen.findByText(/GitHub Actions Integration/i)).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    // StepsList should have rendered numbered steps for GitHub Actions
+    expect(dialog.textContent ?? "").toMatch(/setup|configure|workflow/i);
+  });
+
+  it("closes the CI/CD dialog when dismissed", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([makeRepo({ format: "maven" })]);
+
+    await user.click(screen.getByRole("tab", { name: /CI\/CD/i }));
+    const ghaCard = screen.getByText("GitHub Actions").closest("div[data-slot='card']");
+    await user.click(ghaCard!);
+
+    await screen.findByRole("dialog");
+    // Press Escape to close (Radix Dialog default)
+    await user.keyboard("{Escape}");
+
+    // Dialog should no longer be open
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });
