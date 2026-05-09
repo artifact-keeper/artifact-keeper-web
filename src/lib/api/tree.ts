@@ -1,14 +1,43 @@
 import '@/lib/sdk-client';
 import { getTree } from '@artifact-keeper/sdk';
+import type { TreeNodeResponse } from '@artifact-keeper/sdk';
+import { assertData } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { TreeNodeType, TreeNode } from '@/types/tree';
-import type { TreeNode } from '@/types/tree';
+import type { TreeNode, TreeNodeType } from '@/types/tree';
 
 export interface GetChildrenParams {
   repository_key?: string;
   path?: string;
   include_metadata?: boolean;
+}
+
+const TREE_NODE_TYPES = new Set<TreeNodeType>([
+  'root',
+  'repository',
+  'folder',
+  'package',
+  'version',
+  'artifact',
+  'metadata',
+]);
+
+function isTreeNodeType(v: string): v is TreeNodeType {
+  return TREE_NODE_TYPES.has(v as TreeNodeType);
+}
+
+// SDK TreeNodeResponse.type is `string`; narrow to local TreeNodeType,
+// defaulting unknown values to 'folder' so the UI stays renderable.
+function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    type: isTreeNodeType(sdk.type) ? sdk.type : 'folder',
+    path: sdk.path,
+    has_children: sdk.has_children,
+    children_count: sdk.children_count ?? undefined,
+  };
 }
 
 export const treeApi = {
@@ -18,10 +47,10 @@ export const treeApi = {
         repository_key: params.repository_key,
         path: params.path,
         include_metadata: params.include_metadata,
-      } as never,
+      },
     });
     if (error) throw error;
-    return (data as unknown as { nodes: TreeNode[] }).nodes;
+    return assertData(data, 'treeApi.getChildren').nodes.map(adaptTreeNode);
   },
 
   async getContent(params: {
