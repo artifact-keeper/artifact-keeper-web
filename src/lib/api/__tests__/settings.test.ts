@@ -81,21 +81,23 @@ describe("settingsApi", () => {
     expect(policy.history_count).toBe(3);
   });
 
-  it("getPasswordPolicy returns defaults on SDK error", async () => {
+  it("getPasswordPolicy throws on SDK error (#347)", async () => {
     mockGetSettings.mockResolvedValue({
       data: undefined,
       error: "unauthorized",
     });
     const mod = await import("../settings");
-    const policy = await mod.settingsApi.getPasswordPolicy();
-    expect(policy).toEqual(mod.settingsApi.DEFAULT_PASSWORD_POLICY);
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /Failed to load password policy/
+    );
   });
 
-  it("getPasswordPolicy returns defaults when SDK throws", async () => {
+  it("getPasswordPolicy propagates SDK rejection (#347)", async () => {
     mockGetSettings.mockRejectedValue(new Error("network error"));
     const mod = await import("../settings");
-    const policy = await mod.settingsApi.getPasswordPolicy();
-    expect(policy).toEqual(mod.settingsApi.DEFAULT_PASSWORD_POLICY);
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      "network error"
+    );
   });
 
   it("nested password_policy takes precedence over flat fields", async () => {
@@ -203,21 +205,23 @@ describe("settingsApi", () => {
     expect(config.host).toBe("nested.example.com");
   });
 
-  it("getSmtpConfig returns defaults on SDK error", async () => {
+  it("getSmtpConfig throws on SDK error (#347)", async () => {
     mockGetSettings.mockResolvedValue({
       data: undefined,
       error: "unauthorized",
     });
     const mod = await import("../settings");
-    const config = await mod.settingsApi.getSmtpConfig();
-    expect(config).toEqual(mod.DEFAULT_SMTP_CONFIG);
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /Failed to load SMTP config/
+    );
   });
 
-  it("getSmtpConfig returns defaults when SDK throws", async () => {
+  it("getSmtpConfig propagates SDK rejection (#347)", async () => {
     mockGetSettings.mockRejectedValue(new Error("network error"));
     const mod = await import("../settings");
-    const config = await mod.settingsApi.getSmtpConfig();
-    expect(config).toEqual(mod.DEFAULT_SMTP_CONFIG);
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      "network error"
+    );
   });
 
   it("getSmtpConfig uses default tls_mode for invalid values", async () => {
