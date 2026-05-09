@@ -1,4 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type {
+  SsoProviderInfo as SdkSsoProviderInfo,
+  OidcConfigResponse as SdkOidcConfigResponse,
+  LdapConfigResponse as SdkLdapConfigResponse,
+  SamlConfigResponse as SdkSamlConfigResponse,
+  LdapTestResult as SdkLdapTestResult,
+  ExchangeCodeResponse as SdkExchangeCodeResponse,
+} from "@artifact-keeper/sdk";
 
 vi.mock("@/lib/sdk-client", () => ({}));
 
@@ -50,15 +58,105 @@ vi.mock("@artifact-keeper/sdk", () => ({
   exchangeCode: (...args: unknown[]) => mockExchangeCode(...args),
 }));
 
+const SDK_PROVIDER: SdkSsoProviderInfo = {
+  id: "p1",
+  name: "Corp SSO",
+  provider_type: "oidc",
+  login_url: "/api/v1/sso/oidc/p1/login",
+};
+
+const SDK_OIDC: SdkOidcConfigResponse = {
+  id: "o1",
+  name: "Corp OIDC",
+  issuer_url: "https://accounts.example.com",
+  client_id: "client-1",
+  has_secret: true,
+  scopes: ["openid", "email"],
+  attribute_mapping: { email: "email", name: "name" },
+  auto_create_users: true,
+  is_enabled: true,
+  created_at: "2026-04-01T00:00:00Z",
+  updated_at: "2026-05-01T00:00:00Z",
+};
+
+const SDK_LDAP: SdkLdapConfigResponse = {
+  id: "l1",
+  name: "Corp LDAP",
+  server_url: "ldap://ldap.example.com",
+  bind_dn: "cn=admin,dc=example,dc=com",
+  has_bind_password: true,
+  user_base_dn: "ou=users,dc=example,dc=com",
+  user_filter: "(uid={username})",
+  username_attribute: "uid",
+  email_attribute: "mail",
+  display_name_attribute: "cn",
+  groups_attribute: "memberOf",
+  group_base_dn: "ou=groups,dc=example,dc=com",
+  group_filter: "(member={dn})",
+  admin_group_dn: "cn=admins,ou=groups,dc=example,dc=com",
+  use_starttls: true,
+  is_enabled: true,
+  priority: 10,
+  created_at: "2026-04-01T00:00:00Z",
+  updated_at: "2026-05-01T00:00:00Z",
+};
+
+const SDK_SAML: SdkSamlConfigResponse = {
+  id: "s1",
+  name: "Corp SAML",
+  entity_id: "https://idp.example.com/saml",
+  sso_url: "https://idp.example.com/saml/sso",
+  slo_url: "https://idp.example.com/saml/slo",
+  has_certificate: true,
+  sp_entity_id: "https://artifact-keeper.example.com/saml",
+  name_id_format: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+  attribute_mapping: { email: "Email", name: "DisplayName" },
+  sign_requests: true,
+  require_signed_assertions: true,
+  admin_group: "Admins",
+  is_enabled: true,
+  created_at: "2026-04-01T00:00:00Z",
+  updated_at: "2026-05-01T00:00:00Z",
+};
+
+const SDK_TEST: SdkLdapTestResult = {
+  success: true,
+  message: "ok",
+  response_time_ms: 12,
+};
+
+const SDK_TOKENS: SdkExchangeCodeResponse = {
+  access_token: "AT",
+  refresh_token: "RT",
+  token_type: "Bearer",
+};
+
 describe("ssoApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   // Providers
   it("listProviders returns providers", async () => {
-    const data = [{ id: "oidc1", type: "oidc" }];
-    mockListProviders.mockResolvedValue({ data, error: undefined });
+    mockListProviders.mockResolvedValue({
+      data: [SDK_PROVIDER],
+      error: undefined,
+    });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.listProviders()).toEqual(data);
+    const out = await ssoApi.listProviders();
+    expect(out[0].id).toBe("p1");
+    expect(out[0].provider_type).toBe("oidc");
+  });
+
+  it("listProviders narrows unknown provider_type (#359)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockListProviders.mockResolvedValue({
+      data: [{ ...SDK_PROVIDER, provider_type: "exotic" }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listProviders();
+    expect(out[0].provider_type).toBe("oidc");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("listProviders throws on error", async () => {
@@ -69,10 +167,22 @@ describe("ssoApi", () => {
 
   // OIDC
   it("listOidc returns configs", async () => {
-    const data = [{ id: "o1" }];
-    mockListOidc.mockResolvedValue({ data, error: undefined });
+    mockListOidc.mockResolvedValue({ data: [SDK_OIDC], error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.listOidc()).toEqual(data);
+    const out = await ssoApi.listOidc();
+    expect(out[0].id).toBe("o1");
+    expect(out[0].attribute_mapping).toEqual({ email: "email", name: "name" });
+  });
+
+  it("listOidc coerces non-string attribute_mapping values (#359)", async () => {
+    mockListOidc.mockResolvedValue({
+      data: [{ ...SDK_OIDC, attribute_mapping: { email: 42, name: "name" } }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].attribute_mapping.email).toBe("42");
+    expect(out[0].attribute_mapping.name).toBe("name");
   });
 
   it("listOidc throws on error", async () => {
@@ -82,10 +192,10 @@ describe("ssoApi", () => {
   });
 
   it("getOidc returns config", async () => {
-    const data = { id: "o1" };
-    mockGetOidc.mockResolvedValue({ data, error: undefined });
+    mockGetOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.getOidc("o1")).toEqual(data);
+    const out = await ssoApi.getOidc("o1");
+    expect(out.id).toBe("o1");
   });
 
   it("getOidc throws on error", async () => {
@@ -94,30 +204,54 @@ describe("ssoApi", () => {
     await expect(ssoApi.getOidc("o1")).rejects.toBe("fail");
   });
 
-  it("createOidc returns new config", async () => {
-    const data = { id: "o2" };
-    mockCreateOidc.mockResolvedValue({ data, error: undefined });
+  it("createOidc returns new config and forwards body", async () => {
+    mockCreateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.createOidc({} as any)).toEqual(data);
+    await ssoApi.createOidc({
+      name: "Corp OIDC",
+      issuer_url: "https://accounts.example.com",
+      client_id: "client-1",
+      client_secret: "secret",
+      scopes: ["openid"],
+      auto_create_users: true,
+    });
+    expect(mockCreateOidc).toHaveBeenCalledWith({
+      body: {
+        name: "Corp OIDC",
+        issuer_url: "https://accounts.example.com",
+        client_id: "client-1",
+        client_secret: "secret",
+        scopes: ["openid"],
+        attribute_mapping: undefined,
+        auto_create_users: true,
+      },
+    });
   });
 
   it("createOidc throws on error", async () => {
     mockCreateOidc.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.createOidc({} as any)).rejects.toBe("fail");
+    await expect(
+      ssoApi.createOidc({
+        name: "x",
+        issuer_url: "x",
+        client_id: "x",
+        client_secret: "x",
+      }),
+    ).rejects.toBe("fail");
   });
 
-  it("updateOidc returns updated config", async () => {
-    const data = { id: "o1" };
-    mockUpdateOidc.mockResolvedValue({ data, error: undefined });
+  it("updateOidc returns config", async () => {
+    mockUpdateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.updateOidc("o1", {} as any)).toEqual(data);
+    const out = await ssoApi.updateOidc("o1", { name: "renamed" });
+    expect(out.id).toBe("o1");
   });
 
   it("updateOidc throws on error", async () => {
     mockUpdateOidc.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.updateOidc("o1", {} as any)).rejects.toBe("fail");
+    await expect(ssoApi.updateOidc("o1", {})).rejects.toBe("fail");
   });
 
   it("deleteOidc calls SDK", async () => {
@@ -133,42 +267,54 @@ describe("ssoApi", () => {
     await expect(ssoApi.deleteOidc("o1")).rejects.toBe("fail");
   });
 
-  it("enableOidc toggles with enabled=true", async () => {
+  it("enableOidc passes enabled=true", async () => {
     mockToggleOidc.mockResolvedValue({ error: undefined });
     const { ssoApi } = await import("../sso");
     await ssoApi.enableOidc("o1");
-    expect(mockToggleOidc).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: true } })
-    );
+    expect(mockToggleOidc).toHaveBeenCalledWith({
+      path: { id: "o1" },
+      body: { enabled: true },
+    });
   });
 
-  it("enableOidc throws on error", async () => {
-    mockToggleOidc.mockResolvedValue({ error: "fail" });
-    const { ssoApi } = await import("../sso");
-    await expect(ssoApi.enableOidc("o1")).rejects.toBe("fail");
-  });
-
-  it("disableOidc toggles with enabled=false", async () => {
+  it("disableOidc passes enabled=false", async () => {
     mockToggleOidc.mockResolvedValue({ error: undefined });
     const { ssoApi } = await import("../sso");
     await ssoApi.disableOidc("o1");
-    expect(mockToggleOidc).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: false } })
-    );
-  });
-
-  it("disableOidc throws on error", async () => {
-    mockToggleOidc.mockResolvedValue({ error: "fail" });
-    const { ssoApi } = await import("../sso");
-    await expect(ssoApi.disableOidc("o1")).rejects.toBe("fail");
+    expect(mockToggleOidc).toHaveBeenCalledWith({
+      path: { id: "o1" },
+      body: { enabled: false },
+    });
   });
 
   // LDAP
   it("listLdap returns configs", async () => {
-    const data = [{ id: "l1" }];
-    mockListLdap.mockResolvedValue({ data, error: undefined });
+    mockListLdap.mockResolvedValue({ data: [SDK_LDAP], error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.listLdap()).toEqual(data);
+    const out = await ssoApi.listLdap();
+    expect(out[0].id).toBe("l1");
+    expect(out[0].has_secret).toBe(true);
+  });
+
+  it("listLdap normalizes nullable fields to null (#359)", async () => {
+    mockListLdap.mockResolvedValue({
+      data: [
+        {
+          ...SDK_LDAP,
+          bind_dn: undefined,
+          group_base_dn: undefined,
+          group_filter: undefined,
+          admin_group_dn: undefined,
+        },
+      ],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listLdap();
+    expect(out[0].bind_dn).toBeNull();
+    expect(out[0].group_base_dn).toBeNull();
+    expect(out[0].group_filter).toBeNull();
+    expect(out[0].admin_group_dn).toBeNull();
   });
 
   it("listLdap throws on error", async () => {
@@ -178,9 +324,10 @@ describe("ssoApi", () => {
   });
 
   it("getLdap returns config", async () => {
-    mockGetLdap.mockResolvedValue({ data: { id: "l1" }, error: undefined });
+    mockGetLdap.mockResolvedValue({ data: SDK_LDAP, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.getLdap("l1")).toEqual({ id: "l1" });
+    const out = await ssoApi.getLdap("l1");
+    expect(out.id).toBe("l1");
   });
 
   it("getLdap throws on error", async () => {
@@ -190,27 +337,39 @@ describe("ssoApi", () => {
   });
 
   it("createLdap returns config", async () => {
-    mockCreateLdap.mockResolvedValue({ data: { id: "l2" }, error: undefined });
+    mockCreateLdap.mockResolvedValue({ data: SDK_LDAP, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.createLdap({} as any)).toEqual({ id: "l2" });
+    const out = await ssoApi.createLdap({
+      name: "Corp LDAP",
+      server_url: "ldap://ldap.example.com",
+      user_base_dn: "ou=users,dc=example,dc=com",
+    });
+    expect(out.id).toBe("l1");
   });
 
   it("createLdap throws on error", async () => {
     mockCreateLdap.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.createLdap({} as any)).rejects.toBe("fail");
+    await expect(
+      ssoApi.createLdap({
+        name: "x",
+        server_url: "x",
+        user_base_dn: "x",
+      }),
+    ).rejects.toBe("fail");
   });
 
   it("updateLdap returns config", async () => {
-    mockUpdateLdap.mockResolvedValue({ data: { id: "l1" }, error: undefined });
+    mockUpdateLdap.mockResolvedValue({ data: SDK_LDAP, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.updateLdap("l1", {} as any)).toEqual({ id: "l1" });
+    const out = await ssoApi.updateLdap("l1", { name: "renamed" });
+    expect(out.id).toBe("l1");
   });
 
   it("updateLdap throws on error", async () => {
     mockUpdateLdap.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.updateLdap("l1", {} as any)).rejects.toBe("fail");
+    await expect(ssoApi.updateLdap("l1", {})).rejects.toBe("fail");
   });
 
   it("deleteLdap calls SDK", async () => {
@@ -226,54 +385,61 @@ describe("ssoApi", () => {
     await expect(ssoApi.deleteLdap("l1")).rejects.toBe("fail");
   });
 
-  it("enableLdap toggles with enabled=true", async () => {
+  it("enableLdap / disableLdap pass correct enabled flag", async () => {
     mockToggleLdap.mockResolvedValue({ error: undefined });
     const { ssoApi } = await import("../sso");
     await ssoApi.enableLdap("l1");
-    expect(mockToggleLdap).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: true } })
-    );
-  });
-
-  it("enableLdap throws on error", async () => {
-    mockToggleLdap.mockResolvedValue({ error: "fail" });
-    const { ssoApi } = await import("../sso");
-    await expect(ssoApi.enableLdap("l1")).rejects.toBe("fail");
-  });
-
-  it("disableLdap toggles with enabled=false", async () => {
-    mockToggleLdap.mockResolvedValue({ error: undefined });
-    const { ssoApi } = await import("../sso");
+    expect(mockToggleLdap).toHaveBeenLastCalledWith({
+      path: { id: "l1" },
+      body: { enabled: true },
+    });
     await ssoApi.disableLdap("l1");
-    expect(mockToggleLdap).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: false } })
-    );
+    expect(mockToggleLdap).toHaveBeenLastCalledWith({
+      path: { id: "l1" },
+      body: { enabled: false },
+    });
   });
 
-  it("disableLdap throws on error", async () => {
-    mockToggleLdap.mockResolvedValue({ error: "fail" });
+  it("ldapLogin returns token pair and forwards body", async () => {
+    mockLdapLogin.mockResolvedValue({
+      data: { access_token: "AT", refresh_token: "RT", token_type: "Bearer" },
+      error: undefined,
+    });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.disableLdap("l1")).rejects.toBe("fail");
-  });
-
-  it("ldapLogin returns tokens", async () => {
-    const data = { access_token: "at", refresh_token: "rt" };
-    mockLdapLogin.mockResolvedValue({ data, error: undefined });
-    const { ssoApi } = await import("../sso");
-    expect(await ssoApi.ldapLogin("prov1", "user", "pass")).toEqual(data);
+    const out = await ssoApi.ldapLogin("l1", "alice", "secret");
+    expect(out).toEqual({ access_token: "AT", refresh_token: "RT" });
+    expect(mockLdapLogin).toHaveBeenCalledWith({
+      path: { id: "l1" },
+      body: { username: "alice", password: "secret" },
+    });
   });
 
   it("ldapLogin throws on error", async () => {
-    mockLdapLogin.mockResolvedValue({ data: undefined, error: "bad creds" });
+    mockLdapLogin.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.ldapLogin("prov1", "user", "pass")).rejects.toBe("bad creds");
+    await expect(
+      ssoApi.ldapLogin("l1", "alice", "secret"),
+    ).rejects.toBe("fail");
+  });
+
+  it("ldapLogin throws on missing token fields (#359)", async () => {
+    // The SDK declares LdapLoginResponses.200 as `unknown` — runtime-narrow.
+    mockLdapLogin.mockResolvedValue({
+      data: { access_token: "AT" },
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    await expect(
+      ssoApi.ldapLogin("l1", "alice", "secret"),
+    ).rejects.toThrow(/missing access_token or refresh_token/);
   });
 
   it("testLdap returns result", async () => {
-    const result = { success: true };
-    mockTestLdap.mockResolvedValue({ data: result, error: undefined });
+    mockTestLdap.mockResolvedValue({ data: SDK_TEST, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.testLdap("l1")).toEqual(result);
+    const out = await ssoApi.testLdap("l1");
+    expect(out.success).toBe(true);
+    expect(out.response_time_ms).toBe(12);
   });
 
   it("testLdap throws on error", async () => {
@@ -284,9 +450,21 @@ describe("ssoApi", () => {
 
   // SAML
   it("listSaml returns configs", async () => {
-    mockListSaml.mockResolvedValue({ data: [{ id: "s1" }], error: undefined });
+    mockListSaml.mockResolvedValue({ data: [SDK_SAML], error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.listSaml()).toEqual([{ id: "s1" }]);
+    const out = await ssoApi.listSaml();
+    expect(out[0].id).toBe("s1");
+  });
+
+  it("listSaml normalizes nullable fields (#359)", async () => {
+    mockListSaml.mockResolvedValue({
+      data: [{ ...SDK_SAML, slo_url: undefined, admin_group: undefined }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].slo_url).toBeNull();
+    expect(out[0].admin_group).toBeNull();
   });
 
   it("listSaml throws on error", async () => {
@@ -296,9 +474,10 @@ describe("ssoApi", () => {
   });
 
   it("getSaml returns config", async () => {
-    mockGetSaml.mockResolvedValue({ data: { id: "s1" }, error: undefined });
+    mockGetSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.getSaml("s1")).toEqual({ id: "s1" });
+    const out = await ssoApi.getSaml("s1");
+    expect(out.id).toBe("s1");
   });
 
   it("getSaml throws on error", async () => {
@@ -308,27 +487,41 @@ describe("ssoApi", () => {
   });
 
   it("createSaml returns config", async () => {
-    mockCreateSaml.mockResolvedValue({ data: { id: "s2" }, error: undefined });
+    mockCreateSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.createSaml({} as any)).toEqual({ id: "s2" });
+    const out = await ssoApi.createSaml({
+      name: "Corp SAML",
+      entity_id: "x",
+      sso_url: "x",
+      certificate: "PEM",
+    });
+    expect(out.id).toBe("s1");
   });
 
   it("createSaml throws on error", async () => {
     mockCreateSaml.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.createSaml({} as any)).rejects.toBe("fail");
+    await expect(
+      ssoApi.createSaml({
+        name: "x",
+        entity_id: "x",
+        sso_url: "x",
+        certificate: "x",
+      }),
+    ).rejects.toBe("fail");
   });
 
   it("updateSaml returns config", async () => {
-    mockUpdateSaml.mockResolvedValue({ data: { id: "s1" }, error: undefined });
+    mockUpdateSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.updateSaml("s1", {} as any)).toEqual({ id: "s1" });
+    const out = await ssoApi.updateSaml("s1", { name: "renamed" });
+    expect(out.id).toBe("s1");
   });
 
   it("updateSaml throws on error", async () => {
     mockUpdateSaml.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.updateSaml("s1", {} as any)).rejects.toBe("fail");
+    await expect(ssoApi.updateSaml("s1", {})).rejects.toBe("fail");
   });
 
   it("deleteSaml calls SDK", async () => {
@@ -344,47 +537,35 @@ describe("ssoApi", () => {
     await expect(ssoApi.deleteSaml("s1")).rejects.toBe("fail");
   });
 
-  it("enableSaml toggles with enabled=true", async () => {
+  it("enableSaml / disableSaml pass correct enabled flag", async () => {
     mockToggleSaml.mockResolvedValue({ error: undefined });
     const { ssoApi } = await import("../sso");
     await ssoApi.enableSaml("s1");
-    expect(mockToggleSaml).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: true } })
-    );
-  });
-
-  it("enableSaml throws on error", async () => {
-    mockToggleSaml.mockResolvedValue({ error: "fail" });
-    const { ssoApi } = await import("../sso");
-    await expect(ssoApi.enableSaml("s1")).rejects.toBe("fail");
-  });
-
-  it("disableSaml toggles with enabled=false", async () => {
-    mockToggleSaml.mockResolvedValue({ error: undefined });
-    const { ssoApi } = await import("../sso");
+    expect(mockToggleSaml).toHaveBeenLastCalledWith({
+      path: { id: "s1" },
+      body: { enabled: true },
+    });
     await ssoApi.disableSaml("s1");
-    expect(mockToggleSaml).toHaveBeenCalledWith(
-      expect.objectContaining({ body: { enabled: false } })
-    );
-  });
-
-  it("disableSaml throws on error", async () => {
-    mockToggleSaml.mockResolvedValue({ error: "fail" });
-    const { ssoApi } = await import("../sso");
-    await expect(ssoApi.disableSaml("s1")).rejects.toBe("fail");
+    expect(mockToggleSaml).toHaveBeenLastCalledWith({
+      path: { id: "s1" },
+      body: { enabled: false },
+    });
   });
 
   // Exchange Code
-  it("exchangeCode returns tokens", async () => {
-    const data = { access_token: "at", refresh_token: "rt" };
-    mockExchangeCode.mockResolvedValue({ data, error: undefined });
+  it("exchangeCode returns token pair and forwards body", async () => {
+    mockExchangeCode.mockResolvedValue({ data: SDK_TOKENS, error: undefined });
     const { ssoApi } = await import("../sso");
-    expect(await ssoApi.exchangeCode("code123")).toEqual(data);
+    const out = await ssoApi.exchangeCode("auth-code");
+    expect(out).toEqual({ access_token: "AT", refresh_token: "RT" });
+    expect(mockExchangeCode).toHaveBeenCalledWith({
+      body: { code: "auth-code" },
+    });
   });
 
   it("exchangeCode throws on error", async () => {
-    mockExchangeCode.mockResolvedValue({ data: undefined, error: "invalid code" });
+    mockExchangeCode.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
-    await expect(ssoApi.exchangeCode("bad")).rejects.toBe("invalid code");
+    await expect(ssoApi.exchangeCode("code")).rejects.toBe("fail");
   });
 });
