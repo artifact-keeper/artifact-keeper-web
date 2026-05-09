@@ -319,10 +319,6 @@ describe("SettingsPage", () => {
       },
     });
   }
-  /** Shorthand: render the SMTP form with default data. */
-  function mockSmtpForm() {
-    mockAdminSettings();
-  }
 
   it("populates Storage fields from loaded settings", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
@@ -460,7 +456,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP Configuration heading", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -469,7 +465,7 @@ describe("SettingsPage", () => {
 
   it("renders Send Test Email heading", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -480,7 +476,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP form fields with placeholders", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -527,7 +523,7 @@ describe("SettingsPage", () => {
 
   it("disables Save button when form is not dirty", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -537,7 +533,7 @@ describe("SettingsPage", () => {
 
   it("enables Save button after editing a field", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -552,7 +548,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -579,7 +575,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -607,7 +603,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for empty host on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -622,7 +618,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for empty from address on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -637,7 +633,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for invalid port on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -656,7 +652,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error for non-numeric port on save", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -678,7 +674,7 @@ describe("SettingsPage", () => {
     // Both mutations use the same mutate so we can verify calls regardless of order
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -697,7 +693,7 @@ describe("SettingsPage", () => {
 
   it("shows validation error when sending test email without recipient", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -712,7 +708,7 @@ describe("SettingsPage", () => {
 
   it("renders SMTP field labels", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -726,7 +722,7 @@ describe("SettingsPage", () => {
 
   it("renders the test recipient input", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -739,7 +735,7 @@ describe("SettingsPage", () => {
     const mutateFn = vi.fn();
     mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -766,7 +762,7 @@ describe("SettingsPage", () => {
 
   it("password field is type=password", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -776,7 +772,7 @@ describe("SettingsPage", () => {
 
   it("renders TLS mode options", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -788,7 +784,7 @@ describe("SettingsPage", () => {
   it("disables Save button when mutation is pending", () => {
     mockUseMutation.mockReturnValue(createMutationMock({ isPending: true }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 
@@ -806,7 +802,7 @@ describe("SettingsPage", () => {
       return createMutationMock();
     });
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockSmtpForm();
+    mockAdminSettings();
 
     render(<SettingsPage />);
 

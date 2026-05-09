@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
+import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
@@ -82,18 +83,10 @@ function formatStorageBackend(backend: string): string {
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  // INVARIANT: this useQuery's queryKey, queryFn, staleTime, and retry MUST
-  // match SettingsPage's top-level useQuery (search this file for
-  // ["admin-settings"]). React-query keys cache by serialized queryKey, so
-  // identical options here mean both observers share one in-flight request
-  // and one cache entry. Drift between these two sites silently doubles the
-  // network traffic (#349).
-  const { data: settings, isLoading, isError, error, dataUpdatedAt } = useQuery({
-    queryKey: ["admin-settings"],
-    queryFn: () => settingsApi.getAllSettings(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  // Shares one in-flight request and cache entry with SettingsPage's
+  // top-level call (#349). The shared hook is the dedup invariant.
+  const { data: settings, isLoading, isError, error, dataUpdatedAt } =
+    useAdminSettings();
   const smtpConfig = settings?.smtpConfig;
 
   if (isLoading) {
@@ -157,7 +150,7 @@ function SmtpSettingsForm({
     mutationFn: (config: SmtpConfig) => settingsApi.updateSmtpConfig(config),
     onSuccess: () => {
       toast.success("SMTP configuration saved");
-      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
       setFormDirty(false);
     },
     onError: mutationErrorToast("Failed to save SMTP configuration"),
@@ -393,19 +386,14 @@ export default function SettingsPage() {
     queryFn: () => adminApi.getHealth(),
   });
 
-  // One useQuery for /api/v1/admin/settings instead of three separate
-  // queries (one per slice). Each tab derives its data from the shared
-  // bundle. See #349.
+  // One bundled fetch for /api/v1/admin/settings instead of three separate
+  // queries (one per slice). The SmtpSettingsTab below shares this same
+  // query via the same hook. See #349.
   const {
     data: adminSettings,
     isError: settingsError,
     isLoading: settingsLoading,
-  } = useQuery({
-    queryKey: ["admin-settings"],
-    queryFn: () => settingsApi.getAllSettings(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  } = useAdminSettings();
 
   const passwordPolicy = adminSettings?.passwordPolicy;
   const storageSettings = adminSettings?.storageSettings;
