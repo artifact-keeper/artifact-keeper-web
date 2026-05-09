@@ -99,7 +99,11 @@ function SmtpSettingsTab() {
     );
   }
 
-  if (isError) {
+  if (isError || !smtpConfig) {
+    // `!smtpConfig` is logically dead once isLoading and isError are
+    // handled (the success path always returns an object), but stating
+    // it makes the invariant load-bearing for the type narrowing below
+    // and for any future maintainer reading the render flow (R3, #347).
     return (
       <Card>
         <CardContent className="py-6">

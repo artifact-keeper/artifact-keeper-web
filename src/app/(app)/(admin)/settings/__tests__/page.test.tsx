@@ -135,6 +135,7 @@ vi.mock("@/components/common/page-header", () => ({
 // ---------------------------------------------------------------------------
 
 import SettingsPage from "../page";
+import type { SmtpConfig } from "@/lib/api/settings";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -280,14 +281,17 @@ describe("SettingsPage", () => {
   // state). After #347, getSmtpConfig throws on load failure rather than
   // silently falling back to defaults, so the page now renders an error
   // state when smtp-config is undefined — tests that want the form must
-  // supply concrete data.
-  const DEFAULT_SMTP_DATA = {
+  // supply concrete data. Typed as SmtpConfig so a future schema change
+  // (new required field) breaks this fixture rather than silently rendering
+  // stale shapes — the `useQuery: (opts: any)` mock would otherwise hide
+  // shape drift entirely (R3 finding, #347).
+  const DEFAULT_SMTP_DATA: SmtpConfig = {
     host: "",
     port: 587,
     username: "",
     password: "",
     from_address: "",
-    tls_mode: "starttls" as const,
+    tls_mode: "starttls",
   };
   function mockSmtpForm(
     overrides: Record<string, ReturnType<typeof mockUseQuery>> = {}
@@ -418,16 +422,30 @@ describe("SettingsPage", () => {
 
   it("shows Unavailable in Password Policy when the query errors (#347)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    // Pin storage-settings to a successful response so the only Unavailable
+    // row counted below comes from password-policy. Without this pin,
+    // storage rows would also render Unavailable (3 of them) and the
+    // assertion below would pass even if the password-policy logic were
+    // broken — a load-bearing-by-accident test (caught by R3, #347).
     mockQueriesByKey({
       "password-policy": { data: undefined, isLoading: false, isError: true },
+      "storage-settings": {
+        data: {
+          storage_backend: "filesystem",
+          storage_path: "/data/storage",
+          max_upload_size_bytes: 1_073_741_824,
+        },
+        isLoading: false,
+        isError: false,
+      },
     });
 
     render(<SettingsPage />);
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
-    // Password policy field surfaces an explicit "Unavailable" row instead
-    // of the prior silent default fallback that hid backend outages.
-    expect(inputs.find((i) => i.value === "Unavailable")).toBeDefined();
+    const unavailableInputs = inputs.filter((i) => i.value === "Unavailable");
+    // Exactly one Unavailable row — the password policy.
+    expect(unavailableInputs.length).toBe(1);
   });
 
   it("shows error alert in SMTP tab when the query errors (#347)", () => {
