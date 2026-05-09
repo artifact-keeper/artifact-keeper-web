@@ -412,6 +412,15 @@ export default function SettingsPage() {
     return format(storageSettings);
   };
 
+  // Same loading/error/value gating as storageValue, applied to the
+  // password-policy row so a backend outage shows "Unavailable" instead
+  // of plausible-looking default policy text (#347).
+  function passwordPolicyValue(): string {
+    if (passwordPolicyLoading) return "Loading...";
+    if (passwordPolicyError || !passwordPolicy) return "Unavailable";
+    return formatPasswordPolicy(passwordPolicy);
+  }
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -583,13 +592,7 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Password Policy"
-                value={
-                  passwordPolicyLoading
-                    ? "Loading..."
-                    : passwordPolicyError || !passwordPolicy
-                      ? "Unavailable"
-                      : formatPasswordPolicy(passwordPolicy)
-                }
+                value={passwordPolicyValue()}
                 description="Minimum password requirements for user accounts."
               />
             </CardContent>
