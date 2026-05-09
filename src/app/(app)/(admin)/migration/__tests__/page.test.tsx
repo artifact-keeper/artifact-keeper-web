@@ -303,6 +303,34 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
     });
   }
 
+  // The Source Type label sits in the same `space-y-2` wrapper as its Select.
+  // Scoping queries to that wrapper avoids matching the auth-type Select.
+  function getSourceTypeWrapper(): HTMLElement {
+    return screen.getByText("Source Type").parentElement!;
+  }
+
+  // Fill the three required text fields and submit the (only) form in the
+  // dialog. Returns the captured payload of the createConnection mutation.
+  async function fillAndSubmitForm(name: string): Promise<Record<string, unknown>> {
+    const nameInput = screen.getByPlaceholderText(/Production Artifactory/i);
+    const urlInput = screen.getByPlaceholderText(/artifactory\.example\.com/i);
+    const tokenInput = screen.getByPlaceholderText(/Enter API token/i);
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: name } });
+      fireEvent.change(urlInput, { target: { value: "https://nexus.example.com" } });
+      fireEvent.change(tokenInput, { target: { value: "tok" } });
+    });
+    const form = screen.getByTestId("dialog-content").querySelector("form");
+    expect(form).not.toBeNull();
+    await act(async () => {
+      fireEvent.submit(form!);
+    });
+    const create = capturedMutations.createConn;
+    expect(create).toBeDefined();
+    expect(create.mutate).toHaveBeenCalledTimes(1);
+    return create.mutate.mock.calls[0][0] as Record<string, unknown>;
+  }
+
   it("renders a Source Type label and field in the Add Connection dialog", async () => {
     await openAddConnectionDialog();
     expect(screen.getByText("Source Type")).toBeInTheDocument();
@@ -316,42 +344,16 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
 
   it("defaults the source-type field to 'artifactory'", async () => {
     await openAddConnectionDialog();
-    // Find the Select root paired with the Source Type label by inspecting the
-    // surrounding DOM. The label text is unique on the page.
-    const label = screen.getByText("Source Type");
-    // The label sits inside the same `space-y-2` div as its Select. The Select
-    // root is the descendant with data-testid="select-root".
-    const wrapper = label.parentElement!;
-    const selectRoot = wrapper.querySelector('[data-testid="select-root"]');
+    const selectRoot = getSourceTypeWrapper().querySelector(
+      '[data-testid="select-root"]',
+    );
     expect(selectRoot).not.toBeNull();
     expect(selectRoot!.getAttribute("data-value")).toBe("artifactory");
   });
 
   it("submits source_type in the createConnection mutation body", async () => {
     await openAddConnectionDialog();
-
-    // Fill the required text fields.
-    const nameInput = screen.getByPlaceholderText(/Production Artifactory/i);
-    const urlInput = screen.getByPlaceholderText(/artifactory\.example\.com/i);
-    const tokenInput = screen.getByPlaceholderText(/Enter API token/i);
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: "Prod" } });
-      fireEvent.change(urlInput, { target: { value: "https://nexus.example.com" } });
-      fireEvent.change(tokenInput, { target: { value: "tok" } });
-    });
-
-    // Submit the form. The form is the only <form> in the dialog.
-    const form = screen.getByTestId("dialog-content").querySelector("form");
-    expect(form).not.toBeNull();
-    await act(async () => {
-      fireEvent.submit(form!);
-    });
-
-    // The createConnection mutation should have been invoked with source_type.
-    const create = capturedMutations.createConn;
-    expect(create).toBeDefined();
-    expect(create.mutate).toHaveBeenCalledTimes(1);
-    const submitted = create.mutate.mock.calls[0][0] as Record<string, unknown>;
+    const submitted = await fillAndSubmitForm("Prod");
     expect(submitted).toHaveProperty("source_type");
     // The default selection is artifactory unless the user changes it.
     expect(submitted.source_type).toBe("artifactory");
@@ -359,38 +361,14 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
 
   it("propagates a Nexus selection through to the createConnection payload", async () => {
     await openAddConnectionDialog();
-
-    // Locate the Source Type Select. The label sits in the same `space-y-2`
-    // wrapper as the Select; scope the query to that wrapper so we hit the
-    // source-type Select, not the auth-type Select.
-    const label = screen.getByText("Source Type");
-    const wrapper = label.parentElement!;
-    const nexusItem = wrapper.querySelector(
+    const nexusItem = getSourceTypeWrapper().querySelector(
       '[data-testid="select-item-nexus"]',
     ) as HTMLElement | null;
     expect(nexusItem).not.toBeNull();
     await act(async () => {
       fireEvent.click(nexusItem!);
     });
-
-    // Fill the rest of the form and submit.
-    const nameInput = screen.getByPlaceholderText(/Production Artifactory/i);
-    const urlInput = screen.getByPlaceholderText(/artifactory\.example\.com/i);
-    const tokenInput = screen.getByPlaceholderText(/Enter API token/i);
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: "Nexus Prod" } });
-      fireEvent.change(urlInput, { target: { value: "https://nexus.example.com" } });
-      fireEvent.change(tokenInput, { target: { value: "tok" } });
-    });
-    const form = screen.getByTestId("dialog-content").querySelector("form");
-    await act(async () => {
-      fireEvent.submit(form!);
-    });
-
-    const create = capturedMutations.createConn;
-    expect(create).toBeDefined();
-    expect(create.mutate).toHaveBeenCalledTimes(1);
-    const submitted = create.mutate.mock.calls[0][0] as Record<string, unknown>;
+    const submitted = await fillAndSubmitForm("Nexus Prod");
     expect(submitted.source_type).toBe("nexus");
   });
 });

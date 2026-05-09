@@ -65,11 +65,9 @@ function narrowAuthType(v: string): SourceConnection['auth_type'] {
   return v === 'basic_auth' ? 'basic_auth' : 'api_token';
 }
 
-// Same approach for source_type. The backend currently accepts "artifactory"
-// (default) or "nexus"; unknown values fall back to 'artifactory' so existing
-// connections keep rendering if a new registry type is added server-side
-// before the UI is updated. Uses narrowEnum so adding a new type later only
-// needs the union extended in src/types/migration.ts and the Set extended here.
+// Backend accepts 'artifactory' (default) or 'nexus'. Unknown values fall back
+// to 'artifactory' so existing connections keep rendering if a new registry
+// type is added server-side before the UI is updated.
 const SOURCE_TYPES: ReadonlySet<SourceType> = new Set(['artifactory', 'nexus']);
 function narrowSourceType(v: string): SourceType {
   return narrowEnum<SourceType>(v, SOURCE_TYPES, 'artifactory');
