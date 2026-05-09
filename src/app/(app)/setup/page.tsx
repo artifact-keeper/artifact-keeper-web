@@ -47,6 +47,21 @@ interface SetupStep {
   description?: string;
 }
 
+/** A single client variant for a repository format (e.g. Maven vs. Gradle for a
+ *  JVM repo). The Setup dialog renders one tab per variant when present. */
+interface SetupClientVariant {
+  key: string;
+  label: string;
+  steps: SetupStep[];
+}
+
+/** Setup content for a repository — either a flat list of steps (most formats)
+ *  or a set of client-tool variants (e.g. JVM repos serve Maven, Gradle Groovy,
+ *  Gradle Kotlin DSL, and SBT clients from the same wire format). */
+type RepoSetupContent =
+  | { kind: "steps"; steps: SetupStep[] }
+  | { kind: "variants"; variants: SetupClientVariant[] };
+
 interface CICDPlatform {
   key: string;
   name: string;
@@ -66,7 +81,137 @@ const REGISTRY_HOST =
     ? window.location.host
     : "artifacts.example.com";
 
-/** Generate repo-specific setup steps based on format */
+/** Build the JVM client variants (Maven, Gradle Groovy DSL, Gradle Kotlin DSL,
+ *  SBT). All four clients consume the same Maven-format wire repository, so we
+ *  surface tabs for each. */
+function getJvmClientVariants(repoKey: string): SetupClientVariant[] {
+  const repoUrl = `${REGISTRY_URL}/maven/${repoKey}/`;
+  return [
+    {
+      key: "maven",
+      label: "Maven",
+      steps: [
+        {
+          title: "Configure settings.xml",
+          description: "Add to ~/.m2/settings.xml:",
+          code: `<settings>
+  <servers>
+    <server>
+      <id>${repoKey}</id>
+      <username>YOUR_USERNAME</username>
+      <password>YOUR_TOKEN</password>
+    </server>
+  </servers>
+</settings>`,
+        },
+        {
+          title: "Add repository to pom.xml",
+          code: `<repositories>
+  <repository>
+    <id>${repoKey}</id>
+    <url>${repoUrl}</url>
+  </repository>
+</repositories>
+<dependency>
+  <groupId>com.example</groupId>
+  <artifactId>your-artifact</artifactId>
+  <version>1.0.0</version>
+</dependency>`,
+        },
+        { title: "Deploy artifacts", code: "mvn deploy" },
+      ],
+    },
+    {
+      key: "gradle-groovy",
+      label: "Gradle (Groovy)",
+      steps: [
+        {
+          title: "Configure credentials",
+          description: "Add to ~/.gradle/gradle.properties:",
+          code: `${repoKey}Username=YOUR_USERNAME
+${repoKey}Password=YOUR_TOKEN`,
+        },
+        {
+          title: "Add repository to build.gradle",
+          code: `repositories {
+    maven {
+        url '${repoUrl}'
+        credentials {
+            username = project.findProperty('${repoKey}Username')
+            password = project.findProperty('${repoKey}Password')
+        }
+    }
+}
+dependencies {
+    implementation 'com.example:your-artifact:1.0.0'
+}`,
+        },
+        { title: "Publish artifacts", code: "gradle publish" },
+      ],
+    },
+    {
+      key: "gradle-kotlin",
+      label: "Gradle (Kotlin)",
+      steps: [
+        {
+          title: "Configure credentials",
+          description: "Add to ~/.gradle/gradle.properties:",
+          code: `${repoKey}Username=YOUR_USERNAME
+${repoKey}Password=YOUR_TOKEN`,
+        },
+        {
+          title: "Add repository to build.gradle.kts",
+          code: `repositories {
+    maven {
+        url = uri("${repoUrl}")
+        credentials {
+            username = project.findProperty("${repoKey}Username") as String?
+            password = project.findProperty("${repoKey}Password") as String?
+        }
+    }
+}
+dependencies {
+    implementation("com.example:your-artifact:1.0.0")
+}`,
+        },
+        { title: "Publish artifacts", code: "gradle publish" },
+      ],
+    },
+    {
+      key: "sbt",
+      label: "SBT",
+      steps: [
+        {
+          title: "Configure credentials",
+          description: "Add to ~/.sbt/.credentials:",
+          code: `realm=Artifact Keeper
+host=${REGISTRY_HOST}
+user=YOUR_USERNAME
+password=YOUR_TOKEN`,
+        },
+        {
+          title: "Add resolver to build.sbt",
+          code: `credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
+resolvers += "${repoKey}" at "${repoUrl}"
+libraryDependencies += "com.example" %% "your-artifact" % "1.0.0"`,
+        },
+        { title: "Publish artifacts", code: "sbt publish" },
+      ],
+    },
+  ];
+}
+
+/** Generate repo-specific setup content based on format. JVM formats return a
+ *  set of client variants (rendered as tabs); all other formats return a flat
+ *  list of steps. */
+function getRepoSetupContent(repo: Repository): RepoSetupContent {
+  if (repo.format === "maven" || repo.format === "gradle" || repo.format === "sbt") {
+    return { kind: "variants", variants: getJvmClientVariants(repo.key) };
+  }
+  return { kind: "steps", steps: getRepoSetupSteps(repo) };
+}
+
+/** Generate repo-specific setup steps for non-JVM formats. */
 function getRepoSetupSteps(repo: Repository): SetupStep[] {
   const repoKey = repo.key;
 
@@ -109,34 +254,6 @@ trusted-host = ${REGISTRY_HOST}`,
           title: "Upload with twine",
           code: `twine upload --repository-url ${REGISTRY_URL}/pypi/${repoKey}/ dist/*`,
         },
-      ];
-    case "maven":
-    case "gradle":
-    case "sbt":
-      return [
-        {
-          title: "Configure settings.xml",
-          description: "Add to ~/.m2/settings.xml:",
-          code: `<settings>
-  <servers>
-    <server>
-      <id>${repoKey}</id>
-      <username>YOUR_USERNAME</username>
-      <password>YOUR_TOKEN</password>
-    </server>
-  </servers>
-</settings>`,
-        },
-        {
-          title: "Add repository to pom.xml",
-          code: `<repositories>
-  <repository>
-    <id>${repoKey}</id>
-    <url>${REGISTRY_URL}/maven/${repoKey}/</url>
-  </repository>
-</repositories>`,
-        },
-        { title: "Deploy artifacts", code: "mvn deploy" },
       ];
     case "docker":
     case "podman":
@@ -530,6 +647,33 @@ function CodeBlock({ code }: { code: string }) {
   );
 }
 
+// -- StepsList component (numbered step list with code blocks) --
+
+function StepsList({ steps }: { steps: SetupStep[] }) {
+  return (
+    <div className="space-y-6">
+      {steps.map((step, i) => (
+        <div key={i} className="space-y-2">
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+              {i + 1}
+            </span>
+            {step.title}
+          </h4>
+          {step.description && (
+            <p className="text-sm text-muted-foreground ml-8">
+              {step.description}
+            </p>
+          )}
+          <div className="ml-8">
+            <CodeBlock code={step.code} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // -- page --
 
 export default function SetupPage() {
@@ -581,7 +725,9 @@ export default function SetupPage() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredRepos]);
 
-  const selectedSteps = selectedRepo ? getRepoSetupSteps(selectedRepo) : [];
+  const selectedContent: RepoSetupContent | null = selectedRepo
+    ? getRepoSetupContent(selectedRepo)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -747,26 +893,28 @@ export default function SetupPage() {
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
-            <div className="space-y-6">
-              {selectedSteps.map((step, i) => (
-                <div key={i} className="space-y-2">
-                  <h4 className="text-sm font-semibold flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                      {i + 1}
-                    </span>
-                    {step.title}
-                  </h4>
-                  {step.description && (
-                    <p className="text-sm text-muted-foreground ml-8">
-                      {step.description}
-                    </p>
-                  )}
-                  <div className="ml-8">
-                    <CodeBlock code={step.code} />
-                  </div>
-                </div>
-              ))}
-            </div>
+            {selectedContent?.kind === "variants" ? (
+              <Tabs defaultValue={selectedContent.variants[0]?.key}>
+                <TabsList>
+                  {selectedContent.variants.map((variant) => (
+                    <TabsTrigger key={variant.key} value={variant.key}>
+                      {variant.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {selectedContent.variants.map((variant) => (
+                  <TabsContent
+                    key={variant.key}
+                    value={variant.key}
+                    className="mt-4"
+                  >
+                    <StepsList steps={variant.steps} />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            ) : selectedContent ? (
+              <StepsList steps={selectedContent.steps} />
+            ) : null}
           </ScrollArea>
           <DialogFooter showCloseButton />
         </DialogContent>
@@ -788,26 +936,7 @@ export default function SetupPage() {
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
-            <div className="space-y-6">
-              {selectedPlatform?.steps.map((step, i) => (
-                <div key={i} className="space-y-2">
-                  <h4 className="text-sm font-semibold flex items-center gap-2">
-                    <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                      {i + 1}
-                    </span>
-                    {step.title}
-                  </h4>
-                  {step.description && (
-                    <p className="text-sm text-muted-foreground ml-8">
-                      {step.description}
-                    </p>
-                  )}
-                  <div className="ml-8">
-                    <CodeBlock code={step.code} />
-                  </div>
-                </div>
-              ))}
-            </div>
+            {selectedPlatform && <StepsList steps={selectedPlatform.steps} />}
           </ScrollArea>
           <DialogFooter showCloseButton />
         </DialogContent>
