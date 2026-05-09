@@ -478,6 +478,22 @@ describe("settingsApi", () => {
     );
   });
 
+  it("getAllSettings throws if password policy slice is malformed (#349)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 0,
+        password_policy: { min_length: "eight" },
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
   it("getAllSettings throws if SMTP slice is malformed (#349)", async () => {
     mockGetSettings.mockResolvedValue({
       data: {

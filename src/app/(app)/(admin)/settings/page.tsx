@@ -82,10 +82,12 @@ function formatStorageBackend(backend: string): string {
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  // Reads from the shared `admin-settings` cache populated by SettingsPage's
-  // top-level useQuery — same queryKey + same queryFn so react-query dedups
-  // to a single HTTP round trip (#349). The sub-component pulls the SMTP
-  // slice off the bundle.
+  // INVARIANT: this useQuery's queryKey, queryFn, staleTime, and retry MUST
+  // match SettingsPage's top-level useQuery (search this file for
+  // ["admin-settings"]). React-query keys cache by serialized queryKey, so
+  // identical options here mean both observers share one in-flight request
+  // and one cache entry. Drift between these two sites silently doubles the
+  // network traffic (#349).
   const { data: settings, isLoading, isError, error, dataUpdatedAt } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: () => settingsApi.getAllSettings(),

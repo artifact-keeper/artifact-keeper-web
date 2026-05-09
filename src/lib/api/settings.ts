@@ -122,27 +122,33 @@ export interface AdminSettings {
 // ---- Pure parsers (#349 — extracted so getAllSettings can reuse them) ----
 
 function parseStorageSettings(data: unknown): StorageSettings {
-  const settings = assertData(data, "settingsApi.getStorageSettings") as
-    | Record<string, unknown>
-    | null;
-  // Backend has historically returned wrongly-shaped responses for this
-  // endpoint (see issue #334), so guard at the trust boundary even though
-  // the SDK types claim the shape is correct.
+  // assertData returns the same type as `data`, so with unknown input we
+  // narrow to a record at the trust boundary. The historically-wrong
+  // response shapes called out in #334 are why we guard fields explicitly.
+  if (!isPlainObject(data)) {
+    throw new Error(
+      "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
+    );
+  }
+  assertData(data, "settingsApi.getStorageSettings");
   if (
-    !settings ||
-    typeof settings.storage_backend !== "string" ||
-    typeof settings.storage_path !== "string" ||
-    typeof settings.max_upload_size_bytes !== "number"
+    typeof data.storage_backend !== "string" ||
+    typeof data.storage_path !== "string" ||
+    typeof data.max_upload_size_bytes !== "number"
   ) {
     throw new Error(
       "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
     );
   }
   return {
-    storage_backend: settings.storage_backend,
-    storage_path: settings.storage_path,
-    max_upload_size_bytes: settings.max_upload_size_bytes,
+    storage_backend: data.storage_backend,
+    storage_path: data.storage_path,
+    max_upload_size_bytes: data.max_upload_size_bytes,
   };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function parsePasswordPolicy(data: unknown): PasswordPolicy {

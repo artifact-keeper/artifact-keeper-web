@@ -31,10 +31,10 @@ vi.mock("@/lib/api/admin", () => ({
 }));
 
 vi.mock("@/lib/api/settings", () => ({
+  // useQuery is itself mocked above, so queryFns never actually run — but we
+  // still expose the API surface the page imports so module resolution works.
   settingsApi: {
-    getPasswordPolicy: vi.fn(),
-    getStorageSettings: vi.fn(),
-    getSmtpConfig: vi.fn(),
+    getAllSettings: vi.fn(),
     updateSmtpConfig: vi.fn(),
     sendTestEmail: vi.fn(),
   },
