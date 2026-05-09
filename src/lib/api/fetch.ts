@@ -4,9 +4,14 @@ import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
  * Throw if a successful SDK response had no body when the caller expects one.
  * SDK response types model `data` as `T | undefined` so the success-path needs
  * an explicit assertion for callers that aren't OK with `undefined`.
+ *
+ * Rejects `undefined`, `null`, and `''` (an empty string body almost never
+ * represents a meaningful payload — it's typically a proxy or misconfigured
+ * endpoint returning 200 with no JSON). Other falsy values like `0`, `false`,
+ * and `[]` are valid payloads and are returned unchanged.
  */
 export function assertData<T>(data: T | undefined, context: string): T {
-  if (data === undefined || data === null) {
+  if (data === undefined || data === null || (data as unknown) === '') {
     throw new Error(`Empty response body for ${context}`);
   }
   return data;
