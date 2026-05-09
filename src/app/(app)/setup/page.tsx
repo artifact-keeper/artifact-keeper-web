@@ -71,26 +71,52 @@ interface CICDPlatform {
 
 // -- helpers --
 
+// SSR-safe placeholders that are obviously non-functional so the prerendered
+// HTML doesn't ship with a real-looking domain (`artifacts.example.com`)
+// that a user might copy into a config file before the client hydrates and
+// rewrites them. After hydration `typeof window !== "undefined"` flips and
+// the snippets contain the live origin (#362).
+const REGISTRY_URL_PLACEHOLDER = "__REPLACE_WITH_REGISTRY_URL__";
+const REGISTRY_HOST_PLACEHOLDER = "__REPLACE_WITH_REGISTRY_HOST__";
+
 const REGISTRY_URL =
   typeof window !== "undefined"
     ? window.location.origin
-    : "https://artifacts.example.com";
+    : REGISTRY_URL_PLACEHOLDER;
 
 const REGISTRY_HOST =
   typeof window !== "undefined"
     ? window.location.host
-    : "artifacts.example.com";
+    : REGISTRY_HOST_PLACEHOLDER;
+
+/**
+ * Sanitize a repo key into a Gradle/SBT-friendly camelCase identifier for
+ * property names. Repo keys like `my-jvm-repo` are legal in `gradle.properties`
+ * (the file format permits hyphens and dots), but they look wrong to readers
+ * who assume identifier rules apply. Convert kebab/dot/underscore-case to
+ * camelCase and strip any remaining non-alphanumerics. URLs and `<id>` slots
+ * keep the raw key — only property names need this. (#362)
+ */
+export function repoKeyToGradleId(key: string): string {
+  if (!key) return "repo";
+  const camel = key.replace(/[-._\s]+(.)/g, (_, c: string) => c.toUpperCase());
+  const cleaned = camel.replace(/[^a-zA-Z0-9]/g, "");
+  return cleaned.length > 0 ? cleaned : "repo";
+}
 
 /** Build the JVM client variants (Maven, Gradle Groovy DSL, Gradle Kotlin DSL,
  *  SBT). All four clients consume the same Maven-format wire repository, so we
  *  surface tabs for each. */
 function getJvmClientVariants(repoKey: string): SetupClientVariant[] {
   const repoUrl = `${REGISTRY_URL}/maven/${repoKey}/`;
+  // Keep `repoKey` in URLs and `<id>` slots; sanitize for Gradle property
+  // names so `my-jvm-repo` doesn't emit `my-jvm-repoUsername` (#362).
+  const gradleId = repoKeyToGradleId(repoKey);
   const gradleCredentials: SetupStep = {
     title: "Configure credentials",
     description: "Add to ~/.gradle/gradle.properties:",
-    code: `${repoKey}Username=YOUR_USERNAME
-${repoKey}Password=YOUR_TOKEN`,
+    code: `${gradleId}Username=YOUR_USERNAME
+${gradleId}Password=YOUR_TOKEN`,
   };
   const gradlePublish: SetupStep = { title: "Publish artifacts", code: "gradle publish" };
 
@@ -140,8 +166,8 @@ ${repoKey}Password=YOUR_TOKEN`,
     maven {
         url '${repoUrl}'
         credentials {
-            username = project.findProperty('${repoKey}Username')
-            password = project.findProperty('${repoKey}Password')
+            username = project.findProperty('${gradleId}Username')
+            password = project.findProperty('${gradleId}Password')
         }
     }
 }
@@ -163,8 +189,8 @@ dependencies {
     maven {
         url = uri("${repoUrl}")
         credentials {
-            username = project.findProperty("${repoKey}Username") as String?
-            password = project.findProperty("${repoKey}Password") as String?
+            username = project.findProperty("${gradleId}Username") as String?
+            password = project.findProperty("${gradleId}Password") as String?
         }
     }
 }
