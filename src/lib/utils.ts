@@ -7,13 +7,22 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Format a byte count into a human-readable string (e.g. "1.5 MB").
+ *
+ * Returns "—" (em dash) for non-finite or negative inputs (NaN, Infinity,
+ * -Infinity, negative numbers) so a misbehaving backend can't render
+ * "NaN undefined" or similar in a settings panel — see #348.
  */
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+
 export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  const rawIndex = Math.floor(Math.log(bytes) / Math.log(k));
+  // Clamp so values larger than the largest unit (e.g. multi-PB) render as
+  // "<n> TB" rather than indexing past the end of the units table.
+  const i = Math.min(rawIndex, BYTE_UNITS.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${BYTE_UNITS[i]}`;
 }
 
 /**
