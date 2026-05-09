@@ -6,11 +6,20 @@ import {
   updateBuild as sdkUpdateBuild,
   getBuildDiff,
 } from '@artifact-keeper/sdk';
+import type {
+  BuildResponse,
+  BuildListResponse,
+  BuildDiffResponse,
+  BuildModule as SdkBuildModule,
+  CreateBuildRequest as SdkCreateBuildRequest,
+  UpdateBuildRequest as SdkUpdateBuildRequest,
+} from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
+import { assertData } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
-import type { Build, BuildStatus, BuildDiff } from '@/types/builds';
+import type { Build, BuildStatus, BuildDiff, BuildModule } from '@/types/builds';
 
 export interface ListBuildsParams {
   page?: number;
@@ -21,37 +30,137 @@ export interface ListBuildsParams {
   sort_order?: 'asc' | 'desc';
 }
 
+const BUILD_STATUSES = new Set<BuildStatus>([
+  'pending',
+  'running',
+  'success',
+  'failed',
+  'cancelled',
+]);
+
+function narrowStatus(v: string): BuildStatus {
+  return BUILD_STATUSES.has(v as BuildStatus) ? (v as BuildStatus) : 'pending';
+}
+
+// SDK BuildModule: { id, name, artifacts: BuildArtifact[] }
+// Local BuildModule: { id, build_id, module_name, name, path, checksum_sha256,
+// size_bytes, created_at }. The SDK shape is a parent record holding its
+// artifacts; the local shape was modeled per-artifact-row. For now flatten
+// SDK BuildModule into a single local BuildModule per group, taking the first
+// artifact for the leaf fields. Pages that iterate per-artifact need to use
+// `modules[i].artifacts` directly via the SDK type — that's a follow-up.
+function adaptBuildModule(sdk: SdkBuildModule, buildId: string): BuildModule {
+  const first = sdk.artifacts[0];
+  return {
+    id: sdk.id,
+    build_id: buildId,
+    module_name: sdk.name,
+    name: first?.name ?? sdk.name,
+    path: first?.path ?? '',
+    checksum_sha256: first?.checksum_sha256 ?? '',
+    size_bytes: first?.size_bytes ?? 0,
+    created_at: '',
+  };
+}
+
+function adaptBuild(sdk: BuildResponse): Build {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    number: sdk.number,
+    status: narrowStatus(sdk.status),
+    started_at: sdk.started_at ?? undefined,
+    finished_at: sdk.finished_at ?? undefined,
+    duration_ms: sdk.duration_ms ?? undefined,
+    agent: sdk.agent ?? undefined,
+    created_at: sdk.created_at,
+    updated_at: sdk.updated_at,
+    artifact_count: sdk.artifact_count ?? undefined,
+    modules: sdk.modules ? sdk.modules.map((m) => adaptBuildModule(m, sdk.id)) : undefined,
+    vcs_url: sdk.vcs_url ?? undefined,
+    vcs_revision: sdk.vcs_revision ?? undefined,
+    vcs_branch: sdk.vcs_branch ?? undefined,
+    vcs_message: sdk.vcs_message ?? undefined,
+    metadata: sdk.metadata,
+  };
+}
+
+function adaptBuildList(sdk: BuildListResponse): PaginatedResponse<Build> {
+  return {
+    items: sdk.items.map(adaptBuild),
+    pagination: sdk.pagination,
+  };
+}
+
+function adaptBuildDiff(sdk: BuildDiffResponse): BuildDiff {
+  return {
+    build_a: sdk.build_a,
+    build_b: sdk.build_b,
+    added: sdk.added,
+    removed: sdk.removed,
+    modified: sdk.modified,
+  };
+}
+
 export const buildsApi = {
   list: async (params: ListBuildsParams = {}): Promise<PaginatedResponse<Build>> => {
-    const { data, error } = await sdkListBuilds({ query: params as never });
+    const { data, error } = await sdkListBuilds({ query: params });
     if (error) throw error;
-    return data as unknown as PaginatedResponse<Build>;
+    return adaptBuildList(assertData(data, 'buildsApi.list'));
   },
 
   get: async (buildId: string): Promise<Build> => {
     const { data, error } = await sdkGetBuild({ path: { id: buildId } });
     if (error) throw error;
-    return data as unknown as Build;
+    return adaptBuild(assertData(data, 'buildsApi.get'));
   },
 
-  create: async (data: { name: string; build_number: number; agent?: string; started_at?: string; vcs_url?: string; vcs_revision?: string; vcs_branch?: string; vcs_message?: string; metadata?: Record<string, unknown> }): Promise<Build> => {
-    const { data: result, error } = await sdkCreateBuild({ body: data as never });
+  create: async (input: {
+    name: string;
+    build_number: number;
+    agent?: string;
+    started_at?: string;
+    vcs_url?: string;
+    vcs_revision?: string;
+    vcs_branch?: string;
+    vcs_message?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<Build> => {
+    const body: SdkCreateBuildRequest = {
+      name: input.name,
+      build_number: input.build_number,
+      agent: input.agent,
+      started_at: input.started_at,
+      vcs_url: input.vcs_url,
+      vcs_revision: input.vcs_revision,
+      vcs_branch: input.vcs_branch,
+      vcs_message: input.vcs_message,
+      metadata: input.metadata ?? {},
+    };
+    const { data, error } = await sdkCreateBuild({ body });
     if (error) throw error;
-    return result as unknown as Build;
+    return adaptBuild(assertData(data, 'buildsApi.create'));
   },
 
-  updateStatus: async (buildId: string, data: { status: string; finished_at?: string }): Promise<Build> => {
-    const { data: result, error } = await sdkUpdateBuild({ path: { id: buildId }, body: data as never });
+  updateStatus: async (
+    buildId: string,
+    input: { status: string; finished_at?: string }
+  ): Promise<Build> => {
+    const body: SdkUpdateBuildRequest = {
+      status: input.status,
+      finished_at: input.finished_at,
+    };
+    const { data, error } = await sdkUpdateBuild({ path: { id: buildId }, body });
     if (error) throw error;
-    return result as unknown as Build;
+    return adaptBuild(assertData(data, 'buildsApi.updateStatus'));
   },
 
   diff: async (buildIdA: string, buildIdB: string): Promise<BuildDiff> => {
     const { data, error } = await getBuildDiff({
-      query: { build_a: buildIdA, build_b: buildIdB } as never,
+      query: { build_a: buildIdA, build_b: buildIdB },
     });
     if (error) throw error;
-    return data as unknown as BuildDiff;
+    return adaptBuildDiff(assertData(data, 'buildsApi.diff'));
   },
 };
 
