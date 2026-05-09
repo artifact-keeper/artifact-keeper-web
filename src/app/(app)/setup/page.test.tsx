@@ -121,19 +121,48 @@ describe("SetupPage - JVM client variants", () => {
     expect(screen.getByRole("tab", { name: "SBT" })).toBeTruthy();
   });
 
-  it("shows pom.xml snippet on the Maven tab (the default)", async () => {
+  it("shows pom.xml snippet on the Maven tab (the default for maven format)", async () => {
     const user = userEvent.setup();
     await renderPageWithRepos([makeRepo({ format: "maven", key: "my-jvm-repo" })]);
 
     const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
     await user.click(card!);
 
-    const dialog = await screen.findByRole("dialog");
-    // Maven snippet contains <dependency> and pom-style XML
-    const text = dialog.textContent ?? "";
-    expect(text).toContain("<dependency>");
-    expect(text).toContain("<artifactId>");
-    expect(text).toContain("settings.xml");
+    await screen.findByRole("dialog");
+    // For a maven-format repo, Maven tab is selected by default
+    expect(screen.getByRole("tab", { name: "Maven", selected: true })).toBeTruthy();
+    const mavenPanel = screen.getByRole("tabpanel", { name: "Maven" });
+    expect(mavenPanel.textContent).toContain("<dependency>");
+    expect(mavenPanel.textContent).toContain("<artifactId>");
+    expect(mavenPanel.textContent).toContain("settings.xml");
+  });
+
+  it("opens on the Gradle (Groovy) tab for a gradle-format repo", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([makeRepo({ format: "gradle", key: "my-jvm-repo" })]);
+
+    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
+    await user.click(card!);
+
+    await screen.findByRole("dialog");
+    // For a gradle-format repo, Gradle (Groovy) is selected by default
+    // — this is the fix for the bug at the heart of #333: a Gradle user
+    // should not have to click an extra tab to find Gradle instructions.
+    expect(screen.getByRole("tab", { name: "Gradle (Groovy)", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Gradle (Groovy)" });
+    expect(panel.textContent).toContain("repositories {");
+    expect(panel.textContent).toContain("implementation '");
+  });
+
+  it("opens on the SBT tab for an sbt-format repo", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([makeRepo({ format: "sbt", key: "my-jvm-repo" })]);
+
+    const card = screen.getByText("my-jvm-repo").closest("div[data-slot='card']");
+    await user.click(card!);
+
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "SBT", selected: true })).toBeTruthy();
   });
 
   it("shows Groovy DSL snippet on the Gradle (Groovy) tab", async () => {

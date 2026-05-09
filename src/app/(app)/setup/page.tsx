@@ -60,7 +60,7 @@ interface SetupClientVariant {
  *  Gradle Kotlin DSL, and SBT clients from the same wire format). */
 type RepoSetupContent =
   | { kind: "steps"; steps: SetupStep[] }
-  | { kind: "variants"; variants: SetupClientVariant[] };
+  | { kind: "variants"; variants: SetupClientVariant[]; defaultKey: string };
 
 interface CICDPlatform {
   key: string;
@@ -206,7 +206,13 @@ libraryDependencies += "com.example" %% "your-artifact" % "1.0.0"`,
  *  list of steps. */
 function getRepoSetupContent(repo: Repository): RepoSetupContent {
   if (repo.format === "maven" || repo.format === "gradle" || repo.format === "sbt") {
-    return { kind: "variants", variants: getJvmClientVariants(repo.key) };
+    // Default to the tab matching the repo's declared format so a "Gradle" repo
+    // opens on Gradle (Groovy DSL is the more common variant in the wild).
+    const defaultKey =
+      repo.format === "gradle" ? "gradle-groovy" :
+      repo.format === "sbt" ? "sbt" :
+      "maven";
+    return { kind: "variants", variants: getJvmClientVariants(repo.key), defaultKey };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
 }
@@ -894,8 +900,10 @@ export default function SetupPage() {
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
             {selectedContent?.kind === "variants" ? (
-              <Tabs defaultValue={selectedContent.variants[0]?.key}>
-                <TabsList>
+              <Tabs defaultValue={selectedContent.defaultKey}>
+                {/* h-auto + flex-wrap: 4 JVM client labels overflow at ~360px;
+                    let them wrap to a second row on narrow viewports. */}
+                <TabsList className="h-auto flex-wrap">
                   {selectedContent.variants.map((variant) => (
                     <TabsTrigger key={variant.key} value={variant.key}>
                       {variant.label}
