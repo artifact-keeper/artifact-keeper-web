@@ -16,14 +16,49 @@ vi.mock("@artifact-keeper/sdk", () => ({
   deletePermission: (...args: unknown[]) => mockDeletePermission(...args),
 }));
 
+function sdkPermissionFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "perm1",
+    principal_type: "user",
+    principal_id: "u1",
+    principal_name: null,
+    target_type: "repository",
+    target_id: "r1",
+    target_name: null,
+    actions: ["read"],
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    ...overrides,
+  };
+}
+
+function adaptedPermissionFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "perm1",
+    principal_type: "user",
+    principal_id: "u1",
+    principal_name: undefined,
+    target_type: "repository",
+    target_id: "r1",
+    target_name: undefined,
+    actions: ["read"],
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    ...overrides,
+  };
+}
+
 describe("permissionsApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("list returns paginated permissions", async () => {
-    const data = { items: [{ id: "perm1" }], pagination: { total: 1 } };
+    const data = { items: [sdkPermissionFixture()], pagination: { total: 1 } };
     mockListPermissions.mockResolvedValue({ data, error: undefined });
     const { permissionsApi } = await import("../permissions");
-    expect(await permissionsApi.list()).toEqual(data);
+    expect(await permissionsApi.list()).toEqual({
+      items: [adaptedPermissionFixture()],
+      pagination: { total: 1 },
+    });
   });
 
   it("list throws on error", async () => {
@@ -33,10 +68,9 @@ describe("permissionsApi", () => {
   });
 
   it("get returns a single permission", async () => {
-    const perm = { id: "perm1", actions: ["read"] };
-    mockGetPermission.mockResolvedValue({ data: perm, error: undefined });
+    mockGetPermission.mockResolvedValue({ data: sdkPermissionFixture(), error: undefined });
     const { permissionsApi } = await import("../permissions");
-    expect(await permissionsApi.get("perm1")).toEqual(perm);
+    expect(await permissionsApi.get("perm1")).toEqual(adaptedPermissionFixture());
   });
 
   it("get throws on error", async () => {
@@ -46,8 +80,20 @@ describe("permissionsApi", () => {
   });
 
   it("create returns created permission", async () => {
-    const perm = { id: "perm2" };
-    mockCreatePermission.mockResolvedValue({ data: perm, error: undefined });
+    // CreatedPermissionRow has principal_id/target_id/actions but no
+    // updated_at or *_name fields.
+    mockCreatePermission.mockResolvedValue({
+      data: {
+        id: "perm2",
+        principal_type: "user",
+        principal_id: "u1",
+        target_type: "repository",
+        target_id: "r1",
+        actions: ["read"],
+        created_at: "2025-01-01",
+      },
+      error: undefined,
+    });
     const { permissionsApi } = await import("../permissions");
     expect(
       await permissionsApi.create({
@@ -57,7 +103,18 @@ describe("permissionsApi", () => {
         target_id: "r1",
         actions: ["read"],
       })
-    ).toEqual(perm);
+    ).toEqual({
+      id: "perm2",
+      principal_type: "user",
+      principal_id: "u1",
+      principal_name: undefined,
+      target_type: "repository",
+      target_id: "r1",
+      target_name: undefined,
+      actions: ["read"],
+      created_at: "2025-01-01",
+      updated_at: "2025-01-01",
+    });
   });
 
   it("create throws on error", async () => {
@@ -75,10 +132,20 @@ describe("permissionsApi", () => {
   });
 
   it("update returns updated permission", async () => {
-    const perm = { id: "perm1", actions: ["read", "write"] };
-    mockUpdatePermission.mockResolvedValue({ data: perm, error: undefined });
+    mockUpdatePermission.mockResolvedValue({
+      data: sdkPermissionFixture({ actions: ["read", "write"] }),
+      error: undefined,
+    });
     const { permissionsApi } = await import("../permissions");
-    expect(await permissionsApi.update("perm1", { actions: ["read", "write"] })).toEqual(perm);
+    expect(
+      await permissionsApi.update("perm1", {
+        principal_type: "user",
+        principal_id: "u1",
+        target_type: "repository",
+        target_id: "r1",
+        actions: ["read", "write"],
+      })
+    ).toEqual(adaptedPermissionFixture({ actions: ["read", "write"] }));
   });
 
   it("update throws on error", async () => {

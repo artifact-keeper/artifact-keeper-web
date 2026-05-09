@@ -99,7 +99,7 @@ export const adminApi = {
   listUserTokens: async (userId: string): Promise<ApiKey[]> => {
     const { data, error } = await sdkListUserTokens({ path: { id: userId } });
     if (error) throw error;
-    return assertData(data, 'adminApi.listUserTokens').items.map(adaptApiKey);
+    return (data?.items ?? []).map(adaptApiKey);
   },
 
   revokeUserToken: async (userId: string, tokenId: string): Promise<void> => {

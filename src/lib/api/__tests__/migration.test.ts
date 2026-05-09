@@ -48,17 +48,48 @@ describe("migrationApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("listConnections returns connections from items wrapper", async () => {
-    const items = [{ id: "c1" }];
+    const sdkConn = {
+      id: "c1",
+      name: "n",
+      url: "https://x",
+      auth_type: "api_token",
+      created_at: "2025-01-01",
+    };
+    const items = [sdkConn];
     mockListConnections.mockResolvedValue({ data: { items }, error: undefined });
     const { migrationApi } = await import("../migration");
-    expect(await migrationApi.listConnections()).toEqual(items);
+    expect(await migrationApi.listConnections()).toEqual([
+      {
+        id: "c1",
+        name: "n",
+        url: "https://x",
+        auth_type: "api_token",
+        created_at: "2025-01-01",
+        verified_at: undefined,
+      },
+    ]);
   });
 
   it("listConnections falls back when no items wrapper", async () => {
-    const data = [{ id: "c1" }];
-    mockListConnections.mockResolvedValue({ data, error: undefined });
+    const sdkConn = {
+      id: "c1",
+      name: "n",
+      url: "https://x",
+      auth_type: "basic_auth",
+      created_at: "2025-01-01",
+    };
+    mockListConnections.mockResolvedValue({ data: [sdkConn], error: undefined });
     const { migrationApi } = await import("../migration");
-    expect(await migrationApi.listConnections()).toEqual(data);
+    expect(await migrationApi.listConnections()).toEqual([
+      {
+        id: "c1",
+        name: "n",
+        url: "https://x",
+        auth_type: "basic_auth",
+        created_at: "2025-01-01",
+        verified_at: undefined,
+      },
+    ]);
   });
 
   it("listConnections throws on error", async () => {
@@ -120,10 +151,23 @@ describe("migrationApi", () => {
   });
 
   it("listSourceRepositories returns from items wrapper", async () => {
-    const items = [{ name: "repo1" }];
-    mockListSourceRepositories.mockResolvedValue({ data: { items }, error: undefined });
+    const sdkRepo = {
+      key: "repo1",
+      type: "local",
+      package_type: "npm",
+      url: "https://x",
+    };
+    mockListSourceRepositories.mockResolvedValue({ data: { items: [sdkRepo] }, error: undefined });
     const { migrationApi } = await import("../migration");
-    expect(await migrationApi.listSourceRepositories("c1")).toEqual(items);
+    expect(await migrationApi.listSourceRepositories("c1")).toEqual([
+      {
+        key: "repo1",
+        type: "local",
+        package_type: "npm",
+        url: "https://x",
+        description: undefined,
+      },
+    ]);
   });
 
   it("listSourceRepositories throws on error", async () => {

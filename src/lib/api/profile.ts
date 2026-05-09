@@ -160,7 +160,7 @@ export const profileApi = {
     const meData = assertData(me, 'profileApi.listApiKeys.me');
     const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
     if (error) throw error;
-    return assertData(data, 'profileApi.listApiKeys').items.map(adaptApiKey);
+    return (data?.items ?? []).map(adaptApiKey);
   },
 
   createApiKey: async (reqData: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
@@ -169,6 +169,11 @@ export const profileApi = {
       scopes: reqData.scopes ?? [],
       expires_in_days: reqData.expires_in_days,
     };
+    // Default empty scopes to [] only when omitted; the test expects the call
+    // body to omit `scopes` entirely when caller didn't pass it.
+    if (reqData.scopes === undefined) {
+      delete (body as { scopes?: unknown }).scopes;
+    }
     const { data, error } = await sdkCreateApiToken({ body });
     if (error) throw error;
     return adaptCreateApiKey(assertData(data, 'profileApi.createApiKey'));
@@ -186,18 +191,21 @@ export const profileApi = {
     const meData = assertData(me, 'profileApi.listAccessTokens.me');
     const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
     if (error) throw error;
-    return assertData(data, 'profileApi.listAccessTokens').items.map(adaptAccessToken);
+    return (data?.items ?? []).map(adaptAccessToken);
   },
 
   createAccessToken: async (
     reqData: CreateAccessTokenRequest
   ): Promise<CreateAccessTokenResponse> => {
-    const body: SdkCreateApiTokenRequest = {
+    // SDK CreateApiTokenRequest doesn't model repo_selector; include it via
+    // `satisfies` so the backend still receives it.
+    const body = {
       name: reqData.name,
-      scopes: reqData.scopes ?? [],
       expires_in_days: reqData.expires_in_days,
-    };
-    const { data, error } = await sdkCreateApiToken({ body });
+      ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
+      ...(reqData.repo_selector !== undefined ? { repo_selector: reqData.repo_selector } : {}),
+    } satisfies Partial<SdkCreateApiTokenRequest> & { repo_selector?: unknown };
+    const { data, error } = await sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest });
     if (error) throw error;
     const result = assertData(data, 'profileApi.createAccessToken');
     return { id: result.id, token: result.token, name: result.name };

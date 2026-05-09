@@ -12,6 +12,14 @@ const mockApiFetch = vi.fn();
 
 vi.mock("@/lib/api/fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+  // Re-implement assertData rather than importing the real module so the
+  // mock stays self-contained.
+  assertData: <T,>(data: T | undefined, context: string): T => {
+    if (data === undefined || data === null) {
+      throw new Error(`Empty response body for ${context}`);
+    }
+    return data;
+  },
 }));
 
 describe("settingsApi", () => {

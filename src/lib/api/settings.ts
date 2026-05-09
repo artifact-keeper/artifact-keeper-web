@@ -137,6 +137,18 @@ export const settingsApi = {
       throw new Error(`Failed to load storage settings: ${String(error)}`);
     }
     const settings = assertData(data, "settingsApi.getStorageSettings");
+    // Backend has historically returned wrongly-shaped responses for this
+    // endpoint (see issue #334), so guard at the trust boundary even though
+    // the SDK types claim the shape is correct.
+    if (
+      typeof settings.storage_backend !== "string" ||
+      typeof settings.storage_path !== "string" ||
+      typeof settings.max_upload_size_bytes !== "number"
+    ) {
+      throw new Error(
+        "Storage settings response missing storage_backend, storage_path, or max_upload_size_bytes"
+      );
+    }
     return {
       storage_backend: settings.storage_backend,
       storage_path: settings.storage_path,

@@ -27,14 +27,29 @@ describe("profileApi", () => {
   // ---- get ----
 
   it("get returns user data on success", async () => {
-    const mockUser = { id: "1", username: "admin", email: "admin@test.com" };
-    mockGetCurrentUser.mockResolvedValue({ data: mockUser, error: undefined });
+    const sdkUser = {
+      id: "1",
+      username: "admin",
+      email: "admin@test.com",
+      is_admin: false,
+      totp_enabled: false,
+    };
+    mockGetCurrentUser.mockResolvedValue({ data: sdkUser, error: undefined });
 
     const { profileApi } = await import("../profile");
     const result = await profileApi.get();
 
     expect(mockGetCurrentUser).toHaveBeenCalled();
-    expect(result).toEqual(mockUser);
+    expect(result).toEqual({
+      id: "1",
+      username: "admin",
+      email: "admin@test.com",
+      display_name: undefined,
+      is_admin: false,
+      is_active: undefined,
+      must_change_password: undefined,
+      auth_provider: undefined,
+    });
   });
 
   it("get throws on SDK error", async () => {
@@ -50,10 +65,16 @@ describe("profileApi", () => {
   // ---- update ----
 
   it("update fetches current user then calls updateUser", async () => {
-    const mockUser = { id: "user-1", username: "admin", email: "old@test.com" };
-    const updatedUser = { ...mockUser, email: "new@test.com" };
-    mockGetCurrentUser.mockResolvedValue({ data: mockUser, error: undefined });
-    mockUpdateUser.mockResolvedValue({ data: updatedUser, error: undefined });
+    const sdkUser = {
+      id: "user-1",
+      username: "admin",
+      email: "old@test.com",
+      is_admin: false,
+      totp_enabled: false,
+    };
+    const updatedSdkUser = { ...sdkUser, email: "new@test.com" };
+    mockGetCurrentUser.mockResolvedValue({ data: sdkUser, error: undefined });
+    mockUpdateUser.mockResolvedValue({ data: updatedSdkUser, error: undefined });
 
     const { profileApi } = await import("../profile");
     const result = await profileApi.update({ email: "new@test.com" });
@@ -61,9 +82,23 @@ describe("profileApi", () => {
     expect(mockGetCurrentUser).toHaveBeenCalled();
     expect(mockUpdateUser).toHaveBeenCalledWith({
       path: { id: "user-1" },
-      body: { email: "new@test.com" },
+      body: {
+        display_name: undefined,
+        email: "new@test.com",
+        current_password: undefined,
+        new_password: undefined,
+      },
     });
-    expect(result).toEqual(updatedUser);
+    expect(result).toEqual({
+      id: "user-1",
+      username: "admin",
+      email: "new@test.com",
+      display_name: undefined,
+      is_admin: false,
+      is_active: undefined,
+      must_change_password: undefined,
+      auth_provider: undefined,
+    });
   });
 
   it("update throws when getCurrentUser fails", async () => {
@@ -97,15 +132,27 @@ describe("profileApi", () => {
 
   it("listApiKeys returns items array on success", async () => {
     const mockUser = { id: "user-1" };
-    const mockTokens = {
+    const sdkTokens = {
       items: [
-        { id: "key-1", name: "CI Key", key_prefix: "ak_" },
-        { id: "key-2", name: "Deploy Key", key_prefix: "ak_" },
+        {
+          id: "key-1",
+          name: "CI Key",
+          token_prefix: "ak_",
+          created_at: "2025-01-01",
+          scopes: [],
+        },
+        {
+          id: "key-2",
+          name: "Deploy Key",
+          token_prefix: "ak_",
+          created_at: "2025-01-01",
+          scopes: [],
+        },
       ],
     };
     mockGetCurrentUser.mockResolvedValue({ data: mockUser, error: undefined });
     mockListUserTokens.mockResolvedValue({
-      data: mockTokens,
+      data: sdkTokens,
       error: undefined,
     });
 
@@ -116,7 +163,26 @@ describe("profileApi", () => {
     expect(mockListUserTokens).toHaveBeenCalledWith({
       path: { id: "user-1" },
     });
-    expect(result).toEqual(mockTokens.items);
+    expect(result).toEqual([
+      {
+        id: "key-1",
+        name: "CI Key",
+        key_prefix: "ak_",
+        created_at: "2025-01-01",
+        scopes: [],
+        expires_at: undefined,
+        last_used_at: undefined,
+      },
+      {
+        id: "key-2",
+        name: "Deploy Key",
+        key_prefix: "ak_",
+        created_at: "2025-01-01",
+        scopes: [],
+        expires_at: undefined,
+        last_used_at: undefined,
+      },
+    ]);
   });
 
   it("listApiKeys returns empty array when data has no items", async () => {
@@ -222,14 +288,20 @@ describe("profileApi", () => {
 
   it("listAccessTokens returns items array on success", async () => {
     const mockUser = { id: "user-1" };
-    const mockTokens = {
+    const sdkTokens = {
       items: [
-        { id: "tok-1", name: "Dev Token", token_prefix: "akt_" },
+        {
+          id: "tok-1",
+          name: "Dev Token",
+          token_prefix: "akt_",
+          created_at: "2025-01-01",
+          scopes: [],
+        },
       ],
     };
     mockGetCurrentUser.mockResolvedValue({ data: mockUser, error: undefined });
     mockListUserTokens.mockResolvedValue({
-      data: mockTokens,
+      data: sdkTokens,
       error: undefined,
     });
 
@@ -240,7 +312,17 @@ describe("profileApi", () => {
     expect(mockListUserTokens).toHaveBeenCalledWith({
       path: { id: "user-1" },
     });
-    expect(result).toEqual(mockTokens.items);
+    expect(result).toEqual([
+      {
+        id: "tok-1",
+        name: "Dev Token",
+        token_prefix: "akt_",
+        created_at: "2025-01-01",
+        scopes: [],
+        expires_at: undefined,
+        last_used_at: undefined,
+      },
+    ]);
   });
 
   it("listAccessTokens returns empty array when data is empty", async () => {

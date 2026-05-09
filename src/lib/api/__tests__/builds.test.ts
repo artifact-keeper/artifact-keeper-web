@@ -16,15 +16,55 @@ vi.mock("@artifact-keeper/sdk", () => ({
   getBuildDiff: (...args: unknown[]) => mockGetBuildDiff(...args),
 }));
 
+// Minimal SDK BuildResponse fixture; the adapter maps every field 1:1 with
+// `null → undefined` normalization for optional fields.
+function buildFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "b1",
+    name: "build-1",
+    number: 1,
+    status: "success",
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    ...overrides,
+  };
+}
+
+function adaptedBuildFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "b1",
+    name: "build-1",
+    number: 1,
+    status: "success",
+    started_at: undefined,
+    finished_at: undefined,
+    duration_ms: undefined,
+    agent: undefined,
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    artifact_count: undefined,
+    modules: undefined,
+    vcs_url: undefined,
+    vcs_revision: undefined,
+    vcs_branch: undefined,
+    vcs_message: undefined,
+    metadata: undefined,
+    ...overrides,
+  };
+}
+
 describe("buildsApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("list returns paginated builds", async () => {
-    const response = { items: [{ id: "b1" }], pagination: { total: 1 } };
+    const response = { items: [buildFixture()], pagination: { total: 1 } };
     mockListBuilds.mockResolvedValue({ data: response, error: undefined });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.list();
-    expect(result).toEqual(response);
+    expect(result).toEqual({
+      items: [adaptedBuildFixture()],
+      pagination: { total: 1 },
+    });
   });
 
   it("list throws on error", async () => {
@@ -34,11 +74,10 @@ describe("buildsApi", () => {
   });
 
   it("get returns a single build", async () => {
-    const build = { id: "b1", name: "build-1" };
-    mockGetBuild.mockResolvedValue({ data: build, error: undefined });
+    mockGetBuild.mockResolvedValue({ data: buildFixture(), error: undefined });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.get("b1");
-    expect(result).toEqual(build);
+    expect(result).toEqual(adaptedBuildFixture());
   });
 
   it("get throws on error", async () => {
@@ -48,11 +87,13 @@ describe("buildsApi", () => {
   });
 
   it("create returns created build", async () => {
-    const build = { id: "b2", name: "new-build" };
-    mockCreateBuild.mockResolvedValue({ data: build, error: undefined });
+    mockCreateBuild.mockResolvedValue({
+      data: buildFixture({ id: "b2", name: "new-build" }),
+      error: undefined,
+    });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.create({ name: "new-build", build_number: 1 });
-    expect(result).toEqual(build);
+    expect(result).toEqual(adaptedBuildFixture({ id: "b2", name: "new-build" }));
   });
 
   it("create throws on error", async () => {
@@ -62,11 +103,13 @@ describe("buildsApi", () => {
   });
 
   it("updateStatus returns updated build", async () => {
-    const build = { id: "b1", status: "completed" };
-    mockUpdateBuild.mockResolvedValue({ data: build, error: undefined });
+    mockUpdateBuild.mockResolvedValue({
+      data: buildFixture({ status: "success" }),
+      error: undefined,
+    });
     const { buildsApi } = await import("../builds");
-    const result = await buildsApi.updateStatus("b1", { status: "completed" });
-    expect(result).toEqual(build);
+    const result = await buildsApi.updateStatus("b1", { status: "success" });
+    expect(result).toEqual(adaptedBuildFixture({ status: "success" }));
   });
 
   it("updateStatus throws on error", async () => {
@@ -76,7 +119,13 @@ describe("buildsApi", () => {
   });
 
   it("diff returns build diff", async () => {
-    const diff = { added: [], removed: [] };
+    const diff = {
+      build_a: "b1",
+      build_b: "b2",
+      added: [],
+      removed: [],
+      modified: [],
+    };
     mockGetBuildDiff.mockResolvedValue({ data: diff, error: undefined });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.diff("b1", "b2");
