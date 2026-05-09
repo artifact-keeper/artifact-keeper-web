@@ -15,6 +15,8 @@
  *  7. Anything else falls back to the provided default message
  */
 
+import { toast } from "sonner";
+
 /** Return the value if it is a non-empty string, otherwise undefined. */
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
@@ -145,3 +147,16 @@ export function isPasswordReuseError(error: unknown): boolean {
   const msg = toUserMessage(error, '').toLowerCase();
   return PASSWORD_REUSE_PATTERNS.some((pattern) => msg.includes(pattern));
 }
+
+/**
+ * Returns a TanStack Query `onError` handler that toasts the backend error
+ * via toUserMessage with the given fallback label. Shorthand for the
+ * pattern that appears in ~125 mutation callsites.
+ *
+ * @example
+ *   onError: mutationErrorToast("Failed to delete repository"),
+ */
+export const mutationErrorToast = (label: string) =>
+  (err: unknown) => {
+    toast.error(toUserMessage(err, label));
+  };

@@ -1,10 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   toUserMessage,
   isAccountLocked,
   isPasswordReuseError,
+  mutationErrorToast,
   PASSWORD_REUSE_MESSAGE,
 } from "../error-utils";
+import { toast } from "sonner";
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+  },
+}));
 
 describe("toUserMessage", () => {
   const FALLBACK = "Something went wrong";
@@ -335,5 +343,65 @@ describe("PASSWORD_REUSE_MESSAGE", () => {
   it("is a non-empty string", () => {
     expect(typeof PASSWORD_REUSE_MESSAGE).toBe("string");
     expect(PASSWORD_REUSE_MESSAGE.length).toBeGreaterThan(0);
+  });
+});
+
+describe("mutationErrorToast", () => {
+  const errorMock = vi.mocked(toast.error);
+
+  beforeEach(() => {
+    errorMock.mockClear();
+  });
+
+  it("toasts the Error message when given a standard Error", () => {
+    const handler = mutationErrorToast("Failed to do thing");
+    handler(new Error("Network down"));
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    expect(errorMock).toHaveBeenCalledWith("Network down");
+  });
+
+  it("toasts the SDK .error string when given an SDK-shaped error", () => {
+    const handler = mutationErrorToast("Failed to do thing");
+    handler({ error: "Forbidden" });
+    expect(errorMock).toHaveBeenCalledWith("Forbidden");
+  });
+
+  it("toasts the fallback label for an unrecognized error shape", () => {
+    const handler = mutationErrorToast("Failed to delete repository");
+    handler({ unrelated: 42 });
+    expect(errorMock).toHaveBeenCalledTimes(1);
+    expect(errorMock).toHaveBeenCalledWith("Failed to delete repository");
+  });
+
+  it("toasts the fallback label for null", () => {
+    const handler = mutationErrorToast("Generic failure");
+    handler(null);
+    expect(errorMock).toHaveBeenCalledWith("Generic failure");
+  });
+
+  it("toasts the fallback label for undefined", () => {
+    const handler = mutationErrorToast("Generic failure");
+    handler(undefined);
+    expect(errorMock).toHaveBeenCalledWith("Generic failure");
+  });
+
+  it("returns a reusable handler that does not produce closure side effects across calls", () => {
+    const handler = mutationErrorToast("Fallback label");
+    handler(new Error("first"));
+    handler(new Error("second"));
+    handler({ error: "third" });
+    expect(errorMock).toHaveBeenCalledTimes(3);
+    expect(errorMock).toHaveBeenNthCalledWith(1, "first");
+    expect(errorMock).toHaveBeenNthCalledWith(2, "second");
+    expect(errorMock).toHaveBeenNthCalledWith(3, "third");
+  });
+
+  it("each invocation creates an independent handler with its own label", () => {
+    const handlerA = mutationErrorToast("Label A");
+    const handlerB = mutationErrorToast("Label B");
+    handlerA({});
+    handlerB({});
+    expect(errorMock).toHaveBeenNthCalledWith(1, "Label A");
+    expect(errorMock).toHaveBeenNthCalledWith(2, "Label B");
   });
 });
