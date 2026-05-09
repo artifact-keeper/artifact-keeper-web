@@ -501,7 +501,10 @@ describe("LoginPage lockout UI", () => {
       expect(screen.getByText("Sign in with Okta SSO")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("or continue with")).toBeInTheDocument();
+    // When only OIDC is configured (no LDAP, no setup-required), the local
+    // username/password form is hidden — see issue #350 — so there is no
+    // need for the "or continue with" divider above the provider button.
+    expect(screen.queryByText("or continue with")).not.toBeInTheDocument();
   });
 
   it("redirects when clicking an OIDC provider button with relative login_url", async () => {
