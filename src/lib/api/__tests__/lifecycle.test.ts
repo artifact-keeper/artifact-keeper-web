@@ -144,10 +144,13 @@ describe("lifecycleApi", () => {
     ).toEqual(EXPECTED_POLICY);
   });
 
-  it("create forwards local body shape to SDK (#359)", async () => {
+  it("create forwards local body shape to SDK and strips extras (#359)", async () => {
     // Locks the adapter contract: even though the SDK declares the body
     // type as security-policy CreatePolicyRequest (an SDK type leak), the
     // wire payload must be the local lifecycle CreateLifecyclePolicyRequest.
+    // Cast to bypass TS so we can prove the adapter strips an unrelated
+    // field that doesn't belong on the wire — the explicit-field forward
+    // in adaptCreateRequest is what makes this test load-bearing.
     mockCreate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../lifecycle");
     await mod.default.create({
@@ -157,6 +160,8 @@ describe("lifecycleApi", () => {
       repository_id: "repo-a",
       description: "test",
       priority: 50,
+      // @ts-expect-error — intentionally not in CreateLifecyclePolicyRequest
+      bogus_extra_field: "should be stripped by adapter",
     });
     expect(mockCreate).toHaveBeenCalledWith({
       body: {

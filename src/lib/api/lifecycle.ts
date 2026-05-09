@@ -30,6 +30,10 @@ import { assertData } from '@/lib/api/fetch';
 // undefined → null so callers see a stable shape (#206 / #359).
 
 function adaptLifecyclePolicy(sdk: SdkLifecyclePolicy): LifecyclePolicy {
+  // INTENTIONAL DROP: SDK exposes `cron_schedule?: string | null` but no
+  // current consumer reads it and the local LifecyclePolicy type omits the
+  // field. If a future "next run" UI surfaces this, add it to the local
+  // type AND to the body of this adapter — don't just forward through.
   return {
     id: sdk.id,
     repository_id: sdk.repository_id ?? null,
@@ -64,15 +68,31 @@ function adaptPolicyExecutionResult(
 // declare their bodies as `CreatePolicyRequest` / `UpdatePolicyRequest`, which
 // belong to the *security policies* endpoints (block_on_fail, max_severity, …)
 // and have nothing to do with lifecycle policies. The actual backend accepts
-// the local `CreateLifecyclePolicyRequest` shape (policy_type, config, …);
-// we double-cast through `unknown` to bypass the wrong SDK type while still
-// handing the SDK call a typed object. Track removal in #359 once the
-// generator is rebuilt against the corrected OpenAPI spec.
+// the local `CreateLifecyclePolicyRequest` / `UpdateLifecyclePolicyRequest`
+// shape; we forward fields explicitly (typed as the local request shape so
+// adding a local field forces an adapter update) and double-cast through
+// `unknown` to satisfy the wrong SDK signature. Track removal in #359 once
+// the generator is rebuilt against the corrected OpenAPI spec.
 function adaptCreateRequest(req: CreateLifecyclePolicyRequest): SdkCreatePolicyRequest {
-  return req as unknown as SdkCreatePolicyRequest;
+  const body: CreateLifecyclePolicyRequest = {
+    name: req.name,
+    policy_type: req.policy_type,
+    config: req.config,
+    repository_id: req.repository_id,
+    description: req.description,
+    priority: req.priority,
+  };
+  return body as unknown as SdkCreatePolicyRequest;
 }
 function adaptUpdateRequest(req: UpdateLifecyclePolicyRequest): SdkUpdatePolicyRequest {
-  return req as unknown as SdkUpdatePolicyRequest;
+  const body: UpdateLifecyclePolicyRequest = {
+    name: req.name,
+    description: req.description,
+    enabled: req.enabled,
+    config: req.config,
+    priority: req.priority,
+  };
+  return body as unknown as SdkUpdatePolicyRequest;
 }
 
 const lifecycleApi = {
