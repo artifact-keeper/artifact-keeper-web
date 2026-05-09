@@ -74,6 +74,13 @@ describe("formatBytes", () => {
     // Real backends sometimes report fractional bytes (e.g. averages).
     expect(formatBytes(1024.5)).toBe("1 KB");
   });
+
+  it("handles sub-byte fractional values without overflowing the unit table", () => {
+    // 0 < bytes < 1 produces a negative rawIndex; the clamp must floor it
+    // at 0 (B) so we don't index off the front of the units table.
+    expect(formatBytes(0.5)).toBe("0.5 B");
+    expect(formatBytes(0.1)).toBe("0.1 B");
+  });
 });
 
 describe("formatDate", () => {

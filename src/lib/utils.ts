@@ -21,9 +21,12 @@ export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const rawIndex = Math.floor(Math.log(bytes) / Math.log(k));
-  // Clamp so values larger than the largest unit (e.g. multi-PB) render as
-  // "<n> TB" rather than indexing past the end of the units table.
-  const i = Math.min(rawIndex, BYTE_UNITS.length - 1);
+  // Clamp both ends: sub-byte values (e.g. 0.5) yield rawIndex = -1 which
+  // would index off the front of the units table, and multi-PB values yield
+  // rawIndex >= BYTE_UNITS.length which would index off the end. Both paths
+  // would otherwise produce "<n> undefined" — the bug this function exists
+  // to prevent.
+  const i = Math.max(0, Math.min(rawIndex, BYTE_UNITS.length - 1));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${BYTE_UNITS[i]}`;
 }
 
