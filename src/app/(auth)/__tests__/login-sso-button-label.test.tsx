@@ -6,14 +6,12 @@ import React from "react";
 import type { SsoProvider } from "@/types/sso";
 
 // ---------------------------------------------------------------------------
-// Mocks (mirrors login-form-visibility.test.tsx setup)
+// Mocks — only the dependencies that affect the SSO button label render path.
 // ---------------------------------------------------------------------------
 
-const mockPush = vi.fn();
-const mockSearchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
-  useSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/image", () => {
@@ -23,11 +21,11 @@ vi.mock("next/image", () => {
 });
 
 vi.mock("lucide-react", () => {
-  const stub = (name: string) => {
+  function stub(name: string) {
     const Icon = (props: any) => <span data-testid={`icon-${name}`} {...props} />;
     Icon.displayName = name;
     return Icon;
-  };
+  }
   return {
     Loader2: stub("Loader2"),
     Lock: stub("Lock"),
@@ -38,68 +36,28 @@ vi.mock("lucide-react", () => {
 });
 
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, ...props }: any) => (
-    <button {...props}>{children}</button>
-  ),
+  Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));
-
-vi.mock("@/components/ui/input", () => {
-  const MockInput = React.forwardRef((props: any, ref: any) => (
-    <input ref={ref} {...props} />
-  ));
-  MockInput.displayName = "MockInput";
-  return { Input: MockInput };
-});
-
-vi.mock("@/components/ui/alert", () => ({
-  Alert: ({ children, ...props }: any) => (
-    <div role="alert" {...props}>
-      {children}
-    </div>
-  ),
-  AlertTitle: ({ children }: any) => <strong>{children}</strong>,
-  AlertDescription: ({ children }: any) => <span>{children}</span>,
-}));
-
-vi.mock("@/components/ui/separator", () => ({
-  Separator: () => <hr />,
-}));
-
-vi.mock("@/components/ui/card", () => ({
-  Card: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-  CardContent: ({ children }: any) => <div>{children}</div>,
-  CardHeader: ({ children }: any) => <div>{children}</div>,
-  CardTitle: ({ children }: any) => <h2>{children}</h2>,
-  CardDescription: ({ children }: any) => <p>{children}</p>,
-}));
-
-const mockLogin = vi.fn();
-const mockRefreshUser = vi.fn();
-const mockVerifyTotp = vi.fn();
-const mockClearTotpRequired = vi.fn();
-
-const authState = {
-  login: mockLogin,
-  refreshUser: mockRefreshUser,
-  setupRequired: false,
-  totpRequired: false,
-  verifyTotp: mockVerifyTotp,
-  clearTotpRequired: mockClearTotpRequired,
-};
 
 vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => authState,
+  useAuth: () => ({
+    login: vi.fn(),
+    refreshUser: vi.fn(),
+    setupRequired: false,
+    totpRequired: false,
+    verifyTotp: vi.fn(),
+    clearTotpRequired: vi.fn(),
+  }),
 }));
 
-const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
+const { mockListProviders } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
-  mockLdapLogin: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/api/sso", () => ({
   ssoApi: {
     listProviders: mockListProviders,
-    ldapLogin: mockLdapLogin,
+    ldapLogin: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -111,15 +69,14 @@ import LoginPage from "../login/page";
 function makeProvider(
   overrides: Partial<SsoProvider> & Pick<SsoProvider, "provider_type">
 ): SsoProvider {
+  const id = overrides.id ?? `${overrides.provider_type}-1`;
   return {
-    id: overrides.id ?? `${overrides.provider_type}-1`,
+    id,
     name: overrides.name ?? "Test",
     provider_type: overrides.provider_type,
     login_url:
       overrides.login_url ??
-      `/api/v1/auth/sso/${overrides.provider_type}/${
-        overrides.id ?? `${overrides.provider_type}-1`
-      }/login`,
+      `/api/v1/auth/sso/${overrides.provider_type}/${id}/login`,
   };
 }
 
@@ -138,13 +95,7 @@ async function renderAndWaitForProviders(): Promise<void> {
 
 describe("LoginPage SSO button label (#351)", () => {
   beforeEach(() => {
-    mockPush.mockClear();
-    mockLogin.mockClear();
-    mockRefreshUser.mockClear();
-    mockVerifyTotp.mockClear();
-    mockClearTotpRequired.mockClear();
     mockListProviders.mockReset();
-    mockLdapLogin.mockReset();
   });
 
   afterEach(() => {
@@ -160,9 +111,7 @@ describe("LoginPage SSO button label (#351)", () => {
     await renderAndWaitForProviders();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Sign in with SSO \(OIDC\)/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Sign in with SSO \(OIDC\)/i)).toBeInTheDocument();
     });
     // The bug: button used to say "Sign in with default".
     expect(screen.queryByText(/Sign in with default/i)).not.toBeInTheDocument();
@@ -217,9 +166,7 @@ describe("LoginPage SSO button label (#351)", () => {
     await renderAndWaitForProviders();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Sign in with SSO \(SAML\)/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Sign in with SSO \(SAML\)/i)).toBeInTheDocument();
     });
     expect(screen.queryByText(/Sign in with default/i)).not.toBeInTheDocument();
   });
@@ -232,9 +179,7 @@ describe("LoginPage SSO button label (#351)", () => {
     await renderAndWaitForProviders();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Sign in with SSO \(OIDC\)/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Sign in with SSO \(OIDC\)/i)).toBeInTheDocument();
     });
   });
 
@@ -246,9 +191,7 @@ describe("LoginPage SSO button label (#351)", () => {
     await renderAndWaitForProviders();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Sign in with SSO \(OIDC\)/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Sign in with SSO \(OIDC\)/i)).toBeInTheDocument();
     });
     expect(screen.queryByText("Sign in with Default")).not.toBeInTheDocument();
   });

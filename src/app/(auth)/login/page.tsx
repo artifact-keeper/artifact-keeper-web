@@ -47,14 +47,19 @@ type SelectedProvider =
 // gibberish ("Sign in with default") — see issue #351. Match case-insensitively.
 const GENERIC_PROVIDER_NAMES = new Set(["default", "primary", "main", "sso"]);
 
+// Fallback labels by protocol when the provider's name is generic/empty —
+// at least tells the user which protocol they're authenticating with.
+const GENERIC_LABEL_BY_PROTOCOL: Partial<
+  Record<SsoProvider["provider_type"], string>
+> = {
+  oidc: "Sign in with SSO (OIDC)",
+  saml: "Sign in with SSO (SAML)",
+};
+
 export function ssoButtonLabel(provider: SsoProvider): string {
   const name = provider.name?.trim();
   if (!name || GENERIC_PROVIDER_NAMES.has(name.toLowerCase())) {
-    // Generic / unconfigured name — fall back to a label that at least tells
-    // the user which protocol they're authenticating with.
-    if (provider.provider_type === "oidc") return "Sign in with SSO (OIDC)";
-    if (provider.provider_type === "saml") return "Sign in with SSO (SAML)";
-    return "Sign in with SSO";
+    return GENERIC_LABEL_BY_PROTOCOL[provider.provider_type] ?? "Sign in with SSO";
   }
   return `Sign in with ${name}`;
 }
