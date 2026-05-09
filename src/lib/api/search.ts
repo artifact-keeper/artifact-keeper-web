@@ -1,6 +1,12 @@
 import '@/lib/sdk-client';
 import { quickSearch, advancedSearch, checksumSearch } from '@artifact-keeper/sdk';
+import type {
+  SearchResultItem,
+  AdvancedSearchResponse,
+  ChecksumArtifact,
+} from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
+import { assertData } from '@/lib/api/fetch';
 
 export interface SearchResult {
   id: string;
@@ -46,6 +52,54 @@ export interface ChecksumSearchParams {
   algorithm?: 'sha256' | 'sha1' | 'md5';
 }
 
+function isSearchResultType(v: string): v is SearchResult['type'] {
+  return v === 'artifact' || v === 'package' || v === 'repository';
+}
+
+// SDK's SearchResultItem.type is `string`; narrow to the local union, falling
+// back to 'artifact' for unrecognized values rather than throwing — search
+// UIs should still render unknown items.
+function adaptSearchResult(sdk: SearchResultItem): SearchResult {
+  const t: SearchResult['type'] = isSearchResultType(sdk.type) ? sdk.type : 'artifact';
+  return {
+    id: sdk.id,
+    type: t,
+    name: sdk.name,
+    path: sdk.path ?? undefined,
+    repository_key: sdk.repository_key,
+    format: sdk.format ?? undefined,
+    version: sdk.version ?? undefined,
+    size_bytes: sdk.size_bytes ?? undefined,
+    created_at: sdk.created_at,
+    highlights: sdk.highlights ?? undefined,
+  };
+}
+
+// ChecksumSearchResponse.artifacts uses ChecksumArtifact, which is a strict
+// subset of the local Artifact (no checksum_sha256, content_type, etc.).
+// Adapt by filling in known fields and leaving the rest as defaults.
+function adaptChecksumArtifact(sdk: ChecksumArtifact): Artifact {
+  return {
+    id: sdk.id,
+    repository_key: sdk.repository_key,
+    path: sdk.path,
+    name: sdk.name,
+    version: sdk.version ?? undefined,
+    size_bytes: sdk.size_bytes,
+    checksum_sha256: '',
+    content_type: '',
+    download_count: 0,
+    created_at: '',
+  };
+}
+
+function adaptAdvancedSearch(sdk: AdvancedSearchResponse): PaginatedResponse<SearchResult> {
+  return {
+    items: sdk.items.map(adaptSearchResult),
+    pagination: sdk.pagination,
+  };
+}
+
 export const searchApi = {
   quickSearch: async (params: QuickSearchParams): Promise<SearchResult[]> => {
     const { data, error } = await quickSearch({
@@ -53,18 +107,18 @@ export const searchApi = {
         q: params.query,
         limit: params.limit,
         types: params.types?.join(','),
-      } as never,
+      },
     });
     if (error) throw error;
-    return (data as unknown as { results: SearchResult[] }).results;
+    return assertData(data, 'searchApi.quickSearch').results.map(adaptSearchResult);
   },
 
   advancedSearch: async (
     params: AdvancedSearchParams
   ): Promise<PaginatedResponse<SearchResult>> => {
-    const { data, error } = await advancedSearch({ query: params as never });
+    const { data, error } = await advancedSearch({ query: params });
     if (error) throw error;
-    return data as unknown as PaginatedResponse<SearchResult>;
+    return adaptAdvancedSearch(assertData(data, 'searchApi.advancedSearch'));
   },
 
   checksumSearch: async (params: ChecksumSearchParams): Promise<Artifact[]> => {
@@ -72,10 +126,10 @@ export const searchApi = {
       query: {
         checksum: params.checksum,
         algorithm: params.algorithm || 'sha256',
-      } as never,
+      },
     });
     if (error) throw error;
-    return (data as unknown as { artifacts: Artifact[] }).artifacts;
+    return assertData(data, 'searchApi.checksumSearch').artifacts.map(adaptChecksumArtifact);
   },
 };
 
