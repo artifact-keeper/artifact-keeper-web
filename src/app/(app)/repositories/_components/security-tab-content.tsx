@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert,
@@ -14,14 +15,19 @@ import {
   Link2,
   Link2Off,
   Activity,
+  Bug,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
+import securityApi from "@/lib/api/security";
 import dtApi from "@/lib/api/dependency-track";
+import { useAuth } from "@/providers/auth-provider";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { ArtifactScansSection } from "./artifact-scans-section";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
+import type { ScanResult } from "@/types/security";
 import type { Artifact } from "@/types";
 import type {
   DtFinding,
@@ -120,6 +126,8 @@ function resolveDtProjectUuid(
 
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
+  const { isAuthenticated, user } = useAuth();
+  const isAdmin = isAuthenticated && (user?.is_admin ?? false);
   const [page, setPage] = useState(1);
   const [dtFindingsPage, setDtFindingsPage] = useState(1);
 
@@ -131,6 +139,25 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     queryKey: ["cve-history", artifact.id],
     queryFn: () => sbomApi.getCveHistory(artifact.id),
   });
+
+  // -------------------------------------------------------------------------
+  // Per-artifact scan results (scan_results / scan_findings tables)
+  // -------------------------------------------------------------------------
+  // Distinct from `cve-history` (SBOM-derived) and Dependency-Track findings.
+  // Surfaces results from in-tree scanners (image_scanner, package_scanner)
+  // that write into `scan_results`.
+  const {
+    data: artifactScansResp,
+    isLoading: artifactScansLoading,
+    isError: artifactScansError,
+  } = useQuery({
+    queryKey: ["artifact-scans", artifact.id],
+    queryFn: () => securityApi.listArtifactScans(artifact.id, { per_page: 25 }),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const artifactScans: ScanResult[] = artifactScansResp?.items ?? [];
+  const artifactScansTotal = artifactScansResp?.total ?? artifactScans.length;
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ cveId, status, reason }: { cveId: string; status: CveStatus; reason?: string }) =>
@@ -599,6 +626,18 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       <ArtifactScansSection artifactId={artifact.id} />
 
       {/* ----------------------------------------------------------------- */}
+      {/* Image / Package Scans (in-tree scanner results) */}
+      {/* ----------------------------------------------------------------- */}
+      <Separator />
+      <ArtifactScansSection
+        scans={artifactScans}
+        total={artifactScansTotal}
+        isLoading={artifactScansLoading}
+        isError={artifactScansError}
+        isAdmin={isAdmin}
+      />
+
+      {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Findings Section */}
       {/* ----------------------------------------------------------------- */}
       {dtStatus && (
@@ -693,6 +732,137 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+const SCAN_STATUS_BADGE: Record<string, string> = {
+  completed: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40",
+  running: "text-blue-600 bg-blue-100 dark:bg-blue-950/40",
+  pending: "text-muted-foreground bg-secondary",
+  failed: "text-red-600 bg-red-100 dark:bg-red-950/40",
+  error: "text-red-600 bg-red-100 dark:bg-red-950/40",
+};
+
+function ArtifactScansSection({
+  scans,
+  total,
+  isLoading,
+  isError,
+  isAdmin,
+}: {
+  scans: ScanResult[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+  isAdmin: boolean;
+}) {
+  // The detail route /security/scans/[id] lives under the (admin) route group.
+  // Showing the link to non-admins would render a click-target that 403s.
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Bug className="size-5 text-muted-foreground" />
+        <h3 className="text-sm font-medium">Image / Package Scans</h3>
+        {!isLoading && !isError && total > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            {total} total
+          </Badge>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : isError ? (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
+          <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+              Could not load scan results
+            </p>
+            <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+              The scan service is unreachable or returned an error. Retry by
+              reloading the page; scans already on disk are unaffected.
+            </p>
+          </div>
+        </div>
+      ) : scans.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <ShieldCheck className="size-10 text-muted-foreground/50 mb-3" />
+          <p className="text-sm text-muted-foreground">
+            No scans recorded for this artifact.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Trigger a scan via <code className="text-xs">POST /api/v1/security/scan</code>{" "}
+            or via a CI pipeline that calls the same endpoint.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {scans.map((s) => (
+            <li
+              key={s.id}
+              className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium truncate">{s.scan_type}</span>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs uppercase ${SCAN_STATUS_BADGE[s.status] ?? ""}`}
+                  >
+                    {s.status}
+                  </Badge>
+                  {s.findings_count > 0 && (
+                    <Badge variant="secondary" className="text-xs">
+                      {s.findings_count} findings
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {s.critical_count > 0 && (
+                    <span className="text-red-600 mr-2">{s.critical_count} critical</span>
+                  )}
+                  {s.high_count > 0 && (
+                    <span className="text-orange-600 mr-2">{s.high_count} high</span>
+                  )}
+                  {s.medium_count > 0 && (
+                    <span className="text-yellow-600 mr-2">{s.medium_count} medium</span>
+                  )}
+                  {s.low_count > 0 && (
+                    <span className="text-blue-600 mr-2">{s.low_count} low</span>
+                  )}
+                  {s.completed_at && (
+                    <span className="ml-auto">
+                      <Clock className="inline size-3 mr-1" />
+                      {new Date(s.completed_at).toLocaleString()}
+                    </span>
+                  )}
+                </p>
+              </div>
+              {isAdmin ? (
+                <Link
+                  href={`/security/scans/${s.id}`}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                >
+                  View details
+                  <ExternalLink className="size-3" />
+                </Link>
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground shrink-0"
+                  title="Scan details are visible to administrators"
+                >
+                  Admin only
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 /**
  * Status bar showing whether the Dependency-Track integration is connected.
