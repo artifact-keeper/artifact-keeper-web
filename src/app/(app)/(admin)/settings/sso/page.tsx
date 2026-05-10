@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,7 @@ import {
   Loader2,
   CheckCircle,
   Plug,
+  GitBranch,
 } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -1640,6 +1642,12 @@ export default function SsoSettingsPage() {
           <TabsTrigger value="saml">
             <FileKey className="size-4 mr-1.5" />
             SAML
+          </TabsTrigger>
+          <TabsTrigger value="ci" asChild>
+            <Link href="/settings/sso/ci">
+              <GitBranch className="size-4 mr-1.5" />
+              CI / CD
+            </Link>
           </TabsTrigger>
         </TabsList>
 
