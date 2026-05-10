@@ -61,9 +61,7 @@ export interface CiOidcIdentityMapping {
   /** Lower number = higher priority. Evaluated in ascending order. */
   priority: number;
   claim_filters: ClaimFilters;
-  /** AK Role UUID assigned to the service account. null = no role. */
-  role_id: string | null;
-  /** Repository UUIDs this mapping may access. null = unrestricted. */
+  /** Optional repository restriction for this mapping. */
   allowed_repo_ids: string[] | null;
   is_enabled: boolean;
   created_at: string;
@@ -74,7 +72,6 @@ export interface CreateCiOidcMappingRequest {
   name: string;
   priority?: number;
   claim_filters: ClaimFilters;
-  role_id?: string | null;
   allowed_repo_ids?: string[] | null;
   is_enabled?: boolean;
 }
@@ -83,7 +80,6 @@ export interface UpdateCiOidcMappingRequest {
   name?: string;
   priority?: number;
   claim_filters?: ClaimFilters;
-  role_id?: string | null;
   allowed_repo_ids?: string[] | null;
   is_enabled?: boolean;
 }

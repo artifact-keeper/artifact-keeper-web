@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { ciOidcApi } from "@/lib/api/ci-oidc";
+import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   CiOidcProvider,
@@ -30,6 +31,7 @@ import type {
   CreateCiOidcMappingRequest,
   UpdateCiOidcMappingRequest,
 } from "@/types/ci-oidc";
+import type { Repository } from "@/types";
 
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -42,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -135,8 +138,8 @@ const BLANK_MAPPING_FORM = {
   name: "",
   priority: "100",
   claim_filters_raw: "",
-  role_id: "",
-  allowed_repo_ids_raw: "",
+  repo_scope_mode: "all" as "all" | "selected",
+  selected_repo_ids: [] as string[],
   is_enabled: true,
 };
 type MappingForm = typeof BLANK_MAPPING_FORM;
@@ -146,8 +149,8 @@ function mappingFormFromRow(m: CiOidcIdentityMapping): MappingForm {
     name: m.name,
     priority: String(m.priority),
     claim_filters_raw: JSON.stringify(m.claim_filters, null, 2),
-    role_id: m.role_id ?? "",
-    allowed_repo_ids_raw: m.allowed_repo_ids ? m.allowed_repo_ids.join("\n") : "",
+    repo_scope_mode: m.allowed_repo_ids === null ? "all" : "selected",
+    selected_repo_ids: m.allowed_repo_ids ?? [],
     is_enabled: m.is_enabled,
   };
 }
@@ -166,14 +169,6 @@ function parseClaimFilters(raw: string): ClaimFilters | undefined {
   }
 }
 
-function parseRepoIds(raw: string): string[] | null {
-  const ids = raw
-    .split(/[\n,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return ids.length ? ids : null;
-}
-
 function claimFilterSummary(filters: ClaimFilters): string {
   const keys = Object.keys(filters);
   if (!keys.length) return "No filters (any JWT accepted)";
@@ -183,6 +178,15 @@ function claimFilterSummary(filters: ClaimFilters): string {
       return Array.isArray(v) ? `${k} ∈ [${v.join(", ")}]` : `${k} = ${v}`;
     })
     .join(", ");
+}
+
+function repoScopeSummary(
+  allowedRepoIds: CiOidcIdentityMapping["allowed_repo_ids"],
+): string {
+  if (allowedRepoIds === null) return "All repositories";
+  if (allowedRepoIds.length === 0) return "No repositories";
+  if (allowedRepoIds.length === 1) return "1 repository";
+  return `${allowedRepoIds.length} repositories`;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,9 +206,21 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
     queryFn: () => ciOidcApi.listMappings(provider.id),
   });
 
+  const { data: repositoriesPage, isLoading: isLoadingRepositories } = useQuery({
+    queryKey: ["repositories", "ci-oidc-picker"],
+    queryFn: () => repositoriesApi.list({ page: 1, per_page: 500 }),
+  });
+  const repositories = useMemo(
+    () => [...(repositoriesPage?.items ?? [])].sort((a, b) => a.key.localeCompare(b.key)),
+    [repositoriesPage?.items],
+  );
+
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<CiOidcIdentityMapping | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CiOidcIdentityMapping | null>(null);
+  const [editTarget, setEditTarget] = useState<CiOidcIdentityMapping | null>(
+    null,
+  );
+  const [deleteTarget, setDeleteTarget] =
+    useState<CiOidcIdentityMapping | null>(null);
   const [form, setForm] = useState<MappingForm>(BLANK_MAPPING_FORM);
   const [filtersError, setFiltersError] = useState<string | null>(null);
 
@@ -225,8 +241,13 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, req }: { id: string; req: UpdateCiOidcMappingRequest }) =>
-      ciOidcApi.updateMapping(provider.id, id, req),
+    mutationFn: ({
+      id,
+      req,
+    }: {
+      id: string;
+      req: UpdateCiOidcMappingRequest;
+    }) => ciOidcApi.updateMapping(provider.id, id, req),
     onSuccess: () => {
       invalidate();
       toast.success("Mapping updated");
@@ -276,9 +297,35 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
     setDialogOpen(true);
   }
 
-  function setField<K extends keyof MappingForm>(key: K, value: MappingForm[K]) {
+  function setField<K extends keyof MappingForm>(
+    key: K,
+    value: MappingForm[K],
+  ) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  function toggleRepoSelection(repoId: string, checked: boolean) {
+    setForm((prev) => {
+      if (checked) {
+        if (prev.selected_repo_ids.includes(repoId)) return prev;
+        return {
+          ...prev,
+          selected_repo_ids: [...prev.selected_repo_ids, repoId],
+        };
+      }
+      return {
+        ...prev,
+        selected_repo_ids: prev.selected_repo_ids.filter((id) => id !== repoId),
+      };
+    });
+  }
+
+  const selectedRepositories = useMemo(() => {
+    const byId = new Map<string, Repository>(
+      repositories.map((repo) => [repo.id, repo]),
+    );
+    return form.selected_repo_ids.map((id) => byId.get(id)).filter(Boolean) as Repository[];
+  }, [form.selected_repo_ids, repositories]);
 
   function handleSubmit() {
     setFiltersError(null);
@@ -297,8 +344,8 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
       name: form.name,
       priority,
       claim_filters: filters,
-      role_id: form.role_id.trim() || null,
-      allowed_repo_ids: parseRepoIds(form.allowed_repo_ids_raw),
+      allowed_repo_ids:
+        form.repo_scope_mode === "all" ? null : form.selected_repo_ids,
       is_enabled: form.is_enabled,
     };
 
@@ -335,7 +382,7 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
               <TableHead className="pl-6 w-16">Priority</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Claim Filters</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>Repository Scope</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right pr-6">Actions</TableHead>
             </TableRow>
@@ -352,12 +399,8 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                 <TableCell className="max-w-[280px] text-xs text-muted-foreground truncate">
                   {claimFilterSummary(m.claim_filters)}
                 </TableCell>
-                <TableCell className="text-xs font-mono text-muted-foreground">
-                  {m.role_id ? (
-                    m.role_id.slice(0, 8) + "…"
-                  ) : (
-                    <span className="italic">none</span>
-                  )}
+                <TableCell className="text-xs text-muted-foreground">
+                  {repoScopeSummary(m.allowed_repo_ids)}
                 </TableCell>
                 <TableCell>
                   <StatusBadge
@@ -372,7 +415,10 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                       size="icon"
                       className="size-7"
                       onClick={() =>
-                        toggleMutation.mutate({ id: m.id, enabled: !m.is_enabled })
+                        toggleMutation.mutate({
+                          id: m.id,
+                          enabled: !m.is_enabled,
+                        })
                       }
                     >
                       {m.is_enabled ? (
@@ -454,7 +500,9 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
             <div className="space-y-1.5">
               <Label htmlFor="m-filters">
                 Claim Filters{" "}
-                <span className="text-muted-foreground font-normal">(JSON)</span>
+                <span className="text-muted-foreground font-normal">
+                  (JSON)
+                </span>
               </Label>
               <Textarea
                 id="m-filters"
@@ -475,42 +523,82 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="m-role">
-                Role ID{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional UUID)
-                </span>
-              </Label>
-              <Input
-                id="m-role"
-                className="font-mono text-xs"
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                value={form.role_id}
-                onChange={(e) => setField("role_id", e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                AK Role to assign to the service account for this mapping. Find
-                Role UUIDs under{" "}
-                <span className="font-medium">Users → Roles</span>.
-              </p>
-            </div>
+            <div className="space-y-2">
+              <Label>Repository Access Scope</Label>
+              <Select
+                value={form.repo_scope_mode}
+                onValueChange={(value) =>
+                  setField("repo_scope_mode", value as MappingForm["repo_scope_mode"])
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All repositories</SelectItem>
+                  <SelectItem value="selected">Selected repositories only</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="m-repos">
-                Allowed Repository IDs{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional, one UUID per line)
-                </span>
-              </Label>
-              <Textarea
-                id="m-repos"
-                rows={3}
-                className="font-mono text-xs"
-                placeholder="Leave empty to allow access to all repositories."
-                value={form.allowed_repo_ids_raw}
-                onChange={(e) => setField("allowed_repo_ids_raw", e.target.value)}
-              />
+              {form.repo_scope_mode === "selected" && (
+                <div className="space-y-2 rounded-md border p-3">
+                  {isLoadingRepositories ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-full" />
+                    </div>
+                  ) : repositories.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No repositories found.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
+                        {repositories.map((repo) => {
+                          const checked = form.selected_repo_ids.includes(repo.id);
+                          return (
+                            <label
+                              key={repo.id}
+                              className="flex items-start gap-2 rounded p-1.5 hover:bg-muted cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(value) =>
+                                  toggleRepoSelection(repo.id, value === true)
+                                }
+                                className="mt-0.5"
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium truncate">
+                                  {repo.name}
+                                </span>
+                                <span className="block text-xs text-muted-foreground font-mono truncate">
+                                  {repo.key}
+                                </span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {selectedRepositories.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {selectedRepositories.map((repo) => (
+                            <Badge key={repo.id} variant="secondary" className="text-xs">
+                              {repo.key}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        Pick the repositories this mapping may publish to.
+                        Leaving all unchecked will deny repository access.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -572,8 +660,13 @@ export default function CiOidcPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateCiOidcProviderRequest }) =>
-      ciOidcApi.update(id, data),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: UpdateCiOidcProviderRequest;
+    }) => ciOidcApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ci-oidc"] });
       toast.success("CI OIDC provider updated");
@@ -617,7 +710,10 @@ export default function CiOidcPage() {
     setDialogOpen(true);
   }
 
-  function setField<K extends keyof ProviderForm>(key: K, value: ProviderForm[K]) {
+  function setField<K extends keyof ProviderForm>(
+    key: K,
+    value: ProviderForm[K],
+  ) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -665,7 +761,11 @@ export default function CiOidcPage() {
         <ShieldCheck className="size-4" />
         <AlertTitle>Identity Mapping model</AlertTitle>
         <AlertDescription>
-          Each provider holds priority-ordered <strong>Identity Mappings</strong>. When a pipeline posts its CI JWT, the first enabled mapping whose claim filters all match wins — the pipeline authenticates as a stable service account with the mapping&apos;s assigned role. No static secrets required.
+          Each provider holds priority-ordered{" "}
+          <strong>Identity Mappings</strong>. When a pipeline posts its CI JWT,
+          the first enabled mapping whose claim filters all match wins — the
+          pipeline authenticates as a stable service account. No static secrets
+          required.
         </AlertDescription>
       </Alert>
 
@@ -717,7 +817,8 @@ export default function CiOidcPage() {
 
                       <div className="flex items-center gap-1.5 min-w-[100px] text-sm text-muted-foreground shrink-0">
                         <ProviderTypeIcon type={p.provider_type} />
-                        {PROVIDER_TYPE_LABELS[p.provider_type] ?? p.provider_type}
+                        {PROVIDER_TYPE_LABELS[p.provider_type] ??
+                          p.provider_type}
                       </div>
 
                       <div className="flex-1 min-w-0">
