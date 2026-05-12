@@ -394,3 +394,36 @@ describe("SetupPage - repo key sanitization for Gradle property names (#362)", (
     expect(text).toMatch(/\/maven\/my-jvm-repo\//);
   });
 });
+
+describe("SetupPage - Generic download snippet uses /download/ path (#408)", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("Generic 'Download an artifact' snippet hits /download/, not /artifacts/<file>", async () => {
+    // Bug #408: the Generic-repo "Download an artifact" snippet shows
+    //   curl -O .../api/v1/repositories/<key>/artifacts/my-file.tar.gz
+    // That endpoint returns JSON metadata. The binary lives at
+    //   .../api/v1/repositories/<key>/download/my-file.tar.gz
+    // so the snippet hands users a broken command.
+    await openRepoDialog(makeRepo({ format: "generic", key: "my-generic" }));
+
+    const dialog = await screen.findByRole("dialog");
+
+    // Locate the "Download an artifact" step heading and its code block.
+    const downloadHeading = within(dialog).getByRole("heading", {
+      name: /Download an artifact/i,
+    });
+    const stepContainer = downloadHeading.parentElement as HTMLElement;
+    expect(stepContainer).toBeTruthy();
+    const codeEl = stepContainer.querySelector("code");
+    expect(codeEl).toBeTruthy();
+    const codeText = codeEl?.textContent ?? "";
+
+    // Must use the binary download endpoint.
+    expect(codeText).toMatch(/\/api\/v1\/repositories\/[^/]+\/download\//);
+    // Must NOT use the JSON metadata endpoint for the download example.
+    expect(codeText).not.toMatch(
+      /\/api\/v1\/repositories\/[^/]+\/artifacts\/[^/]*\.tar\.gz/,
+    );
+  });
+});
