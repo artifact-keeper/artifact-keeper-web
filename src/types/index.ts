@@ -189,6 +189,44 @@ export interface PaginatedResponse<T> {
   };
 }
 
+/**
+ * A Maven/Gradle component grouped by GAV (groupId, artifactId, version).
+ * Returned by `GET /api/v1/repositories/:key/artifacts?group_by=maven_component`
+ * (backend PR artifact-keeper#701, issue #254).
+ */
+export interface MavenComponent {
+  /** Representative artifact ID (the first file in the group). */
+  id: string;
+  /** Maven groupId with dots (e.g. `org.junit.jupiter`). */
+  group_id: string;
+  /** Maven artifactId (e.g. `junit-jupiter-api`). */
+  artifact_id: string;
+  /** Maven version string (e.g. `5.11.0`). */
+  version: string;
+  /** Repository key this component belongs to. */
+  repository_key: string;
+  /** Repository format — always `maven` or `gradle`. */
+  format: string;
+  /** Total size in bytes across all files in this component. */
+  size_bytes: number;
+  /** Total download count across all files in this component. */
+  download_count: number;
+  /** Earliest creation timestamp among the component files. */
+  created_at: string;
+  /** Individual filenames belonging to this component (jar, pom, checksums, …). */
+  artifact_files: string[];
+}
+
+/**
+ * Extended pagination response for grouped artifact listings.  Identical to
+ * `PaginatedResponse<Artifact>` plus an optional `components` array that the
+ * backend populates when `group_by=maven_component` is requested.
+ */
+export interface GroupedArtifactListResponse extends PaginatedResponse<Artifact> {
+  /** Present only when `group_by=maven_component` was requested. */
+  components?: MavenComponent[];
+}
+
 export interface HealthResponse {
   status: string;
   version: string;

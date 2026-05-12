@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
@@ -41,6 +41,173 @@ describe("artifactsApi", () => {
         query: expect.objectContaining({ q: "test" }),
       })
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // listGrouped (issues #254, #330)
+  // -------------------------------------------------------------------------
+
+  describe("listGrouped (Maven component grouping #254)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("issues GET to /api/v1/repositories/:key/artifacts with group_by=maven_component", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+            components: [],
+          })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("maven-releases", {
+        group_by: "maven_component",
+        page: 1,
+        per_page: 20,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("/api/v1/repositories/maven-releases/artifacts");
+      expect(url).toContain("group_by=maven_component");
+      expect(url).toContain("page=1");
+      expect(url).toContain("per_page=20");
+      // Send credentials so cookie auth flows through
+      expect(fetchMock.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ credentials: "include" })
+      );
+    });
+
+    it("URL-encodes the repository key", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("repo with spaces", {});
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("/api/v1/repositories/repo%20with%20spaces/artifacts");
+    });
+
+    it("preserves the components array in the response", async () => {
+      const components = [
+        {
+          id: "c1",
+          group_id: "com.example",
+          artifact_id: "lib",
+          version: "1.0",
+          repository_key: "maven-releases",
+          format: "maven",
+          size_bytes: 100,
+          download_count: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          artifact_files: ["lib-1.0.jar"],
+        },
+      ];
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+            components,
+          })
+        ),
+      });
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.listGrouped("maven-releases", {
+        group_by: "maven_component",
+      });
+      expect(result.components).toEqual(components);
+    });
+
+    it("returns an empty items array when raw response omits items", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+          })
+        ),
+      });
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.listGrouped("maven-releases", {});
+      expect(result.items).toEqual([]);
+    });
+
+    it("throws on non-ok response", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: vi.fn().mockResolvedValue(""),
+      });
+      const { artifactsApi } = await import("../artifacts");
+      await expect(
+        artifactsApi.listGrouped("maven-releases", {})
+      ).rejects.toThrow(/API error 500/);
+    });
+
+    it("includes path_prefix and q in the URL when provided", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("maven-releases", {
+        path_prefix: "com/example",
+        q: "lib",
+        group_by: "maven_component",
+      });
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("path_prefix=com%2Fexample");
+      expect(url).toContain("q=lib");
+    });
+
+    it("falls back from `list` to `listGrouped` when group_by is set", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [{ id: "a1", path: "foo.jar" }],
+            pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+            components: [],
+          })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.list("maven-releases", {
+        group_by: "maven_component",
+      });
+      // When delegating, list() drops the components and returns items+pagination
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // SDK was NOT called — direct fetch used the grouped branch
+      expect(mockListArtifacts).not.toHaveBeenCalled();
+      expect(result.items).toHaveLength(1);
+    });
   });
 
   it("get fetches artifact metadata via fetch", async () => {
