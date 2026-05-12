@@ -9,7 +9,12 @@ import type {
   ArtifactListResponse,
 } from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
-import type { Artifact, PaginatedResponse } from '@/types';
+import type {
+  Artifact,
+  GroupedArtifactListResponse,
+  MavenComponent,
+  PaginatedResponse,
+} from '@/types';
 import { assertData } from '@/lib/api/fetch';
 
 export interface ListArtifactsParams {
@@ -19,6 +24,13 @@ export interface ListArtifactsParams {
   q?: string;
   /** @deprecated Use `q` instead */
   search?: string;
+  /**
+   * Server-side grouping mode.  Currently only `'maven_component'` is
+   * supported (backend ak#701, issue #254): when set on a Maven/Gradle repo
+   * the response includes a `components` array of GAV-grouped entries
+   * alongside (an empty) `items` array.
+   */
+  group_by?: 'maven_component';
 }
 
 // Local Artifact extends ArtifactResponse with quarantine fields the SDK
@@ -47,14 +59,67 @@ function adaptArtifactList(sdk: ArtifactListResponse): PaginatedResponse<Artifac
   };
 }
 
+/**
+ * Raw shape returned by the backend when `?group_by=maven_component` is used.
+ * The SDK types haven't been regenerated for ak#701 yet, so we model it here.
+ */
+interface RawGroupedArtifactListResponse {
+  items: ArtifactResponse[];
+  pagination: ArtifactListResponse['pagination'];
+  components?: MavenComponent[];
+}
+
+function buildArtifactsListUrl(repoKey: string, params: ListArtifactsParams): string {
+  const search = new URLSearchParams();
+  if (params.page != null) search.set('page', String(params.page));
+  if (params.per_page != null) search.set('per_page', String(params.per_page));
+  if (params.path_prefix) search.set('path_prefix', params.path_prefix);
+  const q = params.q || params.search;
+  if (q) search.set('q', q);
+  if (params.group_by) search.set('group_by', params.group_by);
+  const qs = search.toString();
+  const base = `${getActiveInstanceBaseUrl()}/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts`;
+  return qs ? `${base}?${qs}` : base;
+}
+
 export const artifactsApi = {
   list: async (repoKey: string, params: ListArtifactsParams = {}): Promise<PaginatedResponse<Artifact>> => {
     // Map 'search' to 'q' for backwards compat
-    const { search, ...rest } = params;
+    const { search, group_by, ...rest } = params;
+    if (group_by) {
+      // Grouped variant — SDK doesn't model `group_by` yet, so go direct.
+      // The caller should use `listGrouped` for the typed result; this branch
+      // exists so existing callers that flip a single param still work.
+      const grouped = await artifactsApi.listGrouped(repoKey, { ...params, group_by });
+      return { items: grouped.items, pagination: grouped.pagination };
+    }
     const query = { ...rest, q: params.q || search || undefined };
     const { data, error } = await listArtifacts({ path: { key: repoKey }, query });
     if (error) throw error;
     return adaptArtifactList(assertData(data, 'artifactsApi.list'));
+  },
+
+  /**
+   * Same endpoint as `list`, but preserves the optional `components` array
+   * returned when `group_by=maven_component` is set.  Used by the Maven
+   * component grouping view (#254).  Goes through a direct `fetch` because
+   * the generated SDK doesn't yet know about `group_by`.
+   */
+  listGrouped: async (
+    repoKey: string,
+    params: ListArtifactsParams = {}
+  ): Promise<GroupedArtifactListResponse> => {
+    const url = buildArtifactsListUrl(repoKey, params);
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to list artifacts: ${response.status}`);
+    }
+    const raw = (await response.json()) as RawGroupedArtifactListResponse;
+    return {
+      items: (raw.items ?? []).map(adaptArtifact),
+      pagination: raw.pagination,
+      components: raw.components,
+    };
   },
 
   get: async (repoKey: string, artifactPath: string): Promise<Artifact> => {
