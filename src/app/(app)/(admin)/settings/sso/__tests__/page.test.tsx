@@ -195,6 +195,38 @@ const OIDC_WITH_EXTRA_MAPPING = {
   updated_at: "2025-01-01T00:00:00Z",
 };
 
+/**
+ * A SAML provider with the same hazard as the OIDC fixture above. The SAML
+ * tab's handleSubmit builds attribute_mapping from only the four form-
+ * rendered claim inputs (username/email/display_name/groups), so without
+ * a spread of editTarget.attribute_mapping any extra keys (e.g. a
+ * department_code claim the backend wrote) get wiped on every save.
+ */
+const SAML_WITH_EXTRA_MAPPING = {
+  id: "saml-1",
+  name: "Corporate SAML IdP",
+  entity_id: "urn:example:idp",
+  sso_url: "https://idp.example.com/sso",
+  slo_url: undefined,
+  sp_entity_id: "urn:artifact-keeper",
+  name_id_format: "emailAddress",
+  has_certificate: true,
+  attribute_mapping: {
+    username: "username",
+    email: "email",
+    display_name: "displayName",
+    groups: "groups",
+    // Key the UI does NOT expose — must be preserved across an update.
+    custom_claim: "department_code",
+  },
+  admin_group: "artifact-keeper-admins",
+  sign_requests: true,
+  require_signed_assertions: true,
+  is_enabled: true,
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -228,8 +260,9 @@ beforeEach(async () => {
   mockUseAuth.mockReturnValue({ user: ADMIN_USER });
   mockSsoApi.listOidc.mockResolvedValue([OIDC_WITH_EXTRA_MAPPING]);
   mockSsoApi.listLdap.mockResolvedValue([]);
-  mockSsoApi.listSaml.mockResolvedValue([]);
+  mockSsoApi.listSaml.mockResolvedValue([SAML_WITH_EXTRA_MAPPING]);
   mockSsoApi.updateOidc.mockResolvedValue(OIDC_WITH_EXTRA_MAPPING);
+  mockSsoApi.updateSaml.mockResolvedValue(SAML_WITH_EXTRA_MAPPING);
 
   // Lazy-import the page so all vi.mocks are applied first.
   const mod = await import("../page");
@@ -296,5 +329,63 @@ describe("SSO OIDC update preserves attribute_mapping (regression #406)", () => 
       });
     }
     // If mapping is undefined we accept that as PATCH semantics — pass.
+  });
+});
+
+describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)", () => {
+  it("preserves attribute_mapping entries the SAML form does not render when only the name is changed", async () => {
+    // Same wholesale-overwrite hazard as the OIDC tab — surfaced during the
+    // round-3 adversarial review of PR for #406. SAML's handleSubmit
+    // rebuilds attribute_mapping from only the four form-rendered claim
+    // inputs (username/email/display_name/groups), so without spreading
+    // editTarget.attribute_mapping any extra keys (custom_claim here)
+    // get wiped on every save.
+    const user = userEvent.setup();
+    await renderPage();
+
+    // Wait for the SAML provider name to appear (Tabs mock renders all
+    // tab contents inline so the SAML row is in the DOM alongside OIDC).
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    // Open the SAML edit dialog via its aria-label.
+    const editBtn = screen.getByRole("button", {
+      name: /Edit SAML provider Corporate SAML IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    // Change only the Name field — claim mapping inputs left untouched.
+    const nameInput = screen.getByLabelText(/^Name$/i) as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Corporate SAML IdP (renamed)");
+
+    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [id, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { name?: string; attribute_mapping?: Record<string, string> },
+    ];
+    expect(id).toBe("saml-1");
+    expect(payload.name).toBe("Corporate SAML IdP (renamed)");
+
+    // Either of the following counts as "doesn't overwrite":
+    //  (a) PATCH semantics — attribute_mapping is not sent at all.
+    //  (b) Full update — but the extra `custom_claim` key is preserved.
+    const mapping = payload.attribute_mapping;
+    if (mapping !== undefined) {
+      expect(mapping).toMatchObject({
+        custom_claim: "department_code",
+      });
+    }
   });
 });
