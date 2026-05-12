@@ -30,14 +30,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -69,7 +61,6 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
-import { PAYLOAD_TEMPLATE_PRESETS } from "@/lib/constants/webhook";
 
 // -- constants --
 
@@ -121,10 +112,6 @@ export default function WebhooksPage() {
   const [formUrl, setFormUrl] = useState("");
   const [formEvents, setFormEvents] = useState<WebhookEvent[]>([]);
   const [formSecret, setFormSecret] = useState("");
-  const [formTemplatePreset, setFormTemplatePreset] = useState("default");
-  const [formPayloadTemplate, setFormPayloadTemplate] = useState(
-    PAYLOAD_TEMPLATE_PRESETS[0].template
-  );
 
   // -- queries --
   const { data, isLoading, isFetching } = useQuery({
@@ -214,16 +201,6 @@ export default function WebhooksPage() {
     setFormUrl("");
     setFormEvents([]);
     setFormSecret("");
-    setFormTemplatePreset("default");
-    setFormPayloadTemplate(PAYLOAD_TEMPLATE_PRESETS[0].template);
-  };
-
-  const handleTemplatePresetChange = (presetId: string) => {
-    setFormTemplatePreset(presetId);
-    const preset = PAYLOAD_TEMPLATE_PRESETS.find((p) => p.id === presetId);
-    if (preset && preset.id !== "custom") {
-      setFormPayloadTemplate(preset.template);
-    }
   };
 
   const toggleEvent = (event: WebhookEvent) => {
@@ -496,7 +473,6 @@ export default function WebhooksPage() {
                 url: formUrl,
                 events: formEvents,
                 secret: formSecret || undefined,
-                payload_template: formPayloadTemplate || undefined,
               });
             }}
           >
@@ -552,56 +528,6 @@ export default function WebhooksPage() {
                 onChange={(e) => setFormSecret(e.target.value)}
                 placeholder="Shared secret for payload signing"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="wh-template-preset">Payload Template</Label>
-              <Select
-                value={formTemplatePreset}
-                onValueChange={handleTemplatePresetChange}
-              >
-                <SelectTrigger id="wh-template-preset" className="w-full" aria-label="Payload template preset">
-                  <SelectValue placeholder="Select a template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYLOAD_TEMPLATE_PRESETS.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {PAYLOAD_TEMPLATE_PRESETS.find(
-                  (p) => p.id === formTemplatePreset
-                )?.description ?? ""}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="wh-payload-template">
-                Template Body{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </Label>
-              <Textarea
-                id="wh-payload-template"
-                value={formPayloadTemplate}
-                onChange={(e) => {
-                  setFormPayloadTemplate(e.target.value);
-                  if (formTemplatePreset !== "custom") {
-                    setFormTemplatePreset("custom");
-                  }
-                }}
-                placeholder='{"event": "{{event}}", ...}'
-                className="font-mono text-xs min-h-[120px]"
-                rows={6}
-              />
-              <p className="text-xs text-muted-foreground">
-                Use {"{{variable}}"} syntax for dynamic values. Available
-                variables: event, timestamp, artifact.name, artifact.version,
-                artifact.repository, artifact.format, actor.username,
-                actor.email.
-              </p>
             </div>
             <DialogFooter>
               <Button

@@ -180,7 +180,15 @@ function OidcTab() {
   }
 
   function handleSubmit() {
+    // #406: When editing an existing provider, preserve attribute_mapping
+    // entries the form doesn't render (e.g. backend-managed keys set via
+    // env vars such as the OIDC redirect_uri claim). The form only knows
+    // about five fields, but the column is a JSONB blob — without the
+    // spread, the PUT wipes everything else server-side.
+    //
+    // On create there's nothing to preserve, so start fresh.
     const attributeMapping: Record<string, string> = {
+      ...(editTarget?.attribute_mapping ?? {}),
       username: usernameClaim,
       email: emailClaim,
       display_name: displayNameClaim,
@@ -188,6 +196,10 @@ function OidcTab() {
     };
     if (adminGroup) {
       attributeMapping.admin_group = adminGroup;
+    } else {
+      // Empty admin_group means the operator deliberately cleared it —
+      // drop the key so it isn't carried over from the previous state.
+      delete attributeMapping.admin_group;
     }
 
     const scopeList = scopes
@@ -1162,7 +1174,14 @@ function SamlTab() {
   }
 
   function handleSubmit() {
+    // #406: Same wholesale-overwrite hazard as the OIDC tab — the SAML
+    // attribute_mapping column is a JSONB blob, so rebuilding it from only
+    // the four form-rendered claim inputs (username/email/display_name/
+    // groups) would wipe any extra keys the backend may have written. Spread
+    // editTarget.attribute_mapping first so unknown keys round-trip.
+    // On create there's nothing to preserve, so the spread is a no-op.
     const attributeMapping: Record<string, string> = {
+      ...(editTarget?.attribute_mapping ?? {}),
       username: usernameClaim,
       email: emailClaim,
       display_name: displayNameClaim,

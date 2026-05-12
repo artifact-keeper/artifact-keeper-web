@@ -178,6 +178,15 @@ export const repositoriesApi = {
       quota_bytes: input.quota_bytes,
       upstream_url: input.upstream_url,
       member_repos: input.member_repos,
+      // #407: forward upstream auth so the create dialog actually persists
+      // basic/bearer credentials. Previously these were dropped here, so the
+      // form appeared to save but `repository_config` stayed empty and the
+      // repo returned 401 on first proxy hit. The SDK type supports these
+      // fields directly on CreateRepositoryRequest, so no separate
+      // updateUpstreamAuth round-trip is needed.
+      upstream_auth_type: input.upstream_auth_type,
+      upstream_username: input.upstream_username,
+      upstream_password: input.upstream_password,
     };
     const { data, error } = await createRepository({ body });
     if (error) throw error;
