@@ -520,7 +520,7 @@ buf dep update`,
         },
         {
           title: "Download an artifact",
-          code: `curl -O ${REGISTRY_URL}/api/v1/repositories/${repoKey}/artifacts/my-file.tar.gz`,
+          code: `curl -O ${REGISTRY_URL}/api/v1/repositories/${repoKey}/download/my-file.tar.gz`,
         },
       ];
   }
