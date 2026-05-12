@@ -1174,7 +1174,14 @@ function SamlTab() {
   }
 
   function handleSubmit() {
+    // #406: Same wholesale-overwrite hazard as the OIDC tab — the SAML
+    // attribute_mapping column is a JSONB blob, so rebuilding it from only
+    // the four form-rendered claim inputs (username/email/display_name/
+    // groups) would wipe any extra keys the backend may have written. Spread
+    // editTarget.attribute_mapping first so unknown keys round-trip.
+    // On create there's nothing to preserve, so the spread is a no-op.
     const attributeMapping: Record<string, string> = {
+      ...(editTarget?.attribute_mapping ?? {}),
       username: usernameClaim,
       email: emailClaim,
       display_name: displayNameClaim,
