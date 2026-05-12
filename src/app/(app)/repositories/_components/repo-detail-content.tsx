@@ -38,6 +38,7 @@ import {
   type ArtifactViewMode,
 } from "./artifact-browser-toggle";
 import { MavenComponentList } from "./maven-component-list";
+import { DockerTagList } from "./docker-tag-list";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
@@ -124,10 +125,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const viewMode: ArtifactViewMode =
     viewModeOverride ??
     (repoFormat && supportsGrouping(repoFormat) ? "grouped" : "flat");
-  // Server-side grouping is currently only Maven/Gradle (#254).
+  // Server-side grouping is currently only Maven/Gradle (#254).  Docker
+  // grouping (#330) is performed client-side over the flat artifact list.
   const useServerGrouping =
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
+  const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
+  // For Docker grouping we need all artifacts on one page so the client
+  // aggregation sees everything.  Bound by a high cap to avoid runaway
+  // responses on huge registries.
+  const effectivePageSize = isDockerGrouped ? 500 : pageSize;
+  const effectivePage = isDockerGrouped ? 1 : page;
 
   const handleViewModeChange = useCallback((next: ArtifactViewMode) => {
     setViewModeOverride(next);
@@ -139,15 +147,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       "artifacts",
       repoKey,
       searchQuery,
-      page,
-      pageSize,
+      effectivePage,
+      effectivePageSize,
       useServerGrouping ? "grouped:maven" : "flat",
     ],
     queryFn: () =>
       artifactsApi.listGrouped(repoKey, {
         q: searchQuery || undefined,
-        per_page: pageSize,
-        page,
+        per_page: effectivePageSize,
+        page: effectivePage,
         ...(useServerGrouping ? { group_by: "maven_component" as const } : {}),
       }),
     enabled: !!repoKey,
@@ -613,6 +621,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               loading={artifactsLoading}
               total={artifactsData?.pagination?.total}
               emptyMessage="No Maven components could be grouped — switch to flat view to see raw files."
+            />
+          ) : isDockerGrouped ? (
+            <DockerTagList
+              artifacts={artifactsData?.items ?? []}
+              loading={artifactsLoading}
+              onTagClick={showDetail}
+              onScan={
+                user?.is_admin
+                  ? (manifest) => scanArtifactMutation.mutate(manifest.id)
+                  : undefined
+              }
+              scanPending={scanArtifactMutation.isPending}
             />
           ) : (
             <DataTable
