@@ -36,12 +36,22 @@ interface MavenComponentListProps {
 export function MavenComponentList({
   components,
   loading = false,
-  emptyMessage = "No components found.",
+  // M7: actionable default — tells the user what to do, not just that it's empty.
+  emptyMessage = "No Maven components found. Switch to Flat to see raw files, or push an artifact with valid GAV coordinates.",
   total,
 }: MavenComponentListProps) {
   if (loading) {
     return (
-      <div className="space-y-2" data-testid="maven-component-list-loading">
+      // M3: announce loading to AT — without aria-live, SR users get silence
+      // for 200-800ms after toggling and don't know the action took effect.
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="space-y-2"
+        data-testid="maven-component-list-loading"
+      >
+        <span className="sr-only">Loading Maven components…</span>
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -92,6 +102,12 @@ function MavenComponentRow({ component }: MavenComponentRowProps) {
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
+          {/*
+            M1: no `aria-label` on the button — that would replace the
+            descendant accessible text, hiding size/downloads from SR users
+            and from anyone whose viewport hides those columns at <md width.
+            Let the inner text content describe the button instead.
+          */}
           <Button
             variant="ghost"
             className={cn(
@@ -99,9 +115,6 @@ function MavenComponentRow({ component }: MavenComponentRowProps) {
               "hover:bg-muted/50 focus-visible:bg-muted/50",
             )}
             aria-expanded={open}
-            aria-label={`${component.group_id}:${component.artifact_id}:${component.version}, ${fileCount} ${
-              fileCount === 1 ? "file" : "files"
-            }`}
           >
             <ChevronRight
               className={cn(
@@ -112,24 +125,35 @@ function MavenComponentRow({ component }: MavenComponentRowProps) {
             />
             <PackageIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-              <span className="truncate font-medium">
+              {/*
+                M2: heading so SR users can jump between GAV groups via
+                H-key navigation.  Parent page uses h1 + h2; h3 is the
+                next available level.
+              */}
+              <h3 className="truncate text-sm font-medium">
                 <span className="text-muted-foreground">{component.group_id}</span>
                 <span className="text-muted-foreground">:</span>
                 <span>{component.artifact_id}</span>
-              </span>
+                <span className="text-muted-foreground">:</span>
+                <span className="text-muted-foreground">{component.version}</span>
+              </h3>
+              {/*
+                M1: render size + downloads as actual text in the button
+                so SR users always hear them, even when responsive Tailwind
+                classes hide them visually at <sm.  Sighted users see the
+                same data — the layout reorders via flex/grid.
+              */}
               <span className="text-xs text-muted-foreground">
-                {component.version}
+                {fileCount} {fileCount === 1 ? "file" : "files"}
+                <span className="mx-1.5" aria-hidden="true">·</span>
+                {formatBytes(component.size_bytes)}
+                <span className="mx-1.5" aria-hidden="true">·</span>
+                {component.download_count.toLocaleString()} downloads
               </span>
             </div>
-            <Badge variant="outline" className="font-normal">
+            <Badge variant="outline" className="font-normal" aria-hidden="true">
               {fileCount} {fileCount === 1 ? "file" : "files"}
             </Badge>
-            <span className="hidden text-xs text-muted-foreground sm:inline-block min-w-[60px] text-right">
-              {formatBytes(component.size_bytes)}
-            </span>
-            <span className="hidden text-xs text-muted-foreground md:inline-block min-w-[80px] text-right">
-              {component.download_count.toLocaleString()} dl
-            </span>
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>

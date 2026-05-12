@@ -63,7 +63,7 @@ export function ArtifactBrowserToggle({
         type="button"
         variant={value === "flat" ? "secondary" : "ghost"}
         size="sm"
-        className="h-7 px-2 text-xs"
+        className="h-8 px-3 text-xs"
         aria-pressed={value === "flat"}
         aria-label="Flat list view"
         data-testid="toggle-flat"
@@ -76,7 +76,7 @@ export function ArtifactBrowserToggle({
         type="button"
         variant={value === "grouped" ? "secondary" : "ghost"}
         size="sm"
-        className="h-7 px-2 text-xs"
+        className="h-8 px-3 text-xs"
         aria-pressed={value === "grouped"}
         aria-label={groupedLabel}
         data-testid="toggle-grouped"

@@ -117,9 +117,10 @@ describe("DockerTagList", () => {
 
   it("empty state mentions blob/manifest count if any are hidden", () => {
     render(<DockerTagList artifacts={[BLOB_1, DIGEST_MANIFEST]} />);
-    // Empty (no tags) + we should see hidden-count notice in the empty state
-    expect(screen.getByText(/blob/i)).toBeInTheDocument();
-    expect(screen.getByText(/manifest/i)).toBeInTheDocument();
+    // Empty (no tags) but the empty container should report the hidden count
+    const empty = screen.getByTestId("docker-tag-list-empty");
+    expect(empty).toHaveTextContent(/2.*blob/i);
+    expect(empty).toHaveTextContent(/manifest/i);
   });
 
   // -------------------------------------------------------------------------

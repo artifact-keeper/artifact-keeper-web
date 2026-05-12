@@ -29,6 +29,10 @@ interface DockerTagListProps {
   emptyMessage?: string;
 }
 
+// Stable id for aria-controls on the "Show layers" disclosure.  Module-level
+// constant so it's identical across renders without needing useId.
+const LAYER_PANEL_ID = "docker-layer-list-panel";
+
 /**
  * Renders Docker repository artifacts grouped by manifest tag (issue #330).
  *
@@ -43,7 +47,8 @@ export function DockerTagList({
   onTagClick,
   onScan,
   scanPending = false,
-  emptyMessage = "No image tags found in this repository.",
+  // M7: actionable default — tells users how to add a tag, not just that there isn't one.
+  emptyMessage = "No image tags found. Push an image (`docker push <registry>/<image>:<tag>`) to see it here, or switch to Flat view to inspect raw blobs.",
 }: DockerTagListProps) {
   const [showLayers, setShowLayers] = useState(false);
 
@@ -53,7 +58,16 @@ export function DockerTagList({
 
   if (loading) {
     return (
-      <div className="space-y-2" data-testid="docker-tag-list-loading">
+      // M3: announce loading to AT so SR users hear "Loading image tags" instead
+      // of silence between toggle click and skeleton render.
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="space-y-2"
+        data-testid="docker-tag-list-loading"
+      >
+        <span className="sr-only">Loading image tags…</span>
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -80,8 +94,21 @@ export function DockerTagList({
 
   return (
     <div className="space-y-3" data-testid="docker-tag-list">
-      <div className="rounded-md border">
-        <table className="w-full text-sm" role="table">
+      {/*
+        N4: 6-column table will overflow at 360px viewports.  Wrap in
+        overflow-x-auto so the page itself doesn't horizontally scroll.
+      */}
+      <div className="overflow-x-auto rounded-md border">
+        {/*
+          M5: real <table> already has implicit role="table" — drop the
+          redundant attribute.  Add aria-label + visually-hidden caption
+          so SR users hear "Image tags table" instead of "table with 6
+          columns" with no name.
+        */}
+        <table className="w-full text-sm" aria-label="Image tags">
+          <caption className="sr-only">
+            Docker image tags in this repository
+          </caption>
           <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">
@@ -99,7 +126,9 @@ export function DockerTagList({
               <th scope="col" className="px-3 py-2 font-medium">
                 Status
               </th>
-              <th scope="col" className="px-3 py-2" aria-label="Actions" />
+              <th scope="col" className="px-3 py-2">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -111,9 +140,16 @@ export function DockerTagList({
                 data-tag={group.key}
               >
                 <td className="px-3 py-2">
+                  {/*
+                    N2: explicit aria-label gives a coherent reading order
+                    ("View library/node:14 manifest") instead of the
+                    visual-order children that would announce as
+                    "fourteen, library slash node".
+                  */}
                   <button
                     type="button"
                     className="flex items-center gap-2 text-left text-primary hover:underline"
+                    aria-label={`View ${group.image}:${group.tag} manifest`}
                     onClick={() => onTagClick?.(group.manifest)}
                   >
                     <Container className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -224,12 +260,17 @@ export function DockerTagList({
               }</>
             )} hidden
           </span>
+          {/*
+            N3: aria-controls links the disclosure button to the panel
+            below so SR users know exactly which region is being toggled.
+          */}
           <Button
             variant="link"
             size="sm"
             className="h-auto p-0 text-xs"
             onClick={() => setShowLayers((s) => !s)}
             aria-expanded={showLayers}
+            aria-controls={LAYER_PANEL_ID}
             data-testid="toggle-layers"
           >
             {showLayers ? "Hide layers" : "Show layers"}
@@ -238,16 +279,27 @@ export function DockerTagList({
       )}
 
       {showLayers && hiddenCount > 0 && (
-        <div className="rounded-md border" data-testid="docker-layer-list">
+        <div
+          id={LAYER_PANEL_ID}
+          className="rounded-md border"
+          data-testid="docker-layer-list"
+        >
           <ul className="divide-y" role="list">
             {[...grouped.manifestsByDigest, ...grouped.blobs, ...grouped.other].map((a) => (
               <li
                 key={a.id}
                 className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
               >
-                <code className="truncate font-mono text-muted-foreground" title={a.path}>
+                {/*
+                  M6: `title=""` is mouse-only and inconsistently announced
+                  by SR.  Render the full path as truncated visible text
+                  AND in an sr-only span so AT users get the unredacted
+                  value regardless of input modality.
+                */}
+                <code className="truncate font-mono text-muted-foreground" aria-hidden="true">
                   {a.path}
                 </code>
+                <span className="sr-only">Full path: {a.path}</span>
                 <span className="shrink-0 text-muted-foreground">
                   {formatBytes(a.size_bytes)}
                 </span>

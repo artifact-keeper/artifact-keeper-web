@@ -626,6 +626,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             )}
           </div>
 
+          {/*
+            M4: SR users get an announcement when the toggle changes the
+            view mode.  `role=status` + `aria-live=polite` queues the
+            update without interrupting current speech, and `sr-only`
+            keeps it visually invisible.
+          */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {viewMode === "grouped"
+              ? `Showing grouped ${repoFormat === "docker" ? "tag" : "component"} view`
+              : "Showing flat list view"}
+          </div>
+
           {useServerGrouping ? (
             <MavenComponentList
               components={artifactsData?.components ?? []}

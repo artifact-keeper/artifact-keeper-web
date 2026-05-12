@@ -63,8 +63,10 @@ describe("MavenComponentList", () => {
 
   it("renders the empty state when components is empty", () => {
     render(<MavenComponentList components={[]} />);
-    expect(screen.getByTestId("maven-component-list-empty")).toBeInTheDocument();
-    expect(screen.getByText("No components found.")).toBeInTheDocument();
+    const empty = screen.getByTestId("maven-component-list-empty");
+    expect(empty).toBeInTheDocument();
+    // Default copy guides the user toward the flat-view fallback
+    expect(empty).toHaveTextContent(/no maven components/i);
   });
 
   it("uses a custom empty message when provided", () => {
