@@ -32,6 +32,12 @@ import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PackagesTabContent } from "./packages-tab-content";
+import {
+  ArtifactBrowserToggle,
+  supportsGrouping,
+  type ArtifactViewMode,
+} from "./artifact-browser-toggle";
+import { MavenComponentList } from "./maven-component-list";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
@@ -92,6 +98,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  // Grouped vs flat artifact-browser view (issue #254).  `null` means
+  // "use the per-format default"; once the user clicks the toggle we
+  // store their explicit choice and never auto-switch again.
+  const [viewModeOverride, setViewModeOverride] =
+    useState<ArtifactViewMode | null>(null);
 
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
@@ -107,13 +118,37 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     enabled: !!repoKey,
   });
 
+  const repoFormat = repository?.format;
+  // Derive effective view mode: explicit user choice wins; otherwise default
+  // to `grouped` for formats that support grouping.
+  const viewMode: ArtifactViewMode =
+    viewModeOverride ??
+    (repoFormat && supportsGrouping(repoFormat) ? "grouped" : "flat");
+  // Server-side grouping is currently only Maven/Gradle (#254).
+  const useServerGrouping =
+    viewMode === "grouped" &&
+    (repoFormat === "maven" || repoFormat === "gradle");
+
+  const handleViewModeChange = useCallback((next: ArtifactViewMode) => {
+    setViewModeOverride(next);
+    setPage(1);
+  }, []);
+
   const { data: artifactsData, isLoading: artifactsLoading } = useQuery({
-    queryKey: ["artifacts", repoKey, searchQuery, page, pageSize],
+    queryKey: [
+      "artifacts",
+      repoKey,
+      searchQuery,
+      page,
+      pageSize,
+      useServerGrouping ? "grouped:maven" : "flat",
+    ],
     queryFn: () =>
-      artifactsApi.list(repoKey, {
+      artifactsApi.listGrouped(repoKey, {
         q: searchQuery || undefined,
         per_page: pageSize,
         page,
+        ...(useServerGrouping ? { group_by: "maven_component" as const } : {}),
       }),
     enabled: !!repoKey,
   });
@@ -539,7 +574,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
         {/* --- Artifacts Tab --- */}
         <TabsContent value="artifacts" className="mt-4 space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
@@ -552,6 +587,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 }}
               />
             </div>
+            {repoFormat && supportsGrouping(repoFormat) && (
+              <ArtifactBrowserToggle
+                value={viewMode}
+                onChange={handleViewModeChange}
+                format={repoFormat}
+              />
+            )}
             {user?.is_admin && (
               <Button
                 variant="outline"
@@ -565,22 +607,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             )}
           </div>
 
-          <DataTable
-            columns={artifactColumns}
-            data={artifactsData?.items ?? []}
-            total={artifactsData?.pagination?.total}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => {
-              setPageSize(s);
-              setPage(1);
-            }}
-            loading={artifactsLoading}
-            emptyMessage="No artifacts in this repository."
-            rowKey={(a) => a.id}
-            onRowClick={showDetail}
-          />
+          {useServerGrouping ? (
+            <MavenComponentList
+              components={artifactsData?.components ?? []}
+              loading={artifactsLoading}
+              total={artifactsData?.pagination?.total}
+              emptyMessage="No Maven components could be grouped — switch to flat view to see raw files."
+            />
+          ) : (
+            <DataTable
+              columns={artifactColumns}
+              data={artifactsData?.items ?? []}
+              total={artifactsData?.pagination?.total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              loading={artifactsLoading}
+              emptyMessage="No artifacts in this repository."
+              rowKey={(a) => a.id}
+              onRowClick={showDetail}
+            />
+          )}
         </TabsContent>
 
         {/* --- Packages Tab --- */}
