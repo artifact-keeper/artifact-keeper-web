@@ -15,7 +15,7 @@ import type {
   MavenComponent,
   PaginatedResponse,
 } from '@/types';
-import { assertData } from '@/lib/api/fetch';
+import { apiFetch, assertData } from '@/lib/api/fetch';
 
 export interface ListArtifactsParams {
   page?: number;
@@ -69,7 +69,13 @@ interface RawGroupedArtifactListResponse {
   components?: MavenComponent[];
 }
 
-function buildArtifactsListUrl(repoKey: string, params: ListArtifactsParams): string {
+/**
+ * Build the path-and-query portion of the artifacts listing URL.  Used by
+ * `listGrouped` which routes through the shared `apiFetch` helper instead
+ * of the generated SDK (the SDK has no `group_by` parameter yet — see #254
+ * / ak#701).  `apiFetch` prepends the active instance base URL itself.
+ */
+function buildArtifactsListPath(repoKey: string, params: ListArtifactsParams): string {
   const search = new URLSearchParams();
   if (params.page != null) search.set('page', String(params.page));
   if (params.per_page != null) search.set('per_page', String(params.per_page));
@@ -78,7 +84,7 @@ function buildArtifactsListUrl(repoKey: string, params: ListArtifactsParams): st
   if (q) search.set('q', q);
   if (params.group_by) search.set('group_by', params.group_by);
   const qs = search.toString();
-  const base = `${getActiveInstanceBaseUrl()}/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts`;
+  const base = `/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts`;
   return qs ? `${base}?${qs}` : base;
 }
 
@@ -102,19 +108,16 @@ export const artifactsApi = {
   /**
    * Same endpoint as `list`, but preserves the optional `components` array
    * returned when `group_by=maven_component` is set.  Used by the Maven
-   * component grouping view (#254).  Goes through a direct `fetch` because
-   * the generated SDK doesn't yet know about `group_by`.
+   * component grouping view (#254).  Goes through `apiFetch` instead of the
+   * generated SDK because the SDK doesn't yet model `group_by`; once the
+   * SDK is regenerated this can collapse back into `list`.
    */
   listGrouped: async (
     repoKey: string,
     params: ListArtifactsParams = {}
   ): Promise<GroupedArtifactListResponse> => {
-    const url = buildArtifactsListUrl(repoKey, params);
-    const response = await fetch(url, { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`Failed to list artifacts: ${response.status}`);
-    }
-    const raw = (await response.json()) as RawGroupedArtifactListResponse;
+    const path = buildArtifactsListPath(repoKey, params);
+    const raw = await apiFetch<RawGroupedArtifactListResponse>(path);
     return {
       items: (raw.items ?? []).map(adaptArtifact),
       pagination: raw.pagination,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -92,6 +92,7 @@ interface RepoDetailContentProps {
 
 export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailContentProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
 
@@ -99,11 +100,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  // Grouped vs flat artifact-browser view (issue #254).  `null` means
-  // "use the per-format default"; once the user clicks the toggle we
-  // store their explicit choice and never auto-switch again.
-  const [viewModeOverride, setViewModeOverride] =
-    useState<ArtifactViewMode | null>(null);
+
+  // Grouped vs flat artifact-browser view (issues #254, #330).  The URL
+  // `?view=flat|grouped` query param is the source of truth so the choice
+  // survives a refresh and is shareable.  Absence falls back to the
+  // per-format default.
+  const urlView = searchParams.get("view");
+  const viewModeOverride: ArtifactViewMode | null =
+    urlView === "flat" || urlView === "grouped" ? urlView : null;
 
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
@@ -137,10 +141,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const effectivePageSize = isDockerGrouped ? 500 : pageSize;
   const effectivePage = isDockerGrouped ? 1 : page;
 
-  const handleViewModeChange = useCallback((next: ArtifactViewMode) => {
-    setViewModeOverride(next);
-    setPage(1);
-  }, []);
+  const handleViewModeChange = useCallback(
+    (next: ArtifactViewMode) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", next);
+      // `replace` avoids polluting browser history with each toggle.
+      // `scroll: false` keeps the user anchored on the artifacts tab.
+      router.replace(`?${params.toString()}`, { scroll: false });
+      setPage(1);
+    },
+    [router, searchParams],
+  );
 
   const { data: artifactsData, isLoading: artifactsLoading } = useQuery({
     queryKey: [

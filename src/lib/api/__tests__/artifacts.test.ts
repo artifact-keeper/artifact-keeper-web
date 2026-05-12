@@ -55,11 +55,14 @@ describe("artifactsApi", () => {
     it("issues GET to /api/v1/repositories/:key/artifacts with group_by=maven_component", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          items: [],
-          pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
-          components: [],
-        }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+            components: [],
+          })
+        ),
       });
       global.fetch = fetchMock;
 
@@ -85,7 +88,10 @@ describe("artifactsApi", () => {
     it("URL-encodes the repository key", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ items: [], pagination: {} }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
       });
       global.fetch = fetchMock;
 
@@ -112,11 +118,14 @@ describe("artifactsApi", () => {
       ];
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          items: [],
-          pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
-          components,
-        }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+            components,
+          })
+        ),
       });
 
       const { artifactsApi } = await import("../artifacts");
@@ -129,9 +138,12 @@ describe("artifactsApi", () => {
     it("returns an empty items array when raw response omits items", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
-        }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+          })
+        ),
       });
 
       const { artifactsApi } = await import("../artifacts");
@@ -140,17 +152,24 @@ describe("artifactsApi", () => {
     });
 
     it("throws on non-ok response", async () => {
-      global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: vi.fn().mockResolvedValue(""),
+      });
       const { artifactsApi } = await import("../artifacts");
       await expect(
         artifactsApi.listGrouped("maven-releases", {})
-      ).rejects.toThrow("Failed to list artifacts: 500");
+      ).rejects.toThrow(/API error 500/);
     });
 
     it("includes path_prefix and q in the URL when provided", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ items: [], pagination: {} }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
       });
       global.fetch = fetchMock;
 
@@ -168,11 +187,14 @@ describe("artifactsApi", () => {
     it("falls back from `list` to `listGrouped` when group_by is set", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({
-          items: [{ id: "a1", path: "foo.jar" }],
-          pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
-          components: [],
-        }),
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [{ id: "a1", path: "foo.jar" }],
+            pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+            components: [],
+          })
+        ),
       });
       global.fetch = fetchMock;
 

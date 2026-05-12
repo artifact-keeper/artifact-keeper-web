@@ -127,7 +127,20 @@ export function DockerTagList({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
-                    <code className="font-mono text-xs text-muted-foreground">
+                    {/*
+                      The visible label is truncated but screen readers and
+                      hover tooltips expose the full digest via aria-label
+                      and title.
+                    */}
+                    <code
+                      className="font-mono text-xs text-muted-foreground"
+                      aria-label={
+                        group.manifest.checksum_sha256
+                          ? `Digest ${group.manifest.checksum_sha256}`
+                          : `Tag ${group.tag}`
+                      }
+                      title={group.manifest.checksum_sha256 || group.tag}
+                    >
                       {truncateDigest(group.manifest.checksum_sha256) ||
                         truncateDigest(group.tag)}
                     </code>
@@ -139,10 +152,19 @@ export function DockerTagList({
                 <td className="px-3 py-2 text-right text-xs text-muted-foreground">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1">
+                      {/*
+                        Button rather than span so keyboard users can focus
+                        the trigger and the Radix tooltip will surface the
+                        "manifest size only" caveat on focus, not just hover.
+                      */}
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        aria-label={`${formatBytes(group.size_bytes)} (manifest size only — backend layer aggregation pending)`}
+                      >
                         {formatBytes(group.size_bytes)}
                         <Info className="size-3 opacity-60" aria-hidden="true" />
-                      </span>
+                      </button>
                     </TooltipTrigger>
                     <TooltipContent>
                       Manifest size only. Total layer size will be aggregated
