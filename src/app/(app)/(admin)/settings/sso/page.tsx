@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -1592,6 +1593,14 @@ export default function SsoSettingsPage() {
       <PageHeader
         title="SSO Providers"
         description="Configure single sign-on authentication providers."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/settings/sso/ci">
+              <Plug className="size-4 mr-1.5" />
+              CI/CD OIDC Providers
+            </Link>
+          </Button>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
