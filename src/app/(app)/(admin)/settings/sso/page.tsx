@@ -17,7 +17,6 @@ import {
   Loader2,
   CheckCircle,
   Plug,
-  GitBranch,
 } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -1894,6 +1893,14 @@ export default function SsoSettingsPage() {
       <PageHeader
         title="SSO Providers"
         description="Configure single sign-on authentication providers."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/settings/sso/ci">
+              <Plug className="size-4 mr-1.5" />
+              CI/CD OIDC Providers
+            </Link>
+          </Button>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -1942,12 +1949,6 @@ export default function SsoSettingsPage() {
           <TabsTrigger value="saml">
             <FileKey className="size-4 mr-1.5" />
             SAML
-          </TabsTrigger>
-          <TabsTrigger value="ci" asChild>
-            <Link href="/settings/sso/ci">
-              <GitBranch className="size-4 mr-1.5" />
-              CI / CD
-            </Link>
           </TabsTrigger>
         </TabsList>
 
