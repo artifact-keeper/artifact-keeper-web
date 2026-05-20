@@ -466,6 +466,25 @@ describe('RepoDialogs - Delete Dialog', () => {
   });
 });
 
+describe('RepoDialogs - Format dropdown order', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('renders Format options sorted alphabetically by label (case-insensitive)', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    // Format is the first mock-select in the create dialog.
+    const formatSelect = within(dialog).getAllByTestId('mock-select')[0] as HTMLSelectElement;
+    const labels = Array.from(formatSelect.options).map((o) => o.textContent ?? '');
+
+    const expected = [...labels].sort((a, b) => a.localeCompare(b));
+    expect(labels).toEqual(expected);
+  });
+});
+
 describe('RepoDialogs - Upstream Auth (Create)', () => {
   beforeEach(() => {
     cleanup();
