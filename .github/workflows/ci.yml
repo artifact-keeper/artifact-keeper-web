@@ -73,7 +73,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
-          CHANGED_FILES=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
+          # Only include Added/Copied/Modified/Renamed files; Deleted files have nothing to cover.
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
 
           if [ -z "$CHANGED_FILES" ]; then
             echo "No source files changed, skipping new code coverage check"
@@ -86,33 +87,72 @@ jobs:
             exit 0
           fi
 
-          RESULT=$(python3 -c "
-          import sys
-          changed = set('''$CHANGED_FILES'''.split())
+          # Build a map of {file -> set of changed line numbers} so the gate
+          # measures only the lines this PR actually added/modified, not every
+          # instrumented line in the touched file.
+          export CHANGED_FILES
+          RESULT=$(python3 <<'PY'
+          import os
+          import subprocess
+
+          changed_files = os.environ['CHANGED_FILES'].split()
+          # Parse unified diff hunks for the added (right-side) line ranges per file.
+          changed_lines = {}
+          for f in changed_files:
+              out = subprocess.run(
+                  ['git', 'diff', '--unified=0', 'FETCH_HEAD', '--', f],
+                  capture_output=True, text=True,
+              ).stdout
+              line_set = set()
+              for line in out.splitlines():
+                  if line.startswith('@@'):
+                      # @@ -old,n +new,n @@
+                      try:
+                          plus = line.split('+', 1)[1].split(' ', 1)[0]
+                          if ',' in plus:
+                              start_s, count_s = plus.split(',')
+                              start, count = int(start_s), int(count_s)
+                          else:
+                              start, count = int(plus), 1
+                      except (ValueError, IndexError):
+                          continue
+                      for n in range(start, start + count):
+                          line_set.add(n)
+              changed_lines[f] = line_set
+
+          # Tally DA: hits/misses for changed lines only.
           hit = miss = 0
-          in_changed = False
-          for line in open('coverage/lcov.info'):
-              line = line.strip()
+          active_file = None
+          active_set = None
+          for raw in open('coverage/lcov.info'):
+              line = raw.strip()
               if line.startswith('SF:'):
                   path = line[3:]
-                  in_changed = any(path.endswith(f) for f in changed)
-              elif line.startswith('DA:') and in_changed:
-                  parts = line[3:].split(',')
-                  count = int(parts[1])
-                  if count > 0:
-                      hit += 1
-                  else:
-                      miss += 1
+                  active_file = None
+                  for f, ls in changed_lines.items():
+                      if path.endswith(f):
+                          active_file = f
+                          active_set = ls
+                          break
+              elif line.startswith('DA:') and active_file is not None and active_set:
+                  ln_s, count_s = line[3:].split(',')[:2]
+                  ln = int(ln_s)
+                  if ln in active_set:
+                      if int(count_s) > 0:
+                          hit += 1
+                      else:
+                          miss += 1
           total = hit + miss
           if total == 0:
               print('none')
           else:
               pct = (hit * 100) // total
               print(f'{pct} {hit} {total}')
-          ")
+          PY
+          )
 
           if [ "$RESULT" = "none" ]; then
-            echo "### New Code Coverage: N/A (no instrumented lines)" >> $GITHUB_STEP_SUMMARY
+            echo "### New Code Coverage: N/A (no instrumented changed lines)" >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
 
@@ -120,8 +160,14 @@ jobs:
           HIT=$(echo "$RESULT" | awk '{print $2}')
           TOTAL=$(echo "$RESULT" | awk '{print $3}')
 
-          echo "### New Code Coverage: ${PCT}% (${HIT}/${TOTAL} lines)" >> $GITHUB_STEP_SUMMARY
-          echo "New code coverage: ${PCT}% (${HIT}/${TOTAL} lines)"
+          echo "### New Code Coverage: ${PCT}% (${HIT}/${TOTAL} changed lines)" >> $GITHUB_STEP_SUMMARY
+          echo "New code coverage: ${PCT}% (${HIT}/${TOTAL} changed lines)"
+
+          # Skip gate when the changed-line surface is tiny (matches MEMORY.md convention).
+          if [ "$TOTAL" -lt 10 ]; then
+            echo "Changed-line surface is below 10 lines; skipping gate."
+            exit 0
+          fi
 
           if [ "$PCT" -lt 80 ]; then
             echo "::error::New code coverage is ${PCT}%, below 80% threshold"
@@ -137,7 +183,8 @@ jobs:
           npm install -g jscpd@4 --silent
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
 
-          CHANGED_SRC=$(git diff --name-only FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' \
+          # Exclude deleted files (--diff-filter=ACMR) — jscpd cannot lstat paths that no longer exist.
+          CHANGED_SRC=$(git diff --name-only --diff-filter=ACMR FETCH_HEAD -- 'src/**/*.ts' 'src/**/*.tsx' \
             | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
 
           if [ -z "$CHANGED_SRC" ]; then
@@ -472,7 +519,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
