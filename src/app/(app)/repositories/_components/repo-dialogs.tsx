@@ -1,9 +1,17 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
 import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
+
+// Alphabetised copy of FORMAT_OPTIONS for the create dialog's flat dropdown.
+// The source array is deliberately ordered by ecosystem group so that the
+// grouped filter in repositories-content.tsx renders its headers correctly;
+// here we just want a predictable A-Z list for the user.
+const SORTED_FORMAT_OPTIONS = [...FORMAT_OPTIONS].sort((a, b) =>
+  a.label.localeCompare(b.label),
+);
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,6 +203,19 @@ export function RepoDialogs({
     setUpstreamPassword("");
   };
 
+  // Reset the create form whenever the dialog opens. The parent flips
+  // `createOpen` back to false programmatically on a successful submit
+  // (mutation onSuccess), but Radix Dialog does NOT fire onOpenChange for
+  // programmatic close — so handleCreateClose's reset path is bypassed and
+  // stale form values would otherwise persist into the next open.
+  useEffect(() => {
+    if (createOpen) {
+      resetCreateForm();
+    }
+    // resetCreateForm only sets local state via stable setters; safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createOpen]);
+
   // Build member_repos array from selected keys
   const buildMemberRepos = (): VirtualRepoMemberInput[] => {
     return selectedMembers.map((key, idx) => ({
@@ -300,7 +321,7 @@ export function RepoDialogs({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FORMAT_OPTIONS.map((o) => (
+                    {SORTED_FORMAT_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
                       </SelectItem>
