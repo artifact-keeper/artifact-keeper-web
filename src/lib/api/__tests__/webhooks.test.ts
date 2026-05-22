@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type {
+  WebhookResponse as SdkWebhookResponse,
+  DeliveryResponse as SdkDeliveryResponse,
+  TestWebhookResponse as SdkTestWebhookResponse,
+} from "@artifact-keeper/sdk";
 
 vi.mock("@/lib/sdk-client", () => ({}));
 
@@ -24,14 +29,92 @@ vi.mock("@artifact-keeper/sdk", () => ({
   redeliver: (...args: unknown[]) => mockRedeliver(...args),
 }));
 
+// Realistic SDK fixtures, typed as the SDK shape so a generator schema
+// drift breaks the fixture at typecheck rather than silently shipping
+// stale shape coverage (#359).
+const SDK_WEBHOOK: SdkWebhookResponse = {
+  id: "w1",
+  name: "deploy",
+  url: "https://example.com",
+  events: ["artifact_uploaded"],
+  is_enabled: true,
+  repository_id: "repo-a",
+  headers: { Authorization: "Bearer xyz" },
+  last_triggered_at: "2026-05-01T00:00:00Z",
+  created_at: "2026-04-01T00:00:00Z",
+};
+
+const SDK_DELIVERY: SdkDeliveryResponse = {
+  id: "d1",
+  webhook_id: "w1",
+  event: "artifact_uploaded",
+  payload: { foo: "bar" },
+  response_status: 200,
+  response_body: "OK",
+  success: true,
+  attempts: 1,
+  delivered_at: "2026-05-01T00:00:00Z",
+  created_at: "2026-04-01T00:00:00Z",
+};
+
+const SDK_TEST_RESULT: SdkTestWebhookResponse = {
+  success: true,
+  status_code: 200,
+  response_body: "OK",
+  error: null,
+};
+
 describe("webhooksApi", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("list returns webhooks", async () => {
-    const data = { items: [{ id: "w1" }], total: 1 };
-    mockListWebhooks.mockResolvedValue({ data, error: undefined });
+    mockListWebhooks.mockResolvedValue({
+      data: { items: [SDK_WEBHOOK], total: 1 },
+      error: undefined,
+    });
     const { webhooksApi } = await import("../webhooks");
-    expect(await webhooksApi.list()).toEqual(data);
+    const out = await webhooksApi.list();
+    expect(out.total).toBe(1);
+    expect(out.items[0].id).toBe("w1");
+    expect(out.items[0].events).toEqual(["artifact_uploaded"]);
+  });
+
+  it("list normalizes optional+nullable fields (#359)", async () => {
+    mockListWebhooks.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ...SDK_WEBHOOK,
+            repository_id: null,
+            headers: null,
+            last_triggered_at: null,
+          },
+        ],
+        total: 1,
+      },
+      error: undefined,
+    });
+    const { webhooksApi } = await import("../webhooks");
+    const out = await webhooksApi.list();
+    expect(out.items[0].repository_id).toBeUndefined();
+    expect(out.items[0].headers).toBeUndefined();
+    expect(out.items[0].last_triggered_at).toBeUndefined();
+  });
+
+  it("list narrows unknown event values to fallback (#359)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockListWebhooks.mockResolvedValue({
+      data: {
+        items: [{ ...SDK_WEBHOOK, events: ["something_new"] }],
+        total: 1,
+      },
+      error: undefined,
+    });
+    const { webhooksApi } = await import("../webhooks");
+    const out = await webhooksApi.list();
+    expect(out.items[0].events).toEqual(["artifact_uploaded"]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("list throws on error", async () => {
@@ -41,10 +124,17 @@ describe("webhooksApi", () => {
   });
 
   it("get returns a webhook", async () => {
-    const wh = { id: "w1", name: "deploy" };
-    mockGetWebhook.mockResolvedValue({ data: wh, error: undefined });
+    mockGetWebhook.mockResolvedValue({ data: SDK_WEBHOOK, error: undefined });
     const { webhooksApi } = await import("../webhooks");
-    expect(await webhooksApi.get("w1")).toEqual(wh);
+    const out = await webhooksApi.get("w1");
+    expect(out.id).toBe("w1");
+    expect(out.name).toBe("deploy");
+  });
+
+  it("get throws Empty response body when SDK returns no data (#359)", async () => {
+    mockGetWebhook.mockResolvedValue({ data: undefined, error: undefined });
+    const { webhooksApi } = await import("../webhooks");
+    await expect(webhooksApi.get("w1")).rejects.toThrow(/Empty response body/);
   });
 
   it("get throws on error", async () => {
@@ -54,19 +144,51 @@ describe("webhooksApi", () => {
   });
 
   it("create returns created webhook", async () => {
-    const wh = { id: "w2", name: "notify" };
-    mockCreateWebhook.mockResolvedValue({ data: wh, error: undefined });
+    mockCreateWebhook.mockResolvedValue({
+      data: SDK_WEBHOOK,
+      error: undefined,
+    });
     const { webhooksApi } = await import("../webhooks");
-    expect(
-      await webhooksApi.create({ name: "notify", url: "https://example.com", events: ["artifact_uploaded"] })
-    ).toEqual(wh);
+    const out = await webhooksApi.create({
+      name: "deploy",
+      url: "https://example.com",
+      events: ["artifact_uploaded"],
+    });
+    expect(out.id).toBe("w1");
+  });
+
+  it("create forwards local body shape and strips extras (#359)", async () => {
+    mockCreateWebhook.mockResolvedValue({
+      data: SDK_WEBHOOK,
+      error: undefined,
+    });
+    const { webhooksApi } = await import("../webhooks");
+    await webhooksApi.create({
+      name: "deploy",
+      url: "https://example.com",
+      events: ["artifact_uploaded"],
+      secret: "s3kr3t",
+      repository_id: "repo-a",
+      // @ts-expect-error — intentionally not in CreateWebhookRequest
+      bogus_extra_field: "should be stripped by adapter",
+    });
+    expect(mockCreateWebhook).toHaveBeenCalledWith({
+      body: {
+        name: "deploy",
+        url: "https://example.com",
+        events: ["artifact_uploaded"],
+        secret: "s3kr3t",
+        repository_id: "repo-a",
+        headers: undefined,
+      },
+    });
   });
 
   it("create throws on error", async () => {
     mockCreateWebhook.mockResolvedValue({ data: undefined, error: "fail" });
     const { webhooksApi } = await import("../webhooks");
     await expect(
-      webhooksApi.create({ name: "x", url: "http://x", events: [] })
+      webhooksApi.create({ name: "x", url: "http://x", events: [] }),
     ).rejects.toBe("fail");
   });
 
@@ -110,10 +232,16 @@ describe("webhooksApi", () => {
   });
 
   it("test returns test result", async () => {
-    const result = { success: true, status_code: 200 };
-    mockTestWebhook.mockResolvedValue({ data: result, error: undefined });
+    mockTestWebhook.mockResolvedValue({
+      data: SDK_TEST_RESULT,
+      error: undefined,
+    });
     const { webhooksApi } = await import("../webhooks");
-    expect(await webhooksApi.test("w1")).toEqual(result);
+    const out = await webhooksApi.test("w1");
+    expect(out.success).toBe(true);
+    expect(out.status_code).toBe(200);
+    expect(out.response_body).toBe("OK");
+    expect(out.error).toBeUndefined();
   });
 
   it("test throws on error", async () => {
@@ -123,10 +251,14 @@ describe("webhooksApi", () => {
   });
 
   it("listDeliveries returns deliveries", async () => {
-    const data = { items: [{ id: "d1" }], total: 1 };
-    mockListDeliveries.mockResolvedValue({ data, error: undefined });
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [SDK_DELIVERY], total: 1 },
+      error: undefined,
+    });
     const { webhooksApi } = await import("../webhooks");
-    expect(await webhooksApi.listDeliveries("w1")).toEqual(data);
+    const out = await webhooksApi.listDeliveries("w1");
+    expect(out.total).toBe(1);
+    expect(out.items[0].id).toBe("d1");
   });
 
   it("listDeliveries throws on error", async () => {
@@ -136,10 +268,11 @@ describe("webhooksApi", () => {
   });
 
   it("redeliver returns delivery", async () => {
-    const delivery = { id: "d1", success: true };
-    mockRedeliver.mockResolvedValue({ data: delivery, error: undefined });
+    mockRedeliver.mockResolvedValue({ data: SDK_DELIVERY, error: undefined });
     const { webhooksApi } = await import("../webhooks");
-    expect(await webhooksApi.redeliver("w1", "d1")).toEqual(delivery);
+    const out = await webhooksApi.redeliver("w1", "d1");
+    expect(out.id).toBe("d1");
+    expect(out.success).toBe(true);
   });
 
   it("redeliver throws on error", async () => {

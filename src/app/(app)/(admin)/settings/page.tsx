@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
+import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
@@ -82,18 +83,38 @@ function formatStorageBackend(backend: string): string {
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  const { data: smtpConfig, isLoading, dataUpdatedAt } = useQuery({
-    queryKey: ["smtp-config"],
-    queryFn: () => settingsApi.getSmtpConfig(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  // Shares one in-flight request and cache entry with SettingsPage's
+  // top-level call (#349). The shared hook is the dedup invariant.
+  const { data: settings, isLoading, isError, error, dataUpdatedAt } =
+    useAdminSettings();
+  const smtpConfig = settings?.smtpConfig;
 
   if (isLoading) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError || !smtpConfig) {
+    // `!smtpConfig` is logically dead once isLoading and isError are
+    // handled (the success path always returns an object), but stating
+    // it makes the invariant load-bearing for the type narrowing below
+    // and for any future maintainer reading the render flow (R3, #347).
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <Alert variant="destructive">
+            <AlertTitle>SMTP configuration unavailable</AlertTitle>
+            <AlertDescription>
+              {error instanceof Error
+                ? error.message
+                : "Unable to load SMTP configuration from the server."}
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     );
@@ -129,7 +150,7 @@ function SmtpSettingsForm({
     mutationFn: (config: SmtpConfig) => settingsApi.updateSmtpConfig(config),
     onSuccess: () => {
       toast.success("SMTP configuration saved");
-      queryClient.invalidateQueries({ queryKey: ["smtp-config"] });
+      queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
       setFormDirty(false);
     },
     onError: mutationErrorToast("Failed to save SMTP configuration"),
@@ -365,31 +386,34 @@ export default function SettingsPage() {
     queryFn: () => adminApi.getHealth(),
   });
 
-  const { data: passwordPolicy } = useQuery({
-    queryKey: ["password-policy"],
-    queryFn: () => settingsApi.getPasswordPolicy(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
-
+  // One bundled fetch for /api/v1/admin/settings instead of three separate
+  // queries (one per slice). The SmtpSettingsTab below shares this same
+  // query via the same hook. See #349.
   const {
-    data: storageSettings,
-    isError: storageError,
-    isLoading: storageLoading,
-  } = useQuery<StorageSettings>({
-    queryKey: ["storage-settings"],
-    queryFn: () => settingsApi.getStorageSettings(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+    data: adminSettings,
+    isError: settingsError,
+    isLoading: settingsLoading,
+  } = useAdminSettings();
+
+  const passwordPolicy = adminSettings?.passwordPolicy;
+  const storageSettings = adminSettings?.storageSettings;
 
   // Render the storage row value, distinguishing loading from error so an
   // API failure doesn't silently fall back to placeholder strings (#334).
   const storageValue = (format: (s: StorageSettings) => string): string => {
-    if (storageLoading) return "Loading...";
-    if (storageError || !storageSettings) return "Unavailable";
+    if (settingsLoading) return "Loading...";
+    if (settingsError || !storageSettings) return "Unavailable";
     return format(storageSettings);
   };
+
+  // Same loading/error/value gating as storageValue, applied to the
+  // password-policy row so a backend outage shows "Unavailable" instead
+  // of plausible-looking default policy text (#347).
+  function passwordPolicyValue(): string {
+    if (settingsLoading) return "Loading...";
+    if (settingsError || !passwordPolicy) return "Unavailable";
+    return formatPasswordPolicy(passwordPolicy);
+  }
 
   if (!user?.is_admin) {
     return (
@@ -562,7 +586,7 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Password Policy"
-                value={formatPasswordPolicy(passwordPolicy)}
+                value={passwordPolicyValue()}
                 description="Minimum password requirements for user accounts."
               />
             </CardContent>

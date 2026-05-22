@@ -13,9 +13,11 @@ export function getInstallCommand(
     case "poetry":
       return `pip install ${packageName}==${v}`;
     case "maven":
-    case "gradle":
-    case "sbt":
       return `<dependency>\n  <groupId>...</groupId>\n  <artifactId>${packageName}</artifactId>\n  <version>${v}</version>\n</dependency>`;
+    case "gradle":
+      return `implementation 'GROUP:${packageName}:${v}'`;
+    case "sbt":
+      return `libraryDependencies += "GROUP" % "${packageName}" % "${v}"`;
     case "cargo":
       return `cargo add ${packageName}@${v}`;
     case "nuget":

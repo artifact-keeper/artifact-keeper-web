@@ -25,6 +25,7 @@ import securityApi from "@/lib/api/security";
 import dtApi from "@/lib/api/dependency-track";
 import { useAuth } from "@/providers/auth-provider";
 import { mutationErrorToast } from "@/lib/error-utils";
+import { ArtifactScansSection } from "./artifact-scans-section";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { ScanResult } from "@/types/security";
 import type { Artifact } from "@/types";
@@ -616,6 +617,13 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
           />
         </>
       )}
+
+      {/* Native scan_findings (#368) — pre-#368 the per-artifact Security
+          tab never queried scan_findings, so a user who triggered a scan
+          had to navigate to /security/scans to find it. Mounting the
+          dedicated section here makes the tab a true single-pane-of-glass. */}
+      <Separator />
+      <ArtifactScansSection artifactId={artifact.id} />
 
       {/* ----------------------------------------------------------------- */}
       {/* Image / Package Scans (in-tree scanner results) */}

@@ -22,6 +22,18 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/**
+ * Cap user-untrusted error text at 240 characters so a 50KB stack trace
+ * or HTML 500 page can't render as a wall of text in a toast. See #356.
+ * Author-controlled fallback strings are not truncated.
+ */
+const TRUNCATE_CAP = 240;
+function truncateForToast(s: string): string {
+  if (s.length <= TRUNCATE_CAP) return s;
+  const dropped = s.length - TRUNCATE_CAP;
+  return `${s.slice(0, TRUNCATE_CAP)}… [truncated, ${dropped} more chars]`;
+}
+
 /** Check whether a value is a non-null object (not an array). */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -100,11 +112,11 @@ function extractHttpStatus(error: Record<string, unknown>): number | undefined {
  */
 export function toUserMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.length > 0) {
-    return error;
+    return truncateForToast(error);
   }
 
   if (error instanceof Error) {
-    return error.message;
+    return truncateForToast(error.message);
   }
 
   if (!isPlainObject(error)) {
@@ -113,32 +125,33 @@ export function toUserMessage(error: unknown, fallback: string): string {
 
   // SDK errors often carry { error: "some message" }
   const errorField = nonEmptyString(error.error);
-  if (errorField) return errorField;
+  if (errorField) return truncateForToast(errorField);
 
   // Some SDK responses use { message: "..." }
   const messageField = nonEmptyString(error.message);
-  if (messageField) return messageField;
+  if (messageField) return truncateForToast(messageField);
 
   // FastAPI's default error shape is { detail: "..." }. The plugins install
   // path on the backend uses this; without explicit handling the toast falls
   // through to the fallback even when the backend supplied a useful message.
   const detailField = nonEmptyString(error.detail);
-  if (detailField) return detailField;
+  if (detailField) return truncateForToast(detailField);
 
   // Wrapped HTTP errors: { body: { message | error | detail: "..." } }
   if (isPlainObject(error.body)) {
     const bodyMessage = nonEmptyString(error.body.message);
-    if (bodyMessage) return bodyMessage;
+    if (bodyMessage) return truncateForToast(bodyMessage);
 
     const bodyError = nonEmptyString(error.body.error);
-    if (bodyError) return bodyError;
+    if (bodyError) return truncateForToast(bodyError);
 
     const bodyDetail = nonEmptyString(error.body.detail);
-    if (bodyDetail) return bodyDetail;
+    if (bodyDetail) return truncateForToast(bodyDetail);
   }
 
   // No useful body message — prefix the fallback with the HTTP status when
   // we can determine one, so different errors don't render identically.
+  // Fallback is author-controlled and not truncated.
   const status = extractHttpStatus(error);
   if (status !== undefined) {
     return `(HTTP ${status}) ${fallback}`;

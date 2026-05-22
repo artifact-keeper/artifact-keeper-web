@@ -81,21 +81,42 @@ describe("settingsApi", () => {
     expect(policy.history_count).toBe(3);
   });
 
-  it("getPasswordPolicy returns defaults on SDK error", async () => {
+  it("getPasswordPolicy throws on SDK error (#347)", async () => {
     mockGetSettings.mockResolvedValue({
       data: undefined,
       error: "unauthorized",
     });
     const mod = await import("../settings");
-    const policy = await mod.settingsApi.getPasswordPolicy();
-    expect(policy).toEqual(mod.settingsApi.DEFAULT_PASSWORD_POLICY);
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /Failed to load password policy/
+    );
   });
 
-  it("getPasswordPolicy returns defaults when SDK throws", async () => {
+  it("getPasswordPolicy propagates SDK rejection (#347)", async () => {
     mockGetSettings.mockRejectedValue(new Error("network error"));
     const mod = await import("../settings");
-    const policy = await mod.settingsApi.getPasswordPolicy();
-    expect(policy).toEqual(mod.settingsApi.DEFAULT_PASSWORD_POLICY);
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      "network error"
+    );
+  });
+
+  it("getPasswordPolicy throws when response is not an object (#347)", async () => {
+    mockGetSettings.mockResolvedValue({ data: "not-an-object", error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
+  it("getPasswordPolicy throws on type-mismatched nested field (#347)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { password_policy: { min_length: "eight" } },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getPasswordPolicy()).rejects.toThrow(
+      /response did not match expected shape/
+    );
   });
 
   it("nested password_policy takes precedence over flat fields", async () => {
@@ -203,21 +224,42 @@ describe("settingsApi", () => {
     expect(config.host).toBe("nested.example.com");
   });
 
-  it("getSmtpConfig returns defaults on SDK error", async () => {
+  it("getSmtpConfig throws on SDK error (#347)", async () => {
     mockGetSettings.mockResolvedValue({
       data: undefined,
       error: "unauthorized",
     });
     const mod = await import("../settings");
-    const config = await mod.settingsApi.getSmtpConfig();
-    expect(config).toEqual(mod.DEFAULT_SMTP_CONFIG);
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /Failed to load SMTP config/
+    );
   });
 
-  it("getSmtpConfig returns defaults when SDK throws", async () => {
+  it("getSmtpConfig propagates SDK rejection (#347)", async () => {
     mockGetSettings.mockRejectedValue(new Error("network error"));
     const mod = await import("../settings");
-    const config = await mod.settingsApi.getSmtpConfig();
-    expect(config).toEqual(mod.DEFAULT_SMTP_CONFIG);
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      "network error"
+    );
+  });
+
+  it("getSmtpConfig throws when response is not an object (#347)", async () => {
+    mockGetSettings.mockResolvedValue({ data: 42, error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
+  it("getSmtpConfig throws on type-mismatched nested field (#347)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { smtp_config: { port: "587" } },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getSmtpConfig()).rejects.toThrow(
+      /response did not match expected shape/
+    );
   });
 
   it("getSmtpConfig uses default tls_mode for invalid values", async () => {
@@ -371,5 +413,100 @@ describe("settingsApi", () => {
     await expect(
       mod.settingsApi.sendTestEmail("admin@test.com")
     ).rejects.toThrow("API error 502");
+  });
+
+  // -------------------------------------------------------------------------
+  // getAllSettings tests (#349)
+  // -------------------------------------------------------------------------
+
+  it("getAllSettings issues exactly one HTTP call and returns all three slices (#349)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "s3",
+        storage_path: "/data/storage",
+        max_upload_size_bytes: 1_073_741_824,
+        password_policy: { min_length: 12 },
+        smtp_config: {
+          host: "mail.example.com",
+          port: 465,
+          username: "user",
+          password: "pass",
+          from_address: "noreply@example.com",
+          tls_mode: "tls",
+        },
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    const all = await mod.settingsApi.getAllSettings();
+
+    // Single HTTP round trip — that's the whole point of this consolidation.
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+
+    expect(all.storageSettings.storage_backend).toBe("s3");
+    expect(all.storageSettings.storage_path).toBe("/data/storage");
+    expect(all.storageSettings.max_upload_size_bytes).toBe(1_073_741_824);
+    expect(all.passwordPolicy.min_length).toBe(12);
+    expect(all.smtpConfig.host).toBe("mail.example.com");
+    expect(all.smtpConfig.tls_mode).toBe("tls");
+  });
+
+  it("getAllSettings throws on SDK error (#349)", async () => {
+    mockGetSettings.mockResolvedValue({ data: undefined, error: "unauthorized" });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      /Failed to load admin settings/
+    );
+  });
+
+  it("getAllSettings propagates SDK rejection (#349)", async () => {
+    mockGetSettings.mockRejectedValue(new Error("network error"));
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      "network error"
+    );
+  });
+
+  it("getAllSettings throws if storage slice is missing required fields (#349)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { password_policy: { min_length: 8 } },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      /Storage settings response missing/
+    );
+  });
+
+  it("getAllSettings throws if password policy slice is malformed (#349)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 0,
+        password_policy: { min_length: "eight" },
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      /response did not match expected shape/
+    );
+  });
+
+  it("getAllSettings throws if SMTP slice is malformed (#349)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 0,
+        smtp_config: { port: "not-a-number" },
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
+      /response did not match expected shape/
+    );
   });
 });
