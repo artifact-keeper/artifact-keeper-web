@@ -40,9 +40,9 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
               <span className="text-sm font-medium truncate">{repo.key}</span>
               {!repo.is_public && <Lock className="size-3 shrink-0 text-muted-foreground" />}
             </div>
-            {repo.name !== repo.key && (
-              <p className="text-xs text-muted-foreground truncate">{repo.name}</p>
-            )}
+            <p className="text-xs text-muted-foreground truncate" aria-hidden={repo.name === repo.key}>
+              {repo.name}
+            </p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[11px] font-medium uppercase text-muted-foreground">
                 {repo.format}
