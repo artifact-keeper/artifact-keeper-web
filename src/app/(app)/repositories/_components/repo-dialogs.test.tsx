@@ -323,6 +323,38 @@ describe('RepoDialogs - Create Dialog', () => {
     await user.click(publicSwitch);
     expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
   });
+
+  // Regression: form state must reset when the dialog is reopened after a
+  // successful submit. The parent (RepositoriesContent) flips `createOpen`
+  // back to false programmatically inside the create mutation's onSuccess.
+  // Radix Dialog does NOT fire onOpenChange for programmatic close, so the
+  // close-time reset path is bypassed. We rely on an open-time reset hook
+  // instead, which this test exercises.
+  it('clears key and name when reopened after programmatic close (regression)', async () => {
+    const user = userEvent.setup();
+
+    const { rerender } = render(<RepoDialogs {...defaultProps} createOpen={true} />);
+
+    // User fills out the form and submits.
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'first-repo');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'First Repo');
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    // Parent flips createOpen to false programmatically (mutation onSuccess).
+    // This is the path that does NOT trigger Radix's onOpenChange — so
+    // handleCreateClose / resetCreateForm would NOT run without the open-time reset.
+    rerender(<RepoDialogs {...defaultProps} createOpen={false} />);
+
+    // User clicks "+ Create Repository" again; parent flips createOpen back to true.
+    rerender(<RepoDialogs {...defaultProps} createOpen={true} />);
+
+    const reopened = screen.getByRole('dialog');
+    const keyInput = within(reopened).getByPlaceholderText('my-repo') as HTMLInputElement;
+    const nameInput = within(reopened).getByPlaceholderText('My Repository') as HTMLInputElement;
+    expect(keyInput.value).toBe('');
+    expect(nameInput.value).toBe('');
+  });
 });
 
 describe('RepoDialogs - Edit Dialog', () => {
@@ -463,6 +495,25 @@ describe('RepoDialogs - Delete Dialog', () => {
     const confirmDialog = screen.getByTestId('confirm-dialog');
     fireEvent.click(within(confirmDialog).getByRole('button', { name: /confirm delete/i }));
     expect(onDeleteConfirm).toHaveBeenCalledWith('test-repo');
+  });
+});
+
+describe('RepoDialogs - Format dropdown order', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('renders Format options sorted alphabetically by label (case-insensitive)', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    // Format is the first mock-select in the create dialog.
+    const formatSelect = within(dialog).getAllByTestId('mock-select')[0] as HTMLSelectElement;
+    const labels = Array.from(formatSelect.options).map((o) => o.textContent ?? '');
+
+    const expected = [...labels].sort((a, b) => a.localeCompare(b));
+    expect(labels).toEqual(expected);
   });
 });
 
