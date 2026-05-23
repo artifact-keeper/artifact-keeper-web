@@ -160,7 +160,7 @@ describe("DashboardContent", () => {
   it("does not render System Health for unauthenticated users", () => {
     mockUseAuth.mockReturnValue({ user: null, isAuthenticated: false });
     render(<DashboardContent />);
-    expect(screen.queryByText("System Health")).not.toBeInTheDocument();
+    expect(screen.queryByText("subsystems")).not.toBeInTheDocument();
   });
 
   it("renders System Health section for authenticated users", () => {
@@ -177,7 +177,7 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    expect(screen.getByText("System Health")).toBeInTheDocument();
+    expect(screen.getByText("subsystems")).toBeInTheDocument();
   });
 
   it("renders Statistics section for admin users", () => {
@@ -200,11 +200,11 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    expect(screen.getByText("Statistics")).toBeInTheDocument();
-    expect(screen.getByText("Security Overview")).toBeInTheDocument();
+    expect(screen.getByText("stats")).toBeInTheDocument();
+    expect(screen.getByText("security")).toBeInTheDocument();
   });
 
-  it("shows personalized greeting with display_name", () => {
+  it("renders status line with username", () => {
     mockUseAuth.mockReturnValue({
       user: { username: "admin", display_name: "Admin" },
       isAuthenticated: true,
@@ -214,10 +214,10 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    expect(screen.getByText("Welcome back, Admin")).toBeInTheDocument();
+    expect(screen.getByText(/admin@/)).toBeInTheDocument();
   });
 
-  it("falls back to username when display_name is absent", () => {
+  it("falls back to username segment when display_name is absent", () => {
     mockUseAuth.mockReturnValue({
       user: { username: "dev_user" },
       isAuthenticated: true,
@@ -227,16 +227,20 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    expect(screen.getByText("Welcome back, dev_user")).toBeInTheDocument();
+    expect(screen.getByText(/dev_user@/)).toBeInTheDocument();
   });
 
-  it('shows "Dashboard" title when no user', () => {
+  it("hides the status line when no user is authenticated", () => {
     mockUseAuth.mockReturnValue({ user: null, isAuthenticated: false });
+    setupUseQuery({
+      "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
+    });
     render(<DashboardContent />);
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.queryByText(/ak:\/\//)).not.toBeInTheDocument();
+    expect(screen.queryByText("subsystems")).not.toBeInTheDocument();
   });
 
-  it("renders repository rows with format badges", () => {
+  it("renders repository rows with typographic format prefix", () => {
     mockUseAuth.mockReturnValue({
       user: { username: "user1" },
       isAuthenticated: true,
@@ -362,7 +366,7 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    const unknowns = screen.getAllByText("Unknown");
+    const unknowns = screen.getAllByText("unknown");
     expect(unknowns.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -455,6 +459,6 @@ describe("DashboardContent", () => {
     // Severity breakdown section should not render when total_cves = 0
     expect(screen.queryByText("Severity Breakdown")).not.toBeInTheDocument();
     // But Security Overview stats should still render
-    expect(screen.getByText("Security Overview")).toBeInTheDocument();
+    expect(screen.getByText("security")).toBeInTheDocument();
   });
 });
