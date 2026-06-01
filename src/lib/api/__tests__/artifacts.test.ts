@@ -248,6 +248,91 @@ describe("artifactsApi", () => {
     await expect(artifactsApi.delete("repo-key", "lib.jar")).rejects.toBe("fail");
   });
 
+  // -------------------------------------------------------------------------
+  // invalidateCache (artifact-keeper#1539 / artifact-keeper-web#446)
+  // -------------------------------------------------------------------------
+
+  describe("invalidateCache", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("issues POST to /api/v1/repositories/:key/cache/invalidate?path=...", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            repository_key: "pypi-remote",
+            path: "simple/requests/",
+            invalidated: true,
+          })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.invalidateCache(
+        "pypi-remote",
+        "simple/requests/"
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("/api/v1/repositories/pypi-remote/cache/invalidate");
+      expect(url).toContain("path=simple%2Frequests%2F");
+      const init = fetchMock.mock.calls[0][1];
+      expect(init).toEqual(
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+        })
+      );
+      expect(result).toEqual({
+        repository_key: "pypi-remote",
+        path: "simple/requests/",
+        invalidated: true,
+      });
+    });
+
+    it("URL-encodes both the repository key and the path", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ repository_key: "x", path: "y", invalidated: true })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.invalidateCache("repo with spaces", "a b/c+d.tgz");
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("/api/v1/repositories/repo%20with%20spaces/cache/invalidate");
+      // `path` is in the query string and must be percent-encoded so '/' and
+      // '+' survive the round-trip back into the path the backend evicts.
+      expect(url).toContain("path=a%20b%2Fc%2Bd.tgz");
+    });
+
+    it("throws on non-ok response (e.g. 400 for non-remote repo, 503 for missing storage)", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            error: "VALIDATION_ERROR",
+            message:
+              "cache invalidation is only supported on remote (proxy) repositories",
+          })
+        ),
+      });
+      const { artifactsApi } = await import("../artifacts");
+      await expect(
+        artifactsApi.invalidateCache("local-only", "foo.jar")
+      ).rejects.toThrow(/API error 400/);
+    });
+  });
+
   it("getDownloadUrl returns correct URL", async () => {
     const { artifactsApi } = await import("../artifacts");
     expect(artifactsApi.getDownloadUrl("repo-key", "com/lib.jar")).toBe(
