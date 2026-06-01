@@ -96,6 +96,7 @@ vi.mock("lucide-react", () => {
     FolderSearch: icon,
     ClipboardCheck: icon,
     Gauge: icon,
+    Hourglass: icon,
   };
 });
 

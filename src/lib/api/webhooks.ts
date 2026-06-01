@@ -34,7 +34,10 @@ export type WebhookEvent =
   | 'user_deleted'
   | 'build_started'
   | 'build_completed'
-  | 'build_failed';
+  | 'build_failed'
+  | 'age_gate_queued'
+  | 'age_gate_approved'
+  | 'age_gate_rejected';
 
 const WEBHOOK_EVENTS = new Set<WebhookEvent>([
   'artifact_uploaded',
@@ -46,6 +49,9 @@ const WEBHOOK_EVENTS = new Set<WebhookEvent>([
   'build_started',
   'build_completed',
   'build_failed',
+  'age_gate_queued',
+  'age_gate_approved',
+  'age_gate_rejected',
 ]);
 
 export interface Webhook {
