@@ -19,6 +19,7 @@ export { default as lifecycleApi } from './lifecycle';
 export { default as telemetryApi } from './telemetry';
 export { default as monitoringApi } from './monitoring';
 export { default as qualityGatesApi } from './quality-gates';
+export { default as ageGateApi } from './age-gate';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';

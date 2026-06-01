@@ -74,6 +74,9 @@ const WEBHOOK_EVENTS: { value: WebhookEvent; label: string }[] = [
   { value: "build_started", label: "Build Started" },
   { value: "build_completed", label: "Build Completed" },
   { value: "build_failed", label: "Build Failed" },
+  { value: "age_gate_queued", label: "Age Gate: Queued" },
+  { value: "age_gate_approved", label: "Age Gate: Approved" },
+  { value: "age_gate_rejected", label: "Age Gate: Rejected" },
 ];
 
 function eventColor(event: string): "green" | "red" | "blue" | "default" {
