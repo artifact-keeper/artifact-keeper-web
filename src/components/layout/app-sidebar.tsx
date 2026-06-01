@@ -35,6 +35,7 @@ import {
   Scale,
   FolderSearch,
   ClipboardCheck,
+  Hourglass,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -92,6 +93,7 @@ const securityItems: NavItem[] = [
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
+  { title: "Age Gate", href: "/age-gate", icon: Hourglass },
   { title: "Health", href: "/system-health", icon: HeartPulse },
   { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
   { title: "Monitoring", href: "/monitoring", icon: Activity },
