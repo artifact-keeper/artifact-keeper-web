@@ -477,9 +477,12 @@ export const migrationApi = {
 
   // Download/stream tickets
   createStreamTicket: async (jobId: string): Promise<string> => {
+    // The backend binds the ticket to this exact path and compares it against
+    // request.uri().path() by byte equality at consume time, so it must be the
+    // absolute path the EventSource request below will use.
     const body: SdkCreateTicketRequest = {
       purpose: 'stream',
-      resource_path: `migration/${jobId}`,
+      resource_path: `/api/v1/migrations/${jobId}/stream`,
     };
     const { data, error } = await sdkCreateDownloadTicket({ body });
     if (error) throw error;

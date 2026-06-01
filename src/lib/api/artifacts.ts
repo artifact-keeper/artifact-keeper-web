@@ -151,8 +151,15 @@ export const artifactsApi = {
   },
 
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
+    // The backend binds the ticket to this exact path and, at consume time,
+    // compares it against request.uri().path() by byte equality. It must be the
+    // absolute path the subsequent download request will carry, which is the
+    // same value getDownloadUrl produces.
     const { data, error } = await createDownloadTicket({
-      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` },
+      body: {
+        purpose: 'download',
+        resource_path: `/api/v1/repositories/${repoKey}/download/${artifactPath}`,
+      },
     });
     if (error) throw error;
     return assertData(data, 'artifactsApi.createDownloadTicket').ticket;

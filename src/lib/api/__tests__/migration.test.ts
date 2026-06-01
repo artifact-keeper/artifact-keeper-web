@@ -582,6 +582,18 @@ describe("migrationApi", () => {
     await expect(migrationApi.createStreamTicket("m1")).rejects.toBe("fail");
   });
 
+  it("createStreamTicket binds resource_path to the absolute stream request path", async () => {
+    // The backend ticket middleware compares the bound resource_path against
+    // request.uri().path() by byte equality, so it must be the absolute path
+    // the EventSource stream request uses. Regression test for web#453.
+    mockCreateDownloadTicket.mockResolvedValue({ data: { ticket: "tk123" }, error: undefined });
+    const { migrationApi } = await import("../migration");
+    await migrationApi.createStreamTicket("m1");
+    expect(mockCreateDownloadTicket).toHaveBeenCalledWith({
+      body: { purpose: "stream", resource_path: "/api/v1/migrations/m1/stream" },
+    });
+  });
+
   it("narrowSourceRepoType warns on unknown type", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockListSourceRepositories.mockResolvedValue({
