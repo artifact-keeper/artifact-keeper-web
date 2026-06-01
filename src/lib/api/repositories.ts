@@ -9,6 +9,8 @@ import {
   addVirtualMember,
   removeVirtualMember,
   updateVirtualMembers,
+  getCacheTtl,
+  setCacheTtl,
 } from '@artifact-keeper/sdk';
 import type {
   RepositoryResponse,
@@ -17,6 +19,7 @@ import type {
   UpdateRepositoryRequest as SdkUpdateRepositoryRequest,
   VirtualMemberResponse,
   VirtualMembersListResponse,
+  CacheTtlResponse,
 } from '@artifact-keeper/sdk';
 import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 import type {
@@ -253,6 +256,40 @@ export const repositoriesApi = {
     return apiFetch(`/api/v1/repositories/${encodeURIComponent(repoKey)}/test-upstream`, {
       method: 'POST',
     });
+  },
+
+  /**
+   * Read the proxy cache TTL for a repository (#448).
+   *
+   * The backend's GET endpoint is permissive: it returns 200 with the
+   * effective TTL (falling back to the default of 86400s = 24h when no value
+   * is stored) for *any* repo type, even though writes are gated to Remote.
+   * The UI gates the section on `repository.repo_type === 'remote'`, but
+   * keeping the read here unconditional preserves the contract documented in
+   * artifact-keeper#917 and matches what the existing UI probes already do
+   * for other repo types.
+   */
+  getCacheTtl: async (repoKey: string): Promise<CacheTtlResponse> => {
+    const { data, error } = await getCacheTtl({ path: { key: repoKey } });
+    if (error) throw error;
+    return assertData(data, 'repositoriesApi.getCacheTtl');
+  },
+
+  /**
+   * Set the proxy cache TTL for a Remote (proxy) repository (#448).
+   *
+   * Backend rejects writes against non-Remote repos with 400; callers should
+   * gate the UI on `repository.repo_type === 'remote'` rather than relying
+   * on the server-side rejection alone, so operators don't compose changes
+   * that fail at save time.
+   */
+  setCacheTtl: async (repoKey: string, cacheTtlSeconds: number): Promise<CacheTtlResponse> => {
+    const { data, error } = await setCacheTtl({
+      path: { key: repoKey },
+      body: { cache_ttl_seconds: cacheTtlSeconds },
+    });
+    if (error) throw error;
+    return assertData(data, 'repositoriesApi.setCacheTtl');
   },
 };
 
