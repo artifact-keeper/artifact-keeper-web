@@ -33,7 +33,13 @@ test.describe('Maven Grouped Browser (#443, #444, #445)', () => {
       `/api/v1/repositories/${REPO_KEY}/artifacts/${relPath}`,
       { data: body, headers: { 'Content-Type': 'application/octet-stream' } },
     );
-    expect(resp.ok(), `PUT ${relPath} failed: ${resp.status()}`).toBeTruthy();
+    // 409 means the coordinate is already deployed: #444 and #445 both seed
+    // the same with-zip GAV, and Playwright retries re-run the seed. For these
+    // read-oriented browser tests an already-present artifact is fine.
+    expect(
+      resp.ok() || resp.status() === 409,
+      `PUT ${relPath} failed: ${resp.status()}`,
+    ).toBeTruthy();
   }
 
   /**

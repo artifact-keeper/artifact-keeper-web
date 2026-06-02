@@ -93,19 +93,26 @@ test.describe.serial('Repository Dialog Accessibility', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
 
-    // Open the per-repo actions menu, then choose Edit.
+    // Target the REMOTE repo's actions menu specifically (by its display
+    // name), not just the first row: the upstream-auth section only exists on
+    // a remote repo's edit dialog. The action button aria-label is
+    // "Repository actions for <name>" (see repo-list-item.tsx).
     const actionsBtn = page
-      .getByRole('button', { name: new RegExp(`repository actions for`, 'i') })
+      .getByRole('button', { name: /repository actions for e2e a11y remote/i })
       .first();
     await expect(actionsBtn).toBeVisible({ timeout: 10000 });
-    await actionsBtn.click();
 
-    const editItem = page.getByRole('menuitem', { name: /edit/i }).first();
-    await expect(editItem).toBeVisible({ timeout: 5000 });
-    await editItem.click();
-
+    // Open the menu and choose Edit. Retry the whole open: a background list
+    // refetch can re-render the row and dismiss the Radix dropdown before the
+    // Edit item is clicked, which otherwise surfaces as "menuitem not found".
+    const editItem = page.getByRole('menuitem', { name: /^edit$/i }).first();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(async () => {
+      await actionsBtn.click();
+      await expect(editItem).toBeVisible({ timeout: 2000 });
+      await editItem.click();
+      await expect(dialog).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 20000 });
     return dialog;
   }
 

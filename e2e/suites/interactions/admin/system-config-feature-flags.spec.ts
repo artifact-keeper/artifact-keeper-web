@@ -39,8 +39,14 @@ test.describe('System config feature flags', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    // The sidebar only renders for an authenticated admin; confirm it is there.
-    const nav = page.getByRole('navigation').first();
+    // The sidebar only renders for an authenticated admin. It is a shadcn
+    // Sidebar (data-sidebar containers), not a <nav> landmark, so confirm it
+    // is present via a guaranteed top-level link, then scope the scanner-link
+    // queries to the sidebar content region.
+    await expect(
+      page.getByRole('link', { name: 'Repositories' }).first()
+    ).toBeVisible({ timeout: 15000 });
+    const nav = page.locator('[data-sidebar="content"]').first();
     await expect(nav).toBeVisible({ timeout: 15000 });
 
     // The sidebar gates scanner surfaces on the same /api/v1/system/config the
