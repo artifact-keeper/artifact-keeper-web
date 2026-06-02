@@ -47,6 +47,25 @@ export interface UpstreamAuthPayload {
   password?: string;
 }
 
+/**
+ * Package age policy for a repository (issue #265, backend
+ * artifact-keeper/artifact-keeper#709).
+ *
+ * When enabled, freshly published artifacts pulled through a remote repository
+ * are held in quarantine for `duration_minutes` after their release. This gives
+ * a window for a compromised upstream release to be flagged before it can be
+ * served, mitigating supply-chain attacks (e.g. the Trivy incident).
+ *
+ * Stored server-side in `repository_config` under `quarantine_enabled` and
+ * `quarantine_duration_minutes`. These fields are written via the repository
+ * update endpoint but are not part of the SDK-generated `UpdateRepositoryRequest`
+ * yet, so this module sends them through `apiFetch` directly.
+ */
+export interface AgePolicyPayload {
+  enabled: boolean;
+  duration_minutes: number;
+}
+
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
@@ -252,6 +271,26 @@ export const repositoriesApi = {
   testUpstream: async (repoKey: string): Promise<{ success: boolean; message?: string }> => {
     return apiFetch(`/api/v1/repositories/${encodeURIComponent(repoKey)}/test-upstream`, {
       method: 'POST',
+    });
+  },
+
+  /**
+   * Configure the package age policy (quarantine-on-release) for a repository.
+   *
+   * Sends `quarantine_enabled` and `quarantine_duration_minutes` to the
+   * repository update endpoint. Uses `apiFetch` rather than the SDK because
+   * those fields are not in the generated `UpdateRepositoryRequest` yet.
+   *
+   * When `enabled` is false, the duration is still sent so the stored value is
+   * preserved and re-enabling does not lose the previously configured window.
+   */
+  updateAgePolicy: async (repoKey: string, payload: AgePolicyPayload): Promise<void> => {
+    await apiFetch<void>(`/api/v1/repositories/${encodeURIComponent(repoKey)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        quarantine_enabled: payload.enabled,
+        quarantine_duration_minutes: payload.duration_minutes,
+      }),
     });
   },
 };
