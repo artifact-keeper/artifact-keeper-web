@@ -41,6 +41,7 @@ import {
 import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { buildMavenSearchQuery } from "@/lib/maven";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 
@@ -73,6 +74,7 @@ interface GavcSearchValues {
   artifactId: string;
   version: string;
   classifier: string;
+  extension: string;
 }
 
 interface ChecksumSearchValues {
@@ -135,6 +137,7 @@ export function SearchContent() {
     artifactId: "",
     version: "",
     classifier: "",
+    extension: "",
   });
   const [checksumValues, setChecksumValues] = useState<ChecksumSearchValues>({
     value: "",
@@ -177,15 +180,27 @@ export function SearchContent() {
           sort_by: sortField,
         };
       }
-      case "gavc":
+      case "gavc": {
+        // The backend advanced-search endpoint matches a single full-text
+        // `query` against name + path + version; it does not filter on the
+        // separate `path`/`version` params. Maven GAV coordinates live in the
+        // artifact path, so fold the supplied fields into one query string and
+        // scope the search to the maven format. (issue #441)
+        const query = buildMavenSearchQuery({
+          groupId: gavcValues.groupId,
+          artifactId: gavcValues.artifactId,
+          version: gavcValues.version,
+          classifier: gavcValues.classifier,
+          extension: gavcValues.extension,
+        });
         return {
-          path: gavcValues.groupId || undefined,
-          name: gavcValues.artifactId || undefined,
-          version: gavcValues.version || undefined,
+          query: query || undefined,
+          format: "maven",
           page,
           per_page: pageSize,
           sort_by: sortField,
         };
+      }
       case "checksum":
         return null; // Checksum handled separately
     }
@@ -545,6 +560,21 @@ export function SearchContent() {
                       setGavcValues((v) => ({
                         ...v,
                         classifier: e.target.value,
+                      }))
+                    }
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="search-gavc-extension" className="text-sm font-medium">Extension</label>
+                  <Input
+                    id="search-gavc-extension"
+                    placeholder="e.g., jar, pom, war"
+                    value={gavcValues.extension}
+                    onChange={(e) =>
+                      setGavcValues((v) => ({
+                        ...v,
+                        extension: e.target.value,
                       }))
                     }
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
