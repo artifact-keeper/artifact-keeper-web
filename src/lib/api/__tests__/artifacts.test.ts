@@ -255,6 +255,19 @@ describe("artifactsApi", () => {
     );
   });
 
+  it("getAbsoluteDownloadUrl returns a full, well-formed URL (#455)", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://registry.example.com");
+    const { artifactsApi } = await import("../artifacts");
+    const url = artifactsApi.getAbsoluteDownloadUrl("repo-key", "com/lib.jar");
+    expect(url).toBe(
+      "https://registry.example.com/api/v1/repositories/repo-key/download/com/lib.jar"
+    );
+    // Must be absolute and parseable by the URL constructor.
+    expect(() => new URL(url)).not.toThrow();
+    expect(new URL(url).protocol).toBe("https:");
+    vi.unstubAllEnvs();
+  });
+
   it("createDownloadTicket returns ticket string", async () => {
     mockCreateDownloadTicket.mockResolvedValue({
       data: { ticket: "tk123" },

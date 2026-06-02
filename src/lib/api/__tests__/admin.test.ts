@@ -119,6 +119,29 @@ describe("adminApi", () => {
     await expect(adminApi.getHealth()).rejects.toBe("down");
   });
 
+  it("getHealth uses the body version on a non-2xx degraded response (#456)", async () => {
+    // Backend returns 503 with a full HealthResponse body when a dependency is
+    // degraded. The SDK surfaces that body as `error`. The version must still
+    // be reported rather than discarded.
+    const degraded = {
+      status: "degraded",
+      version: "1.2.0",
+      commit: "abc1234567890",
+      dirty: false,
+      demo_mode: false,
+      checks: {
+        database: { status: "ok" },
+        storage: { status: "down", message: "disk full" },
+      },
+    };
+    mockHealthCheck.mockResolvedValue({ data: undefined, error: degraded });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getHealth();
+    expect(result.version).toBe("1.2.0");
+    expect(result.status).toBe("degraded");
+    expect(result.checks.storage).toEqual({ status: "down", message: "disk full" });
+  });
+
   // ---- listUserTokens ----
 
   it("listUserTokens returns items array for a given user", async () => {
