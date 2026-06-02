@@ -76,7 +76,7 @@ test.describe('Rate limit admin', () => {
     await dialog.getByRole('button', { name: /cancel/i }).click();
   });
 
-  test('add then remove a username exemption (when the backend supports it)', async ({ page }) => {
+  test('add then remove a username exemption', async ({ page }) => {
     const username = `e2e-exempt-${Date.now()}`;
 
     await page.getByRole('button', { name: /add exemption/i }).first().click();
@@ -88,18 +88,10 @@ test.describe('Rate limit admin', () => {
     await dialog.locator('#exemption-note').fill('e2e test exemption');
     await dialog.getByRole('button', { name: /^add exemption$/i }).click();
 
-    // Either the backend accepts it (row appears) or it has no exemption
-    // endpoint (failure toast). Both are acceptable, but a success must round
-    // trip to a removable row.
+    // The exemption must round-trip to a removable row (backend #271 shipped
+    // the rate-limit exemption management endpoints for v1.2.0).
     const newRow = page.getByRole('row', { name: new RegExp(username) });
-    const created = await newRow
-      .isVisible({ timeout: 8000 })
-      .catch(() => false);
-
-    if (!created) {
-      test.skip(true, 'Backend does not expose rate-limit exemption management');
-      return;
-    }
+    await expect(newRow).toBeVisible({ timeout: 10000 });
 
     // Remove it and confirm in the alert dialog.
     await newRow.getByRole('button', { name: new RegExp(`remove exemption ${username}`, 'i') }).click();

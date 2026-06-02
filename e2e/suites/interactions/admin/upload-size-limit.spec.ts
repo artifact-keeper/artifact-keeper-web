@@ -97,16 +97,15 @@ test.describe('Admin - Upload Size Limit', () => {
         r.url().includes('/api/v1/admin/settings') &&
         r.request().method() === 'POST',
       { timeout: 10000 }
-    ).catch(() => null);
+    );
 
     // The Save button next to the input. Scope to the upload-size row by
     // finding the closest enabled "Save" button after editing.
     await page.getByRole('button', { name: /^save$/i }).first().click();
 
+    // The save must actually POST, and succeed. (review hardening #464)
     const posted = await postResponse;
-    if (posted) {
-      expect(posted.status()).toBeLessThan(400);
-    }
+    expect(posted.status()).toBeLessThan(400);
 
     // Best-effort restore via the UI so the next run starts clean.
     if (originalValue) {

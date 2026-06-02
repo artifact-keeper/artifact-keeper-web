@@ -142,6 +142,9 @@ function AddExemptionDialog() {
   const [type, setType] = useState<ExemptionType>("username");
   const [value, setValue] = useState("");
   const [note, setNote] = useState("");
+  // Validation error associated with the value input via aria-describedby so it
+  // is announced rather than only surfaced in a toast. (review fix #465)
+  const [valueError, setValueError] = useState<string | null>(null);
 
   const addMutation = useMutation({
     mutationFn: () => rateLimitsApi.addExemption({ type, value, note }),
@@ -152,6 +155,7 @@ function AddExemptionDialog() {
       setValue("");
       setNote("");
       setType("username");
+      setValueError(null);
     },
     onError: mutationErrorToast("Failed to add exemption"),
   });
@@ -159,9 +163,10 @@ function AddExemptionDialog() {
   function handleSubmit() {
     const error = validateExemption({ type, value, note });
     if (error) {
-      toast.error(error);
+      setValueError(error);
       return;
     }
+    setValueError(null);
     addMutation.mutate();
   }
 
@@ -203,8 +208,22 @@ function AddExemptionDialog() {
               id="exemption-value"
               placeholder={meta.placeholder}
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value);
+                if (valueError) setValueError(null);
+              }}
+              aria-invalid={valueError != null}
+              aria-describedby="exemption-value-error"
             />
+            {/* Persistent live region so the validation error is announced and
+                stays associated with the input. */}
+            <p
+              id="exemption-value-error"
+              role="alert"
+              className="min-h-[1rem] text-sm text-destructive"
+            >
+              {valueError}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="exemption-note">Note (optional)</Label>

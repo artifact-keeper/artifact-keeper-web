@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -393,6 +393,37 @@ export function SearchContent() {
   };
   const hasActiveFacets = facetFormat !== null || facetRepository !== null;
 
+  // Announce result-set changes to assistive tech. Sorting and facet filtering
+  // re-run the search and silently reorder/replace the list, which a screen
+  // reader would otherwise miss. (review fix #463)
+  const searchAnnouncement = useMemo(() => {
+    if (!searchTriggered || loading) return "";
+    const sortLabels: Record<SortField, string> = {
+      relevance: "relevance",
+      created_at: "date",
+      name: "name",
+      size_bytes: "size",
+      download_count: "downloads",
+    };
+    const parts = [
+      `${totalResults} ${totalResults === 1 ? "result" : "results"} found`,
+      `sorted by ${sortLabels[sortField]}${
+        sortField === "relevance" ? "" : ` ${sortOrder === "asc" ? "ascending" : "descending"}`
+      }`,
+    ];
+    if (facetFormat) parts.push(`filtered to format ${facetFormat}`);
+    if (facetRepository) parts.push(`filtered to repository ${facetRepository}`);
+    return `${parts.join(", ")}.`;
+  }, [
+    searchTriggered,
+    loading,
+    totalResults,
+    sortField,
+    sortOrder,
+    facetFormat,
+    facetRepository,
+  ]);
+
   // Toggle a facet filter: selecting re-runs the search from page 1, clicking
   // the active value again clears it.
   const toggleFacet = useCallback(
@@ -730,6 +761,17 @@ export function SearchContent() {
       {searchTriggered && (
         <Card className="py-0">
           <CardContent className="p-6">
+            {/* Announce result-set changes (count, sort, facets) to screen
+                readers, since sorting/filtering reorders the list silently. */}
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="sr-only"
+              data-testid="search-results-announcement"
+            >
+              {searchAnnouncement}
+            </div>
             {/* Results header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">

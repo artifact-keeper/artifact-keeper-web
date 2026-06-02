@@ -83,14 +83,13 @@ test.describe('Repository - Package Age Policy', () => {
         r.url().includes(`/repositories/${REPO_KEY}`) &&
         r.request().method() === 'PATCH',
       { timeout: 10000 }
-    ).catch(() => null);
+    );
 
     await page.getByRole('button', { name: /save age policy/i }).click();
 
+    // The save must actually PATCH, and succeed. (review hardening #464)
     const saved = await saveResponse;
-    if (saved) {
-      expect(saved.status()).toBeLessThan(400);
-    }
+    expect(saved.status()).toBeLessThan(400);
 
     const body = await page.textContent('body');
     expect(body).not.toContain('Application error');
