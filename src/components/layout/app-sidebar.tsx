@@ -35,9 +35,11 @@ import {
   Scale,
   FolderSearch,
   ClipboardCheck,
+  Gauge,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
+import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
 import {
   Sidebar,
@@ -102,6 +104,7 @@ const adminItems: NavItem[] = [
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
+  { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },
@@ -143,6 +146,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
+  const flags = useFeatureFlags();
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -155,6 +159,21 @@ export function AppSidebar() {
   const visibleIntegrationItems = isAdmin
     ? integrationItems
     : integrationItems.filter((item) => item.href !== "/migration");
+
+  // Hide scanner-dependent security entries when the backend reports no
+  // scanner configured (#271). "Scan Results" needs Trivy or OpenSCAP;
+  // "DT Projects" needs the Dependency-Track integration. The rest of the
+  // Security group (policies, permissions, quality gates) is always shown
+  // since it doesn't depend on a scanner being wired up.
+  const visibleSecurityItems = securityItems.filter((item) => {
+    if (item.href === "/security/scans") {
+      return flags.trivyEnabled || flags.openscapEnabled;
+    }
+    if (item.href === "/security/dt-projects") {
+      return flags.dependencyTrackEnabled;
+    }
+    return true;
+  });
 
   return (
     <Sidebar collapsible="icon">
@@ -204,7 +223,7 @@ export function AppSidebar() {
           <>
             <NavGroup
               label="Security"
-              items={securityItems}
+              items={visibleSecurityItems}
               pathname={pathname}
             />
             <NavGroup
