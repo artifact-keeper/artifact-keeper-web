@@ -38,7 +38,7 @@ test.describe('Download URL and version display', () => {
     const artifactPath = await uploadArtifact(request);
     const artifactName = artifactPath.split('/').pop()!;
 
-    await page.goto(`/repositories/${REPO_KEY}`);
+    await page.goto(`/repositories/${REPO_KEY}?view=flat`);
     await page.waitForLoadState('domcontentloaded');
 
     const table = page.getByRole('table').first();
