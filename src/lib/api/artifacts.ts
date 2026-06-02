@@ -150,6 +150,29 @@ export const artifactsApi = {
     return `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
   },
 
+  /**
+   * Returns the absolute download URL (origin + path) for an artifact.
+   *
+   * `getDownloadUrl` returns a host-less path, which works for issuing a
+   * download against the current origin but is broken when copied and pasted
+   * elsewhere (e.g. into a terminal or another browser). This resolves the
+   * path against the configured API base URL, falling back to the current
+   * window origin, so the copied value is a complete, working URL.
+   */
+  getAbsoluteDownloadUrl: (repoKey: string, artifactPath: string): string => {
+    const path = `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+    const origin =
+      apiBase ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    if (!origin) return path;
+    try {
+      return new URL(path, origin).toString();
+    } catch {
+      return `${origin.replace(/\/$/, "")}${path}`;
+    }
+  },
+
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
     const { data, error } = await createDownloadTicket({
       body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` },

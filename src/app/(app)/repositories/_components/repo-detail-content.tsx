@@ -897,7 +897,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   />
                   <DetailRow
                     label="Download URL"
-                    value={artifactsApi.getDownloadUrl(repoKey, selectedArtifact.path)}
+                    value={artifactsApi.getAbsoluteDownloadUrl(repoKey, selectedArtifact.path)}
                     copy
                     mono
                   />
