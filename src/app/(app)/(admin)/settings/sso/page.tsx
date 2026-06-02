@@ -369,6 +369,7 @@ function OidcTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Google Workspace"
+                aria-required="true"
               />
             </div>
 
@@ -379,6 +380,7 @@ function OidcTab() {
                 value={issuerUrl}
                 onChange={(e) => setIssuerUrl(e.target.value)}
                 placeholder="https://accounts.google.com"
+                aria-required="true"
               />
             </div>
 
@@ -389,6 +391,7 @@ function OidcTab() {
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
                 placeholder="your-client-id"
+                aria-required="true"
               />
             </div>
 
@@ -402,6 +405,7 @@ function OidcTab() {
                 placeholder={
                   editTarget ? "Leave blank to keep existing" : "your-client-secret"
                 }
+                aria-required={!editTarget}
               />
             </div>
 
@@ -856,6 +860,7 @@ function LdapTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Corporate LDAP"
+                aria-required="true"
               />
             </div>
 
@@ -866,6 +871,7 @@ function LdapTab() {
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="ldap://ldap.example.com:389"
+                aria-required="true"
               />
             </div>
 
@@ -899,6 +905,7 @@ function LdapTab() {
                 value={userBaseDn}
                 onChange={(e) => setUserBaseDn(e.target.value)}
                 placeholder="ou=users,dc=example,dc=com"
+                aria-required="true"
               />
             </div>
 
@@ -1358,6 +1365,7 @@ function SamlTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Okta"
+                aria-required="true"
               />
             </div>
 
@@ -1368,6 +1376,7 @@ function SamlTab() {
                 value={entityId}
                 onChange={(e) => setEntityId(e.target.value)}
                 placeholder="https://idp.example.com/metadata"
+                aria-required="true"
               />
             </div>
 
@@ -1378,6 +1387,7 @@ function SamlTab() {
                 value={ssoUrl}
                 onChange={(e) => setSsoUrl(e.target.value)}
                 placeholder="https://idp.example.com/sso/saml"
+                aria-required="true"
               />
             </div>
 
@@ -1404,6 +1414,7 @@ function SamlTab() {
                 }
                 rows={5}
                 className="font-mono text-xs"
+                aria-required={!editTarget}
               />
             </div>
 

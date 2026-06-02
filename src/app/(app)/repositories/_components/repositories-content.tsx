@@ -35,7 +35,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { FORMAT_GROUPS, TYPE_OPTIONS } from "../_lib/constants";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
@@ -67,6 +67,13 @@ export function RepositoriesContent() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dialogRepo, setDialogRepo] = useState<Repository | null>(null);
+
+  // #410: outcome of the most recent upstream-auth save, mirrored into a live
+  // region inside the edit dialog so screen-reader users hear success/failure.
+  const [upstreamAuthStatus, setUpstreamAuthStatus] = useState<{
+    state: "idle" | "success" | "error";
+    message?: string;
+  }>({ state: "idle" });
 
   // --- query ---
   const { data, isLoading, isFetching } = useQuery({
@@ -144,11 +151,22 @@ export function RepositoriesContent() {
   const upstreamAuthMutation = useMutation({
     mutationFn: ({ key, payload }: { key: string; payload: UpstreamAuthPayload }) =>
       repositoriesApi.updateUpstreamAuth(key, payload),
+    onMutate: () => {
+      // Clear any previous outcome so the live region re-announces a repeat
+      // result (e.g. two consecutive successes).
+      setUpstreamAuthStatus({ state: "idle" });
+    },
     onSuccess: () => {
       invalidateAllRepoQueries();
-      toast.success("Upstream authentication updated");
+      const message = "Upstream authentication updated";
+      toast.success(message);
+      setUpstreamAuthStatus({ state: "success", message });
     },
-    onError: mutationErrorToast("Failed to update upstream authentication"),
+    onError: (err: unknown) => {
+      const message = toUserMessage(err, "Failed to update upstream authentication");
+      toast.error(message);
+      setUpstreamAuthStatus({ state: "error", message });
+    },
   });
 
   // --- handlers ---
@@ -448,13 +466,17 @@ export function RepositoriesContent() {
         editOpen={editOpen}
         onEditOpenChange={(o) => {
           setEditOpen(o);
-          if (!o) setDialogRepo(null);
+          if (!o) {
+            setDialogRepo(null);
+            setUpstreamAuthStatus({ state: "idle" });
+          }
         }}
         editRepo={dialogRepo}
         onEditSubmit={(key, d) => updateMutation.mutate({ key, data: d })}
         editPending={updateMutation.isPending}
         onUpstreamAuthUpdate={(key, payload) => upstreamAuthMutation.mutate({ key, payload })}
         upstreamAuthPending={upstreamAuthMutation.isPending}
+        upstreamAuthStatus={upstreamAuthStatus}
         deleteOpen={deleteOpen}
         onDeleteOpenChange={(o) => {
           setDeleteOpen(o);
