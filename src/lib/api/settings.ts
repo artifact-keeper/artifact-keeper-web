@@ -287,6 +287,32 @@ export const settingsApi = {
   },
 
   /**
+   * Update the maximum upload size (issue #189).
+   *
+   * The backend `POST /api/v1/admin/settings` endpoint replaces the whole
+   * `SystemSettings` object, so this reads the current settings first and
+   * sends them back with only `max_upload_size_bytes` changed. This avoids
+   * resetting sibling values (retention, anonymous download, etc.) that the
+   * caller did not intend to touch.
+   *
+   * `bytes` of 0 means "no limit", matching the backend semantics.
+   */
+  updateMaxUploadSize: async (bytes: number): Promise<void> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load current settings: ${String(error)}`);
+    }
+    if (!isPlainObject(data)) {
+      throw new Error("System settings response was not an object");
+    }
+    const payload = { ...data, max_upload_size_bytes: bytes };
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Save SMTP configuration. Uses the /api/v1/admin/smtp endpoint which
    * is not yet in the generated SDK.
    */

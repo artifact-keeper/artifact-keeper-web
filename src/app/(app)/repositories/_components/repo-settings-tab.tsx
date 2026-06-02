@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { repositoriesApi } from "@/lib/api/repositories";
+import { useAdminSettings } from "@/hooks/use-admin-settings";
 import lifecycleApi from "@/lib/api/lifecycle";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
@@ -49,6 +50,19 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type QuotaUnit = "MB" | "GB";
+
+type AgeUnit = "hours" | "days";
+
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 1440;
+
+/** Convert an age value and unit to whole minutes. Clamps negatives to 0. */
+export function ageToMinutes(value: string, unit: AgeUnit): number {
+  const num = Number(value);
+  if (!num || num <= 0 || !Number.isFinite(num)) return 0;
+  const factor = unit === "days" ? MINUTES_PER_DAY : MINUTES_PER_HOUR;
+  return Math.round(num * factor);
+}
 
 export interface UpdateRepositoryFields {
   key?: string;
@@ -202,6 +216,37 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     onError: mutationErrorToast("Failed to preview cleanup policy"),
   });
 
+  // -- Package age policy (#265). Quarantine-on-release for remote repos. --
+  const [ageEnabled, setAgeEnabled] = useState(false);
+  const [ageValue, setAgeValue] = useState("3");
+  const [ageUnit, setAgeUnit] = useState<AgeUnit>("days");
+
+  const ageMinutes = ageToMinutes(ageValue, ageUnit);
+  const ageInvalid = ageEnabled && ageMinutes <= 0;
+
+  const ageMutation = useMutation({
+    mutationFn: () =>
+      repositoriesApi.updateAgePolicy(repository.key, {
+        enabled: ageEnabled,
+        duration_minutes: ageMinutes,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
+      toast.success(
+        ageEnabled
+          ? "Package age policy enabled"
+          : "Package age policy disabled"
+      );
+    },
+    onError: mutationErrorToast("Failed to save package age policy"),
+  });
+
+  // -- Effective upload size limit (#189). Read-only here; configured by an
+  // admin on the global Settings page. Surfaced so repo owners can see the
+  // ceiling that applies to uploads into this repository. --
+  const { data: adminSettings } = useAdminSettings();
+  const maxUploadBytes = adminSettings?.storageSettings.max_upload_size_bytes;
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* -- General Settings Section -- */}
@@ -339,6 +384,114 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             <p className="text-xs text-muted-foreground">
               Maximum storage for this repository. Leave empty for no limit.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Upload Size Limit</Label>
+            <Input
+              value={
+                maxUploadBytes == null
+                  ? "Loading..."
+                  : maxUploadBytes === 0
+                    ? "No limit"
+                    : formatBytes(maxUploadBytes)
+              }
+              disabled
+              className="bg-muted/50"
+              aria-label="Upload size limit"
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum size for a single artifact upload. This limit is set
+              instance-wide by an administrator on the Settings page and applies
+              to every repository.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <Separator />
+
+      {/* -- Package Age Policy Section (#265) -- */}
+      <section aria-labelledby="settings-age-heading">
+        <div className="mb-4">
+          <h3 id="settings-age-heading" className="text-base font-semibold">
+            Package Age Policy
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Hold freshly published packages in quarantine for a cooldown period
+            after their release. New releases pulled from upstream are not served
+            until the window passes, giving time to flag a compromised release
+            before it reaches clients.
+          </p>
+        </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="settings-age-enabled">Enable age policy</Label>
+              <p className="text-xs text-muted-foreground">
+                Quarantine packages released within the cooldown window.
+              </p>
+            </div>
+            <Switch
+              id="settings-age-enabled"
+              checked={ageEnabled}
+              onCheckedChange={setAgeEnabled}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="settings-age-duration">Cooldown period</Label>
+            <div className="flex gap-2">
+              <Input
+                id="settings-age-duration"
+                type="number"
+                min="1"
+                step="1"
+                value={ageValue}
+                onChange={(e) => setAgeValue(e.target.value)}
+                disabled={!ageEnabled}
+                className="flex-1"
+                aria-invalid={ageInvalid}
+              />
+              <Select
+                value={ageUnit}
+                onValueChange={(v) => setAgeUnit(v as AgeUnit)}
+                disabled={!ageEnabled}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hours">Hours</SelectItem>
+                  <SelectItem value="days">Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {ageInvalid ? (
+              <p className="text-sm text-destructive">
+                Enter a cooldown period of at least one {ageUnit === "days" ? "day" : "hour"}.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Packages released less than this long ago are quarantined.
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => ageMutation.mutate()}
+              disabled={ageMutation.isPending || ageInvalid}
+            >
+              {ageMutation.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Age Policy"
+              )}
+            </Button>
           </div>
         </div>
       </section>
