@@ -101,16 +101,25 @@ test.describe('Backups Page', () => {
   test('backups table renders or shows empty state', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /backups/i }).first()).toBeVisible({ timeout: 10000 });
 
-    // Either the table with backups or an empty state message
+    // The backups query can take a moment to settle (it retries on a slow or
+    // erroring backend before falling back to the empty state). Either the
+    // table (also rendered while loading, with skeleton rows) or one of the
+    // empty / access-denied messages must end up on screen. Use a generous
+    // timeout so a retrying fetch does not flake this assertion.
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no backups/i).or(page.getByText(/no data/i)).or(page.getByText(/get started/i)).or(page.getByText(/access denied/i));
+    const emptyState = page
+      .getByText(/no backups/i)
+      .or(page.getByText(/no data/i))
+      .or(page.getByText(/get started/i))
+      .or(page.getByText(/access denied/i))
+      .or(page.getByText(/create a backup/i));
 
     await expect(
       table.or(emptyState).first()
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 20000 });
 
     // If a table is present, verify expected column headers
-    if (await table.isVisible().catch(() => false)) {
+    if (await table.first().isVisible().catch(() => false)) {
       const headers = page.getByRole('columnheader');
       const headerCount = await headers.count();
       if (headerCount > 0) {

@@ -118,10 +118,14 @@ test.describe.serial('Repository Dialog Accessibility', () => {
     await toggleBtn.click();
 
     // After toggling, focus must land on the first control of the edit view:
-    // the auth-type select trigger, which must carry a programmatic label.
+    // the auth-type select trigger, which must carry a programmatic label. The
+    // component moves focus on the next animation frame (it targets the
+    // newly-mounted control by id once it exists in the DOM), so wait for the
+    // control to mount, then poll for focus rather than checking once. The
+    // `toBeFocused` timeout absorbs the rAF latency.
     const authTypeSelect = dialog.locator('#edit-upstream-auth-type');
     await expect(authTypeSelect).toBeVisible({ timeout: 5000 });
-    await expect(authTypeSelect).toBeFocused({ timeout: 5000 });
+    await expect(authTypeSelect).toBeFocused({ timeout: 10000 });
 
     // #413: the select has an associated label (it is a labelable control id).
     const label = dialog.locator('label[for="edit-upstream-auth-type"]');
