@@ -64,6 +64,37 @@ export function ageToMinutes(value: string, unit: AgeUnit): number {
   return Math.round(num * factor);
 }
 
+// Backend constraints from `validate_cache_ttl` in repositories.rs: 1s..=30d.
+// The constants live here (not on the SDK) so the UI can show a clear inline
+// validation error before submitting; the backend would otherwise reject with
+// a 400 + opaque message.
+const CACHE_TTL_MIN_SECONDS = 1;
+const CACHE_TTL_MAX_SECONDS = 30 * 24 * 60 * 60; // 2,592,000
+
+/**
+ * Format a TTL in seconds as a short human-readable hint
+ * ("24 hours", "1 day 6 hours", "30 minutes"). Used as a helper line under
+ * the TTL input so operators don't have to compute "is 86400 a sensible
+ * number?" in their head.
+ */
+function formatTtlHint(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  const day = 24 * 60 * 60;
+  const hour = 60 * 60;
+  const minute = 60;
+  const days = Math.floor(seconds / day);
+  const hours = Math.floor((seconds % day) / hour);
+  const minutes = Math.floor((seconds % hour) / minute);
+  const secs = seconds % minute;
+
+  const parts: string[] = [];
+  if (days) parts.push(`${days} day${days === 1 ? "" : "s"}`);
+  if (hours) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
+  if (minutes) parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
+  if (secs && parts.length === 0) parts.push(`${secs} second${secs === 1 ? "" : "s"}`);
+  return parts.join(" ");
+}
+
 export interface UpdateRepositoryFields {
   key?: string;
   name?: string;
@@ -121,6 +152,38 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const quotaValue = quotaOverrides.value ?? quotaDefaults.value;
   const quotaUnit = quotaOverrides.unit ?? quotaDefaults.unit;
 
+  // -- Proxy cache TTL state (#448) --
+  // Only meaningful for Remote (proxy) repos; the section is hidden for
+  // Local / Virtual / Staging because writes against those types are
+  // rejected upstream with 400 (see is_cache_ttl_configurable). We still
+  // run the GET unconditionally if the section is visible so the read uses
+  // the same code path the backend tests pin (#917).
+  const isRemote = repository.repo_type === "remote";
+  const { data: cacheTtlData, isLoading: cacheTtlLoading } = useQuery({
+    queryKey: ["cache-ttl", repository.key],
+    queryFn: () => repositoriesApi.getCacheTtl(repository.key),
+    enabled: isRemote,
+  });
+  const currentCacheTtlSeconds = cacheTtlData?.cache_ttl_seconds;
+  // String-typed override so the input stays controlled while the user is
+  // typing (e.g. mid-edit "8" before they finish "86400") without snapping
+  // to the parsed number on every keystroke.
+  const [cacheTtlOverride, setCacheTtlOverride] = useState<string | undefined>(undefined);
+  const cacheTtlInputValue =
+    cacheTtlOverride ??
+    (currentCacheTtlSeconds != null ? String(currentCacheTtlSeconds) : "");
+  const parsedCacheTtl =
+    cacheTtlInputValue.trim() === "" ? null : Number(cacheTtlInputValue);
+  const cacheTtlIsValid =
+    parsedCacheTtl != null &&
+    Number.isInteger(parsedCacheTtl) &&
+    parsedCacheTtl >= CACHE_TTL_MIN_SECONDS &&
+    parsedCacheTtl <= CACHE_TTL_MAX_SECONDS;
+  const cacheTtlChanged =
+    isRemote &&
+    cacheTtlOverride !== undefined &&
+    parsedCacheTtl !== currentCacheTtlSeconds;
+
   // Detect whether the form has unsaved changes
   const hasChanges = useMemo(() => {
     if (form.key !== repository.key) return true;
@@ -130,8 +193,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     const currentQuotaBytes = quotaToBytes(quotaValue, quotaUnit);
     const originalQuotaBytes = repository.quota_bytes ?? null;
     if (currentQuotaBytes !== originalQuotaBytes) return true;
+    if (cacheTtlChanged) return true;
     return false;
-  }, [form, quotaValue, quotaUnit, repository]);
+  }, [form, quotaValue, quotaUnit, repository, cacheTtlChanged]);
 
   // -- Save mutation --
   const saveMutation = useMutation({
@@ -151,7 +215,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     onError: mutationErrorToast("Failed to save repository settings"),
   });
 
-  const handleSave = useCallback(() => {
+  // -- Cache TTL mutation (#448, separate endpoint from `update`) --
+  const setCacheTtlMutation = useMutation({
+    mutationFn: (seconds: number) =>
+      repositoriesApi.setCacheTtl(repository.key, seconds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cache-ttl", repository.key] });
+      setCacheTtlOverride(undefined);
+      toast.success("Cache TTL saved");
+    },
+    onError: mutationErrorToast("Failed to save cache TTL"),
+  });
+
+  const handleSave = useCallback(async () => {
+    // The general-fields update and the cache-TTL update are two separate
+    // backend endpoints, so dispatch them independently. We deliberately do
+    // NOT short-circuit one on the other's failure: a bad TTL value
+    // shouldn't roll back a good name change, and the per-mutation toast
+    // already tells the operator which side failed. The promises are run
+    // in parallel because both are idempotent and the round-trips are
+    // independent.
     const fields: UpdateRepositoryFields = {};
     if (form.name !== repository.name) fields.name = form.name;
     if (form.description !== (repository.description ?? ""))
@@ -166,12 +249,34 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       fields.quota_bytes = newQuota;
     }
 
-    saveMutation.mutate(fields);
-  }, [form, quotaValue, quotaUnit, repository, keyChanged, saveMutation]);
+    const promises: Promise<unknown>[] = [];
+    if (Object.keys(fields).length > 0) {
+      promises.push(saveMutation.mutateAsync(fields));
+    }
+    if (cacheTtlChanged && cacheTtlIsValid && parsedCacheTtl != null) {
+      promises.push(setCacheTtlMutation.mutateAsync(parsedCacheTtl));
+    }
+    // Awaited via Promise.allSettled so a 4xx on one side doesn't surface
+    // as an unhandled rejection — each mutation already wired its own
+    // onError toast.
+    await Promise.allSettled(promises);
+  }, [
+    form,
+    quotaValue,
+    quotaUnit,
+    repository,
+    keyChanged,
+    saveMutation,
+    cacheTtlChanged,
+    cacheTtlIsValid,
+    parsedCacheTtl,
+    setCacheTtlMutation,
+  ]);
 
   const handleDiscard = useCallback(() => {
     setOverrides({});
     setQuotaOverrides({});
+    setCacheTtlOverride(undefined);
   }, []);
 
   // -- Lifecycle policies --
@@ -516,6 +621,67 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         </>
       )}
 
+      {/* -- Proxy Cache Section (#448, Remote-only) -- */}
+      {isRemote && (
+        <>
+          <section aria-labelledby="settings-cache-heading">
+            <h3 id="settings-cache-heading" className="text-base font-semibold mb-4">
+              Proxy Cache
+            </h3>
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                How long the proxy keeps cached upstream artifacts before
+                re-validating against upstream. Applies repository-wide; per-
+                artifact eviction is available from the artifact details
+                dialog.
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="settings-cache-ttl">Cache TTL (seconds)</Label>
+                {cacheTtlLoading ? (
+                  <Skeleton className="h-9 w-full" />
+                ) : (
+                  <>
+                    <Input
+                      id="settings-cache-ttl"
+                      type="number"
+                      min={CACHE_TTL_MIN_SECONDS}
+                      max={CACHE_TTL_MAX_SECONDS}
+                      step={1}
+                      value={cacheTtlInputValue}
+                      onChange={(e) => setCacheTtlOverride(e.target.value)}
+                      aria-invalid={
+                        cacheTtlOverride !== undefined && !cacheTtlIsValid
+                      }
+                    />
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Range: {CACHE_TTL_MIN_SECONDS}s to{" "}
+                        {CACHE_TTL_MAX_SECONDS.toLocaleString()}s (30 days)
+                      </span>
+                      {parsedCacheTtl != null && cacheTtlIsValid && (
+                        <span className="text-muted-foreground">
+                          ≈ {formatTtlHint(parsedCacheTtl)}
+                        </span>
+                      )}
+                    </div>
+                    {cacheTtlOverride !== undefined && !cacheTtlIsValid && (
+                      <p className="text-sm text-destructive">
+                        Must be a whole number between{" "}
+                        {CACHE_TTL_MIN_SECONDS} and{" "}
+                        {CACHE_TTL_MAX_SECONDS.toLocaleString()}.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <Separator />
+        </>
+      )}
+
       {/* -- Cleanup Policies Section -- */}
       <section aria-labelledby="settings-cleanup-heading">
         <div className="flex items-center justify-between mb-4">
@@ -606,9 +772,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saveMutation.isPending || !form.name.trim() || !form.key.trim()}
+              disabled={
+                saveMutation.isPending ||
+                setCacheTtlMutation.isPending ||
+                !form.name.trim() ||
+                !form.key.trim() ||
+                (cacheTtlChanged && !cacheTtlIsValid)
+              }
             >
-              {saveMutation.isPending ? (
+              {saveMutation.isPending || setCacheTtlMutation.isPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
                   Saving...

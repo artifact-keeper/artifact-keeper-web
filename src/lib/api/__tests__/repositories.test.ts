@@ -20,6 +20,8 @@ vi.mock("../fetch", () => ({
 // Mock the SDK imports that repositoriesApi uses for other methods
 const mockGetRepository = vi.fn();
 const mockCreateRepository = vi.fn();
+const mockGetCacheTtl = vi.fn();
+const mockSetCacheTtl = vi.fn();
 vi.mock("@artifact-keeper/sdk", () => ({
   listRepositories: vi.fn(),
   getRepository: (...args: unknown[]) => mockGetRepository(...args),
@@ -30,6 +32,8 @@ vi.mock("@artifact-keeper/sdk", () => ({
   addVirtualMember: vi.fn(),
   removeVirtualMember: vi.fn(),
   updateVirtualMembers: vi.fn(),
+  getCacheTtl: (...args: unknown[]) => mockGetCacheTtl(...args),
+  setCacheTtl: (...args: unknown[]) => mockSetCacheTtl(...args),
 }));
 
 vi.mock("@/lib/sdk-client", () => ({
@@ -305,5 +309,74 @@ describe("repositoriesApi.narrowFormat (via get)", () => {
       expect.stringMatching(/unknown repository format "shiny-new-format"/)
     );
     warn.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cache TTL methods (#448) — getCacheTtl / setCacheTtl
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi.getCacheTtl", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the SDK response on success", async () => {
+    mockGetCacheTtl.mockResolvedValue({
+      data: { repository_key: "pypi-remote", cache_ttl_seconds: 3600 },
+      error: undefined,
+    });
+    const result = await repositoriesApi.getCacheTtl("pypi-remote");
+    expect(result).toEqual({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 3600,
+    });
+    expect(mockGetCacheTtl).toHaveBeenCalledWith({
+      path: { key: "pypi-remote" },
+    });
+  });
+
+  it("throws on SDK error", async () => {
+    mockGetCacheTtl.mockResolvedValue({ data: undefined, error: "boom" });
+    await expect(repositoriesApi.getCacheTtl("pypi-remote")).rejects.toBe("boom");
+  });
+});
+
+describe("repositoriesApi.setCacheTtl", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("PUTs the new TTL via the SDK with the correct body shape", async () => {
+    mockSetCacheTtl.mockResolvedValue({
+      data: { repository_key: "pypi-remote", cache_ttl_seconds: 7200 },
+      error: undefined,
+    });
+    const result = await repositoriesApi.setCacheTtl("pypi-remote", 7200);
+    expect(result).toEqual({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 7200,
+    });
+    expect(mockSetCacheTtl).toHaveBeenCalledWith({
+      path: { key: "pypi-remote" },
+      // Body field name must match SetCacheTtlRequest (`cache_ttl_seconds`),
+      // not e.g. the legacy `value` form that the docs PR #71 corrected.
+      body: { cache_ttl_seconds: 7200 },
+    });
+  });
+
+  it("throws on SDK error (e.g. 400 for non-Remote repo)", async () => {
+    mockSetCacheTtl.mockResolvedValue({
+      data: undefined,
+      error: {
+        message:
+          "cache_ttl is only configurable on remote (proxy) repositories",
+      },
+    });
+    await expect(
+      repositoriesApi.setCacheTtl("local-repo", 3600)
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/remote \(proxy\) repositories/),
+    });
   });
 });
