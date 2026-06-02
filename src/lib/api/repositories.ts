@@ -47,6 +47,22 @@ export interface UpstreamAuthPayload {
   password?: string;
 }
 
+/**
+ * A single routing rule for path rewriting on remote/proxy repositories.
+ * Mirrors the backend `RoutingRule` struct: a regex `path_pattern` matched
+ * against the request path and a `rewrite_to` template that may reference
+ * capture groups with `$1`, `$2`, and so on.
+ */
+export interface RoutingRule {
+  path_pattern: string;
+  rewrite_to: string;
+}
+
+export interface RoutingRulesResponse {
+  repository_key: string;
+  rules: RoutingRule[];
+}
+
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
@@ -253,6 +269,54 @@ export const repositoriesApi = {
     return apiFetch(`/api/v1/repositories/${encodeURIComponent(repoKey)}/test-upstream`, {
       method: 'POST',
     });
+  },
+
+  // Routing rules management (issue #263). The generated SDK does not yet expose
+  // these endpoints, so they go through the shared apiFetch wrapper, the same
+  // pattern used for upstream-auth and test-upstream above.
+  getRoutingRules: async (repoKey: string): Promise<RoutingRulesResponse> => {
+    return apiFetch<RoutingRulesResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/routing-rules`
+    );
+  },
+
+  setRoutingRules: async (
+    repoKey: string,
+    rules: RoutingRule[]
+  ): Promise<RoutingRulesResponse> => {
+    return apiFetch<RoutingRulesResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/routing-rules`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ rules }),
+      }
+    );
+  },
+
+  deleteRoutingRules: async (repoKey: string): Promise<void> => {
+    await apiFetch<void>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/routing-rules`,
+      { method: 'DELETE' }
+    );
+  },
+
+  // Release target configuration for staging repositories (issue #260).
+  // Persisted via PATCH /repositories/{key} with the `release_repository_key`
+  // field. Pass an empty string to remove an existing link. The generated SDK's
+  // UpdateRepositoryRequest may not carry this field yet, so it is sent through
+  // apiFetch to guarantee it reaches the backend.
+  setReleaseTarget: async (
+    repoKey: string,
+    releaseRepositoryKey: string
+  ): Promise<Repository> => {
+    const sdk = await apiFetch<RepositoryResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ release_repository_key: releaseRepositoryKey }),
+      }
+    );
+    return adaptRepository(sdk);
   },
 };
 
