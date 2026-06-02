@@ -45,6 +45,7 @@ import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+import { useSystemConfig } from "@/providers/system-config-provider";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
+  const { config: systemConfig } = useSystemConfig();
 
   // artifact search / pagination
   const [searchQuery, setSearchQuery] = useState("");
@@ -722,6 +724,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 showPathInput
                 repositoryKey={repoKey}
                 onChunkedComplete={handleChunkedComplete}
+                maxUploadSizeBytes={systemConfig.max_upload_size_bytes}
               />
             </div>
           </TabsContent>
