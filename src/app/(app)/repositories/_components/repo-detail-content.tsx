@@ -275,6 +275,22 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     setDetailOpen(true);
   }, []);
 
+  // Grouped (Maven) view only knows a file's path, not its full Artifact
+  // record.  Fetch the detail on demand so clicking a file row inside a GAV
+  // group opens the same dialog as the flat list (issues #444, #445).
+  const showDetailByPath = useCallback(
+    async (filePath: string, filename: string) => {
+      try {
+        const artifact = await artifactsApi.get(repoKey, filePath);
+        setSelectedArtifact(artifact);
+        setDetailOpen(true);
+      } catch {
+        toast.error(`Could not load details for ${filename}`);
+      }
+    },
+    [repoKey],
+  );
+
   // --- artifact columns ---
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
@@ -644,6 +660,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               components={artifactsData?.components ?? []}
               loading={artifactsLoading}
               total={artifactsData?.pagination?.total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              onFileSelect={showDetailByPath}
               emptyMessage="No Maven components could be grouped — switch to flat view to see raw files."
             />
           ) : isDockerGrouped ? (
