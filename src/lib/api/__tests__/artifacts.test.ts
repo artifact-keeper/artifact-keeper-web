@@ -498,6 +498,26 @@ describe("artifactsApi", () => {
     await expect(artifactsApi.createDownloadTicket("repo-key", "lib.jar")).rejects.toBe("fail");
   });
 
+  it("createDownloadTicket binds resource_path to the absolute download request path", async () => {
+    // The backend ticket middleware compares the bound resource_path against
+    // request.uri().path() by byte equality, so it must be absolute and match
+    // exactly what getDownloadUrl produces. Regression test for web#453.
+    mockCreateDownloadTicket.mockResolvedValue({
+      data: { ticket: "tk123" },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const artifactPath = "com/example/lib/1.0/lib-1.0.jar";
+    await artifactsApi.createDownloadTicket("repo-key", artifactPath);
+    const expectedPath = artifactsApi.getDownloadUrl("repo-key", artifactPath);
+    expect(expectedPath).toBe(
+      "/api/v1/repositories/repo-key/download/com/example/lib/1.0/lib-1.0.jar"
+    );
+    expect(mockCreateDownloadTicket).toHaveBeenCalledWith({
+      body: { purpose: "download", resource_path: expectedPath },
+    });
+  });
+
   // ---- upload() via XMLHttpRequest ----
 
   describe("upload", () => {
