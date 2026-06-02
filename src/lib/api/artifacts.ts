@@ -127,12 +127,23 @@ export const artifactsApi = {
 
   get: async (repoKey: string, artifactPath: string): Promise<Artifact> => {
     // The SDK uses getRepositoryArtifactMetadata for GET /api/v1/repositories/{key}/artifacts/{path}
-    // but the original code uses a URL-encoded path. Use the SDK's downloadArtifact metadata or
-    // fall back to a direct fetch since the SDK's getArtifact uses /api/v1/artifacts/{id} which
-    // is a different endpoint.
+    // but the SDK's getArtifact uses /api/v1/artifacts/{id} which is a different endpoint, so we
+    // fetch directly.
+    //
+    // The backend route is `/:key/artifacts/*path` (an Axum wildcard), so the
+    // path segment separators must stay as literal slashes — encoding the
+    // whole path with encodeURIComponent (turning `/` into `%2F`) breaks the
+    // wildcard match and 404s.  Encode each segment individually instead so
+    // slashes survive but other reserved characters are still escaped.  This
+    // also matters for Maven grouped-mode detail lookups (#444, #445), where
+    // the path is reconstructed as groupId/artifactId/version/filename.
     const baseUrl = getActiveInstanceBaseUrl();
+    const encodedPath = artifactPath
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
     const response = await fetch(
-      `${baseUrl}/api/v1/repositories/${repoKey}/artifacts/${encodeURIComponent(artifactPath)}`,
+      `${baseUrl}/api/v1/repositories/${repoKey}/artifacts/${encodedPath}`,
       { credentials: 'include' }
     );
     if (!response.ok) {

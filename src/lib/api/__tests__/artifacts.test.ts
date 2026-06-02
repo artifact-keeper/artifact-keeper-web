@@ -224,6 +224,31 @@ describe("artifactsApi", () => {
     vi.restoreAllMocks();
   });
 
+  it("get preserves path separators for the wildcard route (#444/#445)", async () => {
+    // The backend route is `/:key/artifacts/*path`; encoding the whole path
+    // with encodeURIComponent would turn `/` into `%2F` and 404.  Slashes
+    // must survive while individual segments are still escaped.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ id: "a1" }),
+    });
+    global.fetch = fetchMock;
+
+    const { artifactsApi } = await import("../artifacts");
+    await artifactsApi.get(
+      "repo-key",
+      "com/example/with zip/1.0.0/with-1.0.0.zip"
+    );
+
+    const calledUrl = fetchMock.mock.calls[0][0] as string;
+    expect(calledUrl).toContain(
+      "/api/v1/repositories/repo-key/artifacts/com/example/with%20zip/1.0.0/with-1.0.0.zip"
+    );
+    expect(calledUrl).not.toContain("%2F");
+
+    vi.restoreAllMocks();
+  });
+
   it("get throws on non-ok response", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
 
