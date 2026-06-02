@@ -157,6 +157,30 @@ export const artifactsApi = {
     if (error) throw error;
   },
 
+  /**
+   * Invalidate a single cached artifact entry on a Remote (proxy) repository
+   * (artifact-keeper#1539). Routes through `apiFetch` because the generated
+   * SDK has not been regenerated against the new endpoint yet; once it is,
+   * this can collapse to the typed SDK call.
+   *
+   * Idempotent on the backend: invalidating a path that was never cached
+   * still resolves successfully, matching `ProxyService::invalidate_cache`.
+   * Caller is responsible for invalidating any React-Query caches that
+   * depend on the artifact (the artifacts list, the repository row).
+   */
+  invalidateCache: async (
+    repoKey: string,
+    artifactPath: string,
+  ): Promise<{ repository_key: string; path: string; invalidated: boolean }> => {
+    const url =
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/cache/invalidate` +
+      `?path=${encodeURIComponent(artifactPath)}`;
+    return apiFetch<{ repository_key: string; path: string; invalidated: boolean }>(
+      url,
+      { method: 'POST' },
+    );
+  },
+
   getDownloadUrl: (repoKey: string, artifactPath: string): string => {
     return `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
   },

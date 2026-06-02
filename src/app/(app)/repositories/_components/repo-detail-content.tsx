@@ -17,6 +17,7 @@ import {
   Layers,
   Package as PackageIcon,
   Settings,
+  RotateCcw,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -211,6 +212,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
     },
     onError: mutationErrorToast("Failed to trigger scan"),
+  });
+
+  // Invalidate a single cached entry on a Remote (proxy) repository
+  // (artifact-keeper#1539 / artifact-keeper-web#446). Backend rejects this on
+  // non-Remote repos with 400, but we also gate the button below on
+  // `repository.repo_type === "remote"` so the operation is never offered
+  // for repos without a cache.
+  const invalidateCacheMutation = useMutation({
+    mutationFn: (path: string) => artifactsApi.invalidateCache(repoKey, path),
+    onSuccess: () => {
+      // Drop the artifacts list and repo summary from the cache so the next
+      // fetch goes back to upstream (the underlying download endpoint will
+      // re-populate the proxy cache on the next access).
+      queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
+      toast.success("Cache entry invalidated; next download will re-fetch from upstream.");
+    },
+    onError: mutationErrorToast("Failed to invalidate cache"),
   });
 
   const scanRepoMutation = useMutation({
@@ -988,6 +1007,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Trash2 className="size-4" />
                   Delete
                 </Button>
+                {repository.repo_type === "remote" && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (selectedArtifact) {
+                        invalidateCacheMutation.mutate(selectedArtifact.path);
+                      }
+                    }}
+                    disabled={invalidateCacheMutation.isPending}
+                    title="Evict this artifact from the proxy cache; next download re-fetches from upstream"
+                  >
+                    <RotateCcw className="size-4" />
+                    {invalidateCacheMutation.isPending
+                      ? "Invalidating..."
+                      : "Invalidate cache"}
+                  </Button>
+                )}
                 <Button onClick={() => selectedArtifact && handleDownload(selectedArtifact)}>
                   <Download className="size-4" />
                   Download
