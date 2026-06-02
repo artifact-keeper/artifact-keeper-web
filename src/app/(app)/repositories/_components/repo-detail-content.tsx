@@ -84,6 +84,17 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
@@ -117,6 +128,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+
+  // Polite live region for destructive-action outcomes (delete / cache
+  // invalidate). Toasts alone are not reliably announced by screen readers,
+  // so the result is also written here. Kept separate from the view-mode
+  // status region below, whose content is derived from `viewMode`.
+  const [actionAnnounce, setActionAnnounce] = useState("");
 
   // security form local state
   const [secForm, setSecForm] = useState<UpsertScanConfigRequest | null>(null);
@@ -202,6 +219,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       setDetailOpen(false);
       setSelectedArtifact(null);
       toast.success("Artifact deleted");
+      setActionAnnounce("Artifact deleted.");
     },
     onError: mutationErrorToast("Failed to delete artifact"),
   });
@@ -228,7 +246,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       // re-populate the proxy cache on the next access).
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
-      toast.success("Cache entry invalidated; next download will re-fetch from upstream.");
+      // The open dialog holds a stale copy of the artifact whose
+      // cache_cached_at / cache_expires_at fields no longer reflect reality.
+      // Close it rather than show outdated freshness fields; the artifacts
+      // list refetch above gives the operator the current state.
+      setDetailOpen(false);
+      setSelectedArtifact(null);
+      const message =
+        "Cache entry invalidated; next download will re-fetch from upstream.";
+      toast.success(message);
+      setActionAnnounce(message);
     },
     onError: mutationErrorToast("Failed to invalidate cache"),
   });
@@ -677,6 +704,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               : "Showing flat list view"}
           </div>
 
+          {/* Outcome announcements for destructive actions (delete / cache
+              invalidate). Polite so it does not interrupt; sr-only because the
+              same text is shown visually via toast. */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {actionAnnounce}
+          </div>
+
           {useServerGrouping ? (
             <MavenComponentList
               components={artifactsData?.components ?? []}
@@ -1033,21 +1067,48 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   Delete
                 </Button>
                 {repository.repo_type === "remote" && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (selectedArtifact) {
-                        invalidateCacheMutation.mutate(selectedArtifact.path);
-                      }
-                    }}
-                    disabled={invalidateCacheMutation.isPending}
-                    title="Evict this artifact from the proxy cache; next download re-fetches from upstream"
-                  >
-                    <RotateCcw className="size-4" />
-                    {invalidateCacheMutation.isPending
-                      ? "Invalidating..."
-                      : "Invalidate cache"}
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        disabled={invalidateCacheMutation.isPending}
+                        title="Evict this artifact from the proxy cache; next download re-fetches from upstream"
+                      >
+                        <RotateCcw className="size-4" />
+                        {invalidateCacheMutation.isPending
+                          ? "Invalidating..."
+                          : "Invalidate cache"}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Invalidate cache entry?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This evicts{" "}
+                          <span className="font-medium">
+                            {selectedArtifact.name}
+                          </span>{" "}
+                          from the proxy cache. The next download re-fetches it
+                          from upstream, which may be slower and could return a
+                          different artifact if upstream has changed.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => {
+                            if (selectedArtifact) {
+                              invalidateCacheMutation.mutate(
+                                selectedArtifact.path
+                              );
+                            }
+                          }}
+                        >
+                          Invalidate
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
                 <Button onClick={() => selectedArtifact && handleDownload(selectedArtifact)}>
                   <Download className="size-4" />
