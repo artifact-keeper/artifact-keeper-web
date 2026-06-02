@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -17,6 +17,9 @@ import {
   FileSearch,
   ChevronLeft,
   ChevronRight,
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
+  X,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -49,7 +52,16 @@ import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 
 type SearchTab = "package" | "property" | "gavc" | "checksum";
 type ViewMode = "list" | "grid";
-type SortField = "name" | "created_at" | "size_bytes";
+// Sort fields accepted by the OpenSearch-backed /search/advanced endpoint.
+// `relevance` maps to no explicit sort_by so the backend returns its own
+// relevance ranking (the default and most useful order for a text query).
+type SortField =
+  | "relevance"
+  | "name"
+  | "created_at"
+  | "size_bytes"
+  | "download_count";
+type SortOrder = "asc" | "desc";
 
 interface PropertyFilter {
   id: string;
@@ -89,6 +101,30 @@ function formatBytes(bytes: number | undefined): string {
   return formatBytesUtil(bytes);
 }
 
+// OpenSearch returns highlight snippets with matched terms wrapped in <em>
+// tags. Render them as React nodes (emphasized spans) instead of injecting
+// raw HTML, so the markup can never execute arbitrary content. Anything that
+// is not inside <em>...</em> is rendered as plain text.
+function renderHighlight(snippet: string, keyPrefix: string) {
+  const parts = snippet.split(/(<em>.*?<\/em>)/g);
+  return parts
+    .filter((p) => p.length > 0)
+    .map((part, i) => {
+      const match = part.match(/^<em>(.*?)<\/em>$/);
+      if (match) {
+        return (
+          <mark
+            key={`${keyPrefix}-${i}`}
+            className="bg-transparent font-semibold text-foreground"
+          >
+            {match[1]}
+          </mark>
+        );
+      }
+      return <span key={`${keyPrefix}-${i}`}>{part}</span>;
+    });
+}
+
 const FORMAT_OPTIONS = [
   "maven",
   "npm",
@@ -118,9 +154,15 @@ export function SearchContent() {
   // Local state
   const [activeTab, setActiveTab] = useState<SearchTab>(urlTab);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortField, setSortField] = useState<SortField>("relevance");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [page, setPage] = useState(1);
   const pageSize = 20;
+
+  // Active facet filters applied on top of the form query. Selecting a facet
+  // chip narrows results to that format/repository and re-runs the search.
+  const [facetFormat, setFacetFormat] = useState<string | null>(null);
+  const [facetRepository, setFacetRepository] = useState<string | null>(null);
 
   // Per-tab form state
   const [packageValues, setPackageValues] = useState<PackageSearchValues>({
@@ -156,28 +198,36 @@ export function SearchContent() {
 
   const repositories = reposData?.items ?? [];
 
-  // Build search params based on active tab
+  // Build search params based on active tab. `relevance` is the OpenSearch
+  // default ranking and is expressed by omitting sort_by, so the backend does
+  // not switch into an explicit field sort. Active facet chips override the
+  // matching form field (a selected format facet wins over the form's format).
   const buildSearchParams = useCallback(() => {
+    const sort = sortField === "relevance" ? undefined : sortField;
+    const common = {
+      page,
+      per_page: pageSize,
+      sort_by: sort,
+      sort_order: sort ? sortOrder : undefined,
+      format: facetFormat ?? undefined,
+      repository_key: facetRepository ?? undefined,
+    };
     switch (activeTab) {
       case "package":
         return {
+          ...common,
           query: packageValues.name || undefined,
           version: packageValues.version || undefined,
-          repository_key: packageValues.repository || undefined,
-          format: packageValues.format || undefined,
-          page,
-          per_page: pageSize,
-          sort_by: sortField,
+          repository_key: facetRepository ?? (packageValues.repository || undefined),
+          format: facetFormat ?? (packageValues.format || undefined),
         };
       case "property": {
         const queryParts = propertyFilters
           .filter((f) => f.key && f.value)
           .map((f) => `${f.key}:${f.value}`);
         return {
+          ...common,
           query: queryParts.length > 0 ? queryParts.join(" ") : undefined,
-          page,
-          per_page: pageSize,
-          sort_by: sortField,
         };
       }
       case "gavc": {
@@ -193,12 +243,14 @@ export function SearchContent() {
           classifier: gavcValues.classifier,
           extension: gavcValues.extension,
         });
+        // Spread `common` so the GAVC tab honours the shared sort/facet
+        // handling (sort_by, sort_order, repository facet). The GAV fields are
+        // folded into a single full-text `query` and the search is scoped to
+        // maven; an explicit format facet still wins over that default.
         return {
+          ...common,
           query: query || undefined,
-          format: "maven",
-          page,
-          per_page: pageSize,
-          sort_by: sortField,
+          format: facetFormat ?? "maven",
         };
       }
       case "checksum":
@@ -212,6 +264,9 @@ export function SearchContent() {
     page,
     pageSize,
     sortField,
+    sortOrder,
+    facetFormat,
+    facetRepository,
   ]);
 
   // Main search query
@@ -220,7 +275,16 @@ export function SearchContent() {
     isLoading,
     isFetching,
   } = useQuery({
-    queryKey: ["advanced-search", searchKey, activeTab, page, sortField],
+    queryKey: [
+      "advanced-search",
+      searchKey,
+      activeTab,
+      page,
+      sortField,
+      sortOrder,
+      facetFormat,
+      facetRepository,
+    ],
     queryFn: async () => {
       if (activeTab === "checksum") {
         if (!checksumValues.value) return null;
@@ -246,6 +310,7 @@ export function SearchContent() {
             total: artifacts.length,
             total_pages: 1,
           },
+          facets: { formats: [], repositories: [], content_types: [] },
         };
       }
 
@@ -315,20 +380,40 @@ export function SearchContent() {
 
   const loading = isLoading || isFetching;
 
-  // Sort the results client-side as a fallback
-  const sortedResults = useMemo(() => {
-    const items: SearchResult[] = (searchResults?.items ?? []) as SearchResult[];
-    const copy = [...items];
-    copy.sort((a, b) => {
-      if (sortField === "name") return a.name.localeCompare(b.name);
-      if (sortField === "size_bytes")
-        return (b.size_bytes ?? 0) - (a.size_bytes ?? 0);
-      return (
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    });
-    return copy;
-  }, [searchResults?.items, sortField]);
+  // Use the server's ordering directly. The OpenSearch backend already applies
+  // relevance ranking (or the requested sort_by + sort_order) across the full
+  // result set; re-sorting client-side only reorders the current page, which
+  // contradicts the server order and breaks once results span more than one
+  // page. So we render exactly what the backend returned.
+  const results: SearchResult[] = (searchResults?.items ?? []) as SearchResult[];
+  const facets = searchResults?.facets ?? {
+    formats: [],
+    repositories: [],
+    content_types: [],
+  };
+  const hasActiveFacets = facetFormat !== null || facetRepository !== null;
+
+  // Toggle a facet filter: selecting re-runs the search from page 1, clicking
+  // the active value again clears it.
+  const toggleFacet = useCallback(
+    (kind: "format" | "repository", value: string) => {
+      setPage(1);
+      setSearchKey((k) => k + 1);
+      if (kind === "format") {
+        setFacetFormat((cur) => (cur === value ? null : value));
+      } else {
+        setFacetRepository((cur) => (cur === value ? null : value));
+      }
+    },
+    []
+  );
+
+  const clearFacets = useCallback(() => {
+    setFacetFormat(null);
+    setFacetRepository(null);
+    setPage(1);
+    setSearchKey((k) => k + 1);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -656,22 +741,52 @@ export function SearchContent() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <Select
-                  value={sortField}
-                  onValueChange={(val) => {
-                    setSortField(val as SortField);
-                    setSearchKey((k) => k + 1);
-                  }}
-                >
-                  <SelectTrigger className="w-36" size="sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="created_at">Date</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="size_bytes">Size</SelectItem>
-                  </SelectContent>
-                </Select>
+                {activeTab !== "checksum" && (
+                  <>
+                    <Select
+                      value={sortField}
+                      onValueChange={(val) => {
+                        setSortField(val as SortField);
+                        setSearchKey((k) => k + 1);
+                      }}
+                    >
+                      <SelectTrigger
+                        className="w-36"
+                        size="sm"
+                        aria-label="Sort by"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="relevance">Relevance</SelectItem>
+                        <SelectItem value="created_at">Date</SelectItem>
+                        <SelectItem value="name">Name</SelectItem>
+                        <SelectItem value="size_bytes">Size</SelectItem>
+                        <SelectItem value="download_count">Downloads</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      disabled={sortField === "relevance"}
+                      onClick={() => {
+                        setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
+                        setSearchKey((k) => k + 1);
+                      }}
+                      aria-label={
+                        sortOrder === "desc"
+                          ? "Sort descending, switch to ascending"
+                          : "Sort ascending, switch to descending"
+                      }
+                    >
+                      {sortOrder === "desc" ? (
+                        <ArrowDownWideNarrow className="size-4" />
+                      ) : (
+                        <ArrowUpWideNarrow className="size-4" />
+                      )}
+                    </Button>
+                  </>
+                )}
                 <div className="flex items-center rounded-md border">
                   <Button
                     variant={viewMode === "list" ? "secondary" : "ghost"}
@@ -695,6 +810,91 @@ export function SearchContent() {
               </div>
             </div>
 
+            {/* Facets: server-computed aggregations from OpenSearch. Clicking a
+                value filters the result set; the active value is highlighted
+                and can be cleared. Only shown for the index-backed tabs. */}
+            {!loading &&
+              activeTab !== "checksum" &&
+              (facets.formats.length > 0 ||
+                facets.repositories.length > 0 ||
+                hasActiveFacets) && (
+                <div
+                  className="mb-4 space-y-2 rounded-md border bg-muted/30 p-3"
+                  data-testid="search-facets"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Refine
+                    </span>
+                    {hasActiveFacets && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 gap-1 px-2 text-xs"
+                        onClick={clearFacets}
+                      >
+                        <X className="size-3" />
+                        Clear filters
+                      </Button>
+                    )}
+                  </div>
+                  {facets.formats.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground w-20 shrink-0">
+                        Format
+                      </span>
+                      {facets.formats.map((f) => (
+                        <button
+                          key={f.value}
+                          type="button"
+                          onClick={() => toggleFacet("format", f.value)}
+                          aria-pressed={facetFormat === f.value}
+                          className="inline-flex items-center"
+                        >
+                          <Badge
+                            variant={
+                              facetFormat === f.value ? "default" : "secondary"
+                            }
+                            className="cursor-pointer gap-1"
+                          >
+                            {f.value}
+                            <span className="opacity-70">{f.count}</span>
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {facets.repositories.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground w-20 shrink-0">
+                        Repository
+                      </span>
+                      {facets.repositories.map((f) => (
+                        <button
+                          key={f.value}
+                          type="button"
+                          onClick={() => toggleFacet("repository", f.value)}
+                          aria-pressed={facetRepository === f.value}
+                          className="inline-flex items-center"
+                        >
+                          <Badge
+                            variant={
+                              facetRepository === f.value
+                                ? "default"
+                                : "secondary"
+                            }
+                            className="cursor-pointer gap-1"
+                          >
+                            {f.value}
+                            <span className="opacity-70">{f.count}</span>
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
             {/* Loading state */}
             {loading && (
               <div className="flex items-center justify-center py-16">
@@ -703,7 +903,7 @@ export function SearchContent() {
             )}
 
             {/* Empty state */}
-            {!loading && sortedResults.length === 0 && (
+            {!loading && results.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <SearchIcon className="size-10 text-muted-foreground/40 mb-3" />
                 <p className="text-sm text-muted-foreground">
@@ -713,7 +913,7 @@ export function SearchContent() {
             )}
 
             {/* List view */}
-            {!loading && sortedResults.length > 0 && viewMode === "list" && (
+            {!loading && results.length > 0 && viewMode === "list" && (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -727,7 +927,7 @@ export function SearchContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedResults.map((result) => (
+                  {results.map((result) => (
                     <TableRow
                       key={result.id}
                       className="cursor-pointer"
@@ -749,6 +949,14 @@ export function SearchContent() {
                             />
                           )}
                         </span>
+                        {result.highlights && result.highlights.length > 0 && (
+                          <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">
+                            {renderHighlight(
+                              result.highlights[0],
+                              `${result.id}-hl`
+                            )}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {result.version || "--"}
@@ -787,9 +995,9 @@ export function SearchContent() {
             )}
 
             {/* Grid view */}
-            {!loading && sortedResults.length > 0 && viewMode === "grid" && (
+            {!loading && results.length > 0 && viewMode === "grid" && (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {sortedResults.map((result) => (
+                {results.map((result) => (
                   <button
                     key={result.id}
                     type="button"
@@ -811,6 +1019,14 @@ export function SearchContent() {
                           {result.repository_key}
                           {result.path ? `/${result.path}` : ""}
                         </p>
+                        {result.highlights && result.highlights.length > 0 && (
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {renderHighlight(
+                              result.highlights[0],
+                              `${result.id}-grid-hl`
+                            )}
+                          </p>
+                        )}
                       </div>
                       <Button
                         variant="ghost"

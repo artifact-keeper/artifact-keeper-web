@@ -236,6 +236,13 @@ export interface HealthResponse {
     database: { status: string; message?: string };
     storage: { status: string; message?: string };
     security_scanner?: { status: string; message?: string };
+    /**
+     * Search backend health. As of backend 1.2.0 the search index migrated
+     * from Meilisearch to OpenSearch and the health payload exposes this under
+     * `opensearch`. Older backends used `meilisearch`. Both are kept here so the
+     * UI renders the "Search Engine" card regardless of which backend answers.
+     */
+    opensearch?: { status: string; message?: string };
     meilisearch?: { status: string; message?: string };
   };
 }
