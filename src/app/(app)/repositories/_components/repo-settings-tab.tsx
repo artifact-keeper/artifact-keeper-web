@@ -13,6 +13,8 @@ import type { Repository } from "@/types";
 import type { LifecyclePolicy, PolicyType } from "@/types/lifecycle";
 import { POLICY_TYPE_LABELS } from "@/types/lifecycle";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
+import { ReleaseTargetSettings } from "./release-target-settings";
+import { RoutingRulesSettings } from "./routing-rules-settings";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -342,6 +344,24 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       </section>
 
       <Separator />
+
+      {/* -- Release Target Section (staging promotion, #260) -- */}
+      {repository.repo_type === "staging" && (
+        <>
+          <ReleaseTargetSettings repository={repository} />
+          <Separator />
+        </>
+      )}
+
+      {/* -- Routing Rules Section (path rewriting for proxy repos, #263) -- */}
+      {(repository.repo_type === "remote" ||
+        repository.repo_type === "virtual" ||
+        repository.repo_type === "staging") && (
+        <>
+          <RoutingRulesSettings repository={repository} />
+          <Separator />
+        </>
+      )}
 
       {/* -- Cleanup Policies Section -- */}
       <section aria-labelledby="settings-cleanup-heading">
