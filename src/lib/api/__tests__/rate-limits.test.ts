@@ -116,3 +116,35 @@ describe("rate-limit validation helpers", () => {
     ).toBeNull();
   });
 });
+
+describe("rate-limit exemption parsing error paths", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("listExemptions throws when the response shape is unrecognized", async () => {
+    mockApiFetch.mockResolvedValue({ unexpected: "shape" });
+    const mod = await import("../rate-limits");
+    await expect(mod.rateLimitsApi.listExemptions()).rejects.toThrow(
+      /Rate-limit exemptions response did not match the expected shape/
+    );
+  });
+
+  it("listExemptions accepts a wrapped { exemptions: [] } response", async () => {
+    mockApiFetch.mockResolvedValue({
+      exemptions: [
+        { id: "e1", type: "cidr", value: "10.0.0.0/8", note: "internal", created_at: "2025-01-01" },
+      ],
+    });
+    const mod = await import("../rate-limits");
+    const out = await mod.rateLimitsApi.listExemptions();
+    expect(out).toHaveLength(1);
+    expect(out[0].value).toBe("10.0.0.0/8");
+  });
+
+  it("addExemption throws when the create response shape is unrecognized", async () => {
+    mockApiFetch.mockResolvedValue({ garbage: true });
+    const mod = await import("../rate-limits");
+    await expect(
+      mod.rateLimitsApi.addExemption({ type: "username", value: "ci-bot" })
+    ).rejects.toThrow(/Create exemption response did not match the expected shape/);
+  });
+});

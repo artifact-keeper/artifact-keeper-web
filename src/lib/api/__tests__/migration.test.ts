@@ -570,6 +570,71 @@ describe("migrationApi", () => {
     await expect(migrationApi.getAssessment("m1")).rejects.toBe("fail");
   });
 
+  it("getAssessment adapts repository assessments and narrows unknown enums", async () => {
+    mockGetAssessment.mockResolvedValue({
+      data: {
+        job_id: "m1",
+        status: "complete",
+        repositories: [
+          {
+            key: "maven-local",
+            type: "local",
+            package_type: "maven",
+            artifact_count: 5,
+            total_size_bytes: 1000,
+            compatibility: "full",
+            warnings: [],
+          },
+          {
+            // unknown type + compatibility should fall back to local / unsupported
+            key: "weird-repo",
+            type: "federated",
+            package_type: "npm",
+            artifact_count: 0,
+            total_size_bytes: 0,
+            compatibility: "maybe",
+            warnings: ["heads up"],
+          },
+        ],
+        users_count: 2,
+        groups_count: 1,
+        permissions_count: 3,
+        total_artifacts: 5,
+        total_size_bytes: 1000,
+        estimated_duration_seconds: 42,
+        warnings: [],
+        blockers: [],
+      },
+      error: undefined,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { migrationApi } = await import("../migration");
+    const out = await migrationApi.getAssessment("m1");
+    expect(out.repositories).toHaveLength(2);
+    expect(out.repositories[0].compatibility).toBe("full");
+    expect(out.repositories[1].type).toBe("local");
+    expect(out.repositories[1].compatibility).toBe("unsupported");
+    warn.mockRestore();
+  });
+
+  it("listConnections warns and returns empty for an unrecognized response shape", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockListConnections.mockResolvedValue({ data: 42, error: undefined });
+    const { migrationApi } = await import("../migration");
+    expect(await migrationApi.listConnections()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/coerceItemsArray/));
+    warn.mockRestore();
+  });
+
+  it("listConnections returns empty for a null response without warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockListConnections.mockResolvedValue({ data: null, error: undefined });
+    const { migrationApi } = await import("../migration");
+    expect(await migrationApi.listConnections()).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("createStreamTicket returns ticket string", async () => {
     mockCreateDownloadTicket.mockResolvedValue({ data: { ticket: "tk123" }, error: undefined });
     const { migrationApi } = await import("../migration");
