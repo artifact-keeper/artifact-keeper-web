@@ -116,6 +116,18 @@ function UploadSizeSetting({
   const [value, setValue] = useState(initial.value);
   const [unit, setUnit] = useState<UploadSizeUnit>(initial.unit);
   const [dirty, setDirty] = useState(false);
+  // The persisted value arrives asynchronously, so a useState initializer would
+  // seed from `undefined` (rendering an empty "No limit") and never refresh once
+  // the query resolves. Sync local state during render whenever the persisted
+  // bytes change, but only while there are no unsaved edits so we never clobber
+  // what the operator is typing. (review fix #464)
+  const [seededBytes, setSeededBytes] = useState(currentBytes);
+  if (currentBytes !== seededBytes && !dirty) {
+    const next = bytesToUploadSize(currentBytes ?? 0);
+    setSeededBytes(currentBytes);
+    setValue(next.value);
+    setUnit(next.unit);
+  }
 
   const saveMutation = useMutation({
     mutationFn: (bytes: number) => settingsApi.updateMaxUploadSize(bytes),
