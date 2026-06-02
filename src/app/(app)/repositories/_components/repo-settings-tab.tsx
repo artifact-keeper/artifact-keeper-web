@@ -322,9 +322,27 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
-  const [ageEnabled, setAgeEnabled] = useState(false);
-  const [ageValue, setAgeValue] = useState("3");
-  const [ageUnit, setAgeUnit] = useState<AgeUnit>("days");
+  // These seed from local defaults rather than persisted config, so Save stays
+  // disabled until the operator makes an explicit change. That prevents a
+  // pristine form from writing the defaults over an existing policy on save.
+  // (review fix #464)
+  const [ageEnabled, setAgeEnabledState] = useState(false);
+  const [ageValue, setAgeValueState] = useState("3");
+  const [ageUnit, setAgeUnitState] = useState<AgeUnit>("days");
+  const [ageDirty, setAgeDirty] = useState(false);
+
+  const setAgeEnabled = (v: boolean) => {
+    setAgeEnabledState(v);
+    setAgeDirty(true);
+  };
+  const setAgeValue = (v: string) => {
+    setAgeValueState(v);
+    setAgeDirty(true);
+  };
+  const setAgeUnit = (v: AgeUnit) => {
+    setAgeUnitState(v);
+    setAgeDirty(true);
+  };
 
   const ageMinutes = ageToMinutes(ageValue, ageUnit);
   const ageInvalid = ageEnabled && ageMinutes <= 0;
@@ -337,6 +355,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
+      setAgeDirty(false);
       toast.success(
         ageEnabled
           ? "Package age policy enabled"
@@ -557,6 +576,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 disabled={!ageEnabled}
                 className="flex-1"
                 aria-invalid={ageInvalid}
+                aria-describedby="settings-age-error"
               />
               <Select
                 value={ageUnit}
@@ -572,12 +592,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 </SelectContent>
               </Select>
             </div>
-            {ageInvalid ? (
-              <p className="text-sm text-destructive">
-                Enter a cooldown period of at least one {ageUnit === "days" ? "day" : "hour"}.
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
+            {/* Persistent live region so the validation error is announced and
+                stays associated with the input via aria-describedby. */}
+            <p id="settings-age-error" role="alert" className="text-sm text-destructive empty:hidden">
+              {ageInvalid
+                ? `Enter a cooldown period of at least one ${ageUnit === "days" ? "day" : "hour"}.`
+                : ""}
+            </p>
+            {!ageInvalid && (
+              <p id="settings-age-hint" className="text-xs text-muted-foreground">
                 Packages released less than this long ago are quarantined.
               </p>
             )}
@@ -586,7 +609,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <div className="flex justify-end">
             <Button
               onClick={() => ageMutation.mutate()}
-              disabled={ageMutation.isPending || ageInvalid}
+              disabled={ageMutation.isPending || ageInvalid || !ageDirty}
             >
               {ageMutation.isPending ? (
                 <>

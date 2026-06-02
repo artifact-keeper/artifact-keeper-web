@@ -59,8 +59,26 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     path_pattern: "",
     rewrite_to: "",
   });
+  // Validation message for the add-rule row, associated with the pattern input
+  // via aria-describedby so it is announced rather than only shown in a toast.
+  const [addError, setAddError] = useState<string | null>(null);
 
-  if (data?.rules && data.rules !== syncedRef) {
+  // Whether the locally edited rules differ from the server copy. Computed
+  // before the resync below so the resync can avoid clobbering unsaved edits.
+  const serverRules = data?.rules ?? [];
+  const dirty =
+    serverRules.length !== rules.length ||
+    rules.some(
+      (rule, i) =>
+        rule.path_pattern !== serverRules[i]?.path_pattern ||
+        rule.rewrite_to !== serverRules[i]?.rewrite_to
+    );
+
+  // Resync only when there are no unsaved edits. React Query hands back a fresh
+  // array reference on every refetch (e.g. window focus) even when the content
+  // is unchanged, so a by-reference check alone would discard in-progress edits.
+  // (review fix #462)
+  if (data?.rules && data.rules !== syncedRef && !dirty) {
     setSyncedRef(data.rules);
     setRules(data.rules);
   }
@@ -92,9 +110,19 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     const pattern = draft.path_pattern.trim();
     const rewrite = draft.rewrite_to.trim();
     if (!pattern || !rewrite) {
-      toast.error("Both pattern and rewrite target are required");
+      setAddError("Both pattern and rewrite target are required.");
       return;
     }
+    // The pattern is a regex evaluated by the backend; reject an invalid one
+    // here so the operator gets immediate, associated feedback instead of a
+    // 400 at save time.
+    try {
+      new RegExp(pattern);
+    } catch {
+      setAddError("Path pattern is not a valid regular expression.");
+      return;
+    }
+    setAddError(null);
     const next = [...rules, { path_pattern: pattern, rewrite_to: rewrite }];
     saveMutation.mutate(next, {
       onSuccess: (resp) => {
@@ -131,17 +159,6 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
       prev.map((rule, i) => (i === index ? { ...rule, [field]: value } : rule))
     );
   };
-
-  // Whether the locally edited rules differ from the server copy.
-  const dirty = useMemo(() => {
-    const serverRules = data?.rules ?? [];
-    if (serverRules.length !== rules.length) return true;
-    return rules.some(
-      (rule, i) =>
-        rule.path_pattern !== serverRules[i]?.path_pattern ||
-        rule.rewrite_to !== serverRules[i]?.rewrite_to
-    );
-  }, [data, rules]);
 
   return (
     <section aria-labelledby="settings-routing-rules-heading">
@@ -269,11 +286,14 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                 <Input
                   id="routing-rule-pattern"
                   value={draft.path_pattern}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, path_pattern: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setDraft((d) => ({ ...d, path_pattern: e.target.value }));
+                    if (addError) setAddError(null);
+                  }}
                   placeholder="releases/(.+)"
                   className="font-mono text-xs"
+                  aria-invalid={addError != null}
+                  aria-describedby="routing-rule-error"
                 />
               </div>
               <div className="hidden items-end pb-2 text-muted-foreground sm:flex">
@@ -294,6 +314,15 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                 />
               </div>
             </div>
+            {/* Persistent live region so the error is announced when it
+                appears and stays associated with the pattern input. */}
+            <p
+              id="routing-rule-error"
+              role="alert"
+              className="min-h-[1rem] text-sm text-red-500"
+            >
+              {addError}
+            </p>
             <Button
               onClick={handleAdd}
               disabled={isBusy || !draft.path_pattern.trim() || !draft.rewrite_to.trim()}

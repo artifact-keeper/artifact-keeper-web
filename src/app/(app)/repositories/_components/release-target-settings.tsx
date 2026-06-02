@@ -65,6 +65,16 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
   );
 
   const [selected, setSelected] = useState<string>(NONE_VALUE);
+  // The backend exposes no GET for the current link, so the picker seeds to
+  // "none". Track an explicit change and keep Save disabled until then, so a
+  // pristine form cannot unlink an existing target on an accidental click.
+  // (review fix #462)
+  const [dirty, setDirty] = useState(false);
+
+  const handleSelect = (value: string) => {
+    setSelected(value);
+    setDirty(true);
+  };
 
   const saveMutation = useMutation({
     mutationFn: (releaseKey: string) =>
@@ -72,6 +82,7 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setDirty(false);
       toast.success(
         selected === NONE_VALUE
           ? "Release target link removed"
@@ -141,7 +152,7 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
           {candidatesLoading ? (
             <Skeleton className="h-10 w-full" />
           ) : (
-            <Select value={selected} onValueChange={setSelected}>
+            <Select value={selected} onValueChange={handleSelect}>
               <SelectTrigger id="release-target-select" className="w-full">
                 <SelectValue placeholder="Select a release repository" />
               </SelectTrigger>
@@ -166,7 +177,7 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
 
         <Button
           onClick={handleSave}
-          disabled={saveMutation.isPending}
+          disabled={saveMutation.isPending || !dirty}
           className="w-fit"
         >
           {saveMutation.isPending ? (
