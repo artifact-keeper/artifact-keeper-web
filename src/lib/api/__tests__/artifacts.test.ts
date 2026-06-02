@@ -44,6 +44,111 @@ describe("artifactsApi", () => {
   });
 
   // -------------------------------------------------------------------------
+  // adaptArtifact: cache metadata fields (#449 / artifact-keeper#1541)
+  //
+  // The backend optionally returns `cache_cached_at` and `cache_expires_at`
+  // on the per-artifact metadata response. Until the SDK regenerates with
+  // those fields they ride through `adaptArtifact` via a runtime cast --
+  // these tests pin that the cast actually plumbs them, including the
+  // null / missing edge cases that the `skip_serializing_if = "Option::is_none"`
+  // backend shape produces.
+  // -------------------------------------------------------------------------
+
+  it("plumbs cache_cached_at / cache_expires_at through adaptArtifact when present", async () => {
+    const items = [
+      {
+        id: "a1",
+        repository_key: "pypi-remote",
+        path: "requests/requests-2.31.0-py3-none-any.whl",
+        name: "requests-2.31.0-py3-none-any.whl",
+        version: "2.31.0",
+        size_bytes: 62500,
+        checksum_sha256: "deadbeef",
+        content_type: "application/octet-stream",
+        download_count: 0,
+        created_at: "2026-06-01T10:00:00Z",
+        cache_cached_at: "2026-06-01T10:00:00Z",
+        cache_expires_at: "2026-06-02T10:00:00Z",
+      },
+    ];
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items,
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("pypi-remote");
+    expect(result.items[0]).toMatchObject({
+      cache_cached_at: "2026-06-01T10:00:00Z",
+      cache_expires_at: "2026-06-02T10:00:00Z",
+    });
+  });
+
+  it("leaves cache fields undefined on adaptArtifact when omitted by the backend", async () => {
+    // Backend omits the keys entirely (not null) for non-Remote repos AND
+    // for Remote repos without cache metadata, thanks to
+    // `#[serde(skip_serializing_if = "Option::is_none")]`. The web side
+    // must surface that as `undefined` so the dialog hides the rows --
+    // this test pins that contract at the API-wrapper boundary.
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "a1",
+            repository_key: "local-repo",
+            path: "lib.jar",
+            name: "lib.jar",
+            size_bytes: 100,
+            checksum_sha256: "x",
+            content_type: "application/octet-stream",
+            download_count: 0,
+            created_at: "2026-06-01T10:00:00Z",
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("local-repo");
+    expect(result.items[0].cache_cached_at).toBeUndefined();
+    expect(result.items[0].cache_expires_at).toBeUndefined();
+  });
+
+  it("normalises explicit-null cache fields to undefined on adaptArtifact", async () => {
+    // Defensive: even if a future backend serialises the absent state as
+    // `null` instead of dropping the keys, the wrapper should still
+    // surface `undefined` so the dialog rows don't trip the truthy check.
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "a1",
+            repository_key: "pypi-remote",
+            path: "x.whl",
+            name: "x.whl",
+            size_bytes: 1,
+            checksum_sha256: "x",
+            content_type: "application/octet-stream",
+            download_count: 0,
+            created_at: "2026-06-01T10:00:00Z",
+            cache_cached_at: null,
+            cache_expires_at: null,
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("pypi-remote");
+    expect(result.items[0].cache_cached_at).toBeUndefined();
+    expect(result.items[0].cache_expires_at).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // listGrouped (issues #254, #330)
   // -------------------------------------------------------------------------
 

@@ -26,6 +26,7 @@ import securityApi from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isActivelyQuarantined } from "@/lib/quarantine";
 import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
+import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
@@ -936,6 +937,30 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Created"
                     value={new Date(selectedArtifact.created_at).toLocaleString()}
                   />
+                  {repository.repo_type === "remote" &&
+                    selectedArtifact.cache_cached_at && (
+                      <DetailRow
+                        label="Cached"
+                        value={formatRelativeTimestamp(
+                          selectedArtifact.cache_cached_at
+                        )}
+                        title={new Date(
+                          selectedArtifact.cache_cached_at
+                        ).toLocaleString()}
+                      />
+                    )}
+                  {repository.repo_type === "remote" &&
+                    selectedArtifact.cache_expires_at && (
+                      <DetailRow
+                        label="Cache expires"
+                        value={formatCacheExpiry(
+                          selectedArtifact.cache_expires_at
+                        )}
+                        title={new Date(
+                          selectedArtifact.cache_expires_at
+                        ).toLocaleString()}
+                      />
+                    )}
                   <DetailRow
                     label="SHA-256"
                     value={selectedArtifact.checksum_sha256}
@@ -1076,11 +1101,20 @@ function DetailRow({
   value,
   copy,
   mono,
+  title,
 }: {
   label: string;
   value: string;
   copy?: boolean;
   mono?: boolean;
+  /**
+   * Override the hover-tooltip text. Defaults to `value` when omitted.
+   * Useful for rows where the visible text is a derived/abbreviated form
+   * (e.g. "in 4 hours") and the full ISO-8601 timestamp belongs in the
+   * tooltip rather than the visible cell — see the cache_cached_at /
+   * cache_expires_at rows added in #449.
+   */
+  title?: string;
 }) {
   return (
     <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
@@ -1088,7 +1122,7 @@ function DetailRow({
       <div className="flex items-center gap-1 min-w-0">
         <span
           className={`break-all ${mono ? "font-mono text-xs" : ""}`}
-          title={value}
+          title={title ?? value}
         >
           {value}
         </span>

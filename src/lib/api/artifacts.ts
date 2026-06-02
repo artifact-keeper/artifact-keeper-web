@@ -37,6 +37,17 @@ export interface ListArtifactsParams {
 // doesn't model yet — leave those undefined and let callers fetch detail
 // endpoints if they need quarantine state.
 function adaptArtifact(sdk: ArtifactResponse): Artifact {
+  // The backend ships new optional fields (cache_cached_at, cache_expires_at)
+  // via artifact-keeper#1541, but the generated SDK type doesn't carry them
+  // until the SDK regenerates from the upgraded OpenAPI spec. Read them off
+  // the runtime object via a narrowed cast so the fields plumb through as
+  // soon as the backend rolls out, without blocking on SDK regen. Once the
+  // SDK is regenerated with the new fields, this cast can collapse to a
+  // direct property access.
+  const sdkAny = sdk as ArtifactResponse & {
+    cache_cached_at?: string | null;
+    cache_expires_at?: string | null;
+  };
   return {
     id: sdk.id,
     repository_key: sdk.repository_key,
@@ -49,6 +60,8 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     download_count: sdk.download_count,
     created_at: sdk.created_at,
     metadata: sdk.metadata ?? undefined,
+    cache_cached_at: sdkAny.cache_cached_at ?? undefined,
+    cache_expires_at: sdkAny.cache_expires_at ?? undefined,
   };
 }
 
