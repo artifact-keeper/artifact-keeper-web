@@ -24,6 +24,7 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isActivelyQuarantined } from "@/lib/quarantine";
+import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { SbomTabContent } from "./sbom-tab-content";
@@ -901,6 +902,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     copy
                     mono
                   />
+                  {(repoFormat === "maven" || repoFormat === "gradle") && (
+                    <MavenGavSection path={selectedArtifact.path} />
+                  )}
                   {selectedArtifact.metadata &&
                     Object.keys(selectedArtifact.metadata).length > 0 && (
                       <div>
@@ -971,6 +975,38 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 }
 
 // -- detail row helper --
+
+/**
+ * Maven GAV coordinates plus a copy/paste pom.xml dependency snippet, derived
+ * from the artifact path. Shown in the artifact detail view for maven/gradle
+ * repositories so users can identify the GAV and reuse it. (issue #442)
+ */
+function MavenGavSection({ path }: { path: string }) {
+  const gav = parseMavenGav(path);
+  if (!gav) return null;
+  const snippet = buildPomDependencySnippet(gav);
+  return (
+    <div data-testid="maven-gav-section" className="space-y-3">
+      <DetailRow label="Group ID" value={gav.groupId} copy mono />
+      <DetailRow label="Artifact ID" value={gav.artifactId} copy mono />
+      <DetailRow label="GAV Version" value={gav.version} copy mono />
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">
+            pom.xml dependency
+          </p>
+          <CopyButton value={snippet} />
+        </div>
+        <pre
+          data-testid="maven-pom-snippet"
+          className="overflow-auto rounded-md bg-muted p-3 text-xs"
+        >
+          {snippet}
+        </pre>
+      </div>
+    </div>
+  );
+}
 
 function DetailRow({
   label,

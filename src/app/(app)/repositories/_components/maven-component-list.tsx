@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, FileIcon, Package as PackageIcon } from "lucide-react";
+import { ChevronRight, Download, FileIcon, Package as PackageIcon } from "lucide-react";
 
 import {
   Collapsible,
@@ -11,6 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { artifactsApi } from "@/lib/api/artifacts";
+import { isPomFile, mavenFilePath } from "@/lib/maven";
 import { cn, formatBytes } from "@/lib/utils";
 import type { MavenComponent } from "@/types";
 
@@ -162,15 +164,43 @@ function MavenComponentRow({ component }: MavenComponentRowProps) {
             data-testid="maven-component-files"
             role="list"
           >
-            {component.artifact_files.map((filename) => (
-              <li
-                key={filename}
-                className="flex items-center gap-2 px-12 py-2 text-xs text-muted-foreground"
-              >
-                <FileIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate font-mono">{filename}</span>
-              </li>
-            ))}
+            {component.artifact_files.map((filename) => {
+              const isPom = isPomFile(filename);
+              // Build the repository-relative path from the GAV layout so each
+              // file (including the .pom) is directly downloadable. (issue #442)
+              const downloadUrl = artifactsApi.getDownloadUrl(
+                component.repository_key,
+                mavenFilePath(component, filename),
+              );
+              return (
+                <li
+                  key={filename}
+                  className="flex items-center gap-2 px-12 py-2 text-xs"
+                  data-testid={isPom ? "maven-component-pom-file" : "maven-component-file"}
+                >
+                  <FileIcon
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <a
+                    href={downloadUrl}
+                    className="truncate font-mono text-foreground hover:underline focus-visible:underline"
+                    download
+                  >
+                    {filename}
+                  </a>
+                  {isPom && (
+                    <Badge variant="secondary" className="font-normal">
+                      POM
+                    </Badge>
+                  )}
+                  <Download
+                    className="ml-auto size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </li>
+              );
+            })}
           </ul>
         </CollapsibleContent>
       </Collapsible>
