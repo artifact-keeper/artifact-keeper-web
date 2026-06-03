@@ -86,16 +86,29 @@ describe("RoutingRulesSettings", () => {
     expect(await screen.findByText(/No routing rules configured/i)).toBeInTheDocument();
   });
 
-  // Helper: the editable table is populated from a save response (the
-  // component does not seed it from the initial server fetch while a length
-  // mismatch keeps the local copy "dirty"). Adding a rule via the mutation is
-  // the reliable way to get rows into the table.
+  // Helper: add a rule via the save mutation and assert the returned set
+  // lands in the editable table. The table also seeds from the initial server
+  // fetch (see the dedicated test below); this helper covers the add path.
   async function addRule(pattern: string, rewrite: string, returnedRules: { path_pattern: string; rewrite_to: string }[]) {
     mockSetRoutingRules.mockResolvedValueOnce({ repository_key: "npm-proxy", rules: returnedRules });
     fireEvent.change(screen.getByLabelText("Path pattern"), { target: { value: pattern } });
     fireEvent.change(screen.getByLabelText("Rewrite to"), { target: { value: rewrite } });
     fireEvent.click(screen.getByText("Add rule").closest("button")!);
   }
+
+  it("seeds the editable table from the initial server fetch", async () => {
+    mockGetRoutingRules.mockResolvedValue({
+      repository_key: "npm-proxy",
+      rules: [
+        { path_pattern: "releases/(.+)", rewrite_to: "download/$1" },
+        { path_pattern: "snapshots/(.+)", rewrite_to: "dev/$1" },
+      ],
+    });
+    renderWith();
+    expect(await screen.findByLabelText("Rule 1 path pattern")).toHaveValue("releases/(.+)");
+    expect(screen.getByLabelText("Rule 1 rewrite to")).toHaveValue("download/$1");
+    expect(screen.getByLabelText("Rule 2 path pattern")).toHaveValue("snapshots/(.+)");
+  });
 
   it("populates the editable table from a save response", async () => {
     mockGetRoutingRules.mockResolvedValue({ repository_key: "npm-proxy", rules: [] });
