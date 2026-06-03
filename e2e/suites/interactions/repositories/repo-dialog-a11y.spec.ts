@@ -93,13 +93,18 @@ test.describe.serial('Repository Dialog Accessibility', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
 
-    // Target the REMOTE repo's actions menu specifically (by its display
-    // name), not just the first row: the upstream-auth section only exists on
-    // a remote repo's edit dialog. The action button aria-label is
-    // "Repository actions for <name>" (see repo-list-item.tsx).
-    const actionsBtn = page
-      .getByRole('button', { name: /repository actions for e2e a11y remote/i })
-      .first();
+    // Target the REMOTE repo's actions trigger specifically: the upstream-auth
+    // section only exists on a remote repo's edit dialog. NOTE: the whole repo
+    // row is itself a <button> whose accessible name CONCATENATES the nested
+    // actions button label ("e2e-a11y-remote E2E A11y Remote npm · remote · 0 B
+    // Repository actions for E2E A11y Remote"), so a substring match would also
+    // hit the row card and `.first()` would pick it (clicking it just selects
+    // the repo, never opening the menu). Use an exact name to bind only to the
+    // actual DropdownMenu trigger (aria-label in repo-list-item.tsx).
+    const actionsBtn = page.getByRole('button', {
+      name: 'Repository actions for E2E A11y Remote',
+      exact: true,
+    });
     await expect(actionsBtn).toBeVisible({ timeout: 10000 });
 
     // Open the menu and choose Edit. Retry the whole open: a background list
