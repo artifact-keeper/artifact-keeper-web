@@ -66,13 +66,20 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
   // Whether the locally edited rules differ from the server copy. Computed
   // before the resync below so the resync can avoid clobbering unsaved edits.
   const serverRules = data?.rules ?? [];
+  // `dirty` is only meaningful after the first sync. Before the initial seed
+  // (syncedRef === null), local `rules` is still [] while the server may already
+  // have rules, so a raw length/content comparison would report dirty and the
+  // `!dirty` guard below would block the seed, leaving the table empty. Gating
+  // on syncedRef !== null lets the initial seed run, then resumes protecting
+  // unsaved edits once a sync has happened.
   const dirty =
-    serverRules.length !== rules.length ||
-    rules.some(
-      (rule, i) =>
-        rule.path_pattern !== serverRules[i]?.path_pattern ||
-        rule.rewrite_to !== serverRules[i]?.rewrite_to
-    );
+    syncedRef !== null &&
+    (serverRules.length !== rules.length ||
+      rules.some(
+        (rule, i) =>
+          rule.path_pattern !== serverRules[i]?.path_pattern ||
+          rule.rewrite_to !== serverRules[i]?.rewrite_to
+      ));
 
   // Resync only when there are no unsaved edits. React Query hands back a fresh
   // array reference on every refetch (e.g. window focus) even when the content
