@@ -42,6 +42,7 @@ import { MavenComponentList } from "./maven-component-list";
 import { DockerTagList } from "./docker-tag-list";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -113,6 +114,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+  // Confirm gate for the destructive "Invalidate cache" action (#446 review).
+  const [invalidateConfirmOpen, setInvalidateConfirmOpen] = useState(false);
+  // Polite live-region text announcing the cache-invalidation outcome to
+  // assistive tech (#446 review): the toast alone is not reliably announced.
+  const [cacheActionStatus, setCacheActionStatus] = useState("");
 
   // security form local state
   const [secForm, setSecForm] = useState<UpsertScanConfigRequest | null>(null);
@@ -218,15 +224,33 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // for repos without a cache.
   const invalidateCacheMutation = useMutation({
     mutationFn: (path: string) => artifactsApi.invalidateCache(repoKey, path),
-    onSuccess: () => {
+    onSuccess: async (_result, path) => {
       // Drop the artifacts list and repo summary from the cache so the next
       // fetch goes back to upstream (the underlying download endpoint will
       // re-populate the proxy cache on the next access).
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
+      // The dialog holds a local copy of the artifact; after eviction its
+      // cache metadata (cache_cached_at / cache_expires_at, surfaced by #449)
+      // is stale. Refresh the open row from the server so those values
+      // reflect the eviction instead of the pre-eviction snapshot (#446
+      // review). Best-effort: the list/summary are already invalidated, so a
+      // failed refresh just leaves the last-known values in place.
+      try {
+        const fresh = await artifactsApi.get(repoKey, path);
+        setSelectedArtifact((prev) => (prev && prev.path === path ? fresh : prev));
+      } catch {
+        // non-fatal
+      }
+      setCacheActionStatus(
+        "Cache entry invalidated; the next download will re-fetch from upstream.",
+      );
       toast.success("Cache entry invalidated; next download will re-fetch from upstream.");
     },
-    onError: mutationErrorToast("Failed to invalidate cache"),
+    onError: (err: unknown) => {
+      setCacheActionStatus("Cache invalidation failed. Please try again.");
+      mutationErrorToast("Failed to invalidate cache")(err);
+    },
   });
 
   const scanRepoMutation = useMutation({
@@ -290,6 +314,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   const showDetail = useCallback((artifact: Artifact) => {
     setSelectedArtifact(artifact);
+    setCacheActionStatus("");
     setDetailOpen(true);
   }, []);
 
@@ -979,11 +1004,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 {repository.repo_type === "remote" && (
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      if (selectedArtifact) {
-                        invalidateCacheMutation.mutate(selectedArtifact.path);
-                      }
-                    }}
+                    onClick={() => setInvalidateConfirmOpen(true)}
                     disabled={invalidateCacheMutation.isPending}
                     title="Evict this artifact from the proxy cache; next download re-fetches from upstream"
                   >
@@ -1000,8 +1021,37 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </>
             )}
           </DialogFooter>
+          {/*
+            Polite live region for async cache-invalidation feedback (#446
+            review). Toasts are not reliably announced by assistive tech, and
+            the button's "Invalidating..." label swap is otherwise silent.
+            `sr-only` keeps it visually invisible while announcing to AT.
+          */}
+          <div role="status" aria-live="polite" className="sr-only">
+            {invalidateCacheMutation.isPending
+              ? "Invalidating cache entry…"
+              : cacheActionStatus}
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirm gate for the destructive "Invalidate cache" action (#446). */}
+      <ConfirmDialog
+        open={invalidateConfirmOpen}
+        onOpenChange={setInvalidateConfirmOpen}
+        title="Invalidate cached artifact?"
+        description="This evicts the cached copy from the proxy. The next download re-fetches it from the upstream remote. This cannot be undone."
+        confirmText="Invalidate cache"
+        danger
+        loading={invalidateCacheMutation.isPending}
+        onConfirm={() => {
+          if (selectedArtifact) {
+            invalidateCacheMutation.mutate(selectedArtifact.path, {
+              onSettled: () => setInvalidateConfirmOpen(false),
+            });
+          }
+        }}
+      />
     </div>
   );
 }
