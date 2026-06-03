@@ -287,6 +287,7 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() => {
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
       expect(screen.getByTestId("expires-at").textContent).toBe(expiresAt);
       expect(screen.getByTestId("must-change").textContent).toBe("true");
     });
