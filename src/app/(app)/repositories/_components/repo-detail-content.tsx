@@ -1138,7 +1138,7 @@ function MavenGavSection({ path }: { path: string }) {
     <div data-testid="maven-gav-section" className="space-y-3">
       <DetailRow label="Group ID" value={gav.groupId} copy mono />
       <DetailRow label="Artifact ID" value={gav.artifactId} copy mono />
-      <DetailRow label="GAV Version" value={gav.version} copy mono />
+      <DetailRow label="Version" value={gav.version} copy mono />
       <div>
         <div className="mb-1 flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground">
