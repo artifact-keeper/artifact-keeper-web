@@ -59,87 +59,99 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/60 px-3 backdrop-blur-sm">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Separator orientation="vertical" className="mr-1 h-4" />
         <div className="flex flex-1 items-center gap-2">
-          <span className="font-semibold text-sm hidden sm:inline">
-            Artifact Keeper
-          </span>
+          {isAuthenticated && (
+            <span className="hidden text-[11px] tabular-nums text-muted-foreground sm:inline">
+              <span className="text-primary">ak://</span>
+              <span className="text-foreground/80">prod</span>
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* Quick search trigger */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden sm:flex items-center gap-2 text-muted-foreground w-56 justify-start"
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
             onClick={() => setSearchOpen(true)}
+            aria-label="Search (Cmd+K)"
+            aria-keyshortcuts="Meta+K Control+K"
+            className="hidden h-7 w-60 items-center gap-2 border border-border bg-card/40 px-2 text-[12px] text-muted-foreground hover:border-primary/60 hover:text-foreground sm:inline-flex"
           >
-            <SearchIcon className="size-4" />
-            <span>Search...</span>
-            <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-              <span className="text-xs">&#8984;</span>K
+            <span aria-hidden className="text-primary">{">"}</span>
+            <span>search…</span>
+            <kbd
+              aria-hidden
+              className="pointer-events-none ml-auto inline-flex h-4 select-none items-center gap-0.5 border border-border px-1 text-[10px] text-muted-foreground"
+            >
+              <span>&#8984;</span>K
             </kbd>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="sm:hidden"
+          </button>
+          <button
+            type="button"
+            className="inline-flex size-8 items-center justify-center text-muted-foreground hover:text-foreground sm:hidden"
             onClick={() => setSearchOpen(true)}
             aria-label="Search"
           >
             <SearchIcon className="size-4" />
-          </Button>
+          </button>
 
-          {/* Instance switcher */}
           <InstanceSwitcher />
 
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
+            type="button"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="relative inline-flex size-8 items-center justify-center text-muted-foreground hover:text-foreground"
+            aria-label="Toggle theme"
           >
             <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             <span className="sr-only">Toggle theme</span>
-          </Button>
+          </button>
 
-          {/* User menu or sign in */}
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full" aria-label="User menu">
-                  <Avatar className="size-7">
-                    <AvatarFallback className="text-xs">
-                      {userInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1.5 border border-border bg-card/30 px-2 text-[12px] hover:border-primary/60 hover:bg-card"
+                  aria-label="User menu"
+                >
+                  <span className="text-primary">@</span>
+                  <span className="max-w-[120px] truncate text-foreground/90">
+                    {user?.username ?? user?.display_name ?? userInitials.toLowerCase()}
+                  </span>
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-56">
                 <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">
-                    {user?.display_name || user?.username}
+                  <p className="text-[12px]">
+                    <span className="text-primary">@</span>
+                    {user?.username ?? user?.display_name}
                   </p>
-                  <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  <p className="text-[11px] text-muted-foreground">{user?.email}</p>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push("/profile")}>
                   <User className="mr-2 size-4" />
-                  Profile
+                  profile
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="mr-2 size-4" />
-                  Logout
+                  logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button size="sm" onClick={() => router.push("/login")}>
-              Sign In
-            </Button>
+            <button
+              type="button"
+              onClick={() => router.push("/login")}
+              className="inline-flex h-7 items-center gap-1.5 border border-primary bg-primary/10 px-2.5 text-[12px] font-medium text-primary hover:bg-primary/20"
+            >
+              <span>{">"}</span>
+              <span>sign in</span>
+            </button>
           )}
         </div>
       </header>

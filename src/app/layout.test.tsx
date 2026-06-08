@@ -11,8 +11,7 @@ vi.mock('@/components/ui/sonner', () => ({
 }));
 
 vi.mock('next/font/google', () => ({
-  Geist: () => ({ variable: '--font-geist-sans' }),
-  Geist_Mono: () => ({ variable: '--font-geist-mono' }),
+  JetBrains_Mono: () => ({ variable: '--font-mono' }),
 }));
 
 describe('RootLayout', () => {

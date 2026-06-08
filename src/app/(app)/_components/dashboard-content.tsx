@@ -7,9 +7,6 @@ import {
   FileBox,
   Users,
   HardDrive,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
   RefreshCw,
   Package,
   ArrowRight,
@@ -25,7 +22,6 @@ import sbomApi from "@/lib/api/sbom";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
 import type { CveTrends } from "@/types/sbom";
-import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
@@ -45,45 +41,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function healthIcon(status: string | undefined) {
-  if (!status) return <XCircle className="size-4 text-muted-foreground" />;
+function healthGlyph(status: string | undefined): string {
+  if (!status) return "○";
   const s = status.toLowerCase();
-  if (s === "healthy") return <CheckCircle2 className="size-4 text-emerald-600" />;
-  if (s === "degraded" || s === "unavailable")
-    return <AlertTriangle className="size-4 text-amber-500" />;
-  return <XCircle className="size-4 text-red-500" />;
+  if (s === "healthy") return "●";
+  if (s === "degraded" || s === "unavailable") return "◐";
+  return "✕";
 }
 
-function healthColor(status: string | undefined): string {
+function healthTone(status: string | undefined): string {
   if (!status) return "text-muted-foreground";
   const s = status.toLowerCase();
-  if (s === "healthy") return "text-emerald-600 dark:text-emerald-400";
-  if (s === "degraded" || s === "unavailable")
-    return "text-amber-600 dark:text-amber-400";
-  return "text-red-600 dark:text-red-400";
+  if (s === "healthy") return "text-primary";
+  if (s === "degraded" || s === "unavailable") return "text-foreground/70";
+  return "text-seal";
 }
 
-const formatBadgeColors: Record<string, string> = {
-  maven: "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400",
-  pypi: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400",
-  npm: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400",
-  docker: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400",
-  cargo: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
-  helm: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400",
-  nuget: "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400",
-  go: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400",
-  generic: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-};
-
-function getFormatBadgeClass(format: string): string {
-  return formatBadgeColors[format.toLowerCase()] ?? formatBadgeColors.generic;
+function SectionLabel({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <div className="mb-3 flex items-center gap-2 text-xs">
+      <span aria-hidden className="text-muted-foreground/70">─</span>
+      <span className="lowercase text-primary">{children}</span>
+      <span aria-hidden className="flex-1 border-t border-border/70" />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -98,15 +85,127 @@ function HealthCard({
   status: string | undefined;
 }>) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
-      {healthIcon(status)}
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`text-sm font-medium capitalize ${healthColor(status)}`}>
-          {status ?? "Unknown"}
-        </p>
-      </div>
+    <div className="group flex items-baseline gap-2 border border-border/60 bg-card/40 px-3 py-2 hover:border-primary/60 hover:bg-card">
+      <span className={`leading-none ${healthTone(status)}`} aria-hidden>
+        {healthGlyph(status)}
+      </span>
+      <span className="text-xs lowercase text-muted-foreground">{label}</span>
+      <span className={`ml-auto text-xs lowercase ${healthTone(status)}`}>
+        {status ?? "unknown"}
+      </span>
     </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  signal,
+}: Readonly<{
+  label: string;
+  value: React.ReactNode;
+  signal?: boolean;
+}>) {
+  return (
+    <span className="inline-flex items-baseline whitespace-nowrap">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground/60">=</span>
+      <span className={signal ? "text-primary" : "text-foreground"}>{value}</span>
+    </span>
+  );
+}
+
+function StatusLine({
+  user,
+  health,
+  stats,
+  isRefreshing,
+  onRefresh,
+}: Readonly<{
+  user: { display_name?: string | null; username?: string | null } | null | undefined;
+  health: { status?: string; version?: string } | undefined;
+  stats: {
+    total_repositories?: number;
+    total_artifacts?: number;
+    total_storage_bytes?: number;
+    total_users?: number;
+  } | undefined;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}>) {
+  const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const ident = user?.username ?? "anon";
+
+  return (
+    <section className="border border-border bg-background/40">
+      <header className="flex items-baseline justify-between gap-4 border-b border-border bg-card/40 px-4 py-2">
+        <span className="text-sm">
+          <span className="text-primary">ak://</span>
+          <span className="text-foreground">prod</span>
+          <span className="text-muted-foreground"> · {ident}@</span>
+          <span className="text-foreground/80">artifact-keeper</span>
+        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {stamp}Z
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground hover:border-border hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`size-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span>reload</span>
+          </button>
+        </div>
+      </header>
+      <div className="px-4 py-3">
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+          <Stat
+            label="health"
+            signal
+            value={
+              <span className={healthTone(health?.status)}>
+                {healthGlyph(health?.status)}
+                {(health?.status ?? "unknown").toLowerCase()}
+              </span>
+            }
+          />
+          <Stat
+            label="repos"
+            value={stats?.total_repositories?.toLocaleString() ?? "—"}
+          />
+          <Stat
+            label="artifacts"
+            value={stats?.total_artifacts?.toLocaleString() ?? "—"}
+          />
+          <Stat
+            label="storage"
+            value={
+              stats?.total_storage_bytes != null
+                ? formatBytes(stats.total_storage_bytes)
+                : "—"
+            }
+          />
+          <Stat
+            label="users"
+            value={stats?.total_users?.toLocaleString() ?? "—"}
+          />
+          <Stat label="audit" value="clean" />
+          <Stat label="build" value={health?.version ?? "dev"} />
+        </div>
+        <div className="mt-2 text-[11px] text-muted-foreground">
+          <span className="text-primary">$</span>{" "}
+          <span className="text-foreground/80">ak status</span>{" "}
+          <span className="text-muted-foreground">--watch</span>
+          {"   "}
+          <span className="text-muted-foreground/70">
+            # streaming events · ctrl-c to exit
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -142,27 +241,21 @@ function TableSkeleton() {
 
 function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
   return (
-    <TableRow>
+    <TableRow className="group">
       <TableCell>
         <Link
           href={`/repositories/${repo.key}`}
-          className="font-medium text-primary hover:underline"
+          className="text-sm text-foreground group-hover:text-primary"
         >
-          {repo.name || repo.key}
+          <span className="text-primary">{repo.format.toLowerCase()}</span>
+          <span className="text-muted-foreground">:</span>
+          <span>{repo.name || repo.key}</span>
         </Link>
-      </TableCell>
-      <TableCell>
-        <Badge
-          variant="outline"
-          className={`border font-medium uppercase text-xs ${getFormatBadgeClass(repo.format)}`}
-        >
-          {repo.format}
-        </Badge>
       </TableCell>
       <TableCell>
         <StatusBadge status={repo.repo_type} />
       </TableCell>
-      <TableCell className="text-right tabular-nums">
+      <TableCell className="text-right text-sm tabular-nums text-foreground/80">
         {formatBytes(repo.storage_used_bytes)}
       </TableCell>
     </TableRow>
@@ -176,17 +269,17 @@ function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
 const SEVERITY_LEVELS = ["critical", "high", "medium", "low"] as const;
 
 const SEVERITY_BAR_COLORS: Record<string, string> = {
-  critical: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-amber-400",
-  low: "bg-blue-400",
+  critical: "bg-seal",
+  high: "bg-primary",
+  medium: "bg-primary/60",
+  low: "bg-foreground/30",
 };
 
 const SEVERITY_TEXT_COLORS: Record<string, string> = {
-  critical: "text-red-600 dark:text-red-400",
-  high: "text-orange-600 dark:text-orange-400",
-  medium: "text-amber-600 dark:text-amber-400",
-  low: "text-blue-600 dark:text-blue-400",
+  critical: "text-seal",
+  high: "text-primary",
+  medium: "text-foreground/80",
+  low: "text-muted-foreground",
 };
 
 function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
@@ -199,36 +292,49 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
   const max = Math.max(...Object.values(counts), 1);
 
   return (
-    <div className="space-y-4">
-      {/* Horizontal bar chart */}
-      <div className="space-y-3">
+    <div className="space-y-5">
+      <div className="space-y-2">
         {SEVERITY_LEVELS.map((sev) => {
           const count = counts[sev];
           const pct = (count / max) * 100;
           return (
             <div key={sev} className="flex items-center gap-3">
-              <span className={`text-xs font-medium capitalize w-16 ${SEVERITY_TEXT_COLORS[sev]}`}>
+              <span
+                className={`text-[10px] uppercase tracking-[0.2em] w-20 ${SEVERITY_TEXT_COLORS[sev]}`}
+              >
                 {sev}
               </span>
-              <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
+              <div className="flex-1 h-2 bg-muted/60 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${SEVERITY_BAR_COLORS[sev]}`}
-                  style={{ width: `${pct}%`, minWidth: count > 0 ? "8px" : "0" }}
+                  className={`h-full transition-all ${SEVERITY_BAR_COLORS[sev]}`}
+                  style={{ width: `${pct}%`, minWidth: count > 0 ? "4px" : "0" }}
                 />
               </div>
-              <span className="text-sm font-medium tabular-nums w-8 text-right">{count}</span>
+              <span className="text-sm tabular-nums w-10 text-right text-foreground">
+                {count}
+              </span>
             </div>
           );
         })}
       </div>
 
-      {/* Status summary row */}
-      <div className="flex items-center gap-6 pt-2 border-t text-xs text-muted-foreground">
-        <span>Open: <strong className="text-foreground">{trends.open_cves}</strong></span>
-        <span>Fixed: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
-        <span>Acknowledged: <strong className="text-foreground">{trends.acknowledged_cves}</strong></span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border/60 pt-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+        <span>
+          Open <strong className="ml-1 text-foreground tabular-nums">{trends.open_cves}</strong>
+        </span>
+        <span>
+          Fixed <strong className="ml-1 text-foreground tabular-nums">{trends.fixed_cves}</strong>
+        </span>
+        <span>
+          Ack <strong className="ml-1 text-foreground tabular-nums">{trends.acknowledged_cves}</strong>
+        </span>
         {trends.avg_days_to_fix != null && (
-          <span>Avg fix time: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
+          <span>
+            ttf{" "}
+            <strong className="ml-1 text-foreground tabular-nums">
+              {Math.round(trends.avg_days_to_fix)}d
+            </strong>
+          </span>
         )}
       </div>
     </div>
@@ -291,37 +397,21 @@ export function DashboardContent() {
     queryClient.invalidateQueries({ queryKey: ["cve-trends"] });
   }
 
-  const greeting = user?.display_name || user?.username;
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title={greeting ? `Welcome back, ${greeting}` : "Dashboard"}
-        description="Overview of your Artifact Keeper instance."
-        actions={
-          isAuthenticated ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw
-                className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="space-y-8">
+      {isAuthenticated && (
+        <StatusLine
+          user={user}
+          health={health}
+          stats={stats}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
+        />
+      )}
 
-      {/* System Health (authenticated users only) */}
       {isAuthenticated && (
         <section>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            System Health
-          </h2>
+          <SectionLabel>subsystems</SectionLabel>
           {healthLoading ? (
             <HealthSkeleton />
           ) : (
@@ -355,12 +445,9 @@ export function DashboardContent() {
         </section>
       )}
 
-      {/* Admin Stats */}
       {user?.is_admin && (
         <section>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Statistics
-          </h2>
+          <SectionLabel>stats</SectionLabel>
           {statsLoading && <StatsSkeleton />}
           {!statsLoading && stats && (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -401,12 +488,9 @@ export function DashboardContent() {
         </section>
       )}
 
-      {/* Security Overview (Admin only) */}
       {user?.is_admin && (
         <section>
-          <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Security Overview
-          </h2>
+          <SectionLabel>security</SectionLabel>
           {cveTrendsLoading && <StatsSkeleton />}
           {!cveTrendsLoading && cveTrends && (
             <div className="space-y-4">
@@ -437,7 +521,6 @@ export function DashboardContent() {
                 />
               </div>
 
-              {/* Severity Breakdown */}
               {cveTrends.total_cves > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
@@ -458,7 +541,6 @@ export function DashboardContent() {
         </section>
       )}
 
-      {/* Recent Repositories */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Repositories</CardTitle>
@@ -478,7 +560,6 @@ export function DashboardContent() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Format</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Storage</TableHead>
                 </TableRow>
