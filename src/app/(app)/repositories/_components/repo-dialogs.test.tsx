@@ -1454,7 +1454,7 @@ describe('RepoDialogs - Default Upstream URL', () => {
     const latestSelects = within(dialog).getAllByTestId('mock-select');
     fireEvent.change(latestSelects[0], { target: { value: 'pypi' } });
 
-    expect(urlInput.value).toBe('https://pypi.org/simple');
+    expect(urlInput.value).toBe('https://pypi.org');
   });
 
   it('does not overwrite user-modified URL when format changes', async () => {

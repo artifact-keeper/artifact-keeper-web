@@ -3,7 +3,7 @@ export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
   maven: "https://repo.maven.apache.org/maven2",
   gradle: "https://repo.maven.apache.org/maven2",
   npm: "https://registry.npmjs.org",
-  pypi: "https://pypi.org/simple",
+  pypi: "https://pypi.org",
   docker: "https://registry-1.docker.io",
   nuget: "https://api.nuget.org/v3/index.json",
   cargo: "https://index.crates.io",
