@@ -22,6 +22,12 @@ export interface DataTableColumn<T> {
   sortable?: boolean;
   className?: string;
   headerClassName?: string;
+  /**
+   * Render the header text visually hidden but still exposed to screen readers.
+   * Use for utility columns (e.g. row actions) that should not show a visible
+   * label but must not leave an empty, nameless column header.
+   */
+  srOnlyHeader?: boolean;
 }
 
 type SortDir = "asc" | "desc";
@@ -96,6 +102,9 @@ export function DataTable<T>({
 
   const totalItems = total ?? data.length;
 
+  const renderHeaderLabel = (col: DataTableColumn<T>) =>
+    col.srOnlyHeader ? <span className="sr-only">{col.header}</span> : col.header;
+
   if (loading) {
     return (
       <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
@@ -106,7 +115,7 @@ export function DataTable<T>({
               <TableRow>
                 {columns.map((col) => (
                   <TableHead key={col.id} className={col.headerClassName}>
-                    {col.header}
+                    {renderHeaderLabel(col)}
                   </TableHead>
                 ))}
               </TableRow>
@@ -136,7 +145,7 @@ export function DataTable<T>({
             <TableRow>
               {columns.map((col) => (
                 <TableHead key={col.id} className={col.headerClassName}>
-                  {col.header}
+                  {renderHeaderLabel(col)}
                 </TableHead>
               ))}
             </TableRow>
@@ -189,7 +198,7 @@ export function DataTable<T>({
                         )}
                       </button>
                     ) : (
-                      col.header
+                      renderHeaderLabel(col)
                     )}
                   </TableHead>
                 );

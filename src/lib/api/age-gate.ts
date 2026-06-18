@@ -50,21 +50,29 @@ const ageGateApi = {
   },
 
   getReview: async (id: string): Promise<AgeGateReview> => {
-    return apiFetch<AgeGateReview>(`/api/v1/admin/age-gate/reviews/${id}`);
+    return apiFetch<AgeGateReview>(
+      `/api/v1/admin/age-gate/reviews/${encodeURIComponent(id)}`,
+    );
   },
 
   approve: async (id: string, reason?: string): Promise<AgeGateReview> => {
-    return apiFetch<AgeGateReview>(`/api/v1/admin/age-gate/reviews/${id}/approve`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
+    return apiFetch<AgeGateReview>(
+      `/api/v1/admin/age-gate/reviews/${encodeURIComponent(id)}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      },
+    );
   },
 
   reject: async (id: string, reason?: string): Promise<AgeGateReview> => {
-    return apiFetch<AgeGateReview>(`/api/v1/admin/age-gate/reviews/${id}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
+    return apiFetch<AgeGateReview>(
+      `/api/v1/admin/age-gate/reviews/${encodeURIComponent(id)}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      },
+    );
   },
 
   getRepoConfig: async (repoKey: string): Promise<AgeGateConfig> => {

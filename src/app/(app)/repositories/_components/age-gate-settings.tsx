@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import ageGateApi from "@/lib/api/age-gate";
 import { mutationErrorToast } from "@/lib/error-utils";
-import type { Repository } from "@/types/repository";
+import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,9 +35,18 @@ export function AgeGateSettings({ repository }: AgeGateSettingsProps) {
 
   // Local overrides track user edits. Undefined = fall back to server value.
   const [overrides, setOverrides] = useState<FormOverrides>({});
+  // Visually-hidden status announced to assistive tech after a save attempt.
+  const [statusMessage, setStatusMessage] = useState("");
 
   const enabled = overrides.enabled ?? data?.enabled ?? false;
   const minAgeDays = overrides.minAgeDays ?? data?.min_age_days ?? 7;
+
+  // Mirror the backend CHECK (1..=3650) so invalid input is caught before the
+  // request, with an accessible inline error instead of a generic 400 toast.
+  const minAgeError =
+    !Number.isInteger(minAgeDays) || minAgeDays < 1 || minAgeDays > 3650
+      ? "Enter a whole number of days between 1 and 3650."
+      : null;
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -47,11 +56,15 @@ export function AgeGateSettings({ repository }: AgeGateSettingsProps) {
       }),
     onSuccess: () => {
       toast.success("Age gate settings saved");
+      setStatusMessage("Age gate settings saved.");
       setOverrides({});
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key, "age-gate"] });
     },
-    onError: mutationErrorToast("Failed to save age gate settings"),
+    onError: (err) => {
+      setStatusMessage("Failed to save age gate settings.");
+      mutationErrorToast("Failed to save age gate settings")(err);
+    },
   });
 
   if (!isEligible) {
@@ -92,17 +105,28 @@ export function AgeGateSettings({ repository }: AgeGateSettingsProps) {
           max={3650}
           value={minAgeDays}
           disabled={!enabled || isLoading || saveMutation.isPending}
+          aria-invalid={minAgeError ? true : undefined}
+          aria-describedby={minAgeError ? "age-gate-days-error" : undefined}
           onChange={(e) => setOverrides((o) => ({ ...o, minAgeDays: Number(e.target.value) }))}
         />
+        {minAgeError ? (
+          <p id="age-gate-days-error" role="alert" className="text-xs text-destructive">
+            {minAgeError}
+          </p>
+        ) : null}
       </div>
 
       <Button
         type="button"
-        disabled={isLoading || saveMutation.isPending}
+        disabled={isLoading || saveMutation.isPending || !!minAgeError}
         onClick={() => saveMutation.mutate()}
       >
         Save age gate settings
       </Button>
+
+      <p role="status" aria-live="polite" className="sr-only">
+        {statusMessage}
+      </p>
     </div>
   );
 }

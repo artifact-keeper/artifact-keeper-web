@@ -68,6 +68,9 @@ export default function AgeGatePage() {
     review: AgeGateReview;
   } | null>(null);
   const [actionReason, setActionReason] = useState("");
+  // Visually-hidden status announced to assistive tech after a review action,
+  // since toasts alone are not reliably surfaced by every screen reader.
+  const [actionStatus, setActionStatus] = useState("");
 
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
     queryKey: ["age-gate", "reviews", "pending", pendingPage],
@@ -84,6 +87,9 @@ export default function AgeGatePage() {
     queryKey: ["age-gate", "reviews", "history", historyPage],
     queryFn: () =>
       ageGateApi.listReviews({
+        // Filter server-side so pagination totals match the rows shown; filtering
+        // client-side left "pending" rows out of a page while still counting them.
+        status: "approved,rejected",
         page: historyPage,
         per_page: perPage,
       }),
@@ -91,8 +97,7 @@ export default function AgeGatePage() {
   });
 
   const pendingItems = pendingData?.items ?? [];
-  const historyItems =
-    historyData?.items.filter((item) => item.status !== "pending") ?? [];
+  const historyItems = historyData?.items ?? [];
   const pendingTotal = pendingData?.pagination?.total ?? 0;
 
   const approveMutation = useMutation({
@@ -100,11 +105,15 @@ export default function AgeGatePage() {
       ageGateApi.approve(id, reason),
     onSuccess: () => {
       toast.success("Package version approved");
+      setActionStatus("Package version approved.");
       queryClient.invalidateQueries({ queryKey: ["age-gate"] });
       setActionDialog(null);
       setActionReason("");
     },
-    onError: mutationErrorToast("Failed to approve review"),
+    onError: (err) => {
+      setActionStatus("Failed to approve review.");
+      mutationErrorToast("Failed to approve review")(err);
+    },
   });
 
   const rejectMutation = useMutation({
@@ -112,11 +121,15 @@ export default function AgeGatePage() {
       ageGateApi.reject(id, reason),
     onSuccess: () => {
       toast.success("Package version rejected");
+      setActionStatus("Package version rejected.");
       queryClient.invalidateQueries({ queryKey: ["age-gate"] });
       setActionDialog(null);
       setActionReason("");
     },
-    onError: mutationErrorToast("Failed to reject review"),
+    onError: (err) => {
+      setActionStatus("Failed to reject review.");
+      mutationErrorToast("Failed to reject review")(err);
+    },
   });
 
   const isActioning = approveMutation.isPending || rejectMutation.isPending;
@@ -179,12 +192,14 @@ export default function AgeGatePage() {
     },
     {
       id: "actions",
-      header: "",
+      header: "Actions",
+      srOnlyHeader: true,
       cell: (row) => (
         <div className="flex justify-end gap-2">
           <Button
             size="sm"
             variant="outline"
+            aria-label={`Approve ${row.package_name}@${row.package_version}`}
             onClick={() => setActionDialog({ type: "approve", review: row })}
           >
             Approve
@@ -192,6 +207,7 @@ export default function AgeGatePage() {
           <Button
             size="sm"
             variant="destructive"
+            aria-label={`Reject ${row.package_name}@${row.package_version}`}
             onClick={() => setActionDialog({ type: "reject", review: row })}
           >
             Reject
@@ -216,6 +232,10 @@ export default function AgeGatePage() {
         title="Age Gate"
         description="Review proxy packages younger than the configured age threshold before they are served to clients."
       />
+
+      <p role="status" aria-live="polite" className="sr-only">
+        {actionStatus}
+      </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
@@ -307,17 +327,20 @@ export default function AgeGatePage() {
             <Button
               variant={actionDialog?.type === "reject" ? "destructive" : "default"}
               disabled={isActioning}
+              aria-label={
+                actionDialog?.type === "approve" ? "Approve package" : "Reject package"
+              }
               onClick={handleAction}
             >
               {isActioning ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : actionDialog?.type === "approve" ? (
                 <>
-                  <CheckCircle2 className="size-4" /> Approve
+                  <CheckCircle2 className="size-4" aria-hidden="true" /> Approve
                 </>
               ) : (
                 <>
-                  <XCircle className="size-4" /> Reject
+                  <XCircle className="size-4" aria-hidden="true" /> Reject
                 </>
               )}
             </Button>
