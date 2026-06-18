@@ -672,8 +672,8 @@ describe("NotificationsTabContent", () => {
   // WEBHOOK_EVENTS constant
   // -----------------------------------------------------------------------
 
-  it("exports WEBHOOK_EVENTS with 9 event types", () => {
-    expect(WEBHOOK_EVENTS).toHaveLength(9);
+  it("exports WEBHOOK_EVENTS with 12 event types", () => {
+    expect(WEBHOOK_EVENTS).toHaveLength(12);
     expect(WEBHOOK_EVENTS.map((e) => e.value)).toContain("artifact_uploaded");
     expect(WEBHOOK_EVENTS.map((e) => e.value)).toContain("build_completed");
     expect(WEBHOOK_EVENTS.map((e) => e.value)).toContain("repository_deleted");
