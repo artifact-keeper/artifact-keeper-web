@@ -122,7 +122,11 @@ export default function SigningPage() {
   function submitCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!canCreate) return;
-    createMutation.mutate({ ...form, name: form.name.trim() });
+    // Omit blank optional UID fields rather than sending empty strings.
+    const req: CreateSigningKeyRequest = { name: form.name.trim(), key_type: form.key_type };
+    if (form.uid_name?.trim()) req.uid_name = form.uid_name.trim();
+    if (form.uid_email?.trim()) req.uid_email = form.uid_email.trim();
+    createMutation.mutate(req);
   }
 
   return (
@@ -154,7 +158,7 @@ export default function SigningPage() {
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
           <p className="text-sm font-medium">Couldn&apos;t load signing keys</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
             Retry

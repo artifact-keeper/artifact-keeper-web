@@ -13,7 +13,6 @@ import {
 } from '@artifact-keeper/sdk';
 import type {
   SigningKeyPublic,
-  KeyListResponse,
   SigningConfigResponse,
   RepositorySigningConfig,
 } from '@artifact-keeper/sdk';
@@ -115,8 +114,7 @@ const signingApi = {
   listKeys: async (): Promise<SigningKey[]> => {
     const { data, error } = await listKeys();
     if (error) throw error;
-    const list = assertData(data, 'signingApi.listKeys') as KeyListResponse;
-    return list.keys.map(adaptKey);
+    return assertData(data, 'signingApi.listKeys').keys.map(adaptKey);
   },
 
   getKey: async (keyId: string): Promise<SigningKey> => {
