@@ -16,6 +16,7 @@ import {
   Bot,
   BookOpen,
   GitPullRequestArrow,
+  Workflow,
   Key,
   FileSignature,
   Shield,
@@ -76,6 +77,7 @@ const artifactItems: NavItem[] = [
 const integrationItems: NavItem[] = [
   { title: "Peers", href: "/peers", icon: Globe },
   { title: "Replication", href: "/replication", icon: RefreshCw },
+  { title: "Sync Policies", href: "/sync-policies", icon: Workflow },
   { title: "Plugins", href: "/plugins", icon: Puzzle },
   { title: "Webhooks", href: "/webhooks", icon: Webhook },
   { title: "Access Tokens", href: "/access-tokens", icon: Key },
