@@ -8,6 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import '@/lib/sdk-client';
 import {
   login as sdkLogin,
@@ -59,6 +60,7 @@ function clearTokens(): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -99,6 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       storeTokens(loginData as unknown as LoginResponse);
       await refreshUser();
+      // #487: the anonymous session may have cached auth-scoped queries
+      // (e.g. the repositories list returns only public repos when
+      // unauthenticated). Invalidate so they refetch under the new identity
+      // instead of showing stale/empty data until a manual refresh.
+      await queryClient.invalidateQueries();
 
       if (loginData.must_change_password) {
         setMustChangePassword(true);
@@ -106,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [refreshUser]
+    [refreshUser, queryClient]
   );
 
   const verifyTotp = useCallback(
@@ -120,11 +127,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTotpRequired(false);
       setTotpToken(null);
       await refreshUser();
+      // #487: refetch auth-scoped queries under the now-authenticated identity.
+      await queryClient.invalidateQueries();
       if (tokenData.must_change_password) {
         setMustChangePassword(true);
       }
     },
-    [totpToken, refreshUser]
+    [totpToken, refreshUser, queryClient]
   );
 
   const clearTotpRequired = useCallback(() => {
@@ -142,8 +151,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setMustChangePassword(false);
       setPasswordExpiresAt(null);
+      // #487 / security: drop every cached query so the next (anonymous or
+      // next-user) session never sees the previous identity's private data.
+      queryClient.clear();
     }
-  }, []);
+  }, [queryClient]);
 
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
