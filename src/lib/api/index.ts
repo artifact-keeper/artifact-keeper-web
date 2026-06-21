@@ -21,6 +21,8 @@ export { default as monitoringApi } from './monitoring';
 export { default as qualityGatesApi } from './quality-gates';
 export { default as pypiTracksApi } from './pypi-tracks';
 export type { PypiTrack } from './pypi-tracks';
+export { default as curationApi } from './curation';
+export type { CurationPackage, ListCurationParams } from './curation';
 export { default as signingApi } from './signing';
 export type { SigningKey, SigningConfig, CreateSigningKeyRequest } from './signing';
 export { default as syncPoliciesApi } from './sync-policies';

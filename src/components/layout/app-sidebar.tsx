@@ -18,6 +18,7 @@ import {
   GitPullRequestArrow,
   Workflow,
   Key,
+  PackageCheck,
   FileSignature,
   Shield,
   ShieldCheck,
@@ -91,6 +92,7 @@ const securityItems: NavItem[] = [
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "License Policies", href: "/license-policies", icon: Scale },
+  { title: "Curation", href: "/curation", icon: PackageCheck },
   { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
