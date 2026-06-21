@@ -3,7 +3,7 @@
 import { useState, useCallback, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, RefreshCw, Package } from "lucide-react";
+import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { repositoriesApi, type UpstreamAuthPayload } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
@@ -76,7 +76,7 @@ export function RepositoriesContent() {
   }>({ state: "idle" });
 
   // --- query ---
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: [
       "repositories",
       formatFilter === "__all__" ? undefined : formatFilter,
@@ -336,7 +336,32 @@ export function RepositoriesContent() {
             ))}
           </div>
         )}
-        {!isLoading && filtered.length === 0 && (
+        {/* #478: a failed list request must be visually distinct from a
+            genuinely empty install, otherwise a transient backend outage reads
+            as "all repositories were deleted". */}
+        {!isLoading && isError && filtered.length === 0 && (
+          <div
+            className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground"
+            role="alert"
+          >
+            <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
+            <p className="text-sm font-medium text-foreground">Couldn&apos;t load repositories</p>
+            <p className="mt-1 text-xs max-w-sm">
+              {toUserMessage(error, "The server could not be reached. Your repositories are safe.")}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
+              Retry
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Package className="size-8 mb-2 opacity-50" />
             <p className="text-sm">No repositories found.</p>
