@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, act, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,16 @@ function TestConsumer() {
   );
 }
 
+// AuthProvider calls useQueryClient (to invalidate auth-scoped queries on
+// login/logout, #487), so every render must sit under a QueryClientProvider —
+// as it does in production (src/providers/index.tsx).
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -101,7 +112,7 @@ describe("AuthProvider", () => {
   });
 
   it("starts in loading state and then resolves", async () => {
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -128,7 +139,7 @@ describe("AuthProvider", () => {
       error: null,
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -154,7 +165,7 @@ describe("AuthProvider", () => {
       error: null,
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -180,7 +191,7 @@ describe("AuthProvider", () => {
       error: null,
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -208,7 +219,7 @@ describe("AuthProvider", () => {
       error: null,
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -247,7 +258,7 @@ describe("AuthProvider", () => {
     });
     mockSdkLogout.mockResolvedValue({});
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -280,7 +291,7 @@ describe("AuthProvider", () => {
     });
     mockSdkChangePassword.mockResolvedValue({ error: null });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>
@@ -333,7 +344,7 @@ describe("AuthProvider", () => {
       error: null,
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>

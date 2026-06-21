@@ -19,12 +19,20 @@ vi.mock('next/navigation', () => ({
 }));
 
 let useQueryCallIndex = 0;
+const DEFAULT_FIRST_QUERY: Record<string, unknown> = {
+  data: { items: [], pagination: { total_pages: 1 } },
+  isLoading: false,
+  isFetching: false,
+};
+// The repositories-list query result (first useQuery call). Overridable per
+// test — e.g. to simulate a failed request (#478).
+let firstQueryResult: Record<string, unknown> = DEFAULT_FIRST_QUERY;
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => {
     const idx = useQueryCallIndex++;
     if (idx === 0) {
       // repositories list
-      return { data: { items: [], pagination: { total_pages: 1 } }, isLoading: false, isFetching: false };
+      return firstQueryResult;
     }
     // artifact search + extra repos queries return undefined data
     return { data: undefined, isLoading: false, isFetching: false };
@@ -187,6 +195,7 @@ describe('RepositoriesPage - rendering', () => {
     mutationConfigs.length = 0;
     useQueryCallIndex = 0;
     repoListItemCalls = [];
+    firstQueryResult = DEFAULT_FIRST_QUERY;
 
     vi.clearAllMocks();
   });
@@ -215,6 +224,24 @@ describe('RepositoriesPage - rendering', () => {
   it('shows empty state when no repositories', async () => {
     const { container } = await renderPage();
     expect(container.textContent).toContain('No repositories found');
+  });
+
+  // #478: a failed list request must render a distinct error state with a
+  // retry affordance, never the "no repositories" empty state (which reads as
+  // data loss during a backend outage).
+  it('shows an error state, not the empty state, when the list request fails', async () => {
+    firstQueryResult = {
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      isError: true,
+      error: new Error('Network down'),
+      refetch: vi.fn(),
+    };
+    const { container } = await renderPage();
+    expect(container.textContent).toContain("Couldn't load repositories");
+    expect(container.textContent).not.toContain('No repositories found');
+    expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent?.includes('Retry'))).toBe(true);
   });
 
   it('shows detail panel placeholder', async () => {
