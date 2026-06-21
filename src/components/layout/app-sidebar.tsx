@@ -17,6 +17,7 @@ import {
   BookOpen,
   GitPullRequestArrow,
   Key,
+  FileSignature,
   Shield,
   ShieldCheck,
   Search,
@@ -88,6 +89,7 @@ const securityItems: NavItem[] = [
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "License Policies", href: "/license-policies", icon: Scale },
+  { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
 
