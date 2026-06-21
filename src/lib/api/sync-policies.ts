@@ -37,15 +37,35 @@ export interface CreateSyncPolicyRequest {
   enabled?: boolean;
 }
 
-export type UpdateSyncPolicyRequest = Partial<CreateSyncPolicyRequest>;
+/**
+ * Update payload. Note the SDK's `UpdateSyncPolicyPayload` has **no `filter`
+ * convenience field** (unlike create) — the glob only exists as the
+ * `artifact_filter.include_paths` shorthand, which the backend mirrors back to
+ * `filter` on read. So callers updating the filter must set `artifact_filter`,
+ * not `filter`; this type omits `filter` to make that impossible to get wrong.
+ */
+export interface UpdateSyncPolicyRequest {
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+  replication_mode?: string;
+  priority?: number;
+  artifact_filter?: Record<string, unknown>;
+}
+
+/** Build the structured `artifact_filter` from the single-glob shorthand. */
+export function filterToArtifactFilter(glob: string): Record<string, unknown> {
+  const trimmed = glob.trim();
+  return trimmed ? { include_paths: [trimmed] } : {};
+}
 
 function adapt(sdk: SyncPolicyResponse): SyncPolicy {
   return {
     id: sdk.id,
     name: sdk.name,
-    description: sdk.description,
+    description: sdk.description ?? "",
     enabled: sdk.enabled,
-    filter: sdk.filter,
+    filter: sdk.filter ?? "",
     replication_mode: sdk.replication_mode,
     priority: sdk.priority,
     precedence: sdk.precedence,

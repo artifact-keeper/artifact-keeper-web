@@ -61,6 +61,11 @@ vi.mock("@/lib/api/sync-policies", () => ({
     remove: (...a: unknown[]) => api.remove(...a),
     toggle: (...a: unknown[]) => api.toggle(...a),
   },
+  // real implementation so the filter->artifact_filter translation is exercised
+  filterToArtifactFilter: (glob: string) => {
+    const t = glob.trim();
+    return t ? { include_paths: [t] } : {};
+  },
 }));
 
 let isAdmin = true;
@@ -166,20 +171,35 @@ describe("SyncPoliciesPage", () => {
     await user.type(screen.getByLabelText("Name"), "  push-all  ");
     await user.click(screen.getByRole("button", { name: /^Create$/i }));
     expect(saveMutate()).toHaveBeenCalledWith(
-      expect.objectContaining({ id: null, body: expect.objectContaining({ name: "push-all" }) }),
+      expect.objectContaining({ id: null, form: expect.objectContaining({ name: "push-all" }) }),
     );
   });
 
-  it("edits an existing policy (prefilled, update with id)", async () => {
+  it("edits an existing policy (filter + name prefilled, update with id)", async () => {
     const user = userEvent.setup();
     queryResponse = { data: [POLICY], isLoading: false };
     render(<SyncPoliciesPage />);
     await user.click(screen.getByRole("button", { name: /Edit mirror-releases/i }));
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("mirror-releases");
+    expect((screen.getByLabelText(/Filter glob/i) as HTMLInputElement).value).toBe("*.tar.gz");
     await user.click(screen.getByRole("button", { name: /^Save$/i }));
     expect(saveMutate()).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "sp1", body: expect.objectContaining({ name: "mirror-releases" }) }),
+      expect.objectContaining({
+        id: "sp1",
+        form: expect.objectContaining({ name: "mirror-releases", filter: "*.tar.gz" }),
+      }),
     );
+  });
+
+  it("clearing Priority yields undefined (not 0/NaN)", async () => {
+    const user = userEvent.setup();
+    render(<SyncPoliciesPage />);
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.type(screen.getByLabelText("Name"), "p");
+    await user.clear(screen.getByLabelText("Priority"));
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    const arg = saveMutate().mock.calls[0][0] as { form: { priority?: number } };
+    expect(arg.form.priority).toBeUndefined();
   });
 
   it("toggles enabled via the switch", async () => {
@@ -203,10 +223,17 @@ describe("SyncPoliciesPage", () => {
   it("mutation callbacks invalidate, toast, and call the API", () => {
     render(<SyncPoliciesPage />);
     const [save, toggle, del] = mutationConfigs;
-    save.mutationFn({ id: null, body: { name: "x" } });
-    expect(api.create).toHaveBeenCalledWith({ name: "x" });
-    save.mutationFn({ id: "sp1", body: { name: "y" } });
-    expect(api.update).toHaveBeenCalledWith("sp1", { name: "y" });
+    save.mutationFn({ id: null, form: { name: "x", filter: "*.tgz" } });
+    expect(api.create).toHaveBeenCalledWith({ name: "x", filter: "*.tgz" });
+    // update must translate the glob filter into artifact_filter (UpdateSyncPolicyPayload has no `filter`)
+    save.mutationFn({ id: "sp1", form: { name: "y", filter: "*.whl", replication_mode: "pull", priority: 5 } });
+    expect(api.update).toHaveBeenCalledWith("sp1", {
+      name: "y",
+      description: undefined,
+      replication_mode: "pull",
+      priority: 5,
+      artifact_filter: { include_paths: ["*.whl"] },
+    });
     toggle.mutationFn({ id: "sp1", enabled: false });
     expect(api.toggle).toHaveBeenCalledWith("sp1", false);
     del.mutationFn("sp1");

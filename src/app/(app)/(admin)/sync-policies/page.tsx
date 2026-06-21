@@ -6,6 +6,7 @@ import { Workflow, Plus, Trash2, Pencil, AlertCircle, RotateCcw, Loader2 } from 
 import { toast } from "sonner";
 
 import syncPoliciesApi, {
+  filterToArtifactFilter,
   type SyncPolicy,
   type CreateSyncPolicyRequest,
 } from "@/lib/api/sync-policies";
@@ -64,8 +65,20 @@ export default function SyncPoliciesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
 
   const saveMutation = useMutation({
-    mutationFn: (vars: { id: string | null; body: CreateSyncPolicyRequest }) =>
-      vars.id ? syncPoliciesApi.update(vars.id, vars.body) : syncPoliciesApi.create(vars.body),
+    mutationFn: (vars: { id: string | null; form: CreateSyncPolicyRequest }) => {
+      if (vars.id) {
+        // UpdateSyncPolicyPayload has no `filter` shorthand — translate the glob
+        // into the structured artifact_filter the update endpoint accepts.
+        return syncPoliciesApi.update(vars.id, {
+          name: vars.form.name,
+          description: vars.form.description,
+          replication_mode: vars.form.replication_mode,
+          priority: vars.form.priority,
+          artifact_filter: filterToArtifactFilter(vars.form.filter ?? ""),
+        });
+      }
+      return syncPoliciesApi.create(vars.form);
+    },
     onSuccess: (_p, vars) => {
       invalidate();
       setDialogOpen(false);
@@ -123,7 +136,7 @@ export default function SyncPoliciesPage() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSave) return;
-    saveMutation.mutate({ id: editing?.id ?? null, body: { ...form, name: form.name.trim() } });
+    saveMutation.mutate({ id: editing?.id ?? null, form: { ...form, name: form.name.trim() } });
   }
 
   const rows = policies ?? [];
@@ -243,8 +256,14 @@ export default function SyncPoliciesPage() {
                   <Input
                     id="sp-priority"
                     type="number"
-                    value={form.priority ?? 100}
-                    onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) }))}
+                    min={0}
+                    value={form.priority ?? ""}
+                    onChange={(e) => {
+                      // Empty/invalid input -> undefined (omitted, backend default)
+                      // rather than 0 (Number("") === 0) or NaN (serializes to null).
+                      const n = e.target.valueAsNumber;
+                      setForm((f) => ({ ...f, priority: Number.isNaN(n) ? undefined : n }));
+                    }}
                   />
                 </div>
               </div>
