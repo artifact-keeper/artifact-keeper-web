@@ -74,6 +74,8 @@ const SDK_OIDC: SdkOidcConfigResponse = {
   scopes: ["openid", "email"],
   attribute_mapping: { email: "email", name: "name" },
   auto_create_users: true,
+  map_groups_to_groups: false,
+  pkce_enabled: false,
   is_enabled: true,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",

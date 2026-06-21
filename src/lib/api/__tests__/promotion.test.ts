@@ -40,6 +40,8 @@ const SDK_REPO: SdkRepositoryResponse = {
   upstream_url: null,
   upstream_auth_type: null,
   upstream_auth_configured: false,
+  allow_anonymous_access: false,
+  promotion_only: false,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
 };

@@ -19,6 +19,8 @@ export { default as lifecycleApi } from './lifecycle';
 export { default as telemetryApi } from './telemetry';
 export { default as monitoringApi } from './monitoring';
 export { default as qualityGatesApi } from './quality-gates';
+export { default as pypiTracksApi } from './pypi-tracks';
+export type { PypiTrack } from './pypi-tracks';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';

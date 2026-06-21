@@ -18,6 +18,7 @@ import {
   Package as PackageIcon,
   Settings,
   RotateCcw,
+  Link2,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -34,6 +35,7 @@ import { SecurityTabContent } from "./security-tab-content";
 import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
+import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
@@ -637,6 +639,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Members
             </TabsTrigger>
           )}
+          {user?.is_admin &&
+            repository.format === "pypi" &&
+            repository.repo_type === "virtual" && (
+              <TabsTrigger value="pypi-tracks">
+                <Link2 className="size-3.5 mr-1" />
+                Tracks
+              </TabsTrigger>
+            )}
           {user?.is_admin && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
@@ -790,6 +800,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <VirtualMembersPanel repository={repository} />
           </TabsContent>
         )}
+
+        {/* --- PyPI Tracks Tab (PEP 708, virtual PyPI repos) --- */}
+        {user?.is_admin &&
+          repository.format === "pypi" &&
+          repository.repo_type === "virtual" && (
+            <TabsContent value="pypi-tracks" className="mt-4">
+              <PypiTracksPanel repository={repository} />
+            </TabsContent>
+          )}
 
         {/* --- Security Tab --- */}
         {user?.is_admin && (

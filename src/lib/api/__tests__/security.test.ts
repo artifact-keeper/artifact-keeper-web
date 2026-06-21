@@ -77,6 +77,7 @@ const SDK_SCORE: SdkScoreResponse = {
 
 const SDK_SCAN: SdkScanResponse = {
   id: "s1",
+  is_reused: false,
   artifact_id: "a1",
   artifact_name: "lib.jar",
   artifact_version: "1.0",

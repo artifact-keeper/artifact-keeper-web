@@ -57,15 +57,16 @@ function isSdkHealthResponse(value: unknown): value is SdkHealthResponse {
 function adaptHealth(sdk: SdkHealthResponse): HealthResponse {
   const database = adaptCheck(sdk.checks.database) ?? { status: 'unknown' };
   const storage = adaptCheck(sdk.checks.storage) ?? { status: 'unknown' };
-  // Backend 1.2.0 renamed the search-engine health check from `meilisearch`
-  // to `opensearch`. The pinned SDK types only model `meilisearch`, so read
-  // the new field via passthrough and prefer it when present. Either field
-  // maps onto the single local `opensearch` check so the dashboard "Search
-  // Engine" card keeps rendering across both backend versions.
-  const checks = sdk.checks as typeof sdk.checks & {
-    opensearch?: CheckStatus | null;
+  // Backend 1.2.x renamed the search-engine health check from `meilisearch`
+  // to `opensearch`, and the 1.2.x SDK types now model `opensearch` natively.
+  // Older backends still report `meilisearch` at runtime, so read that legacy
+  // field via passthrough and fall back to it. Either field maps onto the
+  // single local `opensearch` check so the dashboard "Search Engine" card
+  // keeps rendering across both backend versions.
+  const legacyChecks = sdk.checks as typeof sdk.checks & {
+    meilisearch?: CheckStatus | null;
   };
-  const searchEngine = adaptCheck(checks.opensearch ?? checks.meilisearch);
+  const searchEngine = adaptCheck(sdk.checks.opensearch ?? legacyChecks.meilisearch);
   return {
     status: sdk.status,
     version: sdk.version,
