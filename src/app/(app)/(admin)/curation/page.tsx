@@ -123,6 +123,11 @@ export default function CurationPage() {
 
   const rows = packages ?? [];
   const allSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
+  // PackageResponse carries no per-row curation status, so the queue's state is
+  // the active filter. Only offer the transition that actually changes it:
+  // don't show "Approve" on the approved queue or "Block" on the blocked queue.
+  const canApprove = status !== "approved";
+  const canBlock = status !== "blocked";
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -176,6 +181,7 @@ export default function CurationPage() {
           size="sm"
           disabled={!repoId || reEvaluateMutation.isPending}
           onClick={() => reEvaluateMutation.mutate()}
+          title="Re-run curation rules. Packages not matched by any rule are blocked by default."
         >
           <RefreshCw className={`size-4 ${reEvaluateMutation.isPending ? "animate-spin" : ""}`} />
           Re-evaluate
@@ -184,12 +190,16 @@ export default function CurationPage() {
         {selected.size > 0 && (
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
-            <Button size="sm" onClick={() => setBulkAction("approve")}>
-              <Check className="size-4" /> Approve
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => setBulkAction("block")}>
-              <Ban className="size-4" /> Block
-            </Button>
+            {canApprove && (
+              <Button size="sm" onClick={() => setBulkAction("approve")}>
+                <Check className="size-4" /> Approve
+              </Button>
+            )}
+            {canBlock && (
+              <Button size="sm" variant="destructive" onClick={() => setBulkAction("block")}>
+                <Ban className="size-4" /> Block
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -237,6 +247,7 @@ export default function CurationPage() {
                 <th className="px-3 py-2 font-medium">Version</th>
                 <th className="px-3 py-2 font-medium">Format</th>
                 <th className="px-3 py-2 font-medium">Size</th>
+                <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -255,13 +266,25 @@ export default function CurationPage() {
                   <td className="px-3 py-2"><Badge variant="outline" className="uppercase">{p.format}</Badge></td>
                   <td className="px-3 py-2 text-muted-foreground">{formatBytes(p.size_bytes)}</td>
                   <td className="px-3 py-2">
+                    <Badge
+                      variant={status === "blocked" ? "destructive" : status === "approved" ? "secondary" : "outline"}
+                      className="capitalize"
+                    >
+                      {status}
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon-sm" aria-label={`Approve ${p.name}`} onClick={() => approveMutation.mutate(p.id)}>
-                        <Check className="size-4 text-emerald-600" />
-                      </Button>
-                      <Button variant="ghost" size="icon-sm" aria-label={`Block ${p.name}`} onClick={() => blockMutation.mutate(p.id)}>
-                        <Ban className="size-4 text-destructive" />
-                      </Button>
+                      {canApprove && (
+                        <Button variant="ghost" size="icon-sm" aria-label={`Approve ${p.name}`} onClick={() => approveMutation.mutate(p.id)}>
+                          <Check className="size-4 text-emerald-600" />
+                        </Button>
+                      )}
+                      {canBlock && (
+                        <Button variant="ghost" size="icon-sm" aria-label={`Block ${p.name}`} onClick={() => blockMutation.mutate(p.id)}>
+                          <Ban className="size-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>

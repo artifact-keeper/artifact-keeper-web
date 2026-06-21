@@ -211,6 +211,61 @@ describe("CurationPage", () => {
     expect(bulkMutate()).toHaveBeenCalledWith({ action: "approve", ids: ["p1"], why: "cve-free" });
   });
 
+  it("disables bulk Confirm until a non-blank reason is entered", async () => {
+    const user = userEvent.setup();
+    reposData = STAGING;
+    packagesData = { data: [PKG], isLoading: false };
+    render(<CurationPage />);
+    await selectRepo(user);
+    await user.click(screen.getByLabelText("Select left-pad"));
+    await user.click(screen.getByRole("button", { name: /^Approve$/i }));
+    const dialog = await screen.findByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: /confirm/i });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText("Reason"), "   ");
+    expect(confirm).toBeDisabled(); // whitespace-only stays disabled
+    await user.type(within(dialog).getByLabelText("Reason"), "ok");
+    expect(confirm).toBeEnabled();
+  });
+
+  it("clears the reason when the bulk dialog is cancelled", async () => {
+    const user = userEvent.setup();
+    reposData = STAGING;
+    packagesData = { data: [PKG], isLoading: false };
+    render(<CurationPage />);
+    await selectRepo(user);
+    await user.click(screen.getByLabelText("Select left-pad"));
+    await user.click(screen.getByRole("button", { name: /^Approve$/i }));
+    let dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Reason"), "typed");
+    await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
+    // reopen — the field should be empty again
+    await user.click(screen.getByRole("button", { name: /^Approve$/i }));
+    dialog = await screen.findByRole("dialog");
+    expect((within(dialog).getByLabelText("Reason") as HTMLInputElement).value).toBe("");
+  });
+
+  it("select-all selects every row", async () => {
+    const user = userEvent.setup();
+    reposData = STAGING;
+    packagesData = { data: [PKG, { ...PKG, id: "p2", name: "right-pad" }], isLoading: false };
+    render(<CurationPage />);
+    await selectRepo(user);
+    await user.click(screen.getByLabelText("Select all"));
+    expect(screen.getByText(/2 selected/i)).toBeInTheDocument();
+  });
+
+  it("hides the Approve action on the approved queue", async () => {
+    const user = userEvent.setup();
+    reposData = STAGING;
+    packagesData = { data: [PKG], isLoading: false };
+    render(<CurationPage />);
+    await selectRepo(user);
+    await user.selectOptions(screen.getByLabelText("Status filter"), "approved");
+    expect(screen.queryByRole("button", { name: /Approve left-pad/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Block left-pad/i })).toBeInTheDocument();
+  });
+
   it("re-evaluates the queue", async () => {
     const user = userEvent.setup();
     reposData = STAGING;
