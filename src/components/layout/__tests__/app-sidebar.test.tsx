@@ -78,6 +78,7 @@ vi.mock("lucide-react", () => {
     GitPullRequestArrow: icon,
     Key: icon,
     PackageCheck: icon,
+    FileSignature: icon,
     Shield: icon,
     ShieldCheck: icon,
     Search: icon,
