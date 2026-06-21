@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
-import type { Repository } from "@/types";
+import type { Repository, RepositoryType } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -234,15 +234,266 @@ const JVM_DEFAULT_VARIANT: Record<"maven" | "gradle" | "sbt", string> = {
   sbt: "sbt",
 };
 
-/** Generate repo-specific setup content based on format. JVM formats return a
- *  set of client variants (rendered as tabs); all other formats return a flat
- *  list of steps. */
+/** Build the npm-registry client variants (Npm, Yarn (v2+), Pnpm, Bun). All
+ *  consume the same npm-registry wire format. Yarn Classic (v1) reads `.npmrc`
+ *  like npm/pnpm/Bun, so v1 users can follow the Npm tab.
+ *
+ *  The config shape depends on the repo type:
+ *    - remote/virtual: the repo proxies (or aggregates) upstream registries,
+ *      so we configure it as the *default* registry. Every install — scoped
+ *      or not — flows through it. Scoped routing (`@foo:registry=...`) would
+ *      only catch `@foo/*` packages and miss everything else.
+ *    - local/staging: the repo hosts packages you publish, typically under a
+ *      scope. Scoped routing leaves public packages to the public npm
+ *      registry while routing `@scope/*` to the artifact keeper.
+ */
+function getNpmClientVariants(
+  repoKey: string,
+  repoType: RepositoryType,
+): SetupClientVariant[] {
+  const registryUrl = `${REGISTRY_URL}/npm/${repoKey}/`;
+  const authLine = `//${REGISTRY_HOST}/npm/${repoKey}/:_authToken=YOUR_TOKEN`;
+  const isProxy = repoType === "remote" || repoType === "virtual";
+
+  // .npmrc — read by pnpm and Bun. For proxies we set the *default* registry
+  // (every install flows through the repo); for hosted repos we scope-route
+  // so only `@key/*` packages hit the artifact keeper.
+  const npmrcConfig = isProxy
+    ? `registry=${registryUrl}
+${authLine}`
+    : `@${repoKey}:registry=${registryUrl}
+${authLine}`;
+
+  // npm CLI form — same proxy-vs-scope split, expressed as `npm config set`.
+  const npmCliConfig = isProxy
+    ? `npm config set registry ${registryUrl}
+npm config set //${REGISTRY_HOST}/npm/${repoKey}/:_authToken YOUR_TOKEN`
+    : `npm config set @${repoKey}:registry ${registryUrl}
+npm config set //${REGISTRY_HOST}/npm/${repoKey}/:_authToken YOUR_TOKEN`;
+
+  // .yarnrc.yml — same proxy-vs-scope reasoning as .npmrc.
+  const yarnrcConfig = isProxy
+    ? `npmRegistryServer: "${registryUrl}"
+
+npmRegistries:
+  "${registryUrl}":
+    npmAlwaysAuth: true
+    npmAuthToken: "YOUR_TOKEN"`
+    : `npmScopes:
+  ${repoKey}:
+    npmRegistryServer: "${registryUrl}"
+
+npmRegistries:
+  "${registryUrl}":
+    npmAlwaysAuth: true
+    npmAuthToken: "YOUR_TOKEN"`;
+
+  const installExample = isProxy ? "<package-name>" : `@${repoKey}/<package-name>`;
+
+  return [
+    {
+      key: "npm",
+      label: "Npm",
+      steps: [
+        {
+          title: "Configure registry",
+          description: "Run:",
+          code: npmCliConfig,
+        },
+        { title: "Install a package", code: `npm install ${installExample}` },
+        { title: "Publish a package", code: `npm publish --registry ${registryUrl}` },
+      ],
+    },
+    {
+      key: "yarn-berry",
+      label: "Yarn (v2+)",
+      steps: [
+        {
+          title: "Configure registry",
+          description: "Add to .yarnrc.yml (project root):",
+          code: yarnrcConfig,
+        },
+        { title: "Install a package", code: `yarn add ${installExample}` },
+        { title: "Publish a package", code: "yarn npm publish" },
+      ],
+    },
+    {
+      key: "pnpm",
+      label: "Pnpm",
+      steps: [
+        {
+          title: "Configure registry",
+          description: "Add to ~/.npmrc:",
+          code: npmrcConfig,
+        },
+        { title: "Install a package", code: `pnpm add ${installExample}` },
+        { title: "Publish a package", code: `pnpm publish --registry ${registryUrl}` },
+      ],
+    },
+    {
+      key: "bun",
+      label: "Bun",
+      steps: [
+        {
+          title: "Configure registry",
+          description: "Add to ~/.npmrc:",
+          code: npmrcConfig,
+        },
+        { title: "Install a package", code: `bun add ${installExample}` },
+        { title: "Publish a package", code: `bun publish --registry ${registryUrl}` },
+      ],
+    },
+  ];
+}
+
+/** Default npm-variant tab keyed by the repo's declared format. */
+const NPM_DEFAULT_VARIANT: Record<"npm" | "yarn" | "pnpm", string> = {
+  npm: "npm",
+  yarn: "yarn-berry",
+  pnpm: "pnpm",
+};
+
+/** Build the PyPI-Simple client variants (pip, Poetry, uv, Pipenv, twine). All
+ *  consume the same PyPI Simple wire format; twine is upload-only with its own
+ *  .pypirc config so it gets its own tab rather than being mixed into pip. */
+function getPypiClientVariants(repoKey: string): SetupClientVariant[] {
+  const simpleUrl = `${REGISTRY_URL}/pypi/${repoKey}/simple/`;
+  const uploadUrl = `${REGISTRY_URL}/pypi/${repoKey}/`;
+  // uv reads UV_INDEX_<NAME>_USERNAME/PASSWORD where <NAME> uppercases the
+  // index name and non-alphanumerics become underscores (e.g. "my-pypi" → MY_PYPI).
+  const uvEnvName = repoKey.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+
+  return [
+    {
+      key: "pip",
+      label: "Pip",
+      steps: [
+        {
+          title: "Configure index",
+          description: "Add to ~/.pip/pip.conf:",
+          code: `[global]
+index-url = ${simpleUrl}
+trusted-host = ${REGISTRY_HOST}`,
+        },
+        {
+          title: "Install a package",
+          code: `pip install --index-url ${simpleUrl} <package-name>`,
+        },
+      ],
+    },
+    {
+      key: "poetry",
+      label: "Poetry",
+      steps: [
+        {
+          title: "Configure source",
+          description:
+            "Run. Use `__token__` as the username for access tokens not scoped to a user; otherwise use your login:",
+          code: `poetry source add ${repoKey} ${simpleUrl}
+poetry config http-basic.${repoKey} __token__ YOUR_TOKEN`,
+        },
+        {
+          title: "Install a package",
+          code: `poetry add --source ${repoKey} <package-name>`,
+        },
+        {
+          title: "Publish a package",
+          code: `poetry publish --repository ${repoKey}`,
+        },
+      ],
+    },
+    {
+      key: "uv",
+      label: "Uv",
+      steps: [
+        {
+          title: "Configure index",
+          description: "Add to pyproject.toml:",
+          code: `[[tool.uv.index]]
+name = "${repoKey}"
+url = "${simpleUrl}"`,
+        },
+        {
+          title: "Set credentials",
+          description:
+            "uv reads credentials from environment variables (name uppercased, non-alphanumerics → _). Use `__token__` as the username for unscoped access tokens:",
+          code: `export UV_INDEX_${uvEnvName}_USERNAME=__token__
+export UV_INDEX_${uvEnvName}_PASSWORD=YOUR_TOKEN`,
+        },
+        { title: "Install a package", code: "uv add <package-name>" },
+      ],
+    },
+    {
+      key: "pipenv",
+      label: "Pipenv",
+      steps: [
+        {
+          title: "Configure source",
+          description:
+            "Add to Pipfile. Use `__token__` as the username for an access token; otherwise use your login:",
+          code: `[[source]]
+name = "${repoKey}"
+url = "https://__token__:YOUR_TOKEN@${REGISTRY_HOST}/pypi/${repoKey}/simple/"
+verify_ssl = true`,
+        },
+        { title: "Install a package", code: "pipenv install <package-name>" },
+      ],
+    },
+    {
+      key: "twine",
+      label: "Twine",
+      steps: [
+        {
+          title: "Configure repository",
+          description:
+            "Add to ~/.pypirc. Use `__token__` as the username for an access token; otherwise use your login:",
+          code: `[distutils]
+index-servers =
+    ${repoKey}
+
+[${repoKey}]
+repository = ${uploadUrl}
+username = __token__
+password = YOUR_TOKEN`,
+        },
+        {
+          title: "Upload a distribution",
+          code: `twine upload --repository ${repoKey} dist/*`,
+        },
+      ],
+    },
+  ];
+}
+
+/** Default PyPI-variant tab keyed by the repo's declared format. */
+const PYPI_DEFAULT_VARIANT: Record<"pypi" | "poetry", string> = {
+  pypi: "pip",
+  poetry: "poetry",
+};
+
+/** Generate repo-specific setup content based on format. JVM, npm, and PyPI
+ *  formats return a set of client variants (rendered as tabs); all other
+ *  formats return a flat list of steps. */
 function getRepoSetupContent(repo: Repository): RepoSetupContent {
   if (repo.format === "maven" || repo.format === "gradle" || repo.format === "sbt") {
     return {
       kind: "variants",
       variants: getJvmClientVariants(repo.key),
       defaultKey: JVM_DEFAULT_VARIANT[repo.format],
+    };
+  }
+  if (repo.format === "npm" || repo.format === "yarn" || repo.format === "pnpm") {
+    return {
+      kind: "variants",
+      variants: getNpmClientVariants(repo.key, repo.repo_type),
+      defaultKey: NPM_DEFAULT_VARIANT[repo.format],
+    };
+  }
+  if (repo.format === "pypi" || repo.format === "poetry") {
+    return {
+      kind: "variants",
+      variants: getPypiClientVariants(repo.key),
+      defaultKey: PYPI_DEFAULT_VARIANT[repo.format],
     };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
@@ -253,28 +504,10 @@ function getRepoSetupSteps(repo: Repository): SetupStep[] {
   const repoKey = repo.key;
 
   switch (repo.format) {
-    case "npm":
-    case "yarn":
-    case "pnpm":
-      return [
-        {
-          title: "Configure registry",
-          description: "Add to your .npmrc file or run:",
-          code: `npm config set @${repoKey}:registry ${REGISTRY_URL}/npm/${repoKey}/
-npm config set //${REGISTRY_HOST}/npm/${repoKey}/:_authToken YOUR_TOKEN`,
-        },
-        {
-          title: "Install a package",
-          code: `npm install @${repoKey}/<package-name>`,
-        },
-        {
-          title: "Publish a package",
-          code: `npm publish --registry ${REGISTRY_URL}/npm/${repoKey}/`,
-        },
-      ];
-    case "pypi":
-    case "poetry":
     case "conda":
+      // Conda has its own wire format (repodata.json), not PyPI Simple — it
+      // belongs with format-specific tooling, not the pypi-variants group.
+      // TODO: replace this pip-style placeholder with real conda channel setup.
       return [
         {
           title: "Configure pip",
@@ -286,10 +519,6 @@ trusted-host = ${REGISTRY_HOST}`,
         {
           title: "Install a package",
           code: `pip install --index-url ${REGISTRY_URL}/pypi/${repoKey}/simple/ <package-name>`,
-        },
-        {
-          title: "Upload with twine",
-          code: `twine upload --repository-url ${REGISTRY_URL}/pypi/${repoKey}/ dist/*`,
         },
       ];
     case "docker":

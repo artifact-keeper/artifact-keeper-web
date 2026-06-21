@@ -10,6 +10,7 @@ import {
   Trash2,
   Search,
   FileIcon,
+  FileArchive,
   Info,
   Shield,
   ExternalLink,
@@ -18,6 +19,7 @@ import {
   Package as PackageIcon,
   Settings,
   RotateCcw,
+  Upload,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -625,12 +627,20 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       {/* Tabs */}
       <Tabs defaultValue="artifacts">
         <TabsList variant="line">
-          <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
+          <TabsTrigger value="artifacts">
+            <FileArchive className="size-3.5 mr-1" />
+            Artifacts
+          </TabsTrigger>
           <TabsTrigger value="packages">
             <PackageIcon className="size-3.5 mr-1" />
             Packages
           </TabsTrigger>
-          {isAuthenticated && <TabsTrigger value="upload">Upload</TabsTrigger>}
+          {isAuthenticated && (
+            <TabsTrigger value="upload">
+              <Upload className="size-3.5 mr-1" />
+              Upload
+            </TabsTrigger>
+          )}
           {repository.repo_type === "virtual" && (
             <TabsTrigger value="members">
               <Layers className="size-3.5 mr-1" />
