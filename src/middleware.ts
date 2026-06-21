@@ -59,6 +59,9 @@ export const config = {
     "/vscode/:path*",
     "/proto/:path*",
     "/incus/:path*",
+    // lxc-format repos are served on /lxc/* by the backend (alias of the Incus
+    // handler, artifact-keeper#1272). Without this the proxy 404s lxc clients.
+    "/lxc/:path*",
     "/ext/:path*",
     "/v2",
     "/v2/:path*",
