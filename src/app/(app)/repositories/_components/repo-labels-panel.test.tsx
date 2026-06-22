@@ -68,6 +68,7 @@ describe("RepoLabelsPanel", () => {
   it("renders a skeleton while loading", () => {
     queryResponse = { data: undefined, isLoading: true };
     render(<RepoLabelsPanel repository={REPO} />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText(/No labels yet/i)).not.toBeInTheDocument();
   });
 
