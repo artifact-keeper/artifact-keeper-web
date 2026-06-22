@@ -56,7 +56,10 @@ services:
       STORAGE_PATH: /data/storage
       BACKUP_PATH: /data/backups
       PLUGINS_DIR: /data/plugins
-      JWT_SECRET: e2e-test-secret-key-32-bytes-long
+      # The 1.2.1+ backend rejects known placeholder/default secrets at startup, so
+      # this must be a high-entropy value supplied from the environment (never committed).
+      # CI generates one per run; for local use: export JWT_SECRET="$(openssl rand -base64 48)"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set, e.g. export JWT_SECRET="$(openssl rand -base64 48)"}
       ADMIN_PASSWORD: TestRunner!2026secure
       RUST_LOG: info
       HOST: 0.0.0.0
