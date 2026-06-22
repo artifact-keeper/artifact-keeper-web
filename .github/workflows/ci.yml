@@ -284,7 +284,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Start E2E stack
-        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: |
+          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
+          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
+          export JWT_SECRET="$(openssl rand -base64 48)"
+          docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -336,7 +340,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Start E2E stack
-        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: |
+          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
+          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
+          export JWT_SECRET="$(openssl rand -base64 48)"
+          docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -388,7 +396,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Start E2E stack
-        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: |
+          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
+          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
+          export JWT_SECRET="$(openssl rand -base64 48)"
+          docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
