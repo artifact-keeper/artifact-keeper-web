@@ -74,6 +74,7 @@ import FormatHandlersPage from "./page";
 const PYPI = { id: "h1", format_key: "pypi", display_name: "PyPI", description: null, extensions: [".whl"], handler_type: "Core", is_enabled: true, priority: 10, plugin_id: null };
 const UNITY = { id: "h2", format_key: "unity", display_name: "Unity", description: null, extensions: [".unitypackage"], handler_type: "Wasm", is_enabled: false, priority: 5, plugin_id: "p1" };
 
+// Hook declaration order in page.tsx: toggleMutation, then testMutation.
 const toggleMutate = () => mutateFns[mutateFns.length - 2];
 const testMutate = () => mutateFns[mutateFns.length - 1];
 

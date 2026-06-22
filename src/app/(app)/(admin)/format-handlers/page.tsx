@@ -184,7 +184,7 @@ export default function FormatHandlersPage() {
             {testResult && (
               <div
                 className={`flex items-start gap-2 rounded-md border p-3 text-sm ${testResult.valid ? "border-emerald-500/40 text-emerald-600" : "border-destructive/40 text-destructive"}`}
-                role="status"
+                role={testResult.valid ? "status" : "alert"}
               >
                 {testResult.valid ? <CheckCircle2 className="size-4 mt-0.5" /> : <XCircle className="size-4 mt-0.5" />}
                 <span>{testResult.valid ? "Valid — the handler parsed this content." : testResult.parse_error || "Invalid content."}</span>
