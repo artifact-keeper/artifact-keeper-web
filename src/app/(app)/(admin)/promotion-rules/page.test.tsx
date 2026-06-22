@@ -113,11 +113,11 @@ const RULE = {
   is_enabled: true,
   auto_promote: true,
   require_signature: false,
-  allowed_licenses: [],
+  allowed_licenses: ["MIT", "Apache-2.0"],
   max_cve_severity: "high",
   min_health_score: 80,
   min_staging_hours: null,
-  max_artifact_age_days: null,
+  max_artifact_age_days: 30,
   created_at: "x",
   updated_at: "y",
 };
@@ -202,6 +202,26 @@ describe("PromotionRulesPage", () => {
     expect(saveMutate()).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
   });
 
+  it("a name-only edit preserves allowed_licenses + max_artifact_age_days (no silent gate wipe)", async () => {
+    const user = userEvent.setup();
+    rulesResponse = { data: [RULE], isLoading: false };
+    reposData = REPOS;
+    render(<PromotionRulesPage />);
+    await user.click(screen.getByRole("button", { name: /Edit promote-stable/i }));
+    // openEdit must have round-tripped the existing gates into the form
+    expect((screen.getByLabelText(/Allowed licenses/i) as HTMLInputElement).value).toBe("MIT, Apache-2.0");
+    expect((screen.getByLabelText(/Max artifact age/i) as HTMLInputElement).value).toBe("30");
+    // change only the name
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "renamed");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+    const arg = saveMutate().mock.calls[0][0] as { form: { name: string; allowed_licenses: string; max_artifact_age_days?: number } };
+    expect(arg.form.name).toBe("renamed");
+    expect(arg.form.allowed_licenses).toBe("MIT, Apache-2.0");
+    expect(arg.form.max_artifact_age_days).toBe(30);
+  });
+
   it("evaluates a rule", async () => {
     const user = userEvent.setup();
     rulesResponse = { data: [RULE], isLoading: false };
@@ -225,13 +245,14 @@ describe("PromotionRulesPage", () => {
   it("mutation callbacks: create vs update (no source/target on update), evaluate toast", () => {
     render(<PromotionRulesPage />);
     const [save, del, evaluate] = mutationConfigs;
-    save.mutationFn({ id: null, form: { name: " x ", source_repo_id: "s", target_repo_id: "t", auto_promote: true, require_signature: false, is_enabled: true, max_cve_severity: "any", min_health_score: undefined, min_staging_hours: undefined } });
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ name: "x", source_repo_id: "s", target_repo_id: "t", max_cve_severity: null }));
-    save.mutationFn({ id: "r1", form: { name: "y", source_repo_id: "s", target_repo_id: "t", auto_promote: false, require_signature: true, is_enabled: true, max_cve_severity: "high", min_health_score: 90, min_staging_hours: 4 } });
+    save.mutationFn({ id: null, form: { name: " x ", source_repo_id: "s", target_repo_id: "t", auto_promote: true, require_signature: false, is_enabled: true, max_cve_severity: "any", min_health_score: undefined, min_staging_hours: undefined, max_artifact_age_days: undefined, allowed_licenses: "MIT, GPL-3.0" } });
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ name: "x", source_repo_id: "s", target_repo_id: "t", max_cve_severity: null, allowed_licenses: ["MIT", "GPL-3.0"] }));
+    save.mutationFn({ id: "r1", form: { name: "y", source_repo_id: "s", target_repo_id: "t", auto_promote: false, require_signature: true, is_enabled: true, max_cve_severity: "high", min_health_score: 90, min_staging_hours: 4, max_artifact_age_days: 30, allowed_licenses: "MIT" } });
     const updateArg = api.update.mock.calls[0][1] as Record<string, unknown>;
     expect(updateArg).not.toHaveProperty("source_repo_id");
     expect(updateArg).not.toHaveProperty("target_repo_id");
-    expect(updateArg).toMatchObject({ name: "y", max_cve_severity: "high", min_health_score: 90 });
+    // gates must survive the update (PUT replace semantics — dropping them would wipe the gate)
+    expect(updateArg).toMatchObject({ name: "y", max_cve_severity: "high", min_health_score: 90, max_artifact_age_days: 30, allowed_licenses: ["MIT"] });
     del.mutationFn("r1");
     expect(api.remove).toHaveBeenCalledWith("r1");
     evaluate.onSuccess?.({ rule_name: "promote-stable", passed: 1, failed: 0, total: 1 });

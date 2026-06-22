@@ -49,6 +49,9 @@ interface FormState {
   max_cve_severity: string; // "any" => null
   min_health_score: number | undefined;
   min_staging_hours: number | undefined;
+  max_artifact_age_days: number | undefined;
+  /** Comma-separated license identifiers; parsed to string[] on submit. */
+  allowed_licenses: string;
 }
 
 const emptyForm: FormState = {
@@ -61,7 +64,13 @@ const emptyForm: FormState = {
   max_cve_severity: "any",
   min_health_score: undefined,
   min_staging_hours: undefined,
+  max_artifact_age_days: undefined,
+  allowed_licenses: "",
 };
+
+function parseLicenses(s: string): string[] {
+  return s.split(",").map((x) => x.trim()).filter(Boolean);
+}
 
 function toRequest(f: FormState): CreatePromotionRuleRequest {
   return {
@@ -74,6 +83,8 @@ function toRequest(f: FormState): CreatePromotionRuleRequest {
     max_cve_severity: f.max_cve_severity === "any" ? null : f.max_cve_severity,
     min_health_score: f.min_health_score,
     min_staging_hours: f.min_staging_hours,
+    max_artifact_age_days: f.max_artifact_age_days,
+    allowed_licenses: parseLicenses(f.allowed_licenses),
   };
 }
 
@@ -119,6 +130,8 @@ export default function PromotionRulesPage() {
           max_cve_severity: req.max_cve_severity,
           min_health_score: req.min_health_score,
           min_staging_hours: req.min_staging_hours,
+          max_artifact_age_days: req.max_artifact_age_days,
+          allowed_licenses: req.allowed_licenses,
         });
       }
       return promotionRulesApi.create(req);
@@ -177,6 +190,8 @@ export default function PromotionRulesPage() {
       max_cve_severity: r.max_cve_severity ?? "any",
       min_health_score: r.min_health_score ?? undefined,
       min_staging_hours: r.min_staging_hours ?? undefined,
+      max_artifact_age_days: r.max_artifact_age_days ?? undefined,
+      allowed_licenses: r.allowed_licenses.join(", "),
     });
     setDialogOpen(true);
   }
@@ -338,9 +353,19 @@ export default function PromotionRulesPage() {
                   <Input id="pr-health" type="number" min={0} value={form.min_health_score ?? ""} onChange={(e) => setForm((f) => ({ ...f, min_health_score: numField(e.target.value) }))} />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pr-staging">Min staging hours</Label>
+                  <Input id="pr-staging" type="number" min={0} value={form.min_staging_hours ?? ""} onChange={(e) => setForm((f) => ({ ...f, min_staging_hours: numField(e.target.value) }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pr-age">Max artifact age (days)</Label>
+                  <Input id="pr-age" type="number" min={0} value={form.max_artifact_age_days ?? ""} onChange={(e) => setForm((f) => ({ ...f, max_artifact_age_days: numField(e.target.value) }))} />
+                </div>
+              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="pr-staging">Min staging hours</Label>
-                <Input id="pr-staging" type="number" min={0} value={form.min_staging_hours ?? ""} onChange={(e) => setForm((f) => ({ ...f, min_staging_hours: numField(e.target.value) }))} />
+                <Label htmlFor="pr-licenses">Allowed licenses (comma-separated, blank = any)</Label>
+                <Input id="pr-licenses" value={form.allowed_licenses} onChange={(e) => setForm((f) => ({ ...f, allowed_licenses: e.target.value }))} placeholder="MIT, Apache-2.0, BSD-3-Clause" />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
                 <Label htmlFor="pr-auto">Auto-promote when gates pass</Label>
