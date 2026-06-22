@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Link2,
   Upload,
+  Tag,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -38,6 +39,7 @@ import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
+import { RepoLabelsPanel } from "./repo-labels-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
@@ -675,6 +677,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Settings
             </TabsTrigger>
           )}
+          {user?.is_admin && (
+            <TabsTrigger value="labels">
+              <Tag className="size-3.5 mr-1" />
+              Labels
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* --- Artifacts Tab --- */}
@@ -923,6 +931,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {user?.is_admin && (
           <TabsContent value="settings" className="mt-4">
             <RepoSettingsTab repository={repository} />
+          </TabsContent>
+        )}
+
+        {/* --- Labels Tab --- */}
+        {user?.is_admin && (
+          <TabsContent value="labels" className="mt-4">
+            <RepoLabelsPanel repository={repository} />
           </TabsContent>
         )}
       </Tabs>
