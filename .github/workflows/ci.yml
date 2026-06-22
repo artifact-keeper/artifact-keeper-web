@@ -283,12 +283,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate E2E JWT secret
+        # 1.2.1+ backend rejects placeholder JWT secrets at startup. Generate a fresh
+        # random one per run and publish it to the job env so EVERY compose step (up,
+        # logs, and teardown) can interpolate ${JWT_SECRET}. Nothing secret is committed.
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
       - name: Start E2E stack
-        run: |
-          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
-          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
-          export JWT_SECRET="$(openssl rand -base64 48)"
-          docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -339,12 +341,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate E2E JWT secret
+        # 1.2.1+ backend rejects placeholder JWT secrets at startup. Generate a fresh
+        # random one per run and publish it to the job env so EVERY compose step (up,
+        # logs, and teardown) can interpolate ${JWT_SECRET}. Nothing secret is committed.
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
       - name: Start E2E stack
-        run: |
-          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
-          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
-          export JWT_SECRET="$(openssl rand -base64 48)"
-          docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -395,12 +399,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate E2E JWT secret
+        # 1.2.1+ backend rejects placeholder JWT secrets at startup. Generate a fresh
+        # random one per run and publish it to the job env so EVERY compose step (up,
+        # logs, and teardown) can interpolate ${JWT_SECRET}. Nothing secret is committed.
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
       - name: Start E2E stack
-        run: |
-          # 1.2.1+ backend rejects placeholder JWT secrets at startup; generate a
-          # fresh random one per run (kept out of the repo so secret scanners stay quiet).
-          export JWT_SECRET="$(openssl rand -base64 48)"
-          docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
