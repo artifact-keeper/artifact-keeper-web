@@ -18,7 +18,9 @@ test.describe('Package Curation Page', () => {
   });
 
   test('prompts to select a staging repository before a queue is shown', async ({ page }) => {
-    await expect(page.getByText(/select a staging repository/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/select a staging repository to review its curation queue/i)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test.afterEach(async ({ page }) => {
