@@ -33,6 +33,8 @@ export { default as formatHandlersApi } from './format-handlers';
 export type { FormatHandler } from './format-handlers';
 export { default as qualityChecksApi } from './quality-checks';
 export type { QualityCheck, QualityIssue } from './quality-checks';
+export { default as repoLabelsApi } from './repo-labels';
+export type { RepoLabel } from './repo-labels';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
