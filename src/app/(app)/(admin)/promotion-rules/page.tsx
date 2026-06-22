@@ -342,7 +342,7 @@ export default function PromotionRulesPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="pr-cve">Max CVE severity</Label>
                   <Select value={form.max_cve_severity} onValueChange={(v) => setForm((f) => ({ ...f, max_cve_severity: v }))}>
-                    <SelectTrigger id="pr-cve"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="pr-cve" aria-label="Max CVE severity"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {SEVERITIES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
                     </SelectContent>

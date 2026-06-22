@@ -189,6 +189,37 @@ describe("PromotionRulesPage", () => {
     );
   });
 
+  it("captures every gate field on create", async () => {
+    const user = userEvent.setup();
+    reposData = REPOS;
+    render(<PromotionRulesPage />);
+    await user.click(screen.getByRole("button", { name: /new rule/i }));
+    await user.type(screen.getByLabelText("Name"), "full-rule");
+    await user.selectOptions(screen.getByLabelText("Source repository"), "src");
+    await user.selectOptions(screen.getByLabelText("Target repository"), "tgt");
+    await user.selectOptions(screen.getByLabelText("Max CVE severity"), "critical");
+    await user.type(screen.getByLabelText("Min health score"), "75");
+    await user.type(screen.getByLabelText("Min staging hours"), "12");
+    await user.type(screen.getByLabelText(/Max artifact age/i), "45");
+    await user.type(screen.getByLabelText(/Allowed licenses/i), "MIT, BSD-3-Clause");
+    await user.click(screen.getByLabelText(/Auto-promote/i));
+    await user.click(screen.getByLabelText(/Require signature/i));
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    const arg = saveMutate().mock.calls[0][0] as { form: Record<string, unknown> };
+    expect(arg.form).toMatchObject({
+      name: "full-rule",
+      source_repo_id: "src",
+      target_repo_id: "tgt",
+      max_cve_severity: "critical",
+      min_health_score: 75,
+      min_staging_hours: 12,
+      max_artifact_age_days: 45,
+      allowed_licenses: "MIT, BSD-3-Clause",
+      auto_promote: true,
+      require_signature: true,
+    });
+  });
+
   it("locks source/target when editing", async () => {
     const user = userEvent.setup();
     rulesResponse = { data: [RULE], isLoading: false };
