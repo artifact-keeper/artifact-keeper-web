@@ -83,6 +83,7 @@ vi.mock("lucide-react", () => {
     FileSignature: icon,
     Shield: icon,
     ShieldCheck: icon,
+    ListChecks: icon,
     Search: icon,
     FileCheck: icon,
     Lock: icon,

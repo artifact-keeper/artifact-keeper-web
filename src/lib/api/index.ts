@@ -31,6 +31,8 @@ export { default as promotionRulesApi } from './promotion-rules';
 export type { PromotionRule, CreatePromotionRuleRequest } from './promotion-rules';
 export { default as formatHandlersApi } from './format-handlers';
 export type { FormatHandler } from './format-handlers';
+export { default as qualityChecksApi } from './quality-checks';
+export type { QualityCheck, QualityIssue } from './quality-checks';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
