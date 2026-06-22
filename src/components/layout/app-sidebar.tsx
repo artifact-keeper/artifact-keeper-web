@@ -38,6 +38,7 @@ import {
   Scale,
   FolderSearch,
   ClipboardCheck,
+  Filter,
   Gauge,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -100,6 +101,7 @@ const securityItems: NavItem[] = [
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
+  { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
   { title: "Health", href: "/system-health", icon: HeartPulse },
   { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
   { title: "Monitoring", href: "/monitoring", icon: Activity },

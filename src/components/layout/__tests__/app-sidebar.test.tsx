@@ -98,6 +98,7 @@ vi.mock("lucide-react", () => {
     Scale: icon,
     FolderSearch: icon,
     ClipboardCheck: icon,
+    Filter: icon,
     Gauge: icon,
   };
 });
