@@ -72,6 +72,7 @@ vi.mock("lucide-react", () => {
     RefreshCw: icon,
     Workflow: icon,
     Puzzle: icon,
+    Blocks: icon,
     Webhook: icon,
     ArrowRightLeft: icon,
     Bot: icon,
