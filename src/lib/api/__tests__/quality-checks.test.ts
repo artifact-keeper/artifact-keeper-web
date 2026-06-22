@@ -82,4 +82,13 @@ describe("qualityChecksApi", () => {
     m.suppressIssue.mockResolvedValue({ error: { status: 404 } });
     await expect(qualityChecksApi.suppressIssue("x", "r")).rejects.toEqual({ status: 404 });
   });
+
+  it("trigger / listIssues / unsuppressIssue throw on error", async () => {
+    m.triggerChecks.mockResolvedValue({ data: undefined, error: { status: 500 } });
+    m.listCheckIssues.mockResolvedValue({ data: undefined, error: { status: 403 } });
+    m.unsuppressIssue.mockResolvedValue({ error: { status: 404 } });
+    await expect(qualityChecksApi.trigger()).rejects.toEqual({ status: 500 });
+    await expect(qualityChecksApi.listIssues("c1")).rejects.toEqual({ status: 403 });
+    await expect(qualityChecksApi.unsuppressIssue("i1")).rejects.toEqual({ status: 404 });
+  });
 });

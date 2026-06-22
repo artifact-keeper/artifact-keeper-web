@@ -161,7 +161,7 @@ export default function QualityChecksPage() {
                   {c.critical_count > 0 && <Badge variant="destructive">{c.critical_count} critical</Badge>}
                   {c.high_count > 0 && <Badge variant="destructive">{c.high_count} high</Badge>}
                   {c.medium_count > 0 && <Badge variant="secondary">{c.medium_count} medium</Badge>}
-                  {c.error_message && <span className="text-destructive">· {c.error_message}</span>}
+                  {c.error_message && <span className="truncate max-w-[16rem] text-destructive">· {c.error_message}</span>}
                 </p>
               </div>
               <Button variant="ghost" size="sm" aria-label={`View issues for ${c.check_type}`} onClick={() => setSelected(c)} disabled={c.issues_count === 0}>

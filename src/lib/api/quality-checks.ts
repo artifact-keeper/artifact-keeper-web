@@ -48,6 +48,9 @@ export interface ListChecksParams {
   artifact_id?: string;
 }
 
+// The web models a subset of CheckResponse/IssueResponse — add fields here
+// (e.g. started_at, checker_version, details, suppressed_by) when the UI
+// surfaces them. Nothing currently rendered is dropped.
 function adaptCheck(sdk: CheckResponse): QualityCheck {
   return {
     id: sdk.id,
