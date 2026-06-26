@@ -1080,6 +1080,7 @@ function SamlTab() {
   const [nameIdFormat, setNameIdFormat] = useState("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
   const [signRequests, setSignRequests] = useState(false);
   const [requireSignedAssertions, setRequireSignedAssertions] = useState(true);
+  const [useAbsoluteAcsUrl, setUseAbsoluteAcsUrl] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("displayName");
@@ -1142,6 +1143,7 @@ function SamlTab() {
     setNameIdFormat("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
     setSignRequests(false);
     setRequireSignedAssertions(true);
+    setUseAbsoluteAcsUrl(false);
     setUsernameClaim("username");
     setEmailClaim("email");
     setDisplayNameClaim("displayName");
@@ -1172,6 +1174,7 @@ function SamlTab() {
     setNameIdFormat(config.name_id_format);
     setSignRequests(config.sign_requests);
     setRequireSignedAssertions(config.require_signed_assertions);
+    setUseAbsoluteAcsUrl(config.use_absolute_acs_url);
     setUsernameClaim(config.attribute_mapping?.username || "username");
     setEmailClaim(config.attribute_mapping?.email || "email");
     setDisplayNameClaim(config.attribute_mapping?.display_name || "displayName");
@@ -1207,6 +1210,7 @@ function SamlTab() {
         sign_requests: signRequests,
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
+        use_absolute_acs_url: useAbsoluteAcsUrl,
       };
       if (certificate) {
         data.certificate = certificate;
@@ -1225,6 +1229,7 @@ function SamlTab() {
         sign_requests: signRequests,
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
+        use_absolute_acs_url: useAbsoluteAcsUrl,
       });
     }
   }
@@ -1472,6 +1477,22 @@ function SamlTab() {
                 id="saml-require-signed-assertions"
                 checked={requireSignedAssertions}
                 onCheckedChange={setRequireSignedAssertions}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="saml-use-absolute-acs-url">Use absolute ACS URL</Label>
+                <p className="text-xs text-muted-foreground">
+                  Emit a full <code>{`{base_url}/api/v1/auth/sso/saml/<id>/acs`}</code> URL in the
+                  AuthnRequest instead of the historical relative path. Required by stricter
+                  SAML 2.0 IdPs that reject relative AssertionConsumerServiceURLs.
+                </p>
+              </div>
+              <Switch
+                id="saml-use-absolute-acs-url"
+                checked={useAbsoluteAcsUrl}
+                onCheckedChange={setUseAbsoluteAcsUrl}
               />
             </div>
 
