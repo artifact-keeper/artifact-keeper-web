@@ -10,6 +10,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type {
   GroupResponse,
+  GroupDetailResponse,
   GroupListResponse,
   CreatedGroupRow,
 } from '@artifact-keeper/sdk';
@@ -17,8 +18,8 @@ import type { PaginatedResponse } from '@/types';
 import { assertData } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
-export type { Group, GroupMember, CreateGroupRequest } from '@/types/groups';
-import type { Group, CreateGroupRequest } from '@/types/groups';
+export type { Group, GroupDetail, GroupMember, CreateGroupRequest } from '@/types/groups';
+import type { Group, GroupDetail, CreateGroupRequest } from '@/types/groups';
 
 export interface ListGroupsParams {
   page?: number;
@@ -44,6 +45,25 @@ function adaptGroup(sdk: GroupResponse | CreatedGroupRow): Group {
   };
 }
 
+function adaptGroupDetail(sdk: GroupDetailResponse): GroupDetail {
+  return {
+    id: sdk.id,
+    name: sdk.name,
+    description: sdk.description ?? undefined,
+    auto_join: false,
+    member_count: sdk.member_count,
+    is_external: false,
+    created_at: sdk.created_at,
+    updated_at: sdk.updated_at,
+    members: sdk.members.map((m) => ({
+      user_id: m.user_id,
+      username: m.username,
+      display_name: m.display_name ?? undefined,
+      joined_at: m.joined_at,
+    })),
+  };
+}
+
 function adaptGroupList(sdk: GroupListResponse): PaginatedResponse<Group> {
   return {
     items: sdk.items.map(adaptGroup),
@@ -62,6 +82,12 @@ export const groupsApi = {
     const { data, error } = await getGroup({ path: { id: groupId } });
     if (error) throw error;
     return adaptGroup(assertData(data, 'groupsApi.get'));
+  },
+
+  getDetail: async (groupId: string): Promise<GroupDetail> => {
+    const { data, error } = await getGroup({ path: { id: groupId } });
+    if (error) throw error;
+    return adaptGroupDetail(assertData(data, 'groupsApi.getDetail'));
   },
 
   create: async (input: CreateGroupRequest): Promise<Group> => {
