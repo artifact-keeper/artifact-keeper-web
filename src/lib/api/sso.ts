@@ -126,6 +126,11 @@ function adaptLdapConfig(sdk: SdkLdapConfigResponse): LdapConfig {
 }
 
 function adaptSamlConfig(sdk: SdkSamlConfigResponse): SamlConfig {
+  // The `use_absolute_acs_url` field arrives once the backend release that
+  // ships migration 138 has been deployed and the regenerated
+  // @artifact-keeper/sdk picks the new field up. Until then, treat absent
+  // as `false` so older backends keep their pre-138 wire format.
+  const sdkAny = sdk as unknown as { use_absolute_acs_url?: boolean };
   return {
     id: sdk.id,
     name: sdk.name,
@@ -140,6 +145,7 @@ function adaptSamlConfig(sdk: SdkSamlConfigResponse): SamlConfig {
     require_signed_assertions: sdk.require_signed_assertions,
     admin_group: sdk.admin_group ?? null,
     is_enabled: sdk.is_enabled,
+    use_absolute_acs_url: sdkAny.use_absolute_acs_url ?? false,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };

@@ -55,6 +55,10 @@ export interface SamlConfig {
   require_signed_assertions: boolean;
   admin_group: string | null;
   is_enabled: boolean;
+  // Backend migration 138 (artifact-keeper PR #TBD). When true, the SAML
+  // AuthnRequest emits an absolute AssertionConsumerServiceURL instead of
+  // the historical relative path. Default false on existing rows.
+  use_absolute_acs_url: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -133,6 +137,7 @@ export interface CreateSamlConfigRequest {
   sign_requests?: boolean;
   require_signed_assertions?: boolean;
   admin_group?: string;
+  use_absolute_acs_url?: boolean;
 }
 
 export interface UpdateSamlConfigRequest {
@@ -147,4 +152,5 @@ export interface UpdateSamlConfigRequest {
   sign_requests?: boolean;
   require_signed_assertions?: boolean;
   admin_group?: string;
+  use_absolute_acs_url?: boolean;
 }

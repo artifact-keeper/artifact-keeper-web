@@ -222,6 +222,7 @@ const SAML_WITH_EXTRA_MAPPING = {
   admin_group: "artifact-keeper-admins",
   sign_requests: true,
   require_signed_assertions: true,
+  use_absolute_acs_url: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -387,5 +388,93 @@ describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)"
         custom_claim: "department_code",
       });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SAML use_absolute_acs_url opt-in (artifact-keeper backend migration 138)
+// ---------------------------------------------------------------------------
+
+describe("SSO SAML use_absolute_acs_url toggle", () => {
+  it("preserves the existing use_absolute_acs_url value on an unrelated edit", async () => {
+    // Regression: an operator editing only the Name must not flip the
+    // ACS-URL mode just because the form remounted. The toggle's initial
+    // state is sourced from the loaded config, and the submit payload
+    // must echo it back.
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", {
+      name: /Edit SAML provider Corporate SAML IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    // Change only the Name field. The Use-absolute-ACS-URL toggle stays
+    // at the loaded provider's value (false).
+    const nameInput = screen.getByLabelText(/^Name$/i) as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Corporate SAML IdP (renamed)");
+
+    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { use_absolute_acs_url?: boolean },
+    ];
+    expect(payload.use_absolute_acs_url).toBe(false);
+  });
+
+  it("propagates the toggled value into the update payload", async () => {
+    // The toggle starts off (as in the fixture); the operator turns it
+    // on and saves. The outbound payload must carry `true`.
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", {
+      name: /Edit SAML provider Corporate SAML IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    // Flip the new switch on. The mocked `Switch` is rendered as a
+    // native checkbox by the test harness, so we can address it by its
+    // label and click it directly.
+    const toggle = screen.getByLabelText(/Use absolute ACS URL/i) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { use_absolute_acs_url?: boolean },
+    ];
+    expect(payload.use_absolute_acs_url).toBe(true);
   });
 });
