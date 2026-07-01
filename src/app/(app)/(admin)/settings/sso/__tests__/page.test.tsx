@@ -190,6 +190,7 @@ const OIDC_WITH_EXTRA_MAPPING = {
     custom_claim: "department_code",
   },
   auto_create_users: true,
+  allow_legacy_rsa_keys: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -387,5 +388,116 @@ describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)"
         custom_claim: "department_code",
       });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OIDC allow_legacy_rsa_keys opt-in (artifact-keeper backend migration 139)
+// ---------------------------------------------------------------------------
+
+describe("SSO OIDC allow_legacy_rsa_keys toggle", () => {
+  it("preserves the existing allow_legacy_rsa_keys value on an unrelated edit", async () => {
+    // Regression: editing an unrelated field (e.g. Name) must not flip the
+    // legacy-RSA flag on or off — the toggle's initial state is sourced
+    // from the loaded provider, and the submit payload must echo it back.
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", {
+      name: /Edit OIDC provider Corporate IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    const nameInput = screen.getByLabelText(/^Name$/i) as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Corporate IdP (renamed)");
+
+    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      { allow_legacy_rsa_keys?: boolean },
+    ];
+    expect(payload.allow_legacy_rsa_keys).toBe(false);
+  });
+
+  it("propagates the toggled value into the update payload", async () => {
+    // The toggle starts off (as in the fixture); the operator turns it on
+    // because their IdP is a legacy 1024-bit RSA IdP and saves. The
+    // outbound payload must carry `true`.
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", {
+      name: /Edit OIDC provider Corporate IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    // Flip the new switch on via its label text.
+    const toggle = screen.getByLabelText(
+      /Allow legacy RSA keys/i,
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      { allow_legacy_rsa_keys?: boolean },
+    ];
+    expect(payload.allow_legacy_rsa_keys).toBe(true);
+  });
+
+  it("surfaces the OWASP-baseline warning in the toggle help text", async () => {
+    // Reviewers asking "why is this opt-in" should land directly on the
+    // amber warning — pin its wording so a future refactor cannot quietly
+    // soften it.
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", {
+      name: /Edit OIDC provider Corporate IdP/i,
+    });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(/Below the OWASP ASVS 4\.0 baseline/i),
+    ).toBeTruthy();
   });
 });

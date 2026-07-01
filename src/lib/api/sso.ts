@@ -86,6 +86,11 @@ function adaptSsoProvider(sdk: SdkSsoProviderInfo): SsoProvider {
 }
 
 function adaptOidcConfig(sdk: SdkOidcConfigResponse): OidcConfig {
+  // The `allow_legacy_rsa_keys` field arrives once the backend release
+  // that ships migration 139 has been deployed and the regenerated
+  // @artifact-keeper/sdk picks it up. Until then, default to `false` —
+  // matches the migration's default and the strict pre-139 behaviour.
+  const sdkAny = sdk as unknown as { allow_legacy_rsa_keys?: boolean };
   return {
     id: sdk.id,
     name: sdk.name,
@@ -96,6 +101,7 @@ function adaptOidcConfig(sdk: SdkOidcConfigResponse): OidcConfig {
     attribute_mapping: adaptAttributeMapping(sdk.attribute_mapping),
     auto_create_users: sdk.auto_create_users,
     is_enabled: sdk.is_enabled,
+    allow_legacy_rsa_keys: sdkAny.allow_legacy_rsa_keys ?? false,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
