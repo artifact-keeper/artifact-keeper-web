@@ -416,8 +416,12 @@ describe("SSO OIDC claim keys match backend (#516)", () => {
 
     const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
       string,
-      { attribute_mapping?: Record<string, string> },
+      {
+        map_groups_to_groups?: boolean;
+        attribute_mapping?: Record<string, string>;
+      },
     ];
+    expect(payload.map_groups_to_groups).toBe(false);
     const mapping = payload.attribute_mapping ?? {};
 
     // Backend (sso.rs::resolve_oidc_claim_name) reads the `_claim` keys.
@@ -472,6 +476,47 @@ describe("SSO OIDC map_groups_to_groups toggle (#534)", () => {
       string,
       { map_groups_to_groups?: boolean },
     ];
+    expect(payload.map_groups_to_groups).toBe(true);
+  });
+
+  it("create submits map_groups_to_groups: true when the toggle is switched on", async () => {
+    mockSsoApi.createOidc.mockResolvedValue(OIDC_WITH_EXTRA_MAPPING);
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    // The Tabs mock renders every tab's content inline; the first
+    // "Add Provider" button belongs to the OIDC card.
+    await user.click(screen.getAllByRole("button", { name: "Add Provider" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add OIDC Provider")).toBeTruthy();
+    });
+
+    await user.type(screen.getByLabelText(/^Name$/i), "New IdP");
+    await user.type(screen.getByLabelText(/issuer url/i), "https://idp.new");
+    await user.type(screen.getByLabelText(/client id/i), "client-new");
+    await user.type(screen.getByLabelText(/client secret/i), "shh");
+
+    // Default is off; toggle it on.
+    const toggle = screen.getByLabelText(
+      /Map OIDC groups to local groups/i,
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+
+    await user.click(screen.getByRole("button", { name: /Create Provider/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.createOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = mockSsoApi.createOidc.mock.calls[0][0] as {
+      map_groups_to_groups?: boolean;
+    };
     expect(payload.map_groups_to_groups).toBe(true);
   });
 });

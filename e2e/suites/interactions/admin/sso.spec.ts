@@ -67,10 +67,11 @@ test.describe('SSO Settings', () => {
     const dialog = page.getByRole('dialog').or(page.locator('[role="dialog"]'));
     await expect(dialog).toBeVisible({ timeout: 5000 });
     // The "Map OIDC groups to local groups" switch surfaces the backend
-    // map_groups_to_groups setting.
+    // map_groups_to_groups setting, including its help text.
     await expect(
       dialog.getByText(/map oidc groups to local groups/i).first()
     ).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByText(/group memberships/i).first()).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByLabel(/map oidc groups to local groups/i)).toBeVisible({ timeout: 5000 });
     await page.getByRole('button', { name: /cancel/i }).click();
   });
