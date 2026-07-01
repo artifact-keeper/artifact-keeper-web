@@ -174,6 +174,17 @@ describe("ssoApi", () => {
     const out = await ssoApi.listOidc();
     expect(out[0].id).toBe("o1");
     expect(out[0].attribute_mapping).toEqual({ email: "email", name: "name" });
+    expect(out[0].map_groups_to_groups).toBe(false);
+  });
+
+  it("listOidc maps map_groups_to_groups through (#1879)", async () => {
+    mockListOidc.mockResolvedValue({
+      data: [{ ...SDK_OIDC, map_groups_to_groups: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].map_groups_to_groups).toBe(true);
   });
 
   it("listOidc coerces non-string attribute_mapping values (#359)", async () => {
@@ -216,6 +227,7 @@ describe("ssoApi", () => {
       client_secret: "secret",
       scopes: ["openid"],
       auto_create_users: true,
+      map_groups_to_groups: true,
     });
     expect(mockCreateOidc).toHaveBeenCalledWith({
       body: {
@@ -226,6 +238,7 @@ describe("ssoApi", () => {
         scopes: ["openid"],
         attribute_mapping: undefined,
         auto_create_users: true,
+        map_groups_to_groups: true,
       },
     });
   });
@@ -243,11 +256,18 @@ describe("ssoApi", () => {
     ).rejects.toBe("fail");
   });
 
-  it("updateOidc returns config", async () => {
+  it("updateOidc returns config and forwards body (#1879)", async () => {
     mockUpdateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
-    const out = await ssoApi.updateOidc("o1", { name: "renamed" });
+    const out = await ssoApi.updateOidc("o1", {
+      name: "renamed",
+      map_groups_to_groups: true,
+    });
     expect(out.id).toBe("o1");
+    expect(mockUpdateOidc).toHaveBeenCalledWith({
+      path: { id: "o1" },
+      body: { name: "renamed", map_groups_to_groups: true },
+    });
   });
 
   it("updateOidc throws on error", async () => {

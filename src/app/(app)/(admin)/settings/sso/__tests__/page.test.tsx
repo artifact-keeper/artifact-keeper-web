@@ -190,6 +190,7 @@ const OIDC_WITH_EXTRA_MAPPING = {
     custom_claim: "department_code",
   },
   auto_create_users: true,
+  map_groups_to_groups: true,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -387,5 +388,109 @@ describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)"
         custom_claim: "department_code",
       });
     }
+  });
+});
+
+describe("SSO OIDC map_groups_to_groups control (#1879)", () => {
+  it("edit dialog renders the toggle and reflects the provider's current value", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    // The provider fixture has map_groups_to_groups: true, so the switch
+    // (mocked as a checkbox tied to its label) must render checked.
+    const toggle = screen.getByLabelText(
+      /Map OIDC groups to local groups/i,
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+  });
+
+  it("edit-save includes map_groups_to_groups while preserving unrendered attribute_mapping keys", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      {
+        map_groups_to_groups?: boolean;
+        attribute_mapping?: Record<string, string>;
+      },
+    ];
+    expect(payload.map_groups_to_groups).toBe(true);
+    // #406 behavior must still hold alongside the new field.
+    if (payload.attribute_mapping !== undefined) {
+      expect(payload.attribute_mapping).toMatchObject({
+        custom_claim: "department_code",
+      });
+    }
+  });
+
+  it("create submits map_groups_to_groups: true when the toggle is switched on", async () => {
+    mockSsoApi.createOidc.mockResolvedValue(OIDC_WITH_EXTRA_MAPPING);
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    // The Tabs mock renders every tab's content inline; the first
+    // "Add Provider" button belongs to the OIDC card.
+    await user.click(screen.getAllByRole("button", { name: "Add Provider" })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add OIDC Provider")).toBeTruthy();
+    });
+
+    await user.type(screen.getByLabelText(/^Name$/i), "New IdP");
+    await user.type(screen.getByLabelText(/issuer url/i), "https://idp.new");
+    await user.type(screen.getByLabelText(/client id/i), "client-new");
+    await user.type(screen.getByLabelText(/client secret/i), "shh");
+
+    // Default is off; toggle it on.
+    const toggle = screen.getByLabelText(
+      /Map OIDC groups to local groups/i,
+    ) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+
+    await user.click(screen.getByRole("button", { name: /Create Provider/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.createOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = mockSsoApi.createOidc.mock.calls[0][0] as {
+      map_groups_to_groups?: boolean;
+    };
+    expect(payload.map_groups_to_groups).toBe(true);
   });
 });

@@ -85,6 +85,7 @@ function OidcTab() {
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState("openid profile email");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
+  const [mapGroupsToGroups, setMapGroupsToGroups] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("preferred_username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("name");
@@ -144,6 +145,7 @@ function OidcTab() {
     setClientSecret("");
     setScopes("openid profile email");
     setAutoCreateUsers(true);
+    setMapGroupsToGroups(false);
     setUsernameClaim("preferred_username");
     setEmailClaim("email");
     setDisplayNameClaim("name");
@@ -171,6 +173,7 @@ function OidcTab() {
     setClientSecret("");
     setScopes(config.scopes.join(" "));
     setAutoCreateUsers(config.auto_create_users);
+    setMapGroupsToGroups(config.map_groups_to_groups);
     setUsernameClaim(config.attribute_mapping?.username || "preferred_username");
     setEmailClaim(config.attribute_mapping?.email || "email");
     setDisplayNameClaim(config.attribute_mapping?.display_name || "name");
@@ -215,6 +218,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       };
       if (clientSecret) {
         data.client_secret = clientSecret;
@@ -229,6 +233,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       });
     }
   }
@@ -488,6 +493,23 @@ function OidcTab() {
                   <p className="text-xs text-muted-foreground">
                     Users in this group will be granted admin privileges.
                   </p>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="oidc-map-groups-to-groups">
+                      Map OIDC groups to local groups
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Reflect the groups claim into Artifact Keeper group
+                      memberships. Matching groups may be auto-created for this
+                      provider; groups you manage manually are left unchanged.
+                    </p>
+                  </div>
+                  <Switch
+                    id="oidc-map-groups-to-groups"
+                    checked={mapGroupsToGroups}
+                    onCheckedChange={setMapGroupsToGroups}
+                  />
                 </div>
               </div>
             </div>
