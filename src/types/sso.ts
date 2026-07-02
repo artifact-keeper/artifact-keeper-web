@@ -14,6 +14,7 @@ export interface OidcConfig {
   scopes: string[];
   attribute_mapping: Record<string, string>;
   auto_create_users: boolean;
+  map_groups_to_groups: boolean;
   is_enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -73,6 +74,7 @@ export interface CreateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
+  map_groups_to_groups?: boolean;
 }
 
 export interface UpdateOidcConfigRequest {
@@ -83,6 +85,7 @@ export interface UpdateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
+  map_groups_to_groups?: boolean;
 }
 
 export interface CreateLdapConfigRequest {

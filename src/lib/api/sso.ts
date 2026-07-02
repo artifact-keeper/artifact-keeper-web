@@ -95,6 +95,7 @@ function adaptOidcConfig(sdk: SdkOidcConfigResponse): OidcConfig {
     scopes: sdk.scopes,
     attribute_mapping: adaptAttributeMapping(sdk.attribute_mapping),
     auto_create_users: sdk.auto_create_users,
+    map_groups_to_groups: sdk.map_groups_to_groups,
     is_enabled: sdk.is_enabled,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
