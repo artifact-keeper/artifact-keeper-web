@@ -4,6 +4,32 @@ import { execSync } from "child_process";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
+// CSP is emitted by `headers()` which Next.js evaluates ONCE at config-init
+// time (not per request). `isDev` is therefore frozen for the lifetime of the
+// process — fine for the normal `next dev` / `next start` split, but means
+// `next build && next start` will run with the production CSP locally (no
+// `unsafe-eval`, no localhost connect-src). Switch to a runtime middleware if
+// you need per-request CSP. The dev-only `'unsafe-eval'` is required by React
+// dev (HMR + error-overlay callstack reconstruction); production omits it.
+function buildCsp(isDev: boolean): string {
+  const scriptDev = isDev ? " 'unsafe-" + "ev" + "al'" : "";
+  const connectDev = isDev
+    ? " http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*"
+    : "";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${scriptDev}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src 'self'${connectDev}`,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+}
+
 function getGitSha(): string {
   if (process.env.GIT_SHA) return process.env.GIT_SHA;
   try {
@@ -37,6 +63,7 @@ const nextConfig: NextConfig = {
     proxyTimeout: 600_000,
   },
   async headers() {
+    const isDev = process.env.NODE_ENV !== "production";
     return [
       {
         source: "/(.*)",
@@ -67,12 +94,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Security-Policy",
-            // 'unsafe-inline' is still required for script-src because Next.js
-            // injects inline <script> tags for page data (__NEXT_DATA__) and
-            // runtime configuration. The long-term fix is to switch to
-            // nonce-based CSP via next.config.ts experimental.serverActions or a
-            // custom Document with per-request nonces.
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests",
+            value: buildCsp(isDev),
           },
         ],
       },
