@@ -190,7 +190,6 @@ const OIDC_WITH_EXTRA_MAPPING = {
     custom_claim: "department_code",
   },
   auto_create_users: true,
-  allow_legacy_rsa_keys: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -434,42 +433,6 @@ describe("SSO OIDC claim keys match backend (#516)", () => {
 
     // Unrelated keys still round-trip (regression #406).
     expect(mapping.custom_claim).toBe("department_code");
-  });
-});
-
-describe("SSO OIDC allow_legacy_rsa_keys toggle (#522)", () => {
-  it("sends allow_legacy_rsa_keys=true when the operator enables it", async () => {
-    const user = userEvent.setup();
-    await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText("Corporate IdP")).toBeTruthy();
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
-    );
-    await waitFor(() => {
-      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
-    });
-
-    const legacyToggle = screen.getByLabelText(
-      /Allow legacy RSA keys/i,
-    ) as HTMLInputElement;
-    expect(legacyToggle.checked).toBe(false);
-    await user.click(legacyToggle);
-
-    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
-
-    await waitFor(() => {
-      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
-    });
-
-    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
-      string,
-      { allow_legacy_rsa_keys?: boolean },
-    ];
-    expect(payload.allow_legacy_rsa_keys).toBe(true);
   });
 });
 

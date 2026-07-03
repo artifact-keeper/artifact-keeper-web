@@ -193,24 +193,6 @@ describe("ssoApi", () => {
     await expect(ssoApi.listOidc()).rejects.toBe("fail");
   });
 
-  it("adaptOidc defaults allow_legacy_rsa_keys to false when absent (#522)", async () => {
-    // Pre-migration-139 backend never emits the field.
-    mockListOidc.mockResolvedValue({ data: [SDK_OIDC], error: undefined });
-    const { ssoApi } = await import("../sso");
-    const out = await ssoApi.listOidc();
-    expect(out[0].allow_legacy_rsa_keys).toBe(false);
-  });
-
-  it("adaptOidc propagates allow_legacy_rsa_keys when present (#522)", async () => {
-    mockListOidc.mockResolvedValue({
-      data: [{ ...SDK_OIDC, allow_legacy_rsa_keys: true }],
-      error: undefined,
-    });
-    const { ssoApi } = await import("../sso");
-    const out = await ssoApi.listOidc();
-    expect(out[0].allow_legacy_rsa_keys).toBe(true);
-  });
-
   it("getOidc returns config", async () => {
     mockGetOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");

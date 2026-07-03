@@ -95,13 +95,6 @@ function adaptOidcConfig(sdk: SdkOidcConfigResponse): OidcConfig {
     scopes: sdk.scopes,
     attribute_mapping: adaptAttributeMapping(sdk.attribute_mapping),
     auto_create_users: sdk.auto_create_users,
-    // Defensive default: the SDK response type may predate migration 139
-    // (backend `allow_legacy_rsa_keys`). Read through a cast and fall back
-    // to `false` (pre-139 strict RSA verification) so the UI is safe to
-    // deploy against an older backend that never emits the field.
-    allow_legacy_rsa_keys:
-      (sdk as { allow_legacy_rsa_keys?: boolean }).allow_legacy_rsa_keys ??
-      false,
     is_enabled: sdk.is_enabled,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,

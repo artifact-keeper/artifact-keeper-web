@@ -85,7 +85,6 @@ function OidcTab() {
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState("openid profile email");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
-  const [allowLegacyRsaKeys, setAllowLegacyRsaKeys] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("preferred_username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("name");
@@ -145,7 +144,6 @@ function OidcTab() {
     setClientSecret("");
     setScopes("openid profile email");
     setAutoCreateUsers(true);
-    setAllowLegacyRsaKeys(false);
     setUsernameClaim("preferred_username");
     setEmailClaim("email");
     setDisplayNameClaim("name");
@@ -173,7 +171,6 @@ function OidcTab() {
     setClientSecret("");
     setScopes(config.scopes.join(" "));
     setAutoCreateUsers(config.auto_create_users);
-    setAllowLegacyRsaKeys(config.allow_legacy_rsa_keys);
     // #516: the backend reads the OIDC claim overrides under the
     // `<field>_claim` keys (username_claim / email_claim / groups_claim).
     // Prefer those, but fall back to the legacy bare keys so a provider
@@ -249,7 +246,6 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
-        allow_legacy_rsa_keys: allowLegacyRsaKeys,
       };
       if (clientSecret) {
         data.client_secret = clientSecret;
@@ -264,7 +260,6 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
-        allow_legacy_rsa_keys: allowLegacyRsaKeys,
       });
     }
   }
@@ -469,28 +464,6 @@ function OidcTab() {
                 id="oidc-auto-create-users"
                 checked={autoCreateUsers}
                 onCheckedChange={setAutoCreateUsers}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5 pr-4">
-                <Label htmlFor="oidc-allow-legacy-rsa-keys">
-                  Allow legacy RSA keys (&lt; 2048-bit)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Accept ID tokens signed with sub-2048-bit RSA keys (RS256/384/512
-                  PKCS#1 v1.5 fallback). Enable only if your IdP still signs with a
-                  short key — for example Lark AnyCross and its 1024-bit RS256 key.
-                </p>
-                <p className="text-xs font-medium text-amber-600 dark:text-amber-500">
-                  Below the OWASP ASVS 4.0 baseline — legacy/insecure, only enable if
-                  required.
-                </p>
-              </div>
-              <Switch
-                id="oidc-allow-legacy-rsa-keys"
-                checked={allowLegacyRsaKeys}
-                onCheckedChange={setAllowLegacyRsaKeys}
               />
             </div>
 

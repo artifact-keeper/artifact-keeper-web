@@ -14,13 +14,6 @@ export interface OidcConfig {
   scopes: string[];
   attribute_mapping: Record<string, string>;
   auto_create_users: boolean;
-  /**
-   * Opt-in (backend migration 139): accept ID tokens signed with legacy
-   * sub-2048-bit RSA keys (RS256/384/512 PKCS#1 v1.5). Below the OWASP
-   * ASVS 4.0 baseline — off by default. Defensive default `false` on
-   * backends that predate the field.
-   */
-  allow_legacy_rsa_keys: boolean;
   is_enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -87,7 +80,6 @@ export interface CreateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
-  allow_legacy_rsa_keys?: boolean;
 }
 
 export interface UpdateOidcConfigRequest {
@@ -98,7 +90,6 @@ export interface UpdateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
-  allow_legacy_rsa_keys?: boolean;
 }
 
 export interface CreateLdapConfigRequest {
