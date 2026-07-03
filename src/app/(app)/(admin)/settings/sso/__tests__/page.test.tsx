@@ -190,6 +190,7 @@ const OIDC_WITH_EXTRA_MAPPING = {
     custom_claim: "department_code",
   },
   auto_create_users: true,
+  allow_legacy_rsa_keys: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -222,6 +223,7 @@ const SAML_WITH_EXTRA_MAPPING = {
   admin_group: "artifact-keeper-admins",
   sign_requests: true,
   require_signed_assertions: true,
+  use_absolute_acs_url: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -387,5 +389,124 @@ describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)"
         custom_claim: "department_code",
       });
     }
+  });
+});
+
+describe("SSO OIDC claim keys match backend (#516)", () => {
+  it("writes username_claim/email_claim/groups_claim and drops the legacy bare keys", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      { attribute_mapping?: Record<string, string> },
+    ];
+    const mapping = payload.attribute_mapping ?? {};
+
+    // Backend (sso.rs::resolve_oidc_claim_name) reads the `_claim` keys.
+    expect(mapping.username_claim).toBe("preferred_username");
+    expect(mapping.email_claim).toBe("email");
+    expect(mapping.groups_claim).toBe("groups");
+    expect(mapping.display_name_claim).toBe("name");
+
+    // The legacy bare keys the backend silently ignored must be gone.
+    expect(mapping.username).toBeUndefined();
+    expect(mapping.email).toBeUndefined();
+    expect(mapping.groups).toBeUndefined();
+    expect(mapping.display_name).toBeUndefined();
+
+    // Unrelated keys still round-trip (regression #406).
+    expect(mapping.custom_claim).toBe("department_code");
+  });
+});
+
+describe("SSO OIDC allow_legacy_rsa_keys toggle (#522)", () => {
+  it("sends allow_legacy_rsa_keys=true when the operator enables it", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    const legacyToggle = screen.getByLabelText(
+      /Allow legacy RSA keys/i,
+    ) as HTMLInputElement;
+    expect(legacyToggle.checked).toBe(false);
+    await user.click(legacyToggle);
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      { allow_legacy_rsa_keys?: boolean },
+    ];
+    expect(payload.allow_legacy_rsa_keys).toBe(true);
+  });
+});
+
+describe("SSO SAML use_absolute_acs_url toggle (#521)", () => {
+  it("sends use_absolute_acs_url=true when the operator enables it", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit SAML provider Corporate SAML IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    const acsToggle = screen.getByLabelText(
+      /Use absolute ACS URL/i,
+    ) as HTMLInputElement;
+    expect(acsToggle.checked).toBe(false);
+    await user.click(acsToggle);
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { use_absolute_acs_url?: boolean },
+    ];
+    expect(payload.use_absolute_acs_url).toBe(true);
   });
 });

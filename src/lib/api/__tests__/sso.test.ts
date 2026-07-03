@@ -193,6 +193,24 @@ describe("ssoApi", () => {
     await expect(ssoApi.listOidc()).rejects.toBe("fail");
   });
 
+  it("adaptOidc defaults allow_legacy_rsa_keys to false when absent (#522)", async () => {
+    // Pre-migration-139 backend never emits the field.
+    mockListOidc.mockResolvedValue({ data: [SDK_OIDC], error: undefined });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].allow_legacy_rsa_keys).toBe(false);
+  });
+
+  it("adaptOidc propagates allow_legacy_rsa_keys when present (#522)", async () => {
+    mockListOidc.mockResolvedValue({
+      data: [{ ...SDK_OIDC, allow_legacy_rsa_keys: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].allow_legacy_rsa_keys).toBe(true);
+  });
+
   it("getOidc returns config", async () => {
     mockGetOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
@@ -473,6 +491,24 @@ describe("ssoApi", () => {
     mockListSaml.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
     await expect(ssoApi.listSaml()).rejects.toBe("fail");
+  });
+
+  it("adaptSaml defaults use_absolute_acs_url to false when absent (#521)", async () => {
+    // Pre-migration-139 backend never emits the field.
+    mockListSaml.mockResolvedValue({ data: [SDK_SAML], error: undefined });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].use_absolute_acs_url).toBe(false);
+  });
+
+  it("adaptSaml propagates use_absolute_acs_url when present (#521)", async () => {
+    mockListSaml.mockResolvedValue({
+      data: [{ ...SDK_SAML, use_absolute_acs_url: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].use_absolute_acs_url).toBe(true);
   });
 
   it("getSaml returns config", async () => {
