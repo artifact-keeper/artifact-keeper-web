@@ -85,6 +85,7 @@ function OidcTab() {
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState("openid profile email");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
+  const [mapGroupsToGroups, setMapGroupsToGroups] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("preferred_username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("name");
@@ -144,6 +145,7 @@ function OidcTab() {
     setClientSecret("");
     setScopes("openid profile email");
     setAutoCreateUsers(true);
+    setMapGroupsToGroups(false);
     setUsernameClaim("preferred_username");
     setEmailClaim("email");
     setDisplayNameClaim("name");
@@ -171,6 +173,7 @@ function OidcTab() {
     setClientSecret("");
     setScopes(config.scopes.join(" "));
     setAutoCreateUsers(config.auto_create_users);
+    setMapGroupsToGroups(config.map_groups_to_groups);
     // #516: the backend reads the OIDC claim overrides under the
     // `<field>_claim` keys (username_claim / email_claim / groups_claim).
     // Prefer those, but fall back to the legacy bare keys so a provider
@@ -246,6 +249,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       };
       if (clientSecret) {
         data.client_secret = clientSecret;
@@ -260,6 +264,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       });
     }
   }
@@ -464,6 +469,25 @@ function OidcTab() {
                 id="oidc-auto-create-users"
                 checked={autoCreateUsers}
                 onCheckedChange={setAutoCreateUsers}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="oidc-map-groups-to-groups">
+                  Map OIDC groups to local groups
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Reflect values from the OIDC groups claim into Artifact Keeper
+                  group memberships on login. Matching groups are auto-created
+                  for this provider; operator-managed groups are left unchanged.
+                  Off keeps the legacy role-mapping behavior.
+                </p>
+              </div>
+              <Switch
+                id="oidc-map-groups-to-groups"
+                checked={mapGroupsToGroups}
+                onCheckedChange={setMapGroupsToGroups}
               />
             </div>
 

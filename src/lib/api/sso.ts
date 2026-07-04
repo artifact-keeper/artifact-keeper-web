@@ -95,6 +95,12 @@ function adaptOidcConfig(sdk: SdkOidcConfigResponse): OidcConfig {
     scopes: sdk.scopes,
     attribute_mapping: adaptAttributeMapping(sdk.attribute_mapping),
     auto_create_users: sdk.auto_create_users,
+    // Defensive default: older backends (pre artifact-keeper#1879) may not
+    // emit `map_groups_to_groups`. Read through a cast and fall back to
+    // `false` (legacy role-mapping behavior) so the UI is safe against a
+    // backend that never returns the field.
+    map_groups_to_groups:
+      (sdk as { map_groups_to_groups?: boolean }).map_groups_to_groups ?? false,
     is_enabled: sdk.is_enabled,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,

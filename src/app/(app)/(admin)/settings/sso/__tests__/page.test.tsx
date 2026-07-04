@@ -190,6 +190,7 @@ const OIDC_WITH_EXTRA_MAPPING = {
     custom_claim: "department_code",
   },
   auto_create_users: true,
+  map_groups_to_groups: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -433,6 +434,45 @@ describe("SSO OIDC claim keys match backend (#516)", () => {
 
     // Unrelated keys still round-trip (regression #406).
     expect(mapping.custom_claim).toBe("department_code");
+  });
+});
+
+describe("SSO OIDC map_groups_to_groups toggle (#534)", () => {
+  it("sends map_groups_to_groups=true when the operator enables it", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit OIDC provider Corporate IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
+    });
+
+    const mapGroupsToggle = screen.getByLabelText(
+      /Map OIDC groups to local groups/i,
+    ) as HTMLInputElement;
+    // Sourced from the loaded config (fixture: false).
+    expect(mapGroupsToggle.checked).toBe(false);
+    await user.click(mapGroupsToggle);
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateOidc).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateOidc.mock.calls[0] as [
+      string,
+      { map_groups_to_groups?: boolean },
+    ];
+    expect(payload.map_groups_to_groups).toBe(true);
   });
 });
 

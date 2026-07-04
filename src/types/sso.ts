@@ -14,6 +14,15 @@ export interface OidcConfig {
   scopes: string[];
   attribute_mapping: Record<string, string>;
   auto_create_users: boolean;
+  /**
+   * When true, values from the OIDC `groups` claim are reflected into
+   * Artifact Keeper group memberships on login (auto-creating matching
+   * groups for this provider); operator-managed groups are left unchanged.
+   * When false, legacy role mapping is used. Backend field
+   * `oidc_configs.map_groups_to_groups` (artifact-keeper#1879). Defensive
+   * default `false` on backends that predate the field.
+   */
+  map_groups_to_groups: boolean;
   is_enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -80,6 +89,7 @@ export interface CreateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
+  map_groups_to_groups?: boolean;
 }
 
 export interface UpdateOidcConfigRequest {
@@ -90,6 +100,7 @@ export interface UpdateOidcConfigRequest {
   scopes?: string[];
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
+  map_groups_to_groups?: boolean;
 }
 
 export interface CreateLdapConfigRequest {

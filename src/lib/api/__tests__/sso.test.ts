@@ -193,6 +193,54 @@ describe("ssoApi", () => {
     await expect(ssoApi.listOidc()).rejects.toBe("fail");
   });
 
+  it("adaptOidc propagates map_groups_to_groups when present (#534)", async () => {
+    mockListOidc.mockResolvedValue({
+      data: [{ ...SDK_OIDC, map_groups_to_groups: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].map_groups_to_groups).toBe(true);
+  });
+
+  it("adaptOidc defaults map_groups_to_groups to false when absent (#534)", async () => {
+    // Older backends (pre artifact-keeper#1879) never emit the field.
+    const { map_groups_to_groups: _omit, ...withoutField } = SDK_OIDC;
+    void _omit;
+    mockListOidc.mockResolvedValue({
+      data: [withoutField],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].map_groups_to_groups).toBe(false);
+  });
+
+  it("createOidc forwards map_groups_to_groups (#534)", async () => {
+    mockCreateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.createOidc({
+      name: "Corp OIDC",
+      issuer_url: "https://accounts.example.com",
+      client_id: "client-1",
+      client_secret: "secret",
+      map_groups_to_groups: true,
+    });
+    expect(mockCreateOidc).toHaveBeenCalledWith({
+      body: expect.objectContaining({ map_groups_to_groups: true }),
+    });
+  });
+
+  it("updateOidc forwards map_groups_to_groups (#534)", async () => {
+    mockUpdateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.updateOidc("o1", { map_groups_to_groups: false });
+    expect(mockUpdateOidc).toHaveBeenCalledWith({
+      path: { id: "o1" },
+      body: expect.objectContaining({ map_groups_to_groups: false }),
+    });
+  });
+
   it("getOidc returns config", async () => {
     mockGetOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
