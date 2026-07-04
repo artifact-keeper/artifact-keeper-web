@@ -45,6 +45,8 @@ vi.mock("lucide-react", () => {
     Unplug: stub("Unplug"),
     ArrowRight: stub("ArrowRight"),
     Download: stub("Download"),
+    Copy: stub("Copy"),
+    ClipboardCheck: stub("ClipboardCheck"),
   };
 });
 
@@ -75,6 +77,7 @@ vi.mock("@/lib/api/migration", () => ({
     createConnection: vi.fn(),
     deleteConnection: vi.fn(),
     testConnection: vi.fn(),
+    listSourceRepositories: vi.fn(),
     listMigrations: vi.fn(),
     listMigrationItems: vi.fn(),
     createMigration: vi.fn(),
@@ -83,6 +86,9 @@ vi.mock("@/lib/api/migration", () => ({
     pauseMigration: vi.fn(),
     resumeMigration: vi.fn(),
     cancelMigration: vi.fn(),
+    getMigrationReport: vi.fn(),
+    runAssessment: vi.fn(),
+    getAssessment: vi.fn(),
     createProgressStream: vi.fn(),
   },
 }));
@@ -535,6 +541,9 @@ type QueryMap = {
   connections?: { data?: ListConnectionsResult; isLoading?: boolean };
   migrations?: { data?: ListMigrationsResult; isLoading?: boolean };
   items?: { data?: ListItemsResult; isLoading?: boolean };
+  sourceRepos?: { data?: unknown; isLoading?: boolean };
+  report?: { data?: unknown; isLoading?: boolean };
+  assessment?: { data?: unknown; isLoading?: boolean };
 };
 
 function configureQueries(map: QueryMap = {}) {
@@ -552,6 +561,12 @@ function configureQueries(map: QueryMap = {}) {
     if (Array.isArray(k) && k[1] === "connections") return conn;
     if (Array.isArray(k) && k[1] === "jobs") return migs;
     if (Array.isArray(k) && k[1] === "items") return items;
+    if (Array.isArray(k) && k[1] === "source-repos")
+      return map.sourceRepos ?? { data: [], isLoading: false };
+    if (Array.isArray(k) && k[1] === "report")
+      return map.report ?? { data: undefined, isLoading: false };
+    if (Array.isArray(k) && k[1] === "assessment")
+      return map.assessment ?? { data: undefined, isLoading: false };
     return { data: undefined, isLoading: false };
   });
 }
@@ -1169,5 +1184,321 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     for (const s of statuses) {
       expect(screen.getAllByText(s).length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature parity coverage (issue #520): create-migration config options,
+// connection-ID visibility, reconciliation report + assessment views.
+// ---------------------------------------------------------------------------
+
+import type {
+  MigrationReport,
+  AssessmentResult,
+  SourceRepository,
+} from "@/types";
+
+function makeReport(over: Partial<MigrationReport> = {}): MigrationReport {
+  return {
+    id: "rep-1",
+    job_id: "job-12345678abcdef",
+    generated_at: "2024-01-04T00:00:00Z",
+    summary: {
+      duration_seconds: 120,
+      repositories: { total: 2, migrated: 2, failed: 0, skipped: 0 },
+      artifacts: { total: 10, migrated: 9, failed: 1, skipped: 0 },
+      users: { total: 3, migrated: 3, failed: 0, skipped: 0 },
+      groups: { total: 1, migrated: 1, failed: 0, skipped: 0 },
+      permissions: { total: 0, migrated: 0, failed: 0, skipped: 0 },
+      total_bytes_transferred: 4096,
+    },
+    warnings: [{ code: "W1", message: "a warning" }],
+    errors: [{ code: "E1", message: "an error" }],
+    recommendations: ["Re-run failed artifacts"],
+    ...over,
+  };
+}
+
+function makeAssessment(over: Partial<AssessmentResult> = {}): AssessmentResult {
+  return {
+    job_id: "job-12345678abcdef",
+    status: "ready",
+    repositories: [
+      {
+        key: "libs-release",
+        type: "local",
+        package_type: "maven",
+        artifact_count: 10,
+        total_size_bytes: 4096,
+        compatibility: "full",
+        warnings: [],
+      },
+    ],
+    users_count: 3,
+    groups_count: 1,
+    permissions_count: 0,
+    total_artifacts: 10,
+    total_size_bytes: 4096,
+    estimated_duration_seconds: 120,
+    warnings: [],
+    blockers: ["blocker-x"],
+    ...over,
+  };
+}
+
+function makeSourceRepo(over: Partial<SourceRepository> = {}): SourceRepository {
+  return {
+    key: "libs-release",
+    type: "local",
+    package_type: "maven",
+    url: "https://artifactory.example.com/libs-release",
+    ...over,
+  };
+}
+
+describe("MigrationPage — feature parity (#520)", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    setupMocks();
+    const { migrationApi } = await import("@/lib/api/migration");
+    (
+      migrationApi.createProgressStream as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(makeFakeEventSource());
+  });
+  afterEach(() => cleanup());
+
+  async function switchToJobsTab() {
+    await act(async () => fireEvent.click(screen.getByTestId("tab-jobs")));
+  }
+
+  function openMigForm(): HTMLFormElement {
+    const createBtns = screen.getAllByText("Create Migration");
+    fireEvent.click(createBtns[0]);
+    const forms = document.querySelectorAll("form");
+    let migForm: HTMLFormElement | null = null;
+    forms.forEach((f) => {
+      if (f.querySelector('[data-testid="select-item-conn-A"]')) {
+        migForm = f as HTMLFormElement;
+      }
+    });
+    expect(migForm).not.toBeNull();
+    return migForm!;
+  }
+
+  it("submits the full MigrationConfig surface with the operator's choices", async () => {
+    configureQueries({
+      connections: { data: [makeConnection({ id: "conn-A", name: "AlphaConn" })] },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    const migForm = openMigForm();
+
+    // Choose the connection.
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-conn-A")),
+    );
+    // Flip several boolean options.
+    await act(async () => {
+      fireEvent.click(document.getElementById("mig-include-users")!);
+      fireEvent.click(document.getElementById("mig-verify-checksums")!);
+      fireEvent.click(document.getElementById("mig-dry-run")!);
+    });
+    // Exclusions.
+    await act(async () => {
+      fireEvent.change(document.getElementById("mig-exclude-repos")!, {
+        target: { value: "junk-repo, temp-repo" },
+      });
+      fireEvent.change(document.getElementById("mig-exclude-paths")!, {
+        target: { value: "**/snapshots/**" },
+      });
+    });
+    // Conflict resolution -> overwrite.
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-overwrite")),
+    );
+    // Transfer tuning.
+    await act(async () => {
+      fireEvent.change(document.getElementById("mig-concurrent-transfers")!, {
+        target: { value: "8" },
+      });
+      fireEvent.change(document.getElementById("mig-throttle-delay")!, {
+        target: { value: "250" },
+      });
+    });
+
+    await act(async () => fireEvent.submit(migForm));
+
+    expect(capturedMutations.createMig.mutate).toHaveBeenCalledTimes(1);
+    const payload = capturedMutations.createMig.mutate.mock.calls[0][0] as {
+      source_connection_id: string;
+      config: {
+        include_users: boolean;
+        include_groups: boolean;
+        include_permissions: boolean;
+        include_cached_remote: boolean;
+        verify_checksums: boolean;
+        dry_run: boolean;
+        conflict_resolution: string;
+        concurrent_transfers: number;
+        throttle_delay_ms: number;
+        exclude_repos: string[];
+        exclude_paths: string[];
+      };
+    };
+    expect(payload.source_connection_id).toBe("conn-A");
+    expect(payload.config.include_users).toBe(false);
+    expect(payload.config.include_groups).toBe(true);
+    expect(payload.config.include_permissions).toBe(true);
+    expect(payload.config.verify_checksums).toBe(false);
+    expect(payload.config.dry_run).toBe(true);
+    expect(payload.config.conflict_resolution).toBe("overwrite");
+    expect(payload.config.concurrent_transfers).toBe(8);
+    expect(payload.config.throttle_delay_ms).toBe(250);
+    expect(payload.config.exclude_repos).toEqual(["junk-repo", "temp-repo"]);
+    expect(payload.config.exclude_paths).toEqual(["**/snapshots/**"]);
+  });
+
+  it("lets the operator pick include repositories from the source list", async () => {
+    configureQueries({
+      connections: { data: [makeConnection({ id: "conn-A", name: "AlphaConn" })] },
+      sourceRepos: { data: [makeSourceRepo({ key: "libs-release" })] },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    const migForm = openMigForm();
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-conn-A")),
+    );
+    // The repo checkbox is rendered from the source repositories query.
+    const repoBox = document.getElementById("include-repo-libs-release");
+    expect(repoBox).not.toBeNull();
+    await act(async () => fireEvent.click(repoBox!));
+    await act(async () => fireEvent.submit(migForm));
+
+    const payload = capturedMutations.createMig.mutate.mock.calls[0][0] as {
+      config: { include_repos: string[] };
+    };
+    expect(payload.config.include_repos).toEqual(["libs-release"]);
+  });
+
+  it("adds date_from/date_to only for incremental migrations", async () => {
+    configureQueries({
+      connections: { data: [makeConnection({ id: "conn-A", name: "AlphaConn" })] },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    const migForm = openMigForm();
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-conn-A")),
+    );
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-incremental")),
+    );
+    await act(async () => {
+      fireEvent.change(document.getElementById("mig-date-from")!, {
+        target: { value: "2024-01-01T00:00" },
+      });
+      fireEvent.change(document.getElementById("mig-date-to")!, {
+        target: { value: "2024-02-01T00:00" },
+      });
+    });
+    await act(async () => fireEvent.submit(migForm));
+
+    const payload = capturedMutations.createMig.mutate.mock.calls[0][0] as {
+      job_type: string;
+      config: { date_from?: string; date_to?: string };
+    };
+    expect(payload.job_type).toBe("incremental");
+    expect(payload.config.date_from).toBeDefined();
+    expect(payload.config.date_to).toBeDefined();
+  });
+
+  it("shows each connection's ID and copies it to the clipboard", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    configureQueries({
+      connections: { data: [makeConnection({ id: "conn-xyz-789" })] },
+    });
+    await renderPage();
+    // The id is rendered in a code cell.
+    expect(screen.getByText("conn-xyz-789")).toBeInTheDocument();
+    const copyBtn = screen.getByLabelText("Copy connection ID");
+    await act(async () => fireEvent.click(copyBtn));
+    expect(writeText).toHaveBeenCalledWith("conn-xyz-789");
+    expect(toast.success).toHaveBeenCalledWith("Connection ID copied");
+  });
+
+  it("renders the reconciliation report for a terminal job", async () => {
+    const job = makeJob({ id: "job-term-0001", status: "completed", job_type: "full" });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: makeReport({ job_id: job.id }) },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-term...")));
+    expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
+    // Artifacts migrated/total from the report summary.
+    expect(screen.getByText("9/10")).toBeInTheDocument();
+    expect(screen.getByText("Re-run failed artifacts")).toBeInTheDocument();
+  });
+
+  it("downloads the HTML report on demand", async () => {
+    const { migrationApi } = await import("@/lib/api/migration");
+    (
+      migrationApi.getMigrationReport as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue("<html>report</html>");
+    const createObjectURL = vi.fn(() => "blob:report");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      value: createObjectURL,
+      configurable: true,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      value: revokeObjectURL,
+      configurable: true,
+    });
+    const job = makeJob({ id: "job-term-0002", status: "completed", job_type: "full" });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: makeReport({ job_id: job.id }) },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-term...")));
+    await act(async () => fireEvent.click(screen.getByText("HTML")));
+    expect(migrationApi.getMigrationReport).toHaveBeenCalledWith(
+      "job-term-0002",
+      "html",
+    );
+  });
+
+  it("renders the assessment panel and runs an assessment for assessment jobs", async () => {
+    const { migrationApi } = await import("@/lib/api/migration");
+    const job = makeJob({
+      id: "job-asmt-0001",
+      status: "pending",
+      job_type: "assessment",
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      assessment: { data: makeAssessment({ job_id: job.id }) },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-asmt...")));
+    expect(screen.getByText("Assessment")).toBeInTheDocument();
+    // Blockers surface from the assessment result.
+    expect(screen.getByText(/blocker-x/)).toBeInTheDocument();
+    await act(async () =>
+      fireEvent.click(screen.getByText("Run Assessment")),
+    );
+    expect(migrationApi.runAssessment).toHaveBeenCalledWith("job-asmt-0001");
   });
 });
