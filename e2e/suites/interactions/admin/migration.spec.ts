@@ -117,6 +117,14 @@ test.describe('Migration Page', () => {
     await page.getByRole('button', { name: /cancel/i }).click();
   });
 
+  test('Source Connections table exposes a Connection ID column (#520)', async ({ page }) => {
+    await page.getByRole('tablist').getByRole('tab', { name: /source connections/i }).click();
+    // Either the table header (when connections exist) or the empty state.
+    const idHeader = page.getByRole('columnheader', { name: /connection id/i });
+    const emptyState = page.getByText(/no connections/i);
+    await expect(idHeader.or(emptyState).first()).toBeVisible({ timeout: 10000 });
+  });
+
   test('no console errors on the page', async ({ page }) => {
     // Wait for page to fully load
     await expect(page.getByRole('heading', { name: /migration/i })).toBeVisible({ timeout: 10000 });

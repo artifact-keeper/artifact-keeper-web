@@ -84,6 +84,11 @@ export interface MigrationConfig {
   conflict_resolution?: ConflictResolution;
   concurrent_transfers?: number;
   throttle_delay_ms?: number;
+  // Whether to verify that locally computed checksums match the digests
+  // advertised by the source registry. Backend `MigrationConfig.verify_checksums`
+  // (defaults true; issue artifact-keeper#856). Set false only when the source
+  // registry is known to return inaccurate digests.
+  verify_checksums?: boolean;
   date_from?: string;
   date_to?: string;
 }
