@@ -19,6 +19,8 @@ import {
   Unplug,
   ArrowRight,
   Download,
+  Copy,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,14 +34,21 @@ import type {
   CreateConnectionRequest,
   MigrationJob,
   MigrationItem,
+  MigrationConfig,
+  ConflictResolution,
   CreateMigrationRequest,
   MigrationJobStatus,
+  MigrationJobType,
   MigrationProgressEvent,
+  MigrationReport,
+  AssessmentResult,
 } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -113,6 +122,72 @@ function formatDuration(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
+// Migration jobs in a terminal state have a materialized reconciliation report
+// (the backend generates it on completion/cancel) — gate the report fetch on
+// these so we don't 404 on in-flight jobs.
+const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+// The create-migration config defaults mirror the backend `MigrationConfig`
+// serde defaults (models/migration.rs): users/groups/permissions and checksum
+// verification on, conflict_resolution "skip", 4 concurrent transfers, 100ms
+// throttle. Kept in lock-step so the UI's "unchanged" submit matches what the
+// backend would apply for an omitted field.
+const DEFAULT_MIG_CONFIG: MigrationConfig = {
+  include_repos: [],
+  exclude_repos: [],
+  exclude_paths: [],
+  include_users: true,
+  include_groups: true,
+  include_permissions: true,
+  include_cached_remote: false,
+  dry_run: false,
+  conflict_resolution: "skip",
+  concurrent_transfers: 4,
+  throttle_delay_ms: 100,
+  verify_checksums: true,
+};
+
+// Split a free-text list (comma / newline / whitespace separated) into the
+// trimmed, non-empty entries the backend `Vec<String>` config fields expect.
+function parseList(text: string): string[] {
+  return text
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// A single labeled checkbox row. Extracted so the several boolean migration
+// config toggles don't each repeat the same markup (keeps the jscpd
+// duplication gate green and the dialog readable).
+function BoolField({
+  id,
+  label,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label htmlFor={id} className="flex items-center gap-2 text-sm">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-input"
+      />
+      {label}
+    </label>
+  );
+}
+
 // -- page --
 
 // Default to Artifactory to preserve the prior backend default behavior;
@@ -145,11 +220,46 @@ export default function MigrationPage() {
   const [createMigOpen, setCreateMigOpen] = useState(false);
   const [deleteMigId, setDeleteMigId] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<MigrationJob | null>(null);
-  const [migForm, setMigForm] = useState({
+  const [migForm, setMigForm] = useState<{
+    source_connection_id: string;
+    job_type: MigrationJobType;
+  }>({
     source_connection_id: "",
-    job_type: "full" as "full" | "incremental" | "assessment",
-    dry_run: false,
+    job_type: "full",
   });
+  // Full backend MigrationConfig surface. Repo include/exclude and path
+  // exclusions are edited separately (below) then folded into this on submit.
+  const [migConfig, setMigConfig] = useState<MigrationConfig>({
+    ...DEFAULT_MIG_CONFIG,
+  });
+  const [excludeReposText, setExcludeReposText] = useState("");
+  const [excludePathsText, setExcludePathsText] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  function resetMigForm() {
+    setMigForm({ source_connection_id: "", job_type: "full" });
+    setMigConfig({ ...DEFAULT_MIG_CONFIG });
+    setExcludeReposText("");
+    setExcludePathsText("");
+    setDateFrom("");
+    setDateTo("");
+  }
+
+  // Toggle a source repository in/out of the include_repos allowlist. An empty
+  // allowlist means "all repositories" (backend treats an empty Vec as no
+  // include filter).
+  function toggleIncludeRepo(key: string, on: boolean) {
+    setMigConfig((c) => {
+      const current = c.include_repos ?? [];
+      return {
+        ...c,
+        include_repos: on
+          ? [...current, key]
+          : current.filter((k) => k !== key),
+      };
+    });
+  }
 
   // -- SSE progress --
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -174,6 +284,35 @@ export default function MigrationPage() {
     queryFn: () =>
       migrationApi.listMigrationItems(detailJob!.id, { per_page: 100 }),
     enabled: !!detailJob,
+  });
+
+  // Source repositories for the selected connection — powers the include-repos
+  // picker in the Create Migration dialog. Only fetched once a connection is
+  // chosen and the dialog is open.
+  const { data: sourceRepos = [] } = useQuery({
+    queryKey: ["migration", "source-repos", migForm.source_connection_id],
+    queryFn: () =>
+      migrationApi.listSourceRepositories(migForm.source_connection_id),
+    enabled: createMigOpen && !!migForm.source_connection_id,
+  });
+
+  // Reconciliation report for a terminal job (materialized by the backend on
+  // completion/cancel). Read-only view surfaced in the job detail dialog.
+  const { data: detailReport } = useQuery({
+    queryKey: ["migration", "report", detailJob?.id],
+    queryFn: () => migrationApi.getMigrationReport(detailJob!.id, "json"),
+    enabled: !!detailJob && TERMINAL_STATUSES.has(detailJob.status),
+  });
+  const report =
+    detailReport && typeof detailReport !== "string"
+      ? (detailReport as MigrationReport)
+      : undefined;
+
+  // Pre-migration assessment for assessment-type jobs.
+  const { data: assessment } = useQuery<AssessmentResult>({
+    queryKey: ["migration", "assessment", detailJob?.id],
+    queryFn: () => migrationApi.getAssessment(detailJob!.id),
+    enabled: !!detailJob && detailJob.job_type === "assessment",
   });
 
   const migrations = migrationsData?.items ?? [];
@@ -272,14 +411,22 @@ export default function MigrationPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       setCreateMigOpen(false);
-      setMigForm({
-        source_connection_id: "",
-        job_type: "full",
-        dry_run: false,
-      });
+      resetMigForm();
       toast.success("Migration job created");
     },
     onError: mutationErrorToast("Failed to create migration"),
+  });
+
+  const runAssessmentMutation = useMutation({
+    mutationFn: (id: string) => migrationApi.runAssessment(id),
+    onSuccess: (job) => {
+      queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
+      queryClient.invalidateQueries({
+        queryKey: ["migration", "assessment", job.id],
+      });
+      toast.success("Assessment started");
+    },
+    onError: mutationErrorToast("Failed to run assessment"),
   });
 
   const startMigMutation = useMutation({
@@ -330,6 +477,32 @@ export default function MigrationPage() {
     onError: mutationErrorToast("Failed to delete migration"),
   });
 
+  // Copy a connection's UUID to the clipboard. Previously the only way to get
+  // the connection id was a direct DB query on source_connections (issue #520);
+  // surfacing it here lets operators grab it for API / SDK use.
+  const copyConnectionId = (id: string) => {
+    void navigator.clipboard?.writeText(id);
+    toast.success("Connection ID copied");
+  };
+
+  // Fetch the reconciliation report as HTML and trigger a file download so
+  // operators can archive it. Falls back to a toast on failure.
+  const downloadReportHtml = async (jobId: string) => {
+    try {
+      const html = await migrationApi.getMigrationReport(jobId, "html");
+      if (typeof html !== "string") return;
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `migration-report-${jobId}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download report");
+    }
+  };
+
   // -- Connection columns --
   const connColumns: DataTableColumn<SourceConnection>[] = [
     {
@@ -341,6 +514,34 @@ export default function MigrationPage() {
         <div className="flex items-center gap-2">
           <Database className="size-3.5 text-muted-foreground" />
           <span className="font-medium text-sm">{c.name}</span>
+        </div>
+      ),
+    },
+    {
+      id: "id",
+      header: "Connection ID",
+      accessor: (c) => c.id,
+      cell: (c) => (
+        <div className="flex items-center gap-1.5">
+          <code className="text-xs text-muted-foreground truncate max-w-[160px]">
+            {c.id}
+          </code>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Copy connection ID"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyConnectionId(c.id);
+                }}
+              >
+                <Copy className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy connection ID</TooltipContent>
+          </Tooltip>
         </div>
       ),
     },
@@ -935,15 +1136,10 @@ export default function MigrationPage() {
         open={createMigOpen}
         onOpenChange={(o) => {
           setCreateMigOpen(o);
-          if (!o)
-            setMigForm({
-              source_connection_id: "",
-              job_type: "full",
-              dry_run: false,
-            });
+          if (!o) resetMigForm();
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Migration Job</DialogTitle>
             <DialogDescription>
@@ -954,12 +1150,21 @@ export default function MigrationPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              const config: MigrationConfig = {
+                ...migConfig,
+                exclude_repos: parseList(excludeReposText),
+                exclude_paths: parseList(excludePathsText),
+              };
+              // date_from/date_to only apply to incremental migrations; the
+              // backend accepts them as RFC3339 timestamps.
+              if (migForm.job_type === "incremental") {
+                if (dateFrom) config.date_from = new Date(dateFrom).toISOString();
+                if (dateTo) config.date_to = new Date(dateTo).toISOString();
+              }
               createMigMutation.mutate({
                 source_connection_id: migForm.source_connection_id,
                 job_type: migForm.job_type,
-                config: {
-                  dry_run: migForm.dry_run,
-                },
+                config,
               });
             }}
           >
@@ -990,7 +1195,7 @@ export default function MigrationPage() {
                 onValueChange={(v) =>
                   setMigForm((f) => ({
                     ...f,
-                    job_type: v as "full" | "incremental" | "assessment",
+                    job_type: v as MigrationJobType,
                   }))
                 }
               >
@@ -1004,19 +1209,205 @@ export default function MigrationPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={migForm.dry_run}
-                  onChange={(e) =>
-                    setMigForm((f) => ({ ...f, dry_run: e.target.checked }))
-                  }
-                  className="rounded border-input"
-                />
-                Dry run (simulate without transferring)
-              </label>
+
+            <Separator />
+
+            {/* Repository selection */}
+            <div className="space-y-2">
+              <Label>Include Repositories</Label>
+              <p className="text-xs text-muted-foreground">
+                Leave all unchecked to migrate every repository. Select a
+                connection to load its repositories.
+              </p>
+              {migForm.source_connection_id && sourceRepos.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
+                  {sourceRepos.map((repo) => (
+                    <BoolField
+                      key={repo.key}
+                      id={`include-repo-${repo.key}`}
+                      label={`${repo.key} (${repo.package_type})`}
+                      checked={(migConfig.include_repos ?? []).includes(repo.key)}
+                      onChange={(on) => toggleIncludeRepo(repo.key, on)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  {migForm.source_connection_id
+                    ? "No repositories found for this connection."
+                    : "No connection selected."}
+                </p>
+              )}
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mig-exclude-repos">Exclude Repositories</Label>
+              <Textarea
+                id="mig-exclude-repos"
+                value={excludeReposText}
+                onChange={(e) => setExcludeReposText(e.target.value)}
+                placeholder="repo-key-1, repo-key-2"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma- or newline-separated repository keys to skip.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mig-exclude-paths">Exclude Paths</Label>
+              <Textarea
+                id="mig-exclude-paths"
+                value={excludePathsText}
+                onChange={(e) => setExcludePathsText(e.target.value)}
+                placeholder="**/snapshots/**, tmp/**"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma- or newline-separated path globs to skip.
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* Content options */}
+            <div className="space-y-2">
+              <Label>Content to Migrate</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <BoolField
+                  id="mig-include-users"
+                  label="Users"
+                  checked={migConfig.include_users ?? true}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, include_users: v }))
+                  }
+                />
+                <BoolField
+                  id="mig-include-groups"
+                  label="Groups"
+                  checked={migConfig.include_groups ?? true}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, include_groups: v }))
+                  }
+                />
+                <BoolField
+                  id="mig-include-permissions"
+                  label="Permissions"
+                  checked={migConfig.include_permissions ?? true}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, include_permissions: v }))
+                  }
+                />
+                <BoolField
+                  id="mig-include-cached-remote"
+                  label="Cached remote artifacts"
+                  checked={migConfig.include_cached_remote ?? false}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, include_cached_remote: v }))
+                  }
+                />
+                <BoolField
+                  id="mig-verify-checksums"
+                  label="Verify checksums"
+                  checked={migConfig.verify_checksums ?? true}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, verify_checksums: v }))
+                  }
+                />
+                <BoolField
+                  id="mig-dry-run"
+                  label="Dry run (simulate without transferring)"
+                  checked={migConfig.dry_run ?? false}
+                  onChange={(v) =>
+                    setMigConfig((c) => ({ ...c, dry_run: v }))
+                  }
+                />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Transfer tuning */}
+            <div className="space-y-2">
+              <Label htmlFor="mig-conflict-resolution">Conflict Resolution</Label>
+              <Select
+                value={migConfig.conflict_resolution ?? "skip"}
+                onValueChange={(v) =>
+                  setMigConfig((c) => ({
+                    ...c,
+                    conflict_resolution: v as ConflictResolution,
+                  }))
+                }
+              >
+                <SelectTrigger id="mig-conflict-resolution" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Skip existing</SelectItem>
+                  <SelectItem value="overwrite">Overwrite</SelectItem>
+                  <SelectItem value="rename">Rename</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="mig-concurrent-transfers">
+                  Concurrent Transfers
+                </Label>
+                <Input
+                  id="mig-concurrent-transfers"
+                  type="number"
+                  min={1}
+                  value={migConfig.concurrent_transfers ?? 4}
+                  onChange={(e) =>
+                    setMigConfig((c) => ({
+                      ...c,
+                      concurrent_transfers: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mig-throttle-delay">Throttle Delay (ms)</Label>
+                <Input
+                  id="mig-throttle-delay"
+                  type="number"
+                  min={0}
+                  value={migConfig.throttle_delay_ms ?? 100}
+                  onChange={(e) =>
+                    setMigConfig((c) => ({
+                      ...c,
+                      throttle_delay_ms: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            {migForm.job_type === "incremental" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="mig-date-from">Date From</Label>
+                  <Input
+                    id="mig-date-from"
+                    type="datetime-local"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mig-date-to">Date To</Label>
+                  <Input
+                    id="mig-date-to"
+                    type="datetime-local"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
             <DialogFooter>
               <Button
                 variant="outline"
@@ -1095,6 +1486,126 @@ export default function MigrationPage() {
                   {detailJob.error_summary}
                 </div>
               )}
+              {/* Assessment (assessment-type jobs) */}
+              {detailJob.job_type === "assessment" && (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <ClipboardCheck className="size-4" />
+                      Assessment
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={runAssessmentMutation.isPending}
+                      onClick={() =>
+                        runAssessmentMutation.mutate(detailJob.id)
+                      }
+                    >
+                      Run Assessment
+                    </Button>
+                  </div>
+                  {assessment ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Repositories
+                          </p>
+                          <p className="font-semibold">
+                            {assessment.repositories.length}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Users</p>
+                          <p className="font-semibold">
+                            {assessment.users_count}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Artifacts
+                          </p>
+                          <p className="font-semibold">
+                            {assessment.total_artifacts}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Est. Duration
+                          </p>
+                          <p className="font-semibold">
+                            {formatDuration(
+                              assessment.estimated_duration_seconds,
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      {assessment.blockers.length > 0 && (
+                        <div className="text-xs text-red-500">
+                          Blockers: {assessment.blockers.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No assessment yet. Run an assessment to estimate scope.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Reconciliation report (terminal jobs) */}
+              {report && (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium flex items-center gap-1.5">
+                      <FileText className="size-4" />
+                      Reconciliation Report
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => downloadReportHtml(detailJob.id)}
+                    >
+                      <Download className="size-3.5" />
+                      HTML
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Artifacts</p>
+                      <p className="font-semibold">
+                        {report.summary.artifacts.migrated}/
+                        {report.summary.artifacts.total}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Repos</p>
+                      <p className="font-semibold">
+                        {report.summary.repositories.migrated}/
+                        {report.summary.repositories.total}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Warnings</p>
+                      <p className="font-semibold">{report.warnings.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Errors</p>
+                      <p className="font-semibold">{report.errors.length}</p>
+                    </div>
+                  </div>
+                  {report.recommendations.length > 0 && (
+                    <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                      {report.recommendations.map((rec, i) => (
+                        <li key={i}>{rec}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               <DataTable
                 columns={itemColumns}
                 data={detailItems?.items ?? []}
