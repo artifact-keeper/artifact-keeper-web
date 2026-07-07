@@ -47,6 +47,7 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
   const sdkAny = sdk as ArtifactResponse & {
     cache_cached_at?: string | null;
     cache_expires_at?: string | null;
+    analyzable?: boolean;
   };
   return {
     id: sdk.id,
@@ -62,6 +63,11 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     metadata: sdk.metadata ?? undefined,
     cache_cached_at: sdkAny.cache_cached_at ?? undefined,
     cache_expires_at: sdkAny.cache_expires_at ?? undefined,
+    // Default to `true` when the backend omits the field (older responses /
+    // not-yet-regenerated SDK): only an explicit `false` disables SBOM/scan
+    // for an artifact (artifact-keeper#2292). Matches the backend's safe
+    // default so hosted artifacts always stay analyzable.
+    analyzable: sdkAny.analyzable ?? true,
   };
 }
 

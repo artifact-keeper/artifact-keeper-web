@@ -29,6 +29,10 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isActivelyQuarantined } from "@/lib/quarantine";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
@@ -469,12 +473,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => scanArtifactMutation.mutate(a.id)}
-                  disabled={scanArtifactMutation.isPending}
+                  disabled={
+                    scanArtifactMutation.isPending || !isArtifactAnalyzable(a)
+                  }
                 >
                   <Shield className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Scan</TooltipContent>
+              <TooltipContent>
+                {isArtifactAnalyzable(a) ? "Scan" : ANALYZABLE_DISABLED_REASON}
+              </TooltipContent>
             </Tooltip>
           )}
           {isAuthenticated && (
@@ -1094,7 +1102,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Button
                     variant="outline"
                     onClick={() => scanArtifactMutation.mutate(selectedArtifact.id)}
-                    disabled={scanArtifactMutation.isPending}
+                    disabled={
+                      scanArtifactMutation.isPending ||
+                      !isArtifactAnalyzable(selectedArtifact)
+                    }
+                    title={
+                      isArtifactAnalyzable(selectedArtifact)
+                        ? undefined
+                        : ANALYZABLE_DISABLED_REASON
+                    }
                   >
                     <Shield className="size-4" />
                     {scanArtifactMutation.isPending ? "Scanning..." : "Scan"}

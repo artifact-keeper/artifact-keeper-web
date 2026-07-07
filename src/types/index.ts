@@ -192,6 +192,16 @@ export interface Artifact {
    * present.
    */
   cache_expires_at?: string | null;
+  /**
+   * Whether this artifact supports SBOM generation and security scanning.
+   * `false` for proxy-cached remote artifacts (synthetic ids, no `artifacts`
+   * row → the backend returns 404 for SBOM/scan), `true` for hosted
+   * artifacts (artifact-keeper#2292, backend PR #2291). Optional: the
+   * generated SDK type and older/pre-upgrade responses may omit it, in which
+   * case callers must treat the artifact as analyzable — see
+   * `isArtifactAnalyzable` in `@/lib/artifact-analyzable`.
+   */
+  analyzable?: boolean;
 }
 
 export interface PaginatedResponse<T> {

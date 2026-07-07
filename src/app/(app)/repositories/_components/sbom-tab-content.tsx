@@ -19,6 +19,10 @@ import { toast } from "sonner";
 
 import sbomApi from "@/lib/api/sbom";
 import { mutationErrorToast } from "@/lib/error-utils";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import type { SbomComponent, SbomFormat, CveHistoryEntry } from "@/types/sbom";
 import type { Artifact } from "@/types";
 
@@ -47,6 +51,10 @@ interface SbomTabContentProps {
 
 export function SbomTabContent({ artifact }: SbomTabContentProps) {
   const queryClient = useQueryClient();
+  // Proxy-cached remote artifacts have no artifacts row on the backend, so
+  // SBOM generation returns 404 (artifact-keeper#2292). Gate the Generate /
+  // Regenerate actions on the artifact's `analyzable` flag.
+  const analyzable = isArtifactAnalyzable(artifact);
   const [selectedFormat, setSelectedFormat] = useState<SbomFormat>("cyclonedx");
   const [jsonExpanded, setJsonExpanded] = useState(false);
   const [componentsPage, setComponentsPage] = useState(1);
@@ -216,7 +224,8 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
             variant="outline"
             size="sm"
             onClick={() => generateMutation.mutate(selectedFormat)}
-            disabled={generateMutation.isPending}
+            disabled={generateMutation.isPending || !analyzable}
+            title={analyzable ? undefined : ANALYZABLE_DISABLED_REASON}
           >
             <RefreshCw
               className={`size-4 ${generateMutation.isPending ? "animate-spin" : ""}`}
@@ -346,11 +355,14 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FileText className="size-12 text-muted-foreground/50 mb-4" />
           <p className="text-sm text-muted-foreground mb-4">
-            No SBOM generated for this artifact yet.
+            {analyzable
+              ? "No SBOM generated for this artifact yet."
+              : ANALYZABLE_DISABLED_REASON}
           </p>
           <Button
             onClick={() => generateMutation.mutate(selectedFormat)}
-            disabled={generateMutation.isPending}
+            disabled={generateMutation.isPending || !analyzable}
+            title={analyzable ? undefined : ANALYZABLE_DISABLED_REASON}
           >
             <FileText className="size-4" />
             Generate {selectedFormat.toUpperCase()} SBOM
