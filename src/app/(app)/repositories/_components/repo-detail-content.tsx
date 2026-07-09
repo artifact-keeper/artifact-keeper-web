@@ -161,17 +161,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const viewMode: ArtifactViewMode =
     viewModeOverride ??
     (repoFormat && supportsGrouping(repoFormat) ? "grouped" : "flat");
-  // Server-side grouping is currently only Maven/Gradle (#254).  Docker
-  // grouping (#330) is performed client-side over the flat artifact list.
+  // Both grouped views are server-side: Maven/Gradle GAV components (#254,
+  // backend ak#701) and Docker tag rollups (#330, backend ak#1336).  Docker
+  // grouping was previously re-derived client-side from ONE page of the
+  // flat artifact list, which rendered "No image tags found" whenever the
+  // first page (sorted by path) contained no `…/manifests/<tag>` rows —
+  // trivially hit by any large repository.
   const useServerGrouping =
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
   const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
-  // For Docker grouping we need all artifacts on one page so the client
-  // aggregation sees everything.  Bound by a high cap to avoid runaway
-  // responses on huge registries.
-  const effectivePageSize = isDockerGrouped ? 500 : pageSize;
-  const effectivePage = isDockerGrouped ? 1 : page;
 
   const handleViewModeChange = useCallback(
     (next: ArtifactViewMode) => {
@@ -190,16 +189,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       "artifacts",
       repoKey,
       searchQuery,
-      effectivePage,
-      effectivePageSize,
-      useServerGrouping ? "grouped:maven" : "flat",
+      page,
+      pageSize,
+      useServerGrouping ? "grouped:maven" : isDockerGrouped ? "grouped:docker" : "flat",
     ],
     queryFn: () =>
       artifactsApi.listGrouped(repoKey, {
         q: searchQuery || undefined,
-        per_page: effectivePageSize,
-        page: effectivePage,
+        per_page: pageSize,
+        page,
         ...(useServerGrouping ? { group_by: "maven_component" as const } : {}),
+        ...(isDockerGrouped ? { group_by: "docker_tag" as const } : {}),
       }),
     enabled: !!repoKey,
   });
@@ -764,12 +764,29 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             />
           ) : isDockerGrouped ? (
             <DockerTagList
-              artifacts={artifactsData?.items ?? []}
+              tags={artifactsData?.docker_tags ?? []}
               loading={artifactsLoading}
-              onTagClick={showDetail}
+              total={artifactsData?.pagination?.total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              // The grouped row only carries the manifest's artifact id, not
+              // the full Artifact — resolve it by its deterministic path
+              // (`v2/{image}/manifests/{tag}`, composed by the push handler)
+              // so clicking a tag opens the same detail dialog as flat view.
+              onTagClick={(t) =>
+                showDetailByPath(
+                  `v2/${t.image}/manifests/${t.tag}`,
+                  `${t.image}:${t.tag}`,
+                )
+              }
               onScan={
                 user?.is_admin
-                  ? (manifest) => scanArtifactMutation.mutate(manifest.id)
+                  ? (t) => scanArtifactMutation.mutate(t.id)
                   : undefined
               }
               scanPending={scanArtifactMutation.isPending}

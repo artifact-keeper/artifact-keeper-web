@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Container, Info, Layers as LayersIcon, Shield } from "lucide-react";
+import { Container, Shield } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,54 +11,69 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/common/copy-button";
-import { QuarantineBadge } from "@/components/common/quarantine-badge";
-import { isActivelyQuarantined } from "@/lib/quarantine";
-import {
-  ANALYZABLE_DISABLED_REASON,
-  isArtifactAnalyzable,
-} from "@/lib/artifact-analyzable";
+import { DataTablePagination } from "@/components/common/data-table-pagination";
 import { formatBytes } from "@/lib/utils";
-import type { Artifact } from "@/types";
+import type { DockerTag } from "@/types";
 
-import { groupDockerArtifacts, truncateDigest } from "../_lib/docker-grouping";
+import { truncateDigest } from "../_lib/docker-grouping";
 
 interface DockerTagListProps {
-  artifacts: Artifact[];
+  /** Server-grouped tag rollups (`?group_by=docker_tag`, backend ak#1336). */
+  tags: DockerTag[];
   loading?: boolean;
+  /**
+   * Total tag count from the server.  Used for the "showing N of M" helper
+   * text and to drive pagination.  Optional.
+   */
+  total?: number;
+  /** Current 1-based page (server-side pagination). */
+  page?: number;
+  /** Tags per page. */
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
   /** Click handler for a tag row — typically opens the manifest detail dialog. */
-  onTagClick?: (manifest: Artifact) => void;
-  onScan?: (manifest: Artifact) => void;
+  onTagClick?: (tag: DockerTag) => void;
+  onScan?: (tag: DockerTag) => void;
   scanPending?: boolean;
   emptyMessage?: string;
 }
 
-// Stable id for aria-controls on the "Show layers" disclosure.  Module-level
-// constant so it's identical across renders without needing useId.
-const LAYER_PANEL_ID = "docker-layer-list-panel";
+/**
+ * Human label for the server's scan rollup status; `undefined`/`null` means
+ * the tag's manifest has never been scanned.
+ */
+function scanStatusLabel(status: string | null | undefined): string {
+  return status ?? "not scanned";
+}
 
 /**
- * Renders Docker repository artifacts grouped by manifest tag (issue #330).
+ * Renders Docker repository tags grouped server-side (issue #330).
  *
- * Backend has no native tag aggregation yet, so this component aggregates
- * on the client using {@link groupDockerArtifacts}.  Raw layer blobs and
- * digest-only manifests are hidden by default; the count is surfaced as a
- * small footer with a "show layers" expansion for advanced users.
+ * Uses `GET /api/v1/repositories/:key/artifacts?group_by=docker_tag`
+ * (backend ak#1336) — the same pattern as the Maven component grouping —
+ * instead of re-deriving tags client-side from one page of the flat
+ * artifact list.  The old client-side grouping only ever saw the first
+ * page of the flat list sorted by path, so any repository whose first
+ * page contained no `…/manifests/<tag>` rows rendered "No image tags
+ * found" even though tags existed; it also could not compute true image
+ * sizes.  The server rollup returns every tag with its real (multi-arch
+ * aware) total size, last push time, and scan status.
  */
 export function DockerTagList({
-  artifacts,
+  tags,
   loading = false,
+  total,
+  page = 1,
+  pageSize = 20,
+  onPageChange,
+  onPageSizeChange,
   onTagClick,
   onScan,
   scanPending = false,
   // M7: actionable default — tells users how to add a tag, not just that there isn't one.
   emptyMessage = "No image tags found. Push an image (`docker push <registry>/<image>:<tag>`) to see it here, or switch to Flat view to inspect raw blobs.",
 }: DockerTagListProps) {
-  const [showLayers, setShowLayers] = useState(false);
-
-  const grouped = useMemo(() => groupDockerArtifacts(artifacts), [artifacts]);
-  const hiddenCount =
-    grouped.blobs.length + grouped.manifestsByDigest.length + grouped.other.length;
-
   if (loading) {
     return (
       // M3: announce loading to AT so SR users hear "Loading image tags" instead
@@ -79,19 +93,13 @@ export function DockerTagList({
     );
   }
 
-  if (!grouped.tags.length) {
+  if (!tags.length) {
     return (
-      <div className="space-y-3" data-testid="docker-tag-list-empty">
-        <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          {emptyMessage}
-        </div>
-        {hiddenCount > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {hiddenCount} blob{hiddenCount === 1 ? "" : "s"} / digest-only
-            manifest{hiddenCount === 1 ? "" : "s"} present but no tagged images
-            were detected. Switch to flat view to inspect them.
-          </p>
-        )}
+      <div
+        className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground"
+        data-testid="docker-tag-list-empty"
+      >
+        {emptyMessage}
       </div>
     );
   }
@@ -128,7 +136,7 @@ export function DockerTagList({
                 Last pushed
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Status
+                Scan
               </th>
               <th scope="col" className="px-3 py-2">
                 <span className="sr-only">Actions</span>
@@ -136,12 +144,12 @@ export function DockerTagList({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {grouped.tags.map((group) => (
+            {tags.map((t) => (
               <tr
-                key={group.key}
+                key={`${t.image}:${t.tag}`}
                 className="hover:bg-muted/30"
                 data-testid="docker-tag-row"
-                data-tag={group.key}
+                data-tag={`${t.image}:${t.tag}`}
               >
                 <td className="px-3 py-2">
                   {/*
@@ -153,14 +161,21 @@ export function DockerTagList({
                   <button
                     type="button"
                     className="flex items-center gap-2 text-left text-primary hover:underline"
-                    aria-label={`View ${group.image}:${group.tag} manifest`}
-                    onClick={() => onTagClick?.(group.manifest)}
+                    aria-label={`View ${t.image}:${t.tag} manifest`}
+                    onClick={() => onTagClick?.(t)}
                   >
                     <Container className="size-4 text-muted-foreground" aria-hidden="true" />
                     <div className="flex flex-col">
-                      <span className="font-medium">{group.tag}</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        {t.tag}
+                        {t.is_index && (
+                          <Badge variant="outline" className="font-normal">
+                            multi-arch
+                          </Badge>
+                        )}
+                      </span>
                       <span className="text-xs text-muted-foreground">
-                        {group.image}
+                        {t.image}
                       </span>
                     </div>
                   </button>
@@ -174,86 +189,43 @@ export function DockerTagList({
                     */}
                     <code
                       className="font-mono text-xs text-muted-foreground"
-                      aria-label={
-                        group.manifest.checksum_sha256
-                          ? `Digest ${group.manifest.checksum_sha256}`
-                          : `Tag ${group.tag}`
-                      }
-                      title={group.manifest.checksum_sha256 || group.tag}
+                      aria-label={`Digest ${t.manifest_digest}`}
+                      title={t.manifest_digest}
                     >
-                      {truncateDigest(group.manifest.checksum_sha256) ||
-                        truncateDigest(group.tag)}
+                      {truncateDigest(t.manifest_digest)}
                     </code>
-                    {group.manifest.checksum_sha256 && (
-                      <CopyButton value={group.manifest.checksum_sha256} />
-                    )}
+                    <CopyButton value={t.manifest_digest} />
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {/*
-                        Button rather than span so keyboard users can focus
-                        the trigger and the Radix tooltip will surface the
-                        "manifest size only" caveat on focus, not just hover.
-                      */}
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        aria-label={`${formatBytes(group.size_bytes)} (manifest size only — backend layer aggregation pending)`}
-                      >
-                        {formatBytes(group.size_bytes)}
-                        <Info className="size-3 opacity-60" aria-hidden="true" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Manifest size only. Total layer size will be aggregated
-                      once backend support lands.
-                    </TooltipContent>
-                  </Tooltip>
+                  {formatBytes(t.total_size_bytes)}
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">
-                  {new Date(group.manifest.created_at).toLocaleDateString()}
+                  {new Date(t.last_pushed_at).toLocaleDateString()}
                 </td>
                 <td className="px-3 py-2">
-                  {isActivelyQuarantined(group.manifest) ? (
-                    <QuarantineBadge
-                      reason={group.manifest.quarantine_reason}
-                      quarantineUntil={group.manifest.quarantine_until}
-                    />
-                  ) : (
-                    <Badge variant="outline" className="font-normal">
-                      OK
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className="font-normal">
+                    {scanStatusLabel(t.scan_status)}
+                  </Badge>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-1">
-                    {onScan &&
-                      (() => {
-                        // Proxy-cached remote manifests can't be scanned
-                        // (artifact-keeper#2292) — keep the affordance visible
-                        // but disabled with an explanatory tooltip.
-                        const analyzable = isArtifactAnalyzable(group.manifest);
-                        return (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                onClick={() => onScan(group.manifest)}
-                                disabled={scanPending || !analyzable}
-                                aria-label={`Scan ${group.image}:${group.tag}`}
-                              >
-                                <Shield className="size-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {analyzable ? "Scan" : ANALYZABLE_DISABLED_REASON}
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })()}
+                    {onScan && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => onScan(t)}
+                            disabled={scanPending}
+                            aria-label={`Scan ${t.image}:${t.tag}`}
+                          >
+                            <Shield className="size-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Scan</TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -262,64 +234,16 @@ export function DockerTagList({
         </table>
       </div>
 
-      {hiddenCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <LayersIcon className="size-3.5" aria-hidden="true" />
-            {hiddenCount} layer{hiddenCount === 1 ? "" : "s"} /
-            {grouped.manifestsByDigest.length > 0 && (
-              <> {grouped.manifestsByDigest.length} digest-only manifest{
-                grouped.manifestsByDigest.length === 1 ? "" : "s"
-              }</>
-            )} hidden
-          </span>
-          {/*
-            N3: aria-controls links the disclosure button to the panel
-            below so SR users know exactly which region is being toggled.
-          */}
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => setShowLayers((s) => !s)}
-            aria-expanded={showLayers}
-            aria-controls={LAYER_PANEL_ID}
-            data-testid="toggle-layers"
-          >
-            {showLayers ? "Hide layers" : "Show layers"}
-          </Button>
-        </div>
-      )}
-
-      {showLayers && hiddenCount > 0 && (
-        <div
-          id={LAYER_PANEL_ID}
-          className="rounded-md border"
-          data-testid="docker-layer-list"
-        >
-          <ul className="divide-y" role="list">
-            {[...grouped.manifestsByDigest, ...grouped.blobs, ...grouped.other].map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
-              >
-                {/*
-                  M6: `title=""` is mouse-only and inconsistently announced
-                  by SR.  Render the full path as truncated visible text
-                  AND in an sr-only span so AT users get the unredacted
-                  value regardless of input modality.
-                */}
-                <code className="truncate font-mono text-muted-foreground" aria-hidden="true">
-                  {a.path}
-                </code>
-                <span className="sr-only">Full path: {a.path}</span>
-                <span className="shrink-0 text-muted-foreground">
-                  {formatBytes(a.size_bytes)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* Pagination over the tags themselves (server-side, like #443). */}
+      {typeof total === "number" && (
+        <DataTablePagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          itemLabel="tags"
+        />
       )}
     </div>
   );

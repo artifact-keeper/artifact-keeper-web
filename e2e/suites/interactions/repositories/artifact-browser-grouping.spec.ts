@@ -192,25 +192,10 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     expect(bodyText).not.toMatch(/\/blobs\/sha256:[0-9a-f]/);
   });
 
-  test('Docker grouped view: "Show layers" reveals hidden blobs', async ({ page }) => {
-    const key = await findRepoByFormat(page, ['docker']);
-    test.skip(!key, 'No docker repository available');
-    await gotoArtifactsTab(page, key!);
-
-    const groupedBtn = page.getByTestId('toggle-grouped');
-    if ((await groupedBtn.getAttribute('aria-pressed')) !== 'true') {
-      await groupedBtn.click();
-    }
-
-    const layersToggle = page.getByTestId('toggle-layers');
-    if (!(await layersToggle.isVisible({ timeout: 3000 }).catch(() => false))) {
-      // No hidden artifacts in this fixture — skip gracefully
-      return;
-    }
-
-    await layersToggle.click();
-    await expect(page.getByTestId('docker-layer-list')).toBeVisible();
-  });
+  // (The "Show layers" disclosure test was removed with the client-side
+  // grouping: the grouped view now consumes the server's
+  // `?group_by=docker_tag` rollup, which returns only tag rows — raw layer
+  // blobs are inspected via Flat view.)
 
   // -------------------------------------------------------------------------
   // Non-groupable formats — toggle hidden
