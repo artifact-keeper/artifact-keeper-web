@@ -104,6 +104,7 @@ vi.mock("lucide-react", () => {
     Gauge: icon,
     ScrollText: icon,
     Network: icon,
+    Crosshair: icon,
   };
 });
 
@@ -332,5 +333,13 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.getByText("Downloads")).toBeDefined();
+  });
+
+  it("renders the Blast Radius security entry (#570)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Blast Radius")).toBeDefined();
   });
 });

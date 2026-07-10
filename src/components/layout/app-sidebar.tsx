@@ -44,6 +44,7 @@ import {
   Gauge,
   ScrollText,
   Network,
+  Crosshair,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -94,6 +95,7 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
   { title: "Quality Checks", href: "/quality-checks", icon: ListChecks },

@@ -3,6 +3,7 @@ export { AnalyticsPage } from './AnalyticsPage';
 export { ApprovalsPage } from './ApprovalsPage';
 export { AuditLogPage } from './AuditLogPage';
 export { BackupsPage } from './BackupsPage';
+export { BlastRadiusPage } from './BlastRadiusPage';
 export { BuildsPage } from './BuildsPage';
 export { DashboardPage } from './DashboardPage';
 export { DependencyTrackPage } from './DependencyTrackPage';
