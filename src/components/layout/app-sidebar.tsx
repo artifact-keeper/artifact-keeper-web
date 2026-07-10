@@ -42,6 +42,7 @@ import {
   ClipboardCheck,
   Filter,
   Gauge,
+  ScrollText,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -117,6 +118,7 @@ const adminItems: NavItem[] = [
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
   { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
+  { title: "Audit Log", href: "/audit", icon: ScrollText },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },

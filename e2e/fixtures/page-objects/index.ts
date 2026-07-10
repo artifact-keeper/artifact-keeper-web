@@ -1,6 +1,7 @@
 export { AccessTokensPage } from './AccessTokensPage';
 export { AnalyticsPage } from './AnalyticsPage';
 export { ApprovalsPage } from './ApprovalsPage';
+export { AuditLogPage } from './AuditLogPage';
 export { BackupsPage } from './BackupsPage';
 export { BuildsPage } from './BuildsPage';
 export { DashboardPage } from './DashboardPage';
