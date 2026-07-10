@@ -243,13 +243,51 @@ export interface MavenComponent {
 }
 
 /**
+ * A Docker/OCI tag rollup grouped server-side by (image, tag).
+ * Returned by `GET /api/v1/repositories/:key/artifacts?group_by=docker_tag`
+ * (backend PR artifact-keeper#1336, issue artifact-keeper#1193).
+ */
+export interface DockerTag {
+  /** Artifact ID of the tag's manifest row (usable for scan triggers). */
+  id: string;
+  /** Repository key this tag belongs to. */
+  repository_key: string;
+  /** Image path under the registry, e.g. `library/node`. */
+  image: string;
+  /** Tag portion, e.g. `14`, `latest`. */
+  tag: string;
+  /** Full manifest digest (`sha256:…`). */
+  manifest_digest: string;
+  /**
+   * Total size in bytes for the tag. For multi-arch indexes the backend
+   * folds in each child manifest's size, so this reflects what a pull
+   * actually downloads — not just the manifest document size.
+   */
+  total_size_bytes: number;
+  /** Layer count — currently always 0 (backend does not persist it yet). */
+  layer_count: number;
+  /** True when the manifest is an image index / manifest list (multi-arch). */
+  is_index: boolean;
+  /** Timestamp of the most recent push of this tag. */
+  last_pushed_at: string;
+  /**
+   * Scan rollup across all scanners for the tag's manifest artifact:
+   * `completed` | `partial` | `failed` | `running` | `pending`, or
+   * absent when never scanned.
+   */
+  scan_status?: string | null;
+}
+
+/**
  * Extended pagination response for grouped artifact listings.  Identical to
- * `PaginatedResponse<Artifact>` plus an optional `components` array that the
- * backend populates when `group_by=maven_component` is requested.
+ * `PaginatedResponse<Artifact>` plus the optional grouping array the backend
+ * populates for the requested `group_by` mode.
  */
 export interface GroupedArtifactListResponse extends PaginatedResponse<Artifact> {
   /** Present only when `group_by=maven_component` was requested. */
   components?: MavenComponent[];
+  /** Present only when `group_by=docker_tag` was requested. */
+  docker_tags?: DockerTag[];
 }
 
 export interface HealthResponse {

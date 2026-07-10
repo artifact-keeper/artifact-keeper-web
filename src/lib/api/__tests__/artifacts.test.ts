@@ -409,6 +409,73 @@ describe("artifactsApi", () => {
     });
   });
 
+  describe("listGrouped (Docker tag grouping #330 / ak#1336)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("issues GET with group_by=docker_tag", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
+            docker_tags: [],
+          })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("docker-local", {
+        group_by: "docker_tag",
+        page: 2,
+        per_page: 20,
+      });
+
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain("/api/v1/repositories/docker-local/artifacts");
+      expect(url).toContain("group_by=docker_tag");
+      expect(url).toContain("page=2");
+    });
+
+    it("preserves the docker_tags array in the response", async () => {
+      const docker_tags = [
+        {
+          id: "a1",
+          repository_key: "docker-local",
+          image: "acme/app",
+          tag: "1.0.0",
+          manifest_digest: "sha256:abc",
+          total_size_bytes: 6000,
+          layer_count: 0,
+          is_index: false,
+          last_pushed_at: "2026-01-01T00:00:00Z",
+          scan_status: "completed",
+        },
+      ];
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+            docker_tags,
+          })
+        ),
+      });
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.listGrouped("docker-local", {
+        group_by: "docker_tag",
+      });
+      expect(result.docker_tags).toEqual(docker_tags);
+    });
+  });
+
   it("get fetches artifact metadata via fetch", async () => {
     const artifact = { id: "a1", path: "com/example/lib.jar" };
     global.fetch = vi.fn().mockResolvedValue({

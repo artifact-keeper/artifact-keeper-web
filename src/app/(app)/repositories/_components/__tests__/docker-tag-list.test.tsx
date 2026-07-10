@@ -2,7 +2,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ---------------------------------------------------------------------------
@@ -31,58 +31,42 @@ vi.mock("@/components/common/copy-button", () => ({
   ),
 }));
 
-vi.mock("@/components/common/quarantine-badge", () => ({
-  QuarantineBadge: () => (
-    <span data-testid="quarantine-badge">Quarantined</span>
+vi.mock("@/components/common/data-table-pagination", () => ({
+  DataTablePagination: ({ total }: { total: number }) => (
+    <div data-testid="pagination" data-total={total} />
   ),
 }));
 
 import { DockerTagList } from "../docker-tag-list";
-import type { Artifact } from "@/types";
+import type { DockerTag } from "@/types";
 
 // ---------------------------------------------------------------------------
-// Fixtures
+// Fixtures — server-side rollups from `?group_by=docker_tag` (backend ak#1336)
 // ---------------------------------------------------------------------------
-
-function art(overrides: Partial<Artifact> & Pick<Artifact, "path" | "id">): Artifact {
-  return {
-    repository_key: "docker-hub",
-    name: overrides.path.split("/").pop() ?? overrides.path,
-    size_bytes: 4096,
-    checksum_sha256: "",
-    content_type: "application/vnd.oci.image.manifest.v1+json",
-    download_count: 0,
-    created_at: "2026-04-10T12:00:00Z",
-    ...overrides,
-  };
-}
 
 const FULL_DIGEST =
   "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
 
-const TAG_14 = art({
-  id: "tag14",
-  path: "library/node/manifests/14",
-  size_bytes: 50_000_000,
-  checksum_sha256: FULL_DIGEST,
-});
+function tag(overrides: Partial<DockerTag> & Pick<DockerTag, "id" | "tag">): DockerTag {
+  return {
+    repository_key: "docker-hub",
+    image: "library/node",
+    manifest_digest: FULL_DIGEST,
+    total_size_bytes: 50_000_000,
+    layer_count: 0,
+    is_index: false,
+    last_pushed_at: "2026-04-10T12:00:00Z",
+    scan_status: undefined,
+    ...overrides,
+  };
+}
 
-const TAG_LATEST = art({
+const TAG_14 = tag({ id: "tag14", tag: "14" });
+const TAG_LATEST = tag({
   id: "taglatest",
-  path: "library/node/manifests/latest",
-  size_bytes: 50_000_000,
-  checksum_sha256:
+  tag: "latest",
+  manifest_digest:
     "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-});
-
-const DIGEST_MANIFEST = art({
-  id: "dgst",
-  path: "library/node/manifests/sha256:deadbeefcafebabe1111222233334444555566667777888899990000aaaabbbb",
-});
-
-const BLOB_1 = art({
-  id: "blob1",
-  path: "library/node/blobs/sha256:abcd1234deadbeef0000111122223333444455556666777788889999aaaabbbb",
 });
 
 // ---------------------------------------------------------------------------
@@ -100,27 +84,19 @@ describe("DockerTagList", () => {
   // -------------------------------------------------------------------------
 
   it("renders skeletons when loading", () => {
-    render(<DockerTagList artifacts={[]} loading />);
+    render(<DockerTagList tags={[]} loading />);
     expect(screen.getByTestId("docker-tag-list-loading")).toBeInTheDocument();
   });
 
   it("renders empty state when no tags are present", () => {
-    render(<DockerTagList artifacts={[]} />);
+    render(<DockerTagList tags={[]} />);
     expect(screen.getByTestId("docker-tag-list-empty")).toBeInTheDocument();
     expect(screen.getByText(/no image tags found/i)).toBeInTheDocument();
   });
 
   it("uses a custom empty message when provided", () => {
-    render(<DockerTagList artifacts={[]} emptyMessage="Nothing here." />);
+    render(<DockerTagList tags={[]} emptyMessage="Nothing here." />);
     expect(screen.getByText("Nothing here.")).toBeInTheDocument();
-  });
-
-  it("empty state mentions blob/manifest count if any are hidden", () => {
-    render(<DockerTagList artifacts={[BLOB_1, DIGEST_MANIFEST]} />);
-    // Empty (no tags) but the empty container should report the hidden count
-    const empty = screen.getByTestId("docker-tag-list-empty");
-    expect(empty).toHaveTextContent(/2.*blob/i);
-    expect(empty).toHaveTextContent(/manifest/i);
   });
 
   // -------------------------------------------------------------------------
@@ -128,141 +104,111 @@ describe("DockerTagList", () => {
   // -------------------------------------------------------------------------
 
   it("renders one row per tag", () => {
-    render(<DockerTagList artifacts={[TAG_14, TAG_LATEST]} />);
+    render(<DockerTagList tags={[TAG_14, TAG_LATEST]} />);
     const rows = screen.getAllByTestId("docker-tag-row");
     expect(rows).toHaveLength(2);
   });
 
   it("renders tag name and image", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
+    render(<DockerTagList tags={[TAG_14]} />);
     expect(screen.getByText("14")).toBeInTheDocument();
     expect(screen.getByText("library/node")).toBeInTheDocument();
   });
 
   it("displays a TRUNCATED digest (sha256:<12 chars>), never the full digest", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
+    render(<DockerTagList tags={[TAG_14]} />);
     expect(screen.queryByText(FULL_DIGEST)).not.toBeInTheDocument();
     expect(screen.getByText("sha256:abcdef123456")).toBeInTheDocument();
   });
 
   it("provides a copy button carrying the full digest", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
+    render(<DockerTagList tags={[TAG_14]} />);
     const copyBtn = screen.getByTestId("copy-button");
     expect(copyBtn).toHaveAttribute("data-value", FULL_DIGEST);
   });
 
-  it("renders the size in human-readable form (MB)", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
+  it("renders the server-computed total size in human-readable form (MB)", () => {
+    render(<DockerTagList tags={[TAG_14]} />);
     // formatBytes(50_000_000) ≈ "47.68 MB" / "50 MB"
     expect(screen.getByText(/MB/i)).toBeInTheDocument();
   });
 
   it("renders the last-pushed date for each tag", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
+    render(<DockerTagList tags={[TAG_14]} />);
     // toLocaleDateString of 2026-04-10
     expect(screen.getAllByText(/2026/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders an OK status badge by default for non-quarantined manifests", () => {
-    render(<DockerTagList artifacts={[TAG_14]} />);
-    expect(screen.getByText("OK")).toBeInTheDocument();
-    expect(screen.queryByTestId("quarantine-badge")).not.toBeInTheDocument();
+  it("marks multi-arch (image index) tags with a badge", () => {
+    render(<DockerTagList tags={[tag({ id: "idx", tag: "v2", is_index: true })]} />);
+    expect(screen.getByText("multi-arch")).toBeInTheDocument();
   });
 
-  it("renders a QuarantineBadge for quarantined manifests", () => {
-    const qTag = {
-      ...TAG_14,
-      is_quarantined: true,
-      quarantine_reason: "vulnerability",
-      quarantine_until: "2099-01-01T00:00:00Z",
-    };
-    render(<DockerTagList artifacts={[qTag]} />);
-    expect(screen.getByTestId("quarantine-badge")).toBeInTheDocument();
-    expect(screen.queryByText("OK")).not.toBeInTheDocument();
+  it("does NOT render the multi-arch badge for single-platform tags", () => {
+    render(<DockerTagList tags={[TAG_14]} />);
+    expect(screen.queryByText("multi-arch")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
-  // Layer blobs hidden by default
+  // Scan status rollup
   // -------------------------------------------------------------------------
 
-  it("does NOT render raw blob rows by default", () => {
-    render(<DockerTagList artifacts={[TAG_14, BLOB_1]} />);
-    const rows = screen.getAllByTestId("docker-tag-row");
-    expect(rows).toHaveLength(1);
-    // The blob's path/digest must not be visible in default view
-    expect(
-      screen.queryByText(/abcd1234deadbeef/),
-    ).not.toBeInTheDocument();
+  it("renders the scan rollup status when present", () => {
+    render(
+      <DockerTagList
+        tags={[tag({ id: "scanned", tag: "1.0", scan_status: "completed" })]}
+      />,
+    );
+    expect(screen.getByText("completed")).toBeInTheDocument();
   });
 
-  it("does NOT render digest-only manifests by default", () => {
-    render(<DockerTagList artifacts={[TAG_14, DIGEST_MANIFEST]} />);
-    expect(screen.getAllByTestId("docker-tag-row")).toHaveLength(1);
-    expect(screen.queryByText(/deadbeefcafebabe/)).not.toBeInTheDocument();
+  it("renders 'not scanned' when the tag has never been scanned", () => {
+    render(<DockerTagList tags={[TAG_14]} />);
+    expect(screen.getByText("not scanned")).toBeInTheDocument();
   });
 
-  it("shows a hidden-layers footer with a 'Show layers' toggle when blobs/digest manifests exist", () => {
-    render(<DockerTagList artifacts={[TAG_14, BLOB_1, DIGEST_MANIFEST]} />);
-    expect(screen.getByTestId("toggle-layers")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /show layers/i })).toBeInTheDocument();
-    // The hidden-count message
-    expect(screen.getByText(/hidden/i)).toBeInTheDocument();
+  // -------------------------------------------------------------------------
+  // Pagination
+  // -------------------------------------------------------------------------
+
+  it("renders server-side pagination when a total is supplied", () => {
+    render(<DockerTagList tags={[TAG_14]} total={137} />);
+    expect(screen.getByTestId("pagination")).toHaveAttribute("data-total", "137");
   });
 
-  it("DOES NOT render the layers footer when there are no hidden artifacts", () => {
-    render(<DockerTagList artifacts={[TAG_14, TAG_LATEST]} />);
-    expect(screen.queryByTestId("toggle-layers")).not.toBeInTheDocument();
-  });
-
-  it("clicking 'Show layers' reveals the docker-layer-list panel with blob & manifest paths", async () => {
-    render(<DockerTagList artifacts={[TAG_14, BLOB_1, DIGEST_MANIFEST]} />);
-    expect(screen.queryByTestId("docker-layer-list")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByTestId("toggle-layers"));
-    const layerList = await screen.findByTestId("docker-layer-list");
-    expect(within(layerList).getByText(BLOB_1.path)).toBeInTheDocument();
-    expect(within(layerList).getByText(DIGEST_MANIFEST.path)).toBeInTheDocument();
-  });
-
-  it("toggling 'Show layers' twice hides the panel again", async () => {
-    render(<DockerTagList artifacts={[TAG_14, BLOB_1]} />);
-    const toggle = screen.getByTestId("toggle-layers");
-    await userEvent.click(toggle);
-    expect(screen.getByTestId("docker-layer-list")).toBeInTheDocument();
-    await userEvent.click(toggle);
-    expect(screen.queryByTestId("docker-layer-list")).not.toBeInTheDocument();
+  it("omits pagination when no total is supplied", () => {
+    render(<DockerTagList tags={[TAG_14]} />);
+    expect(screen.queryByTestId("pagination")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
   // Click handlers
   // -------------------------------------------------------------------------
 
-  it("invokes onTagClick with the manifest artifact when a tag is clicked", async () => {
+  it("invokes onTagClick with the tag rollup when a tag is clicked", async () => {
     const onTagClick = vi.fn();
-    render(<DockerTagList artifacts={[TAG_14]} onTagClick={onTagClick} />);
+    render(<DockerTagList tags={[TAG_14]} onTagClick={onTagClick} />);
     await userEvent.click(screen.getByText("14"));
     expect(onTagClick).toHaveBeenCalledTimes(1);
     expect(onTagClick).toHaveBeenCalledWith(TAG_14);
   });
 
   it("renders a Scan button only when onScan is supplied", () => {
-    const { rerender } = render(
-      <DockerTagList artifacts={[TAG_14]} />,
-    );
+    const { rerender } = render(<DockerTagList tags={[TAG_14]} />);
     expect(
       screen.queryByRole("button", { name: /scan library\/node:14/i }),
     ).not.toBeInTheDocument();
 
     const onScan = vi.fn();
-    rerender(<DockerTagList artifacts={[TAG_14]} onScan={onScan} />);
+    rerender(<DockerTagList tags={[TAG_14]} onScan={onScan} />);
     expect(
       screen.getByRole("button", { name: /scan library\/node:14/i }),
     ).toBeInTheDocument();
   });
 
-  it("invokes onScan with the manifest artifact when the Scan button is clicked", async () => {
+  it("invokes onScan with the tag rollup when the Scan button is clicked", async () => {
     const onScan = vi.fn();
-    render(<DockerTagList artifacts={[TAG_14]} onScan={onScan} />);
+    render(<DockerTagList tags={[TAG_14]} onScan={onScan} />);
     await userEvent.click(
       screen.getByRole("button", { name: /scan library\/node:14/i }),
     );
@@ -270,53 +216,9 @@ describe("DockerTagList", () => {
   });
 
   it("disables the Scan button while scanPending=true", () => {
-    render(
-      <DockerTagList artifacts={[TAG_14]} onScan={vi.fn()} scanPending />,
-    );
+    render(<DockerTagList tags={[TAG_14]} onScan={vi.fn()} scanPending />);
     expect(
       screen.getByRole("button", { name: /scan library\/node:14/i }),
     ).toBeDisabled();
-  });
-
-  // -------------------------------------------------------------------------
-  // analyzable gating (artifact-keeper#2292)
-  // -------------------------------------------------------------------------
-
-  it("disables the Scan button for a non-analyzable (proxy-cached) manifest", () => {
-    const cached = art({
-      id: "tagcached",
-      path: "library/node/manifests/14",
-      checksum_sha256: FULL_DIGEST,
-      analyzable: false,
-    });
-    render(<DockerTagList artifacts={[cached]} onScan={vi.fn()} />);
-    expect(
-      screen.getByRole("button", { name: /scan library\/node:14/i }),
-    ).toBeDisabled();
-    // The tooltip explains why the action is unavailable.
-    expect(
-      screen.getByText(/proxy-cached remote artifacts/i),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps the Scan button enabled when analyzable is true", () => {
-    const analyzableTag = art({
-      id: "taghosted",
-      path: "library/node/manifests/14",
-      checksum_sha256: FULL_DIGEST,
-      analyzable: true,
-    });
-    render(<DockerTagList artifacts={[analyzableTag]} onScan={vi.fn()} />);
-    expect(
-      screen.getByRole("button", { name: /scan library\/node:14/i }),
-    ).not.toBeDisabled();
-  });
-
-  it("keeps the Scan button enabled when analyzable is absent (safe default)", () => {
-    // TAG_14 carries no `analyzable` flag — must default to analyzable.
-    render(<DockerTagList artifacts={[TAG_14]} onScan={vi.fn()} />);
-    expect(
-      screen.getByRole("button", { name: /scan library\/node:14/i }),
-    ).not.toBeDisabled();
   });
 });

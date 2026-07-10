@@ -11,6 +11,7 @@ import type {
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 import type {
   Artifact,
+  DockerTag,
   GroupedArtifactListResponse,
   MavenComponent,
   PaginatedResponse,
@@ -25,12 +26,17 @@ export interface ListArtifactsParams {
   /** @deprecated Use `q` instead */
   search?: string;
   /**
-   * Server-side grouping mode.  Currently only `'maven_component'` is
-   * supported (backend ak#701, issue #254): when set on a Maven/Gradle repo
-   * the response includes a `components` array of GAV-grouped entries
-   * alongside (an empty) `items` array.
+   * Server-side grouping mode.
+   *
+   * - `'maven_component'` (backend ak#701, issue #254): on a Maven/Gradle
+   *   repo the response includes a `components` array of GAV-grouped
+   *   entries alongside (an empty) `items` array.
+   * - `'docker_tag'` (backend ak#1336, issue ak#1193): on a Docker/OCI repo
+   *   the response includes a `docker_tags` array of per-tag rollups
+   *   (digest, true total size, last push, scan status) alongside (an
+   *   empty) `items` array.
    */
-  group_by?: 'maven_component';
+  group_by?: 'maven_component' | 'docker_tag';
 }
 
 // Local Artifact extends ArtifactResponse with quarantine fields the SDK
@@ -79,13 +85,14 @@ function adaptArtifactList(sdk: ArtifactListResponse): PaginatedResponse<Artifac
 }
 
 /**
- * Raw shape returned by the backend when `?group_by=maven_component` is used.
- * The SDK types haven't been regenerated for ak#701 yet, so we model it here.
+ * Raw shape returned by the backend when `?group_by=` is used. The SDK types
+ * haven't been regenerated for ak#701 / ak#1336 yet, so we model it here.
  */
 interface RawGroupedArtifactListResponse {
   items: ArtifactResponse[];
   pagination: ArtifactListResponse['pagination'];
   components?: MavenComponent[];
+  docker_tags?: DockerTag[];
 }
 
 /**
@@ -141,6 +148,7 @@ export const artifactsApi = {
       items: (raw.items ?? []).map(adaptArtifact),
       pagination: raw.pagination,
       components: raw.components,
+      docker_tags: raw.docker_tags,
     };
   },
 
