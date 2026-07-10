@@ -103,6 +103,7 @@ vi.mock("lucide-react", () => {
     Filter: icon,
     Gauge: icon,
     ScrollText: icon,
+    Network: icon,
   };
 });
 
@@ -323,5 +324,13 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.getByText("Audit Log")).toBeDefined();
+  });
+
+  it("renders the Downloads operations entry (#569)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Downloads")).toBeDefined();
   });
 });

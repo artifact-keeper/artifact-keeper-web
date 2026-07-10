@@ -43,6 +43,7 @@ import {
   Filter,
   Gauge,
   ScrollText,
+  Network,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -105,6 +106,7 @@ const securityItems: NavItem[] = [
 
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Downloads", href: "/downloads", icon: Network },
   { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
   { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
   { title: "Health", href: "/system-health", icon: HeartPulse },
