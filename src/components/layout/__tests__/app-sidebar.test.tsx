@@ -102,6 +102,7 @@ vi.mock("lucide-react", () => {
     ClipboardCheck: icon,
     Filter: icon,
     Gauge: icon,
+    ScrollText: icon,
   };
 });
 
@@ -314,5 +315,13 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.getByText("Rate Limits")).toBeDefined();
+  });
+
+  it("renders the Audit Log admin entry (#568)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Audit Log")).toBeDefined();
   });
 });
