@@ -59,6 +59,14 @@ export interface Repository {
   format: RepositoryFormat;
   repo_type: RepositoryType;
   is_public: boolean;
+  /**
+   * First-class artifact versioning opt-in (#571, backend
+   * artifact-keeper#2367). When true on a Generic/Mlmodel repository,
+   * different-bytes re-uploads of the same path append immutable revisions
+   * instead of overwriting. Optional with a `false` default so the UI is
+   * safe against a backend that predates the flag.
+   */
+  versioning_enabled?: boolean;
   storage_used_bytes: number;
   quota_bytes?: number;
   // For remote repositories
@@ -134,6 +142,8 @@ export interface CreateRepositoryRequest {
   format: RepositoryFormat;
   repo_type: RepositoryType;
   is_public?: boolean;
+  /** Opt a Generic/Mlmodel repository into first-class versioning (#571). */
+  versioning_enabled?: boolean;
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;

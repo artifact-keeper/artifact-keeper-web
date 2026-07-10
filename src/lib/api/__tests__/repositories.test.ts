@@ -493,6 +493,51 @@ describe("repositoriesApi.update", () => {
     mockUpdateRepository.mockResolvedValue({ data: undefined, error: new Error("update failed") });
     await expect(repositoriesApi.update("maven-local", { name: "x" })).rejects.toThrow("update failed");
   });
+
+  it("forwards versioning_enabled to the update body (#571)", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "generic", versioning_enabled: true }),
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.update("configs", {
+      versioning_enabled: true,
+    });
+
+    expect(mockUpdateRepository).toHaveBeenCalledWith({
+      path: { key: "configs" },
+      body: expect.objectContaining({ versioning_enabled: true }),
+    });
+    expect(result.versioning_enabled).toBe(true);
+  });
+
+  it("omits versioning_enabled from the body when not provided so the flag is left unchanged", async () => {
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+
+    await repositoriesApi.update("maven-local", { name: "Renamed" });
+
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.versioning_enabled).toBeUndefined();
+  });
+});
+
+describe("repositoriesApi adaptation of versioning_enabled (#571)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("exposes versioning_enabled from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ format: "generic", versioning_enabled: true }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("configs");
+    expect(repo.versioning_enabled).toBe(true);
+  });
+
+  it("defaults versioning_enabled to false when the backend omits it", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.versioning_enabled).toBe(false);
+  });
 });
 
 describe("repositoriesApi.delete", () => {
