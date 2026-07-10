@@ -86,25 +86,41 @@ vi.mock("@/components/ui/alert", () => ({
 }));
 
 // Lightweight DataTable stand-in that still exercises the column cell
-// renderers, empty message, and loading flag the page passes in.
+// renderers and accessors, row keys, the empty message, the loading flag,
+// and the pagination callbacks the page passes in.
 vi.mock("@/components/common/data-table", () => ({
-  DataTable: ({ columns, data, loading, emptyMessage }: any) => {
+  DataTable: ({
+    columns,
+    data,
+    loading,
+    emptyMessage,
+    rowKey,
+    onPageChange,
+    onPageSizeChange,
+  }: any) => {
     if (loading) return <div data-testid="data-table-loading" />;
     if (!data.length) return <div data-testid="data-table-empty">{emptyMessage}</div>;
     return (
-      <table data-testid="data-table">
-        <tbody>
-          {data.map((row: any, i: number) => (
-            <tr key={row.id ?? i}>
-              {columns.map((c: any) => (
-                <td key={c.id}>
-                  {c.cell ? c.cell(row) : String(c.accessor?.(row) ?? "")}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div>
+        <table data-testid="data-table">
+          <tbody>
+            {data.map((row: any, i: number) => (
+              <tr key={rowKey ? rowKey(row) : i}>
+                {columns.map((c: any) => {
+                  c.accessor?.(row); // real DataTable uses accessors for sorting
+                  return (
+                    <td key={c.id}>
+                      {c.cell ? c.cell(row) : String(c.accessor?.(row) ?? "")}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button onClick={() => onPageChange?.(2)}>next-page</button>
+        <button onClick={() => onPageSizeChange?.(100)}>set-page-size</button>
+      </div>
     );
   },
 }));
@@ -269,6 +285,146 @@ describe("AuditLogPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /apply filters/i }));
     expect(screen.getByRole("alert")).toHaveTextContent("");
+  });
+
+  it("applies filters on Enter and clears them via Clear filters", () => {
+    queryState({
+      audit: {
+        data: { items: [], total: 0, page: 1, per_page: 50 },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+    });
+
+    render(<AuditLogPage />);
+
+    // Fill every filter input, then apply with Enter from a text filter.
+    fireEvent.change(screen.getByLabelText(/^action$/i), {
+      target: { value: "LOGIN" },
+    });
+    fireEvent.change(screen.getByLabelText(/resource type/i), {
+      target: { value: "user" },
+    });
+    fireEvent.change(screen.getByLabelText(/^from$/i), {
+      target: { value: "2026-07-01" },
+    });
+    fireEvent.change(screen.getByLabelText(/^to$/i), {
+      target: { value: "2026-07-02" },
+    });
+    fireEvent.keyDown(screen.getByLabelText(/resource type/i), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText(/user id/i), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText(/^action$/i), { key: "Enter" });
+
+    // Applied filters reveal the clear affordance; clicking it resets state.
+    const clear = screen.getByRole("button", { name: /clear filters/i });
+    fireEvent.click(clear);
+    expect(
+      screen.queryByRole("button", { name: /clear filters/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^action$/i)).toHaveValue("");
+  });
+
+  it("invalidates the audit query on refresh and forwards pagination callbacks", () => {
+    queryState({
+      audit: {
+        data: { items: [EVENT], total: 300, page: 1, per_page: 50 },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+    });
+
+    render(<AuditLogPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh audit log/i }));
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["admin-audit-log"],
+    });
+
+    // The DataTable stub forwards onPageChange / onPageSizeChange; the page
+    // must not crash and keeps rendering after both.
+    fireEvent.click(screen.getByRole("button", { name: "next-page" }));
+    fireEvent.click(screen.getByRole("button", { name: "set-page-size" }));
+    expect(screen.getByTestId("data-table")).toBeInTheDocument();
+  });
+
+  it("builds the audit query from applied filters when the query runs", async () => {
+    queryState({
+      audit: {
+        data: { items: [], total: 0, page: 1, per_page: 50 },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+    });
+    mockAuditList.mockResolvedValue({ items: [], total: 0, page: 1, per_page: 50 });
+    mockAdminListUsers.mockResolvedValue([]);
+
+    render(<AuditLogPage />);
+
+    fireEvent.change(screen.getByLabelText(/^action$/i), {
+      target: { value: "LOGIN" },
+    });
+    fireEvent.change(screen.getByLabelText(/^from$/i), {
+      target: { value: "2026-07-01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply filters/i }));
+
+    // Execute the captured queryFn / placeholderData for both queries the way
+    // react-query would, and assert the audit call carries the applied
+    // filters (dates converted to RFC 3339 bounds).
+    const auditOpts = mockUseQuery.mock.calls
+      .map(([o]) => o)
+      .filter((o) => o.queryKey?.[0] === "admin-audit-log")
+      .at(-1);
+    await auditOpts.queryFn();
+    expect(mockAuditList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 1,
+        per_page: 50,
+        action: "LOGIN",
+        user_id: undefined,
+        resource_type: undefined,
+        from: new Date("2026-07-01T00:00:00").toISOString(),
+        to: undefined,
+      })
+    );
+    expect(auditOpts.placeholderData("previous")).toBe("previous");
+
+    const usersOpts = mockUseQuery.mock.calls
+      .map(([o]) => o)
+      .find((o) => o.queryKey?.[0] === "admin-users");
+    await usersOpts.queryFn();
+    expect(mockAdminListUsers).toHaveBeenCalled();
+  });
+
+  it("renders string details and truncates long payloads", () => {
+    const longDetails = { blob: "x".repeat(200) };
+    queryState({
+      audit: {
+        data: {
+          items: [
+            { ...EVENT, id: "s1", details: "plain-string-details" },
+            { ...EVENT, id: "s2", details: longDetails },
+            { ...EVENT, id: "s3", details: null },
+          ],
+          total: 3,
+          page: 1,
+          per_page: 50,
+        },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+    });
+
+    render(<AuditLogPage />);
+
+    expect(screen.getByText("plain-string-details")).toBeInTheDocument();
+    // The long payload preview is truncated to 80 chars with an ellipsis.
+    const expectedPreview = `${JSON.stringify(longDetails).slice(0, 80)}…`;
+    expect(screen.getByText(expectedPreview)).toBeInTheDocument();
   });
 });
 
