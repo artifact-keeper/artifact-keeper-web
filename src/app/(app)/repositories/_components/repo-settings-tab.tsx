@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { repositoriesApi } from "@/lib/api/repositories";
+import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import lifecycleApi from "@/lib/api/lifecycle";
 import { mutationErrorToast } from "@/lib/error-utils";
@@ -101,12 +102,21 @@ export interface UpdateRepositoryFields {
   description?: string;
   is_public?: boolean;
   quota_bytes?: number | null;
+  /** First-class artifact versioning opt-in (#571, Generic/Mlmodel only). */
+  versioning_enabled?: boolean;
 }
 
 /** Convert UpdateRepositoryFields to the shape repositoriesApi.update expects. */
 function toUpdatePayload(
   fields: UpdateRepositoryFields
-): Partial<{ key: string; name: string; description: string; is_public: boolean; quota_bytes: number }> {
+): Partial<{
+  key: string;
+  name: string;
+  description: string;
+  is_public: boolean;
+  quota_bytes: number;
+  versioning_enabled: boolean;
+}> {
   const { quota_bytes, ...rest } = fields;
   // The SDK type does not accept null for quota_bytes, so strip it.
   if (quota_bytes != null) {
@@ -129,6 +139,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       name: repository.name,
       description: repository.description ?? "",
       is_public: repository.is_public,
+      versioning_enabled: repository.versioning_enabled ?? false,
     }),
     [repository]
   );
@@ -184,12 +195,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     cacheTtlOverride !== undefined &&
     parsedCacheTtl !== currentCacheTtlSeconds;
 
+  // First-class versioning is only offered where the backend applies it:
+  // Generic/Mlmodel repositories (backend `versioning_applies`, #571).
+  const versioningSupported = supportsVersioning(repository.format);
+
   // Detect whether the form has unsaved changes
   const hasChanges = useMemo(() => {
     if (form.key !== repository.key) return true;
     if (form.name !== repository.name) return true;
     if (form.description !== (repository.description ?? "")) return true;
     if (form.is_public !== repository.is_public) return true;
+    if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
+      return true;
     const currentQuotaBytes = quotaToBytes(quotaValue, quotaUnit);
     const originalQuotaBytes = repository.quota_bytes ?? null;
     if (currentQuotaBytes !== originalQuotaBytes) return true;
@@ -241,6 +258,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       fields.description = form.description;
     if (form.is_public !== repository.is_public)
       fields.is_public = form.is_public;
+    if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
+      fields.versioning_enabled = form.versioning_enabled;
     if (keyChanged) fields.key = form.key;
 
     const newQuota = quotaToBytes(quotaValue, quotaUnit);
@@ -534,6 +553,48 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       </section>
 
       <Separator />
+
+      {/* -- Artifact Versioning Section (#571, Generic/Mlmodel only) -- */}
+      {versioningSupported && (
+        <>
+          <section aria-labelledby="settings-versioning-heading">
+            <div className="mb-4">
+              <h3
+                id="settings-versioning-heading"
+                className="text-base font-semibold"
+              >
+                Artifact Versioning
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Keep an immutable revision history for artifacts in this
+                repository. Re-uploading a path with different content appends
+                a new revision instead of overwriting; prior revisions stay
+                downloadable from the artifact&apos;s Versions tab.
+              </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="settings-versioning-enabled">
+                  Enable versioning
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Applies to future uploads. Turning this off stops recording
+                  new revisions; existing history remains addressable.
+                </p>
+              </div>
+              <Switch
+                id="settings-versioning-enabled"
+                checked={form.versioning_enabled}
+                onCheckedChange={(v) =>
+                  setOverrides((o) => ({ ...o, versioning_enabled: v }))
+                }
+              />
+            </div>
+          </section>
+
+          <Separator />
+        </>
+      )}
 
       {/* -- Package Age Policy Section (#265) -- */}
       <section aria-labelledby="settings-age-heading">

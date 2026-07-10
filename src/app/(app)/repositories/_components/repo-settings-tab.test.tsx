@@ -1132,3 +1132,123 @@ describe("RepoSettingsTab - Proxy Cache section (#448)", () => {
     });
   });
 });
+
+describe("RepoSettingsTab - Artifact Versioning Section (#571)", () => {
+  const genericRepo: Repository = {
+    ...baseRepo,
+    id: "repo-generic",
+    key: "configs",
+    name: "Configs",
+    format: "generic",
+    versioning_enabled: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("renders the section with the switch off for a generic repo without versioning", () => {
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.getByRole("heading", { name: /artifact versioning/i })
+    ).toBeTruthy();
+    const toggle = screen.getByLabelText("Enable versioning");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("seeds the switch from repository.versioning_enabled", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...genericRepo, versioning_enabled: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(
+      screen.getByLabelText("Enable versioning").getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("does not render the section for formats without first-class versioning", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.queryByRole("heading", { name: /artifact versioning/i })
+    ).toBeNull();
+    expect(screen.queryByLabelText("Enable versioning")).toBeNull();
+  });
+
+  it("renders the section for mlmodel repositories", () => {
+    render(
+      <RepoSettingsTab repository={{ ...genericRepo, format: "mlmodel" }} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /artifact versioning/i })
+    ).toBeTruthy();
+  });
+
+  it("saves versioning_enabled through the repository update endpoint", async () => {
+    mockUpdate.mockResolvedValue({ ...genericRepo, versioning_enabled: true });
+
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("configs", {
+        versioning_enabled: true,
+      });
+    });
+  });
+
+  it("can disable versioning on a repo where it is on", async () => {
+    mockUpdate.mockResolvedValue({ ...genericRepo, versioning_enabled: false });
+
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...genericRepo, versioning_enabled: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("configs", {
+        versioning_enabled: false,
+      });
+    });
+  });
+
+  it("discard resets a toggled versioning switch without saving", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /discard/i }));
+
+    expect(screen.queryByText(/unsaved changes/i)).toBeNull();
+    expect(
+      screen.getByLabelText("Enable versioning").getAttribute("aria-checked")
+    ).toBe("false");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});

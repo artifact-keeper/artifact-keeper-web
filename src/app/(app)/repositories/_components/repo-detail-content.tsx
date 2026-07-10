@@ -15,6 +15,7 @@ import {
   Shield,
   ExternalLink,
   HeartPulse,
+  History,
   Layers,
   Package as PackageIcon,
   Settings,
@@ -37,6 +38,8 @@ import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
+import { supportsVersioning } from "@/lib/api/versions";
+import { ArtifactVersionsSection } from "./artifact-versions-section";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
 import { HealthTabContent } from "./health-tab-content";
@@ -167,6 +170,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
   const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
+  // First-class version history (#571, backend artifact-keeper#2367): only
+  // repositories that opted in via `versioning_enabled` AND whose format
+  // participates (Generic/Mlmodel) get the Versions tab in the artifact
+  // detail dialog. Everything else keeps the existing dialog unchanged.
+  const versioningActive =
+    !!repository?.versioning_enabled &&
+    !!repoFormat &&
+    supportsVersioning(repoFormat);
   // For Docker grouping we need all artifacts on one page so the client
   // aggregation sees everything.  Bound by a high cap to avoid runaway
   // responses on huge registries.
@@ -972,6 +983,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Info className="size-3.5 mr-1" />
                   Details
                 </TabsTrigger>
+                {versioningActive && (
+                  <TabsTrigger value="versions">
+                    <History className="size-3.5 mr-1" />
+                    Versions
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="sbom">
                   <FileIcon className="size-3.5 mr-1" />
                   SBOM
@@ -1075,6 +1092,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     )}
                 </div>
               </TabsContent>
+
+              {versioningActive && (
+                <TabsContent
+                  value="versions"
+                  className="flex-1 overflow-y-auto mt-4"
+                >
+                  <ArtifactVersionsSection
+                    repoKey={repoKey}
+                    artifact={selectedArtifact}
+                  />
+                </TabsContent>
+              )}
 
               <TabsContent value="sbom" className="flex-1 overflow-y-auto mt-4">
                 <SbomTabContent artifact={selectedArtifact} />
