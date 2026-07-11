@@ -235,39 +235,67 @@ export default function PeersPage() {
     {
       id: "actions",
       header: "",
-      cell: (p) => (
-        <div
-          className="flex items-center gap-1 justify-end"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => syncMutation.mutate(p.id)}
-                disabled={p.status === "offline"}
-              >
-                <RefreshCcw className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Trigger Sync</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setDeleteId(p.id)}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Unregister</TooltipContent>
-          </Tooltip>
-        </div>
-      ),
+      cell: (p) => {
+        const syncDisabled = p.is_local || p.status === "offline";
+        return (
+          <div
+            className="flex items-center gap-1 justify-end"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Tooltip>
+              {/* Disabled buttons get pointer-events-none, so the wrapping
+                  span keeps the explanatory tooltip hover/focus reachable. */}
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex"
+                  tabIndex={syncDisabled ? 0 : undefined}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Sync ${p.name}`}
+                    onClick={() => syncMutation.mutate(p.id)}
+                    disabled={syncDisabled}
+                  >
+                    <RefreshCcw className="size-3.5" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {p.is_local
+                  ? "The local peer cannot sync with itself"
+                  : p.status === "offline"
+                    ? "Offline peers cannot be synced"
+                    : "Trigger Sync"}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex"
+                  tabIndex={p.is_local ? 0 : undefined}
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-destructive hover:text-destructive"
+                    aria-label={`Unregister ${p.name}`}
+                    onClick={() => setDeleteId(p.id)}
+                    disabled={p.is_local}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {p.is_local
+                  ? "The local peer cannot be unregistered"
+                  : "Unregister"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        );
+      },
     },
   ];
 
