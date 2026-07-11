@@ -13,12 +13,14 @@ test.describe('Security Scans Page', () => {
   });
 
   test('scans table or empty state is visible', async ({ page }) => {
-    // Use .or() with expect().toBeVisible() so Playwright auto-retries until data loads
-    await expect(
-      page.getByRole('table').first()
-        .or(page.getByText(/no scan results found/i).first())
-        .or(page.getByText(/no data found/i).first())
-    ).toBeVisible({ timeout: 15000 });
+    // The scans list renders through the shared <DataTable>, which always
+    // mounts a <table> (its column header row) regardless of whether there are
+    // results — the "No scan results found." copy is an extra element rendered
+    // *alongside* that header table, not instead of it. The old `.or()` chain
+    // therefore matched two elements (table + empty-state text) in the empty
+    // case and tripped strict mode. Asserting on the always-present header
+    // table is unambiguous and still auto-retries until the page hydrates.
+    await expect(page.getByRole('table').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('trigger scan button is visible', async ({ page }) => {

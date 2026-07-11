@@ -153,7 +153,7 @@ test.describe.serial('Generic artifact version history (#571)', () => {
       await page.waitForTimeout(1500);
     }
 
-    const row = vp.artifactsTable.getByRole('row').filter({ hasText: 'app-config.yaml' });
+    const row = vp.artifactRow('app-config.yaml');
     if (!(await row.first().isVisible({ timeout: 5000 }).catch(() => false))) {
       test.skip(true, 'Artifact row not visible in table');
       return;
@@ -180,11 +180,24 @@ test.describe.serial('Generic artifact version history (#571)', () => {
     const vp = new ArtifactVersionsPage(page);
     await vp.goto(REPO_KEY);
 
-    if (!(await vp.settingsTab.isVisible({ timeout: 8000 }).catch(() => false))) {
+    // Wait for the repo-detail tabs to hydrate before probing for the
+    // admin-only Settings tab. `locator.isVisible()` is a non-retrying instant
+    // check that ignores the `timeout` option, so calling it straight after
+    // `domcontentloaded` raced the client render and made this test always
+    // auto-skip. `waitFor` actually polls, so as admin we proceed and assert,
+    // while a non-admin session (no Settings tab) still skips as intended.
+    const settingsVisible = await vp.settingsTab
+      .waitFor({ state: 'visible', timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!settingsVisible) {
       test.skip(true, 'Settings tab not visible (requires admin); API tests cover the contract');
       return;
     }
-    await vp.settingsTab.click();
+    // Wait for the tab to actually become active before asserting on its
+    // contents — the settings panel mounts asynchronously and the versioning
+    // section only renders once the repository data has hydrated.
+    await vp.openSettingsTab();
 
     await expect(vp.versioningHeading).toBeVisible({ timeout: 8000 });
     await expect(vp.versioningToggle).toBeVisible({ timeout: 5000 });

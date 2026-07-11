@@ -16,6 +16,7 @@ export class ArtifactVersionsPage {
   readonly versioningToggle: Locator;
   readonly saveButton: Locator;
   readonly artifactsTable: Locator;
+  readonly artifactRows: Locator;
   readonly versionsTab: Locator;
   readonly versionsSection: Locator;
   readonly versionRows: Locator;
@@ -28,6 +29,12 @@ export class ArtifactVersionsPage {
     this.versioningToggle = page.getByLabel('Enable versioning');
     this.saveButton = page.getByRole('button', { name: /save changes/i });
     this.artifactsTable = page.getByRole('table').first();
+    // The artifact browser renders via the shared <DataTable>, which spreads
+    // `role="button"` onto each clickable data <tr> (so a row click opens the
+    // detail dialog). That override strips the implicit `row` role, so
+    // `getByRole('row')` only ever matches the header. Locate data rows by the
+    // DOM structure (`tbody tr`) instead, which is unambiguous and role-neutral.
+    this.artifactRows = this.artifactsTable.locator('tbody tr');
     this.versionsTab = page.getByRole('tab', { name: /versions/i });
     this.versionsSection = page.getByTestId('artifact-versions-section');
     this.versionRows = page.getByTestId('artifact-version-row');
@@ -38,10 +45,27 @@ export class ArtifactVersionsPage {
     await this.page.waitForLoadState('domcontentloaded');
   }
 
+  /** A data row in the artifact browser matching `name` (see artifactRows). */
+  artifactRow(name: string): Locator {
+    return this.artifactRows.filter({ hasText: name });
+  }
+
+  /**
+   * Select the repository Settings tab and wait for it to become the active
+   * tab before callers assert on its contents. Radix flips `aria-selected` /
+   * `data-state=active` once the panel is mounted, so gating on that removes
+   * the load-timing race where an assertion runs before the tab has switched.
+   */
+  async openSettingsTab() {
+    await this.settingsTab.click();
+    await this.settingsTab
+      .and(this.page.locator('[data-state="active"]'))
+      .waitFor({ state: 'visible', timeout: 8000 });
+  }
+
   /** Open the artifact detail dialog by clicking the row for `name`. */
   async openArtifactDetail(name: string) {
-    const row = this.artifactsTable.getByRole('row').filter({ hasText: name });
-    await row.first().click();
+    await this.artifactRow(name).first().click();
   }
 
   /** Per-revision download button by revision number. */
