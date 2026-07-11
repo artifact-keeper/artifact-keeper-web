@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/fetch";
+import type { AuditLogItem, AuditLogListResponse } from "@artifact-keeper/sdk";
+
+// Re-export the generated SDK types so callers keep importing them from this
+// module. The response shapes now live in `@artifact-keeper/sdk` (regenerated
+// from the OpenAPI spec); the zod schema below still validates at the trust
+// boundary before we hand data back typed as these.
+export type { AuditLogItem, AuditLogListResponse };
 
 /**
  * Admin client for the audit-log query endpoint (#568, backend issue #2366).
@@ -17,33 +24,6 @@ import { apiFetch } from "@/lib/api/fetch";
  * from / to (inclusive RFC 3339 bounds), page / per_page (default 50, max 200).
  * Results are ordered newest-first by the backend.
  */
-
-export interface AuditLogItem {
-  id: string;
-  /** Acting user id; null for system-initiated events. */
-  user_id: string | null;
-  /** Action string, e.g. `LOGIN`, `USER_CREATED`, `ARTIFACT_DOWNLOADED`. */
-  action: string;
-  /** Resource type, e.g. `user`, `repository`, `artifact`. */
-  resource_type: string;
-  /** Affected resource id, when the event targets a specific resource. */
-  resource_id: string | null;
-  /** Free-form JSON payload with event-specific context. */
-  details: unknown;
-  /** Client IP the request originated from, when recorded. */
-  ip_address: string | null;
-  /** Correlation id linking events from the same request. */
-  correlation_id: string;
-  /** When the event was recorded, ISO 8601. */
-  created_at: string;
-}
-
-export interface AuditLogListResponse {
-  items: AuditLogItem[];
-  total: number;
-  page: number;
-  per_page: number;
-}
 
 export interface AuditLogQuery {
   /** Filter by acting user id (UUID). */
@@ -73,6 +53,8 @@ const AuditLogItemSchema = z
   .object({
     id: z.string(),
     user_id: z.string().nullish(),
+    /** Username of the acting user, embedded server-side (#2392). */
+    actor_username: z.string().nullish(),
     action: z.string(),
     resource_type: z.string(),
     resource_id: z.string().nullish(),
@@ -101,6 +83,7 @@ export function parseAuditLogList(data: unknown): AuditLogListResponse {
     items: parsed.data.items.map((r) => ({
       id: r.id,
       user_id: r.user_id ?? null,
+      actor_username: r.actor_username ?? null,
       action: r.action,
       resource_type: r.resource_type,
       resource_id: r.resource_id ?? null,

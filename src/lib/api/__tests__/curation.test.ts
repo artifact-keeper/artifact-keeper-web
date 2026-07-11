@@ -26,16 +26,15 @@ import curationApi from "../curation";
 
 const PKG = {
   id: "p1",
-  name: "left-pad",
+  package_name: "left-pad",
   version: "1.3.0",
   format: "npm",
-  repository_key: "staging-npm",
-  description: undefined,
-  size_bytes: 1024,
-  download_count: 5,
+  status: "pending",
   metadata: { curation_status: "pending" },
-  created_at: "2026-06-01T00:00:00Z",
-  updated_at: "2026-06-02T00:00:00Z",
+  staging_repo_id: "r1",
+  remote_repo_id: "rm1",
+  upstream_path: "left-pad/-/left-pad-1.3.0.tgz",
+  first_seen_at: "2026-06-01T00:00:00Z",
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -47,7 +46,7 @@ describe("curationApi", () => {
     expect(m.listCurationPackages).toHaveBeenCalledWith({
       query: { staging_repo_id: "r1", status: "pending" },
     });
-    expect(out[0]).toMatchObject({ id: "p1", name: "left-pad", description: null });
+    expect(out[0]).toMatchObject({ id: "p1", name: "left-pad", status: "pending" });
   });
 
   it("listPackages throws on error", async () => {

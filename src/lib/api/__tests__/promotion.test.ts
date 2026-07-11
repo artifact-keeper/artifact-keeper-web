@@ -42,6 +42,7 @@ const SDK_REPO: SdkRepositoryResponse = {
   upstream_auth_configured: false,
   allow_anonymous_access: false,
   promotion_only: false,
+  versioning_enabled: false,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
 };
@@ -61,6 +62,7 @@ const SDK_ARTIFACT: SdkArtifactResponse = {
   checksum_sha256: "abc",
   content_type: "application/java-archive",
   download_count: 0,
+  analyzable: true,
   created_at: "2026-04-01T00:00:00Z",
   metadata: null,
 };
