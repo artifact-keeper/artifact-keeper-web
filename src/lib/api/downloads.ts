@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/fetch";
+import type { DownloadRecord, DownloadListResponse } from "@artifact-keeper/sdk";
+
+// Re-export the generated SDK types (regenerated from the OpenAPI spec). The
+// zod schema below still validates responses at the trust boundary.
+export type { DownloadRecord, DownloadListResponse };
 
 /**
  * Admin client for the download-attribution endpoints (#569, backend #2365).
@@ -22,30 +27,6 @@ import { apiFetch } from "@/lib/api/fetch";
  * by-ip / by-user endpoints the path parameter overrides the corresponding
  * query filter.
  */
-
-export interface DownloadRecord {
-  /** Downloaded artifact id (UUID). The response carries no artifact name. */
-  artifact_id: string;
-  /** Downloader user id; null for anonymous downloads and legacy rows. */
-  user_id: string | null;
-  /**
-   * Username of the downloader, when the download was authenticated and the
-   * user still exists.
-   */
-  username: string | null;
-  /** Resolved client IP; null for legacy rows and unresolvable clients. */
-  ip_address: string | null;
-  user_agent: string | null;
-  /** When the download happened, RFC 3339. */
-  downloaded_at: string;
-}
-
-export interface DownloadListResponse {
-  downloads: DownloadRecord[];
-  total: number;
-  page: number;
-  per_page: number;
-}
 
 export interface DownloadsQuery {
   /** Filter to downloads of one artifact (UUID). */
@@ -227,7 +208,7 @@ export function groupDownloadsByIp(records: DownloadRecord[]): IpGroup[] {
         artifacts: new Set(),
         g: {
           ip: key,
-          subnet: subnetOf(r.ip_address),
+          subnet: subnetOf(r.ip_address ?? null),
           downloads: 0,
           unique_users: 0,
           unique_artifacts: 0,
@@ -272,8 +253,8 @@ export function groupDownloadsByUser(records: DownloadRecord[]): UserGroup[] {
         ips: new Set(),
         artifacts: new Set(),
         g: {
-          user_id: r.user_id,
-          username: r.user_id ? r.username : null,
+          user_id: r.user_id ?? null,
+          username: r.user_id ? r.username ?? null : null,
           downloads: 0,
           unique_ips: 0,
           unique_artifacts: 0,
@@ -285,7 +266,7 @@ export function groupDownloadsByUser(records: DownloadRecord[]): UserGroup[] {
     entry.g.downloads += 1;
     if (r.ip_address) entry.ips.add(r.ip_address);
     entry.artifacts.add(r.artifact_id);
-    if (!entry.g.username && r.user_id) entry.g.username = r.username;
+    if (!entry.g.username && r.user_id) entry.g.username = r.username ?? null;
     if (r.downloaded_at > entry.g.last_downloaded_at) {
       entry.g.last_downloaded_at = r.downloaded_at;
     }

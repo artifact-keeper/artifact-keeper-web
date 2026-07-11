@@ -8,26 +8,36 @@ import {
   bulkBlock,
   reEvaluate,
 } from '@artifact-keeper/sdk';
-import type { PackageResponse } from '@artifact-keeper/sdk';
+import type { CurationPackageResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
 
 /**
  * A package awaiting curation review in a staging repository. Curation gates
  * artifacts proxied from upstreams so they can be approved or blocked before
  * promotion (supply-chain control).
+ *
+ * SDK 1.5.0 renamed the curation endpoints' payload from the generic
+ * `PackageResponse` to the purpose-built `CurationPackageResponse` and, in the
+ * process, changed its shape to the fields the curation queue actually carries:
+ * the upstream coordinate (`package_name` / `version` / `upstream_path`), the
+ * source/target repos, and a per-row `status`. The generic package fields
+ * (`repository_key`, `size_bytes`, `download_count`, `created_at`,
+ * `updated_at`, `description`) are no longer served for curation rows.
  */
 export interface CurationPackage {
   id: string;
   name: string;
   version: string;
   format: string;
-  repository_key: string;
-  description: string | null;
-  size_bytes: number;
-  download_count: number;
+  /** Per-package curation state: `pending` | `approved` | `blocked`. */
+  status: string;
   metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
+  staging_repo_id: string;
+  remote_repo_id: string;
+  /** Path of the package on the upstream it was proxied from. */
+  upstream_path: string;
+  /** When the package first entered the curation queue, RFC 3339. */
+  first_seen_at: string;
 }
 
 export interface ListCurationParams {
@@ -37,19 +47,18 @@ export interface ListCurationParams {
   offset?: number;
 }
 
-function adaptPackage(sdk: PackageResponse): CurationPackage {
+function adaptPackage(sdk: CurationPackageResponse): CurationPackage {
   return {
     id: sdk.id,
-    name: sdk.name,
+    name: sdk.package_name,
     version: sdk.version,
     format: sdk.format,
-    repository_key: sdk.repository_key,
-    description: sdk.description ?? null,
-    size_bytes: sdk.size_bytes,
-    download_count: sdk.download_count,
+    status: sdk.status,
     metadata: sdk.metadata ?? {},
-    created_at: sdk.created_at,
-    updated_at: sdk.updated_at,
+    staging_repo_id: sdk.staging_repo_id,
+    remote_repo_id: sdk.remote_repo_id,
+    upstream_path: sdk.upstream_path,
+    first_seen_at: sdk.first_seen_at,
   };
 }
 

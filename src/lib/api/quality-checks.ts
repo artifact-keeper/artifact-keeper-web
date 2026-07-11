@@ -1,6 +1,5 @@
 import '@/lib/sdk-client';
 import {
-  listChecks,
   getCheck,
   listCheckIssues,
   triggerChecks,
@@ -8,7 +7,7 @@ import {
   unsuppressIssue,
 } from '@artifact-keeper/sdk';
 import type { CheckResponse, IssueResponse } from '@artifact-keeper/sdk';
-import { assertData } from '@/lib/api/fetch';
+import { apiFetch, assertData } from '@/lib/api/fetch';
 
 /** A quality-check result for an artifact (e.g. metadata, naming, policy). */
 export interface QualityCheck {
@@ -88,8 +87,21 @@ function adaptIssue(sdk: IssueResponse): QualityIssue {
 
 const qualityChecksApi = {
   list: async (params: ListChecksParams = {}): Promise<QualityCheck[]> => {
-    const { data, error } = await listChecks({ query: params });
-    if (error) throw error;
+    // SDK 1.5.0's generated `listChecks` types its query as
+    // `{ artifact_id: string }` — required, and with no `repository_id`. That
+    // contradicts the real GET /api/v1/quality/checks, which accepts an
+    // OPTIONAL `artifact_id` plus a `repository_id` filter and is what this
+    // admin view (list-all, or filter by repo) depends on. Rather than
+    // force-cast our honest `ListChecksParams` through the wrong SDK query
+    // type, this call goes through the shared `apiFetch` trust boundary (the
+    // same pattern repositories.ts uses for fields the SDK doesn't model yet).
+    // Collapse back to the SDK `listChecks` once the backend OpenAPI query
+    // schema is corrected and the SDK regenerated.
+    const qs = new URLSearchParams();
+    if (params.repository_id) qs.set('repository_id', params.repository_id);
+    if (params.artifact_id) qs.set('artifact_id', params.artifact_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const data = await apiFetch<CheckResponse[]>(`/api/v1/quality/checks${suffix}`);
     return assertData(data, 'qualityChecksApi.list').map(adaptCheck);
   },
 

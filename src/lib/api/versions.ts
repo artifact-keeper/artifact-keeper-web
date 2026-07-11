@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/fetch";
 import type { RepositoryFormat } from "@/types";
+import type {
+  ArtifactVersionResponse,
+  ArtifactVersionListResponse,
+} from "@artifact-keeper/sdk";
+
+// Re-export the generated SDK types (regenerated from the OpenAPI spec) under
+// this module's historical names. The zod schema below still validates at the
+// trust boundary.
+export type ArtifactVersionEntry = ArtifactVersionResponse;
+export type ArtifactVersionList = ArtifactVersionListResponse;
 
 /**
  * Client for the generic-artifact version-history endpoints (#571, backend
@@ -25,33 +35,6 @@ import type { RepositoryFormat } from "@/types";
  * wrapper and validate responses with zod at the trust boundary (same
  * pattern as audit and downloads).
  */
-
-/** One immutable stored revision of a versioned artifact, newest first. */
-export interface ArtifactVersionEntry {
-  /** Server-assigned auto-increment revision (1-based). */
-  revision: number;
-  /** Optional human tag supplied via `X-Artifact-Version` at upload time. */
-  version_label: string | null;
-  size_bytes: number;
-  checksum_sha256: string;
-  content_type: string;
-  /**
-   * Uploader user id. The backend records `uploaded_by` on each revision but
-   * the current `ArtifactVersionResponse` does not serialize it yet — this
-   * field plumbs through as soon as the backend adds it and renders as
-   * "unknown" until then (gap noted on #571).
-   */
-  uploaded_by: string | null;
-  /** When this revision was stored, RFC 3339. */
-  created_at: string;
-}
-
-/** Version history for one artifact coordinate, newest first. */
-export interface ArtifactVersionList {
-  repository_key: string;
-  path: string;
-  items: ArtifactVersionEntry[];
-}
 
 const VersionEntrySchema = z
   .object({

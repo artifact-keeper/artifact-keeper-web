@@ -143,12 +143,6 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
 ]);
 
 function adaptRepository(sdk: RepositoryResponse): Repository {
-  // The backend ships `versioning_enabled` (artifact-keeper#2367) on the
-  // repository response, but the generated SDK type doesn't carry it until
-  // the SDK regenerates from the upgraded OpenAPI spec. Read it off the
-  // runtime object via a narrowed cast (same approach as the artifact cache
-  // fields in artifacts.ts); collapse to a direct access after SDK regen.
-  const sdkAny = sdk as RepositoryResponse & { versioning_enabled?: boolean };
   return {
     id: sdk.id,
     key: sdk.key,
@@ -166,8 +160,10 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     ),
     repo_type: narrowEnum(sdk.repo_type, REPO_TYPES, 'local'),
     is_public: sdk.is_public,
-    // Default false: a backend that predates #2367 simply has no versioning.
-    versioning_enabled: sdkAny.versioning_enabled ?? false,
+    // `versioning_enabled` (artifact-keeper#2367) is now carried on the
+    // generated SDK type; `?? false` stays defensive against a backend that
+    // predates #2367 and omits the flag at runtime.
+    versioning_enabled: sdk.versioning_enabled ?? false,
     storage_used_bytes: sdk.storage_used_bytes,
     quota_bytes: sdk.quota_bytes ?? undefined,
     upstream_url: sdk.upstream_url ?? undefined,
@@ -240,11 +236,9 @@ export const repositoriesApi = {
   },
 
   update: async (key: string, input: Partial<CreateRepositoryRequest>): Promise<Repository> => {
-    // `versioning_enabled` (artifact-keeper#2367) is accepted by the backend
-    // update endpoint but is not on the generated SDK request type yet, so
-    // widen the body via a narrowed cast (mirrors adaptRepository above).
-    // When omitted the backend leaves the flag unchanged.
-    const body: SdkUpdateRepositoryRequest & { versioning_enabled?: boolean } = {
+    // `versioning_enabled` (artifact-keeper#2367) is now on the generated SDK
+    // request type. When omitted the backend leaves the flag unchanged.
+    const body: SdkUpdateRepositoryRequest = {
       name: input.name,
       description: input.description,
       is_public: input.is_public,

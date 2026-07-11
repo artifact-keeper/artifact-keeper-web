@@ -1,6 +1,26 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/fetch";
 import { isCveId, isGhsaId } from "@/lib/vuln-utils";
+import type {
+  BlastRadiusResponse,
+  BlastRadiusSummary,
+  BlastRadiusTargetInfo,
+  AffectedRepo,
+  BlastDownloader,
+} from "@artifact-keeper/sdk";
+
+// Re-export the generated SDK types (regenerated from the OpenAPI spec),
+// mapping the two SDK names that differ from this module's historical names
+// (`BlastRadiusTargetInfo` -> BlastRadiusTarget, `BlastDownloader` ->
+// BlastRadiusDownloader). The zod schema below still validates at the trust
+// boundary.
+export type {
+  BlastRadiusResponse,
+  BlastRadiusSummary,
+  AffectedRepo,
+};
+export type BlastRadiusTarget = BlastRadiusTargetInfo;
+export type BlastRadiusDownloader = BlastDownloader;
 
 /**
  * Admin client for the CVE blast-radius endpoints (#570, backend #2364).
@@ -24,29 +44,6 @@ import { isCveId, isGhsaId } from "@/lib/vuln-utils";
  * per-downloader IP samples are capped at 50 (counts stay exact).
  */
 
-/** What the report was computed for. */
-export interface BlastRadiusTarget {
-  /** `cve` or `artifact`. */
-  kind: string;
-  /** The CVE id or artifact id the report is scoped to. */
-  value: string;
-}
-
-export interface BlastRadiusSummary {
-  /** Affected artifacts downloaded in the window. */
-  affected_artifact_count: number;
-  /** Repositories holding an affected artifact. */
-  affected_repo_count: number;
-  /** Distinct authenticated users that downloaded an affected artifact. */
-  downloader_user_count: number;
-  /** True when at least one download was unauthenticated. */
-  anonymous_download_present: boolean;
-  /** Distinct client IPs across all downloads of affected artifacts. */
-  distinct_ip_count: number;
-  /** Total downloads of affected artifacts in the window. */
-  total_download_count: number;
-}
-
 /**
  * How widely a repository holding an affected artifact is reachable:
  * `public` (anonymous-readable — everyone is exposed), `restricted_acl`
@@ -56,39 +53,6 @@ export interface BlastRadiusSummary {
  * failing the whole response parse.
  */
 export type AccessScope = string;
-
-export interface AffectedRepo {
-  repository_id: string;
-  repository_key: string;
-  is_public: boolean;
-  access_scope: AccessScope;
-}
-
-export interface BlastRadiusDownloader {
-  /** Downloader user id; null for the collapsed anonymous principal. */
-  user_id: string | null;
-  /** Username when the download was authenticated and the user still exists. */
-  username: string | null;
-  download_count: number;
-  distinct_ip_count: number;
-  /** Earliest matching download, RFC 3339. */
-  first_download: string;
-  /** Most recent matching download, RFC 3339. */
-  last_download: string;
-  /** Sample of client IPs (capped at 50 server-side; counts stay exact). */
-  ip_addresses: string[];
-}
-
-export interface BlastRadiusResponse {
-  target: BlastRadiusTarget;
-  summary: BlastRadiusSummary;
-  affected_repos: AffectedRepo[];
-  downloaders: BlastRadiusDownloader[];
-  /** Total collapsed downloader principals (for pagination). */
-  total_downloaders: number;
-  page: number;
-  per_page: number;
-}
 
 export interface BlastRadiusQuery {
   /** Inclusive lower bound on downloaded_at, RFC 3339. */
