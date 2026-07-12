@@ -39,24 +39,24 @@ const ISSUE = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("qualityChecksApi", () => {
-  it("list builds the query string and maps CheckResponse[]", async () => {
-    mockApiFetch.mockResolvedValue([CHECK]);
+  it("list hits the admin list-all endpoint and unwraps the envelope", async () => {
+    mockApiFetch.mockResolvedValue({ items: [CHECK], total: 1, page: 1, per_page: 50 });
     const out = await qualityChecksApi.list({ repository_id: "r1" });
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/quality/checks?repository_id=r1");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/quality-checks?repository_id=r1");
     expect(out[0]).toMatchObject({ id: "c1", check_type: "metadata", passed: false, critical_count: 1 });
   });
 
-  it("list with no params queries the unfiltered endpoint", async () => {
-    mockApiFetch.mockResolvedValue([]);
+  it("list with no params queries the unfiltered admin endpoint", async () => {
+    mockApiFetch.mockResolvedValue({ items: [], total: 0, page: 1, per_page: 50 });
     await qualityChecksApi.list();
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/quality/checks");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/quality-checks");
   });
 
   it("list encodes both artifact_id and repository_id filters", async () => {
-    mockApiFetch.mockResolvedValue([]);
+    mockApiFetch.mockResolvedValue({ items: [], total: 0, page: 1, per_page: 50 });
     await qualityChecksApi.list({ repository_id: "r1", artifact_id: "a1" });
     expect(mockApiFetch).toHaveBeenCalledWith(
-      "/api/v1/quality/checks?repository_id=r1&artifact_id=a1",
+      "/api/v1/admin/quality-checks?repository_id=r1&artifact_id=a1",
     );
   });
 
