@@ -41,6 +41,7 @@ import type {
   MigrationJobType,
   MigrationProgressEvent,
   MigrationReport,
+  ItemSummary,
   AssessmentResult,
 } from "@/types";
 
@@ -130,6 +131,17 @@ const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "failed",
   "cancelled",
 ]);
+
+// The reconciliation report's per-category summary (artifacts/repositories/...)
+// is only present when the job migrated at least one item of that type, so a
+// category can be absent on completed jobs (assessment runs, or a full job that
+// touched no artifacts). Render "migrated/total" defensively: an absent summary
+// shows "—" and a partial one falls back to 0 instead of crashing the whole
+// admin page with a TypeError (artifact-keeper#2455).
+function formatItemCount(summary: ItemSummary | undefined): string {
+  if (!summary) return "—";
+  return `${summary.migrated ?? 0}/${summary.total ?? 0}`;
+}
 
 // The create-migration config defaults mirror the backend `MigrationConfig`
 // serde defaults (models/migration.rs): users/groups/permissions and checksum
@@ -1576,27 +1588,27 @@ export default function MigrationPage() {
                     <div>
                       <p className="text-xs text-muted-foreground">Artifacts</p>
                       <p className="font-semibold">
-                        {report.summary.artifacts.migrated}/
-                        {report.summary.artifacts.total}
+                        {formatItemCount(report.summary?.artifacts)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Repos</p>
                       <p className="font-semibold">
-                        {report.summary.repositories.migrated}/
-                        {report.summary.repositories.total}
+                        {formatItemCount(report.summary?.repositories)}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Warnings</p>
-                      <p className="font-semibold">{report.warnings.length}</p>
+                      <p className="font-semibold">
+                        {report.warnings?.length ?? 0}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Errors</p>
-                      <p className="font-semibold">{report.errors.length}</p>
+                      <p className="font-semibold">{report.errors?.length ?? 0}</p>
                     </div>
                   </div>
-                  {report.recommendations.length > 0 && (
+                  {(report.recommendations?.length ?? 0) > 0 && (
                     <ul className="list-disc pl-5 text-xs text-muted-foreground">
                       {report.recommendations.map((rec, i) => (
                         <li key={i}>{rec}</li>
