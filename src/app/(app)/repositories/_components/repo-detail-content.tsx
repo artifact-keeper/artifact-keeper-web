@@ -58,6 +58,7 @@ import { DockerTagList } from "./docker-tag-list";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
+import { RepoStoragePanel } from "./repo-storage-panel";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -646,6 +647,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           )}
         </div>
       )}
+
+      {/* Deduplicated storage usage (epic artifact-keeper#2056). Renders the
+          real physical/logical footprint, dedup savings, and — for admins —
+          the instance total and reclaimable estimate. Field visibility for
+          non-admins on instance-scope backends is enforced by the backend and
+          handled gracefully by the panel. */}
+      <RepoStoragePanel
+        repository={repository}
+        isAdmin={!!user?.is_admin}
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="artifacts">
