@@ -85,6 +85,22 @@ export interface AgePolicyPayload {
   duration_minutes: number;
 }
 
+/**
+ * APT Release metadata overrides for hosted Debian repositories.
+ * Mirrors the `repository_config` keys `apt_origin`, `apt_label`,
+ * `apt_release_version`, and `apt_description` on the backend.
+ *
+ * `origin` and `label` default to "artifact-keeper" when omitted.
+ * `version` and `description` are optional — the Release file omits
+ * those lines when unset.
+ */
+export interface AptReleaseMetadataPayload {
+  origin?: string;
+  label?: string;
+  version?: string;
+  description?: string;
+}
+
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
@@ -407,6 +423,36 @@ export const repositoriesApi = {
         quarantine_duration_minutes: payload.duration_minutes,
       }),
     });
+  },
+
+  /**
+   * Write APT Release metadata overrides for a hosted Debian repository.
+   *
+   * Sends `apt_origin`, `apt_label`, `apt_release_version`, and
+   * `apt_description` to the repository update endpoint via PATCH.  Uses
+   * `apiFetch` directly (same pattern as `updateAgePolicy`) because the
+   * generated SDK's `UpdateRepositoryRequest` may not carry these fields
+   * yet.
+   *
+   * Pass an empty string to clear a field (restoring its default).
+   */
+  updateAptReleaseMetadata: async (
+    repoKey: string,
+    payload: AptReleaseMetadataPayload,
+  ): Promise<Repository> => {
+    const sdk = await apiFetch<RepositoryResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          apt_origin: payload.origin ?? '',
+          apt_label: payload.label ?? '',
+          apt_release_version: payload.version ?? '',
+          apt_description: payload.description ?? '',
+        }),
+      }
+    );
+    return adaptRepository(sdk);
   },
 
   /**

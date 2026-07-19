@@ -84,7 +84,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean; quota_bytes?: number }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean; quota_bytes?: number; apt_origin?: string; apt_label?: string; apt_release_version?: string; apt_description?: string }) => void;
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
   upstreamAuthPending?: boolean;
@@ -213,6 +213,27 @@ export function RepoDialogs({
   const [editQuotaOverrides, setEditQuotaOverrides] = useState<{ value?: string; unit?: QuotaUnit }>({});
   const editQuotaValue = editQuotaOverrides.value ?? editQuotaDefaults.value;
   const editQuotaUnit = editQuotaOverrides.unit ?? editQuotaDefaults.unit;
+
+  const isCreateHosted =
+    (createForm.repo_type === "local" || createForm.repo_type === "staging");
+
+  const isEditHosted =
+    (editRepo?.repo_type === "local" || editRepo?.repo_type === "staging");
+
+  // APT Release metadata state for edit dialog (hosted Debian repos only).
+  // Initialized from the repository object and reset when the dialog opens.
+  const [editAptOrigin, setEditAptOrigin] = useState(editRepo?.apt_origin ?? "");
+  const [editAptLabel, setEditAptLabel] = useState(editRepo?.apt_label ?? "");
+  const [editAptVersion, setEditAptVersion] = useState(editRepo?.apt_release_version ?? "");
+  const [editAptDescription, setEditAptDescription] = useState(editRepo?.apt_description ?? "");
+
+  // Re-seed local state when editRepo changes (dialog open / repo switch).
+  useEffect(() => {
+    setEditAptOrigin(editRepo?.apt_origin ?? "");
+    setEditAptLabel(editRepo?.apt_label ?? "");
+    setEditAptVersion(editRepo?.apt_release_version ?? "");
+    setEditAptDescription(editRepo?.apt_description ?? "");
+  }, [editRepo?.apt_origin, editRepo?.apt_label, editRepo?.apt_release_version, editRepo?.apt_description]);
 
   // Key validation - check if key is already taken
   const keyTaken = useMemo(() => {
@@ -470,6 +491,118 @@ export function RepoDialogs({
               </div>
             )}
 
+            {/* Hosted repository: Debian/APT properties */}
+            {isCreateHosted && createForm.format === "debian" && (
+              <div className="space-y-3 border-t pt-4">
+                <div className="mb-2">
+                  <Label className="text-sm font-medium">APT Release Metadata</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Customize the Origin, Label, Version, and Description fields
+                    emitted in the Debian/APT Release file. Leave a field empty
+                    to use the default ({" "}
+                    <code className="bg-muted px-1 rounded text-xs">
+                      artifact-keeper
+                    </code>{" "}
+                    for Origin / Label) or omit the line entirely (Version /
+                    Description).
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="create-apt-origin">Origin</Label>
+                    <Input
+                      id="create-apt-origin"
+                      placeholder="artifact-keeper"
+                      value={createForm.apt_origin ?? ""}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, apt_origin: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      A single line of free-form text — e.g.{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Debian
+                      </code>{" "}
+                      in the Debian distribution or{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Ubuntu
+                      </code>{" "}
+                      in Ubuntu.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="create-apt-label">Label</Label>
+                    <Input
+                      id="create-apt-label"
+                      placeholder="artifact-keeper"
+                      value={createForm.apt_label ?? ""}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, apt_label: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      A single line of free-form text — e.g.{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Debian
+                      </code>{" "}
+                      in the Debian distribution or{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Ubuntu
+                      </code>{" "}
+                      in Ubuntu.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="create-apt-version">Version</Label>
+                  <Input
+                    id="create-apt-version"
+                    placeholder="(omitted)"
+                    value={createForm.apt_release_version ?? ""}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        apt_release_version: e.target.value,
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A single line, usually a sequence of integers separated by{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">.</code>{" "}
+                    — e.g.{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">
+                      13.6
+                    </code>{" "}
+                    for Debian 13.6 &quot;Trixie&quot; or{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">
+                      26.04
+                    </code>{" "}
+                    for Ubuntu 26.04 &quot;Resolute Raccoon&quot;.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="create-apt-description">Description</Label>
+                  <Textarea
+                    id="create-apt-description"
+                    placeholder="(omitted)"
+                    value={createForm.apt_description ?? ""}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        apt_description: e.target.value,
+                      }))
+                    }
+                    rows={2}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Free-form text describing the repository. Multi-line is
+                    accepted; the backend formats empty lines per the deb822
+                    continuation convention.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Remote repository: upstream authentication */}
             {createForm.repo_type === "remote" && (
               <div className="space-y-3">
@@ -689,6 +822,10 @@ export function RepoDialogs({
                   ...rest,
                   ...(editKeyChanged ? { key: formKey } : {}),
                   quota_bytes: quotaToBytes(editQuotaValue, editQuotaUnit) ?? undefined,
+                  apt_origin: editAptOrigin,
+                  apt_label: editAptLabel,
+                  apt_release_version: editAptVersion,
+                  apt_description: editAptDescription,
                 });
               }
             }}
@@ -778,6 +915,104 @@ export function RepoDialogs({
                 Maximum storage for this repository. Leave empty for no limit.
               </p>
             </div>
+
+            {/* Hosted repository: Debian/APT properties */}
+            {isEditHosted && (editRepo?.format === "debian") && (
+              <div className="space-y-3 border-t pt-4">
+                <div className="mb-2">
+                  <Label className="text-sm font-medium">APT Release Metadata</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Customize the Origin, Label, Version, and Description fields
+                    emitted in the Debian/APT Release file. Leave a field empty
+                    to use the default ({" "}
+                    <code className="bg-muted px-1 rounded text-xs">
+                      artifact-keeper
+                    </code>{" "}
+                    for Origin / Label) or omit the line entirely (Version /
+                    Description).
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-apt-origin">Origin</Label>
+                    <Input
+                      id="edit-apt-origin"
+                      placeholder="artifact-keeper"
+                      value={editAptOrigin}
+                      onChange={(e) => setEditAptOrigin(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      A single line of free-form text — e.g.{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Debian
+                      </code>{" "}
+                      in the Debian distribution or{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Ubuntu
+                      </code>{" "}
+                      in Ubuntu.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-apt-label">Label</Label>
+                    <Input
+                      id="edit-apt-label"
+                      placeholder="artifact-keeper"
+                      value={editAptLabel}
+                      onChange={(e) => setEditAptLabel(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      A single line of free-form text — e.g.{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Debian
+                      </code>{" "}
+                      in the Debian distribution or{" "}
+                      <code className="bg-muted px-0.5 rounded text-xs">
+                        Ubuntu
+                      </code>{" "}
+                      in Ubuntu.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-apt-version">Version</Label>
+                  <Input
+                    id="edit-apt-version"
+                    placeholder="(omitted)"
+                    value={editAptVersion}
+                    onChange={(e) => setEditAptVersion(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A single line, usually a sequence of integers separated by{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">.</code>{" "}
+                    — e.g.{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">
+                      13.6
+                    </code>{" "}
+                    for Debian 13.6 &quot;Trixie&quot; or{" "}
+                    <code className="bg-muted px-0.5 rounded text-xs">
+                      26.04
+                    </code>{" "}
+                    for Ubuntu 26.04 &quot;Resolute Raccoon&quot;.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-apt-description">Description</Label>
+                  <Textarea
+                    id="edit-apt-description"
+                    placeholder="(omitted)"
+                    value={editAptDescription}
+                    onChange={(e) => setEditAptDescription(e.target.value)}
+                    rows={2}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Free-form text describing the repository. Multi-line is
+                    accepted; the backend formats empty lines per the deb822
+                    continuation convention.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Upstream authentication for remote repos (saved separately from main form) */}
             {editRepo?.repo_type === "remote" && (
