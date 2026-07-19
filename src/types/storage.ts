@@ -57,8 +57,13 @@ export interface RepositoryStorageUsage {
   dedup_scope: DedupScope;
   /** Number of distinct stored blobs backing this repository. Always returned. */
   blob_count: number;
-  /** ISO-8601 timestamp of when these figures were computed. */
-  computed_at: string;
+  /**
+   * ISO-8601 timestamp of when these figures were computed. `null` before the
+   * first background refresh has run for the repository (the stats cache is
+   * materialized on a schedule + post-GC), so consumers must guard the
+   * freshness display on presence.
+   */
+  computed_at: string | null;
   /**
    * Instance-wide unique physical bytes across ALL repositories. Admin-only —
    * the backend only includes it for admin viewers, so it is optional here and
