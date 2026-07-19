@@ -96,6 +96,42 @@ export interface TreeFolderMetadata {
   folder_count: number;
   /** Total size of files in this folder (not recursive) */
   total_size_bytes?: number;
+  /**
+   * Deduplicated per-folder storage (backend epic artifact-keeper#2056,
+   * sub-task 4: `GET /api/v1/repositories/{key}/storage/tree`). Mirrors the
+   * repo-level dedup accounting scoped to a single folder/path prefix so
+   * operators can see which folders actually consume physical storage after
+   * content-addressable deduplication — not just their logical footprint.
+   *
+   * IMPORTANT: these fields are OPTIONAL and are NOT part of the generated
+   * `@artifact-keeper/sdk` (v1.6.0 ships only the repo-level `/storage`
+   * operation; the folder-level API and the `repository_path_storage_stats`
+   * rows it reads have not been released to the SDK/backend spec yet). The tree
+   * API adapter therefore reads them from the response via a zod trust-boundary
+   * schema and leaves them `undefined` when the backend omits them. Consumers
+   * MUST treat "absent" as "not reported by this backend" rather than "zero",
+   * exactly as the per-repository panel treats the #2560 field omission.
+   */
+  dedup?: FolderDedupUsage;
+}
+
+/**
+ * Per-folder deduplicated storage breakdown. Field semantics mirror
+ * `RepositoryStorageUsage` in `types/storage.ts` but scoped to one folder path.
+ * Every figure is optional/nullable because the folder-level backend API is not
+ * yet released; the fields travel together (present or all absent).
+ */
+export interface FolderDedupUsage {
+  /** Sum of referenced artifact sizes in this folder, before deduplication. */
+  logical_bytes?: number | null;
+  /** Bytes physically stored for this folder after deduplication. */
+  physical_bytes?: number | null;
+  /** Physical bytes referenced only by artifacts under this folder. */
+  unique_bytes?: number | null;
+  /** Physical bytes this folder shares with artifacts elsewhere. */
+  shared_bytes?: number | null;
+  /** `logical_bytes / physical_bytes` for this folder. */
+  dedup_ratio?: number | null;
 }
 
 export interface TreeLoadRequest {
