@@ -11,12 +11,33 @@ import { useAdminSettings } from "@/hooks/use-admin-settings";
 import lifecycleApi from "@/lib/api/lifecycle";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
-import type { Repository } from "@/types";
+import type {
+  Repository,
+  DebianRepoConfig,
+  CreateRepositoryRequest,
+} from "@/types";
 import type { LifecyclePolicy, PolicyType } from "@/types/lifecycle";
 import { POLICY_TYPE_LABELS } from "@/types/lifecycle";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
+import {
+  hasRpmTrustedKeyConfig,
+  hasDebianConfig,
+  hasNpmScopePolicy,
+} from "../_lib/constants";
 import { ReleaseTargetSettings } from "./release-target-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
+import {
+  RpmTrustedKeyField,
+  DebianConfigFields,
+  NpmScopePolicyFields,
+  buildDebianConfigFields,
+  buildNpmScopePolicyFields,
+  formatList,
+  EMPTY_RPM_CONFIG,
+  type RpmConfigValue,
+  type DebianConfigValue,
+  type NpmScopePolicyValue,
+} from "./format-config-fields";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,21 +125,26 @@ export interface UpdateRepositoryFields {
   quota_bytes?: number | null;
   /** First-class artifact versioning opt-in (#571, Generic/Mlmodel only). */
   versioning_enabled?: boolean;
+  // --- 1.6.0 format-specific config (#602) ---
+  /** RPM curation trusted GPG key (#2568): string to set, `null` to clear. */
+  trusted_gpg_key?: string | null;
+  apt_origin?: string;
+  apt_label?: string;
+  apt_release_version?: string;
+  apt_description?: string;
+  debian?: DebianRepoConfig;
+  npm_allowed_scopes?: string[];
+  npm_allowed_name_patterns?: string[];
+  npm_allow_unscoped?: boolean;
 }
 
 /** Convert UpdateRepositoryFields to the shape repositoriesApi.update expects. */
 function toUpdatePayload(
   fields: UpdateRepositoryFields
-): Partial<{
-  key: string;
-  name: string;
-  description: string;
-  is_public: boolean;
-  quota_bytes: number;
-  versioning_enabled: boolean;
-}> {
+): Partial<CreateRepositoryRequest> {
   const { quota_bytes, ...rest } = fields;
-  // The SDK type does not accept null for quota_bytes, so strip it.
+  // The SDK type does not accept null for quota_bytes, so strip it. A `null`
+  // trusted_gpg_key IS preserved (three-way clear semantics, #2568).
   if (quota_bytes != null) {
     return { ...rest, quota_bytes };
   }
@@ -162,6 +188,73 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   }>({});
   const quotaValue = quotaOverrides.value ?? quotaDefaults.value;
   const quotaUnit = quotaOverrides.unit ?? quotaDefaults.unit;
+
+  // -- 1.6.0 format-specific config (#602) --
+  const isRpm = hasRpmTrustedKeyConfig(repository.format);
+  const isDebian = hasDebianConfig(repository.format);
+  const isNpmScoped = hasNpmScopePolicy(
+    repository.format,
+    repository.repo_type
+  );
+
+  // RPM trusted GPG key (#2568). The key is write-only: the textarea always
+  // starts empty and a stored key surfaces via `has_trusted_gpg_key`. Typing a
+  // key replaces it; toggling "remove" clears it (three-way semantics).
+  const [rpmConfig, setRpmConfig] = useState<RpmConfigValue>(EMPTY_RPM_CONFIG);
+  const [rpmClear, setRpmClear] = useState(false);
+  const rpmKeyTyped = rpmConfig.trusted_gpg_key.trim().length > 0;
+  const rpmChanged = isRpm && (rpmKeyTyped || rpmClear);
+
+  // Debian/APT config (#2407/#2460/#2489/#2459), override-based like the
+  // general fields so a repository prop change re-seeds the defaults.
+  const debianDefaults = useMemo<DebianConfigValue>(
+    () => ({
+      apt_origin: repository.apt_origin ?? "",
+      apt_label: repository.apt_label ?? "",
+      apt_release_version: repository.apt_release_version ?? "",
+      apt_description: repository.apt_description ?? "",
+      distribution_paths: formatList(repository.debian?.distribution_paths),
+      components: formatList(repository.debian?.components),
+      architectures: formatList(repository.debian?.architectures),
+    }),
+    [repository]
+  );
+  const [debianOverrides, setDebianOverrides] = useState<
+    Partial<DebianConfigValue>
+  >({});
+  const debianConfig = useMemo(
+    () => ({ ...debianDefaults, ...debianOverrides }),
+    [debianDefaults, debianOverrides]
+  );
+  const debianChanged =
+    isDebian &&
+    (Object.keys(debianConfig) as (keyof DebianConfigValue)[]).some(
+      (k) => debianConfig[k] !== debianDefaults[k]
+    );
+
+  // npm scope policy (#2424).
+  const npmDefaults = useMemo<NpmScopePolicyValue>(
+    () => ({
+      npm_allowed_scopes: formatList(repository.npm_allowed_scopes),
+      npm_allowed_name_patterns: formatList(
+        repository.npm_allowed_name_patterns
+      ),
+      npm_allow_unscoped: repository.npm_allow_unscoped ?? false,
+    }),
+    [repository]
+  );
+  const [npmOverrides, setNpmOverrides] = useState<
+    Partial<NpmScopePolicyValue>
+  >({});
+  const npmScopePolicy = useMemo(
+    () => ({ ...npmDefaults, ...npmOverrides }),
+    [npmDefaults, npmOverrides]
+  );
+  const npmChanged =
+    isNpmScoped &&
+    (Object.keys(npmScopePolicy) as (keyof NpmScopePolicyValue)[]).some(
+      (k) => npmScopePolicy[k] !== npmDefaults[k]
+    );
 
   // -- Proxy cache TTL state (#448) --
   // Only meaningful for Remote (proxy) repos; the section is hidden for
@@ -211,8 +304,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     const originalQuotaBytes = repository.quota_bytes ?? null;
     if (currentQuotaBytes !== originalQuotaBytes) return true;
     if (cacheTtlChanged) return true;
+    if (rpmChanged || debianChanged || npmChanged) return true;
     return false;
-  }, [form, quotaValue, quotaUnit, repository, cacheTtlChanged]);
+  }, [
+    form,
+    quotaValue,
+    quotaUnit,
+    repository,
+    cacheTtlChanged,
+    rpmChanged,
+    debianChanged,
+    npmChanged,
+  ]);
 
   // -- Save mutation --
   const saveMutation = useMutation({
@@ -227,6 +330,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       }
       setOverrides({});
       setQuotaOverrides({});
+      // Reset 1.6.0 format-specific config editors (#602). The RPM key is
+      // write-only, so the textarea always returns to empty after a save.
+      setRpmConfig(EMPTY_RPM_CONFIG);
+      setRpmClear(false);
+      setDebianOverrides({});
+      setNpmOverrides({});
       toast.success("Repository settings saved");
     },
     onError: mutationErrorToast("Failed to save repository settings"),
@@ -268,6 +377,20 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       fields.quota_bytes = newQuota;
     }
 
+    // 1.6.0 format-specific config (#602). RPM key uses three-way semantics:
+    // a typed key replaces, an explicit remove clears (null), else unchanged.
+    if (isRpm) {
+      const typedKey = rpmConfig.trusted_gpg_key.trim();
+      if (typedKey) fields.trusted_gpg_key = typedKey;
+      else if (rpmClear) fields.trusted_gpg_key = null;
+    }
+    if (isDebian && debianChanged) {
+      Object.assign(fields, buildDebianConfigFields(debianConfig));
+    }
+    if (isNpmScoped && npmChanged) {
+      Object.assign(fields, buildNpmScopePolicyFields(npmScopePolicy));
+    }
+
     const promises: Promise<unknown>[] = [];
     if (Object.keys(fields).length > 0) {
       promises.push(saveMutation.mutateAsync(fields));
@@ -290,12 +413,25 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     cacheTtlIsValid,
     parsedCacheTtl,
     setCacheTtlMutation,
+    isRpm,
+    rpmConfig,
+    rpmClear,
+    isDebian,
+    debianChanged,
+    debianConfig,
+    isNpmScoped,
+    npmChanged,
+    npmScopePolicy,
   ]);
 
   const handleDiscard = useCallback(() => {
     setOverrides({});
     setQuotaOverrides({});
     setCacheTtlOverride(undefined);
+    setRpmConfig(EMPTY_RPM_CONFIG);
+    setRpmClear(false);
+    setDebianOverrides({});
+    setNpmOverrides({});
   }, []);
 
   // -- Lifecycle policies --
@@ -592,6 +728,97 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             </div>
           </section>
 
+          <Separator />
+        </>
+      )}
+
+      {/* -- RPM Curation Trust Section (#2568, RPM only) -- */}
+      {isRpm && (
+        <>
+          <section aria-labelledby="settings-rpm-heading">
+            <div className="mb-4">
+              <h3 id="settings-rpm-heading" className="text-base font-semibold">
+                RPM Curation Trust
+              </h3>
+            </div>
+            <RpmTrustedKeyField
+              idPrefix="settings"
+              value={rpmConfig}
+              onChange={setRpmConfig}
+              hasExistingKey={
+                (repository.has_trusted_gpg_key ?? false) && !rpmClear
+              }
+              onRemove={
+                repository.has_trusted_gpg_key
+                  ? () => setRpmClear(true)
+                  : undefined
+              }
+            />
+            {rpmClear && (
+              <div className="mt-2 flex items-center justify-between rounded border border-destructive/40 bg-destructive/5 p-2">
+                <p className="text-xs text-destructive">
+                  Trusted key will be removed when you save.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRpmClear(false)}
+                >
+                  Undo
+                </Button>
+              </div>
+            )}
+          </section>
+          <Separator />
+        </>
+      )}
+
+      {/* -- Debian/APT Section (#2407/#2460/#2489/#2459, Debian only) -- */}
+      {isDebian && (
+        <>
+          <section aria-labelledby="settings-debian-heading">
+            <div className="mb-4">
+              <h3
+                id="settings-debian-heading"
+                className="text-base font-semibold"
+              >
+                Debian / APT Configuration
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Proxy distro/component/architecture filters and Release-file
+                metadata.
+              </p>
+            </div>
+            <DebianConfigFields
+              idPrefix="settings"
+              value={debianConfig}
+              onChange={(v) => setDebianOverrides(v)}
+            />
+          </section>
+          <Separator />
+        </>
+      )}
+
+      {/* -- npm Scope Policy Section (#2424, npm remote/virtual only) -- */}
+      {isNpmScoped && (
+        <>
+          <section aria-labelledby="settings-npm-heading">
+            <div className="mb-4">
+              <h3 id="settings-npm-heading" className="text-base font-semibold">
+                npm Scope Policy
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Restrict which npm scopes and names resolve through this
+                repository.
+              </p>
+            </div>
+            <NpmScopePolicyFields
+              idPrefix="settings"
+              value={npmScopePolicy}
+              onChange={(v) => setNpmOverrides(v)}
+            />
+          </section>
           <Separator />
         </>
       )}
