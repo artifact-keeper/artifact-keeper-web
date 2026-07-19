@@ -117,6 +117,7 @@ const SDK_SAML: SdkSamlConfigResponse = {
   sign_requests: true,
   require_signed_assertions: true,
   use_absolute_acs_url: false,
+  map_groups_to_groups: false,
   admin_group: "Admins",
   is_enabled: true,
   created_at: "2026-04-01T00:00:00Z",
