@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 
 import signingApi, { type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
-import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import { Button } from "@/components/ui/button";
@@ -154,7 +154,17 @@ export default function SigningPage() {
         </div>
       )}
 
-      {!isLoading && isError && (
+      {!isLoading && isError && isForbiddenError(error) && (
+        <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
+          <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
+          <p className="text-sm font-medium">You don&apos;t have permission to manage signing keys</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Signing-key management is restricted to administrators.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && isError && !isForbiddenError(error) && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
           <p className="text-sm font-medium">Couldn&apos;t load signing keys</p>
