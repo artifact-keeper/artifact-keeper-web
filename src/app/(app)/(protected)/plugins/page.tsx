@@ -30,7 +30,8 @@ import {
   installFromGit,
   installFromZip,
 } from "@artifact-keeper/sdk";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, isForbiddenError, toUserMessage } from "@/lib/error-utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,11 @@ const STATUS_COLORS: Record<string, "green" | "red" | "default"> = {
 
 export default function PluginsPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Plugin configuration read/write is admin-only on the backend
+  // (#2512 / AK-SEC-001). Gate the Configure affordance accordingly and lean
+  // on backend 403s for defense in depth.
+  const canConfigure = !!user?.is_admin;
 
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
   const [installOpen, setInstallOpen] = useState(false);
@@ -162,7 +168,11 @@ export default function PluginsPage() {
     },
   });
 
-  const { data: pluginConfig } = useQuery({
+  const {
+    data: pluginConfig,
+    isError: configIsError,
+    error: configError,
+  } = useQuery({
     queryKey: ["plugin-config", configPlugin?.id],
     queryFn: async () => {
       const { data, error } = await getPluginConfig({
@@ -171,7 +181,10 @@ export default function PluginsPage() {
       if (error) throw error;
       return (data as any).items as PluginConfig[];
     },
-    enabled: !!configPlugin,
+    // Config is admin-only (#2512). Non-admins never trigger the request; the
+    // Configure affordance is hidden for them, and a stale-admin 403 is handled
+    // gracefully in the dialog below.
+    enabled: !!configPlugin && canConfigure,
   });
 
   const plugins = data?.items ?? [];
@@ -363,21 +376,24 @@ export default function PluginsPage() {
           className="flex items-center gap-1 justify-end"
           onClick={(e) => e.stopPropagation()}
         >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => {
-                  setConfigPlugin(p);
-                  setConfigValues({});
-                }}
-              >
-                <Settings className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Configure</TooltipContent>
-          </Tooltip>
+          {canConfigure && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Configure ${p.name}`}
+                  onClick={() => {
+                    setConfigPlugin(p);
+                    setConfigValues({});
+                  }}
+                >
+                  <Settings className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Configure</TooltipContent>
+            </Tooltip>
+          )}
           {p.status === "disabled" ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -765,7 +781,23 @@ export default function PluginsPage() {
                   </div>
                 </TabsContent>
                 <TabsContent value="config" className="mt-4">
-                  {pluginConfig && pluginConfig.length > 0 ? (
+                  {!canConfigure || (configIsError && isForbiddenError(configError)) ? (
+                    <p
+                      className="text-sm text-muted-foreground py-8 text-center"
+                      role="alert"
+                    >
+                      You don&apos;t have permission to view or edit this
+                      plugin&apos;s configuration. Plugin configuration is
+                      restricted to administrators.
+                    </p>
+                  ) : configIsError ? (
+                    <p
+                      className="text-sm text-red-500 py-8 text-center"
+                      role="alert"
+                    >
+                      {toUserMessage(configError, "Failed to load configuration.")}
+                    </p>
+                  ) : pluginConfig && pluginConfig.length > 0 ? (
                     <form
                       className="space-y-4"
                       onSubmit={(e) => {
