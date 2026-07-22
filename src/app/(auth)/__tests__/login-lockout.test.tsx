@@ -73,10 +73,19 @@ const mockRefreshUser = vi.fn();
 const mockVerifyTotp = vi.fn();
 const mockClearTotpRequired = vi.fn();
 
-let authState = {
+let authState: {
+  login: typeof mockLogin;
+  refreshUser: typeof mockRefreshUser;
+  setupRequired: boolean;
+  setupPasswordHint: string | null;
+  totpRequired: boolean;
+  verifyTotp: typeof mockVerifyTotp;
+  clearTotpRequired: typeof mockClearTotpRequired;
+} = {
   login: mockLogin,
   refreshUser: mockRefreshUser,
   setupRequired: false,
+  setupPasswordHint: null,
   totpRequired: false,
   verifyTotp: mockVerifyTotp,
   clearTotpRequired: mockClearTotpRequired,
@@ -122,6 +131,7 @@ describe("LoginPage lockout UI", () => {
       login: mockLogin,
       refreshUser: mockRefreshUser,
       setupRequired: false,
+      setupPasswordHint: null,
       totpRequired: false,
       verifyTotp: mockVerifyTotp,
       clearTotpRequired: mockClearTotpRequired,
@@ -293,6 +303,37 @@ describe("LoginPage lockout UI", () => {
     render(<LoginPage />);
 
     expect(screen.queryByText("First-Time Setup")).not.toBeInTheDocument();
+  });
+
+  it("shows the built-in docker compose instruction when no hint is provided", () => {
+    authState.setupRequired = true;
+
+    render(<LoginPage />);
+
+    expect(
+      screen.getByText(
+        "docker exec artifact-keeper-backend cat /data/storage/admin.password"
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("renders the backend-provided setup hint in place of the default", () => {
+    authState.setupRequired = true;
+    authState.setupPasswordHint =
+      "kubectl exec deploy/artifact-keeper -- cat /data/storage/admin.password";
+
+    render(<LoginPage />);
+
+    expect(
+      screen.getByText(
+        "kubectl exec deploy/artifact-keeper -- cat /data/storage/admin.password"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "docker exec artifact-keeper-backend cat /data/storage/admin.password"
+      )
+    ).not.toBeInTheDocument();
   });
 
   it("renders the TOTP form when totpRequired is true", () => {
