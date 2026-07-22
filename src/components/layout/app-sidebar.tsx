@@ -31,6 +31,7 @@ import {
   UsersRound,
   HardDrive,
   KeyRound,
+  GitBranch,
   Settings,
   BarChart3,
   Recycle,
@@ -125,6 +126,7 @@ const adminItems: NavItem[] = [
   { title: "Audit Log", href: "/audit", icon: ScrollText },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
+  { title: "CI/CD OIDC", href: "/settings/sso/ci", icon: GitBranch },
   { title: "Settings", href: "/settings", icon: Settings },
 ];
 
