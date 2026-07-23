@@ -85,6 +85,7 @@ function OidcTab() {
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState("openid profile email");
   const [autoCreateUsers, setAutoCreateUsers] = useState(true);
+  const [mapGroupsToGroups, setMapGroupsToGroups] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("preferred_username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("name");
@@ -144,6 +145,7 @@ function OidcTab() {
     setClientSecret("");
     setScopes("openid profile email");
     setAutoCreateUsers(true);
+    setMapGroupsToGroups(false);
     setUsernameClaim("preferred_username");
     setEmailClaim("email");
     setDisplayNameClaim("name");
@@ -171,10 +173,31 @@ function OidcTab() {
     setClientSecret("");
     setScopes(config.scopes.join(" "));
     setAutoCreateUsers(config.auto_create_users);
-    setUsernameClaim(config.attribute_mapping?.username || "preferred_username");
-    setEmailClaim(config.attribute_mapping?.email || "email");
-    setDisplayNameClaim(config.attribute_mapping?.display_name || "name");
-    setGroupsClaim(config.attribute_mapping?.groups || "groups");
+    setMapGroupsToGroups(config.map_groups_to_groups);
+    // #516: the backend reads the OIDC claim overrides under the
+    // `<field>_claim` keys (username_claim / email_claim / groups_claim).
+    // Prefer those, but fall back to the legacy bare keys so a provider
+    // saved by a pre-fix UI still displays its configured claim names.
+    setUsernameClaim(
+      config.attribute_mapping?.username_claim ||
+        config.attribute_mapping?.username ||
+        "preferred_username",
+    );
+    setEmailClaim(
+      config.attribute_mapping?.email_claim ||
+        config.attribute_mapping?.email ||
+        "email",
+    );
+    setDisplayNameClaim(
+      config.attribute_mapping?.display_name_claim ||
+        config.attribute_mapping?.display_name ||
+        "name",
+    );
+    setGroupsClaim(
+      config.attribute_mapping?.groups_claim ||
+        config.attribute_mapping?.groups ||
+        "groups",
+    );
     setAdminGroup(config.attribute_mapping?.admin_group || "");
     setDialogOpen(true);
   }
@@ -187,13 +210,24 @@ function OidcTab() {
     // spread, the PUT wipes everything else server-side.
     //
     // On create there's nothing to preserve, so start fresh.
+    // #516: the backend (sso.rs::resolve_oidc_claim_name) expects the claim
+    // overrides under the `<field>_claim` keys — `username_claim`,
+    // `email_claim`, `groups_claim` (`display_name_claim` is not consumed by
+    // the backend yet but is written for parity). The pre-fix UI wrote bare
+    // `username` / `email` / `groups` keys that the backend silently ignored.
     const attributeMapping: Record<string, string> = {
       ...(editTarget?.attribute_mapping ?? {}),
-      username: usernameClaim,
-      email: emailClaim,
-      display_name: displayNameClaim,
-      groups: groupsClaim,
+      username_claim: usernameClaim,
+      email_claim: emailClaim,
+      display_name_claim: displayNameClaim,
+      groups_claim: groupsClaim,
     };
+    // Drop the legacy bare keys so an edited provider doesn't carry both the
+    // old (ignored) and new claim keys in the JSONB blob.
+    delete attributeMapping.username;
+    delete attributeMapping.email;
+    delete attributeMapping.display_name;
+    delete attributeMapping.groups;
     if (adminGroup) {
       attributeMapping.admin_group = adminGroup;
     } else {
@@ -215,6 +249,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       };
       if (clientSecret) {
         data.client_secret = clientSecret;
@@ -229,6 +264,7 @@ function OidcTab() {
         scopes: scopeList,
         attribute_mapping: attributeMapping,
         auto_create_users: autoCreateUsers,
+        map_groups_to_groups: mapGroupsToGroups,
       });
     }
   }
@@ -369,6 +405,7 @@ function OidcTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Google Workspace"
+                aria-required="true"
               />
             </div>
 
@@ -379,6 +416,7 @@ function OidcTab() {
                 value={issuerUrl}
                 onChange={(e) => setIssuerUrl(e.target.value)}
                 placeholder="https://accounts.google.com"
+                aria-required="true"
               />
             </div>
 
@@ -389,6 +427,7 @@ function OidcTab() {
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
                 placeholder="your-client-id"
+                aria-required="true"
               />
             </div>
 
@@ -402,6 +441,7 @@ function OidcTab() {
                 placeholder={
                   editTarget ? "Leave blank to keep existing" : "your-client-secret"
                 }
+                aria-required={!editTarget}
               />
             </div>
 
@@ -429,6 +469,25 @@ function OidcTab() {
                 id="oidc-auto-create-users"
                 checked={autoCreateUsers}
                 onCheckedChange={setAutoCreateUsers}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="oidc-map-groups-to-groups">
+                  Map OIDC groups to local groups
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Reflect values from the OIDC groups claim into Artifact Keeper
+                  group memberships on login. Matching groups are auto-created
+                  for this provider; operator-managed groups are left unchanged.
+                  Off keeps the legacy role-mapping behavior.
+                </p>
+              </div>
+              <Switch
+                id="oidc-map-groups-to-groups"
+                checked={mapGroupsToGroups}
+                onCheckedChange={setMapGroupsToGroups}
               />
             </div>
 
@@ -856,6 +915,7 @@ function LdapTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Corporate LDAP"
+                aria-required="true"
               />
             </div>
 
@@ -866,6 +926,7 @@ function LdapTab() {
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 placeholder="ldap://ldap.example.com:389"
+                aria-required="true"
               />
             </div>
 
@@ -899,6 +960,7 @@ function LdapTab() {
                 value={userBaseDn}
                 onChange={(e) => setUserBaseDn(e.target.value)}
                 placeholder="ou=users,dc=example,dc=com"
+                aria-required="true"
               />
             </div>
 
@@ -1073,6 +1135,7 @@ function SamlTab() {
   const [nameIdFormat, setNameIdFormat] = useState("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
   const [signRequests, setSignRequests] = useState(false);
   const [requireSignedAssertions, setRequireSignedAssertions] = useState(true);
+  const [useAbsoluteAcsUrl, setUseAbsoluteAcsUrl] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("displayName");
@@ -1135,6 +1198,7 @@ function SamlTab() {
     setNameIdFormat("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
     setSignRequests(false);
     setRequireSignedAssertions(true);
+    setUseAbsoluteAcsUrl(false);
     setUsernameClaim("username");
     setEmailClaim("email");
     setDisplayNameClaim("displayName");
@@ -1165,6 +1229,7 @@ function SamlTab() {
     setNameIdFormat(config.name_id_format);
     setSignRequests(config.sign_requests);
     setRequireSignedAssertions(config.require_signed_assertions);
+    setUseAbsoluteAcsUrl(config.use_absolute_acs_url);
     setUsernameClaim(config.attribute_mapping?.username || "username");
     setEmailClaim(config.attribute_mapping?.email || "email");
     setDisplayNameClaim(config.attribute_mapping?.display_name || "displayName");
@@ -1200,6 +1265,7 @@ function SamlTab() {
         sign_requests: signRequests,
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
+        use_absolute_acs_url: useAbsoluteAcsUrl,
       };
       if (certificate) {
         data.certificate = certificate;
@@ -1218,6 +1284,7 @@ function SamlTab() {
         sign_requests: signRequests,
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
+        use_absolute_acs_url: useAbsoluteAcsUrl,
       });
     }
   }
@@ -1358,6 +1425,7 @@ function SamlTab() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Okta"
+                aria-required="true"
               />
             </div>
 
@@ -1368,6 +1436,7 @@ function SamlTab() {
                 value={entityId}
                 onChange={(e) => setEntityId(e.target.value)}
                 placeholder="https://idp.example.com/metadata"
+                aria-required="true"
               />
             </div>
 
@@ -1378,6 +1447,7 @@ function SamlTab() {
                 value={ssoUrl}
                 onChange={(e) => setSsoUrl(e.target.value)}
                 placeholder="https://idp.example.com/sso/saml"
+                aria-required="true"
               />
             </div>
 
@@ -1404,6 +1474,7 @@ function SamlTab() {
                 }
                 rows={5}
                 className="font-mono text-xs"
+                aria-required={!editTarget}
               />
             </div>
 
@@ -1461,6 +1532,23 @@ function SamlTab() {
                 id="saml-require-signed-assertions"
                 checked={requireSignedAssertions}
                 onCheckedChange={setRequireSignedAssertions}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="saml-use-absolute-acs-url">Use absolute ACS URL</Label>
+                <p className="text-xs text-muted-foreground">
+                  Send an absolute AssertionConsumerServiceURL in the AuthnRequest
+                  instead of the historical relative path. Enable for stricter SAML
+                  2.0 IdPs that reject relative AssertionConsumerServiceURLs (e.g.
+                  Lark AnyCross). Off keeps the pre-existing wire format.
+                </p>
+              </div>
+              <Switch
+                id="saml-use-absolute-acs-url"
+                checked={useAbsoluteAcsUrl}
+                onCheckedChange={setUseAbsoluteAcsUrl}
               />
             </div>
 

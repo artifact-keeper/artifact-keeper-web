@@ -108,8 +108,55 @@ describe("adminApi", () => {
         database: { status: "ok", message: undefined },
         storage: { status: "ok", message: undefined },
         security_scanner: undefined,
+        opensearch: undefined,
         meilisearch: undefined,
       },
+    });
+  });
+
+  it("getHealth maps the 1.2.0 opensearch check onto the search engine fields", async () => {
+    const health = {
+      status: "ok",
+      version: "1.2.0",
+      demo_mode: false,
+      checks: {
+        database: { status: "ok" },
+        storage: { status: "ok" },
+        // Backend 1.2.0 reports the search engine under `opensearch`.
+        opensearch: { status: "healthy", message: "cluster status: green" },
+      },
+    };
+    mockHealthCheck.mockResolvedValue({ data: health, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getHealth();
+    expect(result.checks.opensearch).toEqual({
+      status: "healthy",
+      message: "cluster status: green",
+    });
+    // The legacy alias is kept populated so older consumers keep rendering.
+    expect(result.checks.meilisearch).toEqual({
+      status: "healthy",
+      message: "cluster status: green",
+    });
+  });
+
+  it("getHealth falls back to a legacy meilisearch check when opensearch is absent", async () => {
+    const health = {
+      status: "ok",
+      version: "1.1.0",
+      demo_mode: false,
+      checks: {
+        database: { status: "ok" },
+        storage: { status: "ok" },
+        meilisearch: { status: "healthy" },
+      },
+    };
+    mockHealthCheck.mockResolvedValue({ data: health, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getHealth();
+    expect(result.checks.opensearch).toEqual({
+      status: "healthy",
+      message: undefined,
     });
   });
 
@@ -117,6 +164,29 @@ describe("adminApi", () => {
     mockHealthCheck.mockResolvedValue({ data: undefined, error: "down" });
     const { adminApi } = await import("../admin");
     await expect(adminApi.getHealth()).rejects.toBe("down");
+  });
+
+  it("getHealth uses the body version on a non-2xx degraded response (#456)", async () => {
+    // Backend returns 503 with a full HealthResponse body when a dependency is
+    // degraded. The SDK surfaces that body as `error`. The version must still
+    // be reported rather than discarded.
+    const degraded = {
+      status: "degraded",
+      version: "1.2.0",
+      commit: "abc1234567890",
+      dirty: false,
+      demo_mode: false,
+      checks: {
+        database: { status: "ok" },
+        storage: { status: "down", message: "disk full" },
+      },
+    };
+    mockHealthCheck.mockResolvedValue({ data: undefined, error: degraded });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getHealth();
+    expect(result.version).toBe("1.2.0");
+    expect(result.status).toBe("degraded");
+    expect(result.checks.storage).toEqual({ status: "down", message: "disk full" });
   });
 
   // ---- listUserTokens ----

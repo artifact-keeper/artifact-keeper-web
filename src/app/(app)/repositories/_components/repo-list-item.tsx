@@ -73,7 +73,12 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
         {(onEdit || onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon-xs" className="shrink-0 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label={`Repository actions for ${repo.name}`}
+              >
                 <Settings className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>

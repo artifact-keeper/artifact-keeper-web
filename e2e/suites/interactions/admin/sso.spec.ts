@@ -60,6 +60,21 @@ test.describe('SSO Settings', () => {
     await page.getByRole('button', { name: /cancel/i }).click();
   });
 
+  test('OIDC dialog exposes Map groups to local groups toggle (#534)', async ({ page }) => {
+    await page.goto('/settings/sso');
+    await page.locator('[role="tablist"] >> text=OIDC').first().click();
+    await page.getByRole('button', { name: /create.*provider|add.*provider|create/i }).first().click();
+    const dialog = page.getByRole('dialog').or(page.locator('[role="dialog"]'));
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    // The "Map OIDC groups to local groups" switch surfaces the backend
+    // map_groups_to_groups setting.
+    await expect(
+      dialog.getByText(/map oidc groups to local groups/i).first()
+    ).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByLabel(/map oidc groups to local groups/i)).toBeVisible({ timeout: 5000 });
+    await page.getByRole('button', { name: /cancel/i }).click();
+  });
+
   test('cancel closes OIDC dialog', async ({ page }) => {
     await page.goto('/settings/sso');
     await page.locator('[role="tablist"] >> text=OIDC').first().click();

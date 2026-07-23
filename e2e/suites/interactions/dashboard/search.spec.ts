@@ -120,8 +120,12 @@ test.describe('Search', () => {
     // Fill in a package name
     await page.getByPlaceholder('e.g., react, lodash').fill('test');
 
-    // Click search button
-    await page.getByRole('button', { name: /search/i }).first().click();
+    // Click the advanced-search Search button. Scope to the <main> landmark:
+    // the app header also has a quick-search trigger whose accessible name
+    // ("Search...") matches /search/i and comes first in the DOM, so an
+    // unscoped `.first()` would open the command palette instead of running
+    // the advanced search.
+    await page.getByRole('main').getByRole('button', { name: /search/i }).first().click();
 
     // Wait for results section to appear (either results or empty state)
     await expect(
@@ -133,9 +137,11 @@ test.describe('Search', () => {
     await page.goto('/search');
     await page.waitForTimeout(1000);
 
-    // Trigger a search to make the results area appear
+    // Trigger a search to make the results area appear. Scope to <main> so the
+    // header quick-search trigger (whose name also matches /search/i) is not
+    // clicked instead of the advanced-search Search button.
     await page.getByPlaceholder('e.g., react, lodash').fill('test');
-    await page.getByRole('button', { name: /search/i }).first().click();
+    await page.getByRole('main').getByRole('button', { name: /search/i }).first().click();
 
     // Wait for results card to be visible
     await expect(page.getByText(/results/i).first()).toBeVisible({ timeout: 10000 });

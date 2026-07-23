@@ -134,7 +134,7 @@ vi.mock("@/components/common/page-header", () => ({
 // Component under test
 // ---------------------------------------------------------------------------
 
-import SettingsPage from "../page";
+import SettingsPage, { bytesToUploadSize, uploadSizeToBytes } from "../page";
 import type { AdminSettings, SmtpConfig } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY } from "@/hooks/use-admin-settings";
 
@@ -313,6 +313,7 @@ describe("SettingsPage", () => {
       max_upload_size_bytes: 1_073_741_824,
     },
     smtpConfig: DEFAULT_SMTP_DATA,
+    environment: "production",
   };
 
   /** Mocks the shared `admin-settings` query for a given bundle (or default). */
@@ -344,8 +345,10 @@ describe("SettingsPage", () => {
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "S3")).toBeDefined();
     expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
-    // formatBytes from @/lib/utils renders 1 GiB as "1 GB" (no trailing .0).
-    expect(inputs.find((i) => i.value === "1 GB")).toBeDefined();
+    // Max Upload Size is now an editable number input (#189). 1 GiB shows
+    // as the value "1" with the unit selector set to GB.
+    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(numberInputs.find((i) => i.value === "1")).toBeDefined();
   });
 
   it("renders friendly storage backend labels", () => {
@@ -363,9 +366,10 @@ describe("SettingsPage", () => {
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "Local Filesystem")).toBeDefined();
-    // 0 bytes renders literally as "0 B" — we no longer invent an
-    // "Unlimited" semantic that isn't in the API contract.
-    expect(inputs.find((i) => i.value === "0 B")).toBeDefined();
+    // 0 bytes means "no limit" (#189): the editable number input is empty
+    // with the "No limit" placeholder.
+    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(numberInputs.find((i) => i.value === "")).toBeDefined();
   });
 
   it("falls back to raw storage backend value when label is unknown", () => {
@@ -383,7 +387,46 @@ describe("SettingsPage", () => {
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "minio")).toBeDefined();
-    expect(inputs.find((i) => i.value === "5 GB")).toBeDefined();
+    // 5 GiB shows as the value "5" in the editable number input (#189).
+    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(numberInputs.find((i) => i.value === "5")).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Environment badge tests (General tab)
+  // ---------------------------------------------------------------------------
+
+  it("renders the Environment badge from the loaded settings value", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings({ ...DEFAULT_ADMIN_SETTINGS, environment: "staging" });
+
+    render(<SettingsPage />);
+
+    // Badge value comes from adminSettings.environment, no longer hardcoded.
+    expect(screen.getByText("staging")).toBeDefined();
+    expect(screen.queryByText("Production")).toBeNull();
+  });
+
+  it("falls back to Unknown when the environment field is empty", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings({ ...DEFAULT_ADMIN_SETTINGS, environment: "" });
+
+    render(<SettingsPage />);
+
+    // An older backend that omits ENVIRONMENT yields "" — the badge degrades
+    // to "Unknown" instead of the previous misleading hardcoded "Production".
+    expect(screen.getByText("Unknown")).toBeDefined();
+  });
+
+  it("falls back to Unknown when admin-settings errors", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: false, isError: true },
+    });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Unknown")).toBeDefined();
   });
 
   it("shows Loading… in Storage fields while admin-settings is loading (#349)", () => {
@@ -801,10 +844,13 @@ describe("SettingsPage", () => {
   });
 
   it("disables Send Test Email button when test mutation is pending", () => {
+    // useMutation call order is: [1] upload-size save (storage tab, #189),
+    // [2] SMTP save, [3] send-test-email. The test-email mutation is the
+    // third call, so mark only that one pending.
     let mutationCallIndex = 0;
     mockUseMutation.mockImplementation(() => {
       mutationCallIndex++;
-      if (mutationCallIndex === 2) {
+      if (mutationCallIndex === 3) {
         return createMutationMock({ isPending: true });
       }
       return createMutationMock();
@@ -817,5 +863,42 @@ describe("SettingsPage", () => {
     const sendButtons = screen.getAllByText("Send Test Email");
     const sendButton = sendButtons.find((el) => el.closest("button"));
     expect(sendButton?.closest("button")?.disabled).toBe(true);
+  });
+});
+
+describe("upload size helpers (#189)", () => {
+  it("converts whole GB to value + GB unit", () => {
+    expect(bytesToUploadSize(5 * 1024 * 1024 * 1024)).toEqual({
+      value: "5",
+      unit: "GB",
+    });
+  });
+
+  it("falls back to MB for non-GB-aligned sizes", () => {
+    expect(bytesToUploadSize(100 * 1024 * 1024)).toEqual({
+      value: "100",
+      unit: "MB",
+    });
+  });
+
+  it("treats 0 bytes as no limit (empty value)", () => {
+    expect(bytesToUploadSize(0)).toEqual({ value: "", unit: "MB" });
+  });
+
+  it("converts a value + unit back to bytes", () => {
+    expect(uploadSizeToBytes("2", "GB")).toBe(2 * 1024 * 1024 * 1024);
+    expect(uploadSizeToBytes("250", "MB")).toBe(250 * 1024 * 1024);
+  });
+
+  it("returns 0 (no limit) for empty or invalid input", () => {
+    expect(uploadSizeToBytes("", "GB")).toBe(0);
+    expect(uploadSizeToBytes("-1", "MB")).toBe(0);
+    expect(uploadSizeToBytes("abc", "GB")).toBe(0);
+  });
+
+  it("round-trips through bytes -> size -> bytes", () => {
+    const original = 3 * 1024 * 1024 * 1024;
+    const { value, unit } = bytesToUploadSize(original);
+    expect(uploadSizeToBytes(value, unit)).toBe(original);
   });
 });

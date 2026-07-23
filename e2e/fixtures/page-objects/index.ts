@@ -1,10 +1,14 @@
 export { AccessTokensPage } from './AccessTokensPage';
 export { AnalyticsPage } from './AnalyticsPage';
 export { ApprovalsPage } from './ApprovalsPage';
+export { ArtifactVersionsPage } from './ArtifactVersionsPage';
+export { AuditLogPage } from './AuditLogPage';
 export { BackupsPage } from './BackupsPage';
+export { BlastRadiusPage } from './BlastRadiusPage';
 export { BuildsPage } from './BuildsPage';
 export { DashboardPage } from './DashboardPage';
 export { DependencyTrackPage } from './DependencyTrackPage';
+export { DownloadsPage } from './DownloadsPage';
 export { GroupsPage } from './GroupsPage';
 export { LicensePoliciesPage } from './LicensePoliciesPage';
 export { LifecyclePage } from './LifecyclePage';

@@ -18,18 +18,29 @@ vi.mock("../fetch", () => ({
 }));
 
 // Mock the SDK imports that repositoriesApi uses for other methods
+const mockListRepositories = vi.fn();
 const mockGetRepository = vi.fn();
 const mockCreateRepository = vi.fn();
+const mockUpdateRepository = vi.fn();
+const mockDeleteRepository = vi.fn();
+const mockListVirtualMembers = vi.fn();
+const mockAddVirtualMember = vi.fn();
+const mockRemoveVirtualMember = vi.fn();
+const mockUpdateVirtualMembers = vi.fn();
+const mockGetCacheTtl = vi.fn();
+const mockSetCacheTtl = vi.fn();
 vi.mock("@artifact-keeper/sdk", () => ({
-  listRepositories: vi.fn(),
+  listRepositories: (...args: unknown[]) => mockListRepositories(...args),
   getRepository: (...args: unknown[]) => mockGetRepository(...args),
   createRepository: (...args: unknown[]) => mockCreateRepository(...args),
-  updateRepository: vi.fn(),
-  deleteRepository: vi.fn(),
-  listVirtualMembers: vi.fn(),
-  addVirtualMember: vi.fn(),
-  removeVirtualMember: vi.fn(),
-  updateVirtualMembers: vi.fn(),
+  updateRepository: (...args: unknown[]) => mockUpdateRepository(...args),
+  deleteRepository: (...args: unknown[]) => mockDeleteRepository(...args),
+  listVirtualMembers: (...args: unknown[]) => mockListVirtualMembers(...args),
+  addVirtualMember: (...args: unknown[]) => mockAddVirtualMember(...args),
+  removeVirtualMember: (...args: unknown[]) => mockRemoveVirtualMember(...args),
+  updateVirtualMembers: (...args: unknown[]) => mockUpdateVirtualMembers(...args),
+  getCacheTtl: (...args: unknown[]) => mockGetCacheTtl(...args),
+  setCacheTtl: (...args: unknown[]) => mockSetCacheTtl(...args),
 }));
 
 vi.mock("@/lib/sdk-client", () => ({
@@ -305,5 +316,611 @@ describe("repositoriesApi.narrowFormat (via get)", () => {
       expect.stringMatching(/unknown repository format "shiny-new-format"/)
     );
     warn.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cache TTL methods (#448) — getCacheTtl / setCacheTtl
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi.getCacheTtl", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns the SDK response on success", async () => {
+    mockGetCacheTtl.mockResolvedValue({
+      data: { repository_key: "pypi-remote", cache_ttl_seconds: 3600 },
+      error: undefined,
+    });
+    const result = await repositoriesApi.getCacheTtl("pypi-remote");
+    expect(result).toEqual({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 3600,
+    });
+    expect(mockGetCacheTtl).toHaveBeenCalledWith({
+      path: { key: "pypi-remote" },
+    });
+  });
+
+  it("throws on SDK error", async () => {
+    mockGetCacheTtl.mockResolvedValue({ data: undefined, error: "boom" });
+    await expect(repositoriesApi.getCacheTtl("pypi-remote")).rejects.toBe("boom");
+  });
+});
+
+describe("repositoriesApi.setCacheTtl", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("PUTs the new TTL via the SDK with the correct body shape", async () => {
+    mockSetCacheTtl.mockResolvedValue({
+      data: { repository_key: "pypi-remote", cache_ttl_seconds: 7200 },
+      error: undefined,
+    });
+    const result = await repositoriesApi.setCacheTtl("pypi-remote", 7200);
+    expect(result).toEqual({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 7200,
+    });
+    expect(mockSetCacheTtl).toHaveBeenCalledWith({
+      path: { key: "pypi-remote" },
+      // Body field name must match SetCacheTtlRequest (`cache_ttl_seconds`),
+      // not e.g. the legacy `value` form that the docs PR #71 corrected.
+      body: { cache_ttl_seconds: 7200 },
+    });
+  });
+
+  it("throws on SDK error (e.g. 400 for non-Remote repo)", async () => {
+    mockSetCacheTtl.mockResolvedValue({
+      data: undefined,
+      error: {
+        message:
+          "cache_ttl is only configurable on remote (proxy) repositories",
+      },
+    });
+    await expect(
+      repositoriesApi.setCacheTtl("local-repo", 3600)
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/remote \(proxy\) repositories/),
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Repository CRUD: list / update / delete
+// ---------------------------------------------------------------------------
+
+const sdkRepo = (overrides: Record<string, unknown> = {}) => ({
+  id: "r1",
+  key: "maven-local",
+  name: "Maven Local",
+  description: "desc",
+  format: "maven",
+  repo_type: "local",
+  is_public: true,
+  storage_used_bytes: 100,
+  quota_bytes: 1000,
+  upstream_url: null,
+  upstream_auth_type: null,
+  upstream_auth_configured: false,
+  created_at: "2025-01-01",
+  updated_at: "2025-01-02",
+  ...overrides,
+});
+
+describe("repositoriesApi.list", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("adapts the list and forwards query params", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: {
+        items: [sdkRepo(), sdkRepo({ id: "r2", key: "pypi-remote", format: "pypi", repo_type: "remote" })],
+        pagination: { page: 1, per_page: 20, total: 2, total_pages: 1 },
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.list({ page: 1, per_page: 20, format: "maven" });
+
+    expect(mockListRepositories).toHaveBeenCalledWith({
+      query: { page: 1, per_page: 20, format: "maven" },
+    });
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].key).toBe("maven-local");
+    expect(result.items[1].repo_type).toBe("remote");
+    expect(result.pagination.total).toBe(2);
+  });
+
+  it("defaults params to an empty object", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: { items: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 } },
+      error: undefined,
+    });
+    await repositoriesApi.list();
+    expect(mockListRepositories).toHaveBeenCalledWith({ query: {} });
+  });
+
+  it("coerces null optional fields to undefined during adaptation", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: {
+        items: [sdkRepo({ description: null, quota_bytes: null, upstream_url: null })],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const result = await repositoriesApi.list();
+    expect(result.items[0].description).toBeUndefined();
+    expect(result.items[0].quota_bytes).toBeUndefined();
+    expect(result.items[0].upstream_url).toBeUndefined();
+  });
+
+  it("throws on SDK error", async () => {
+    mockListRepositories.mockResolvedValue({ data: undefined, error: new Error("list failed") });
+    await expect(repositoriesApi.list()).rejects.toThrow("list failed");
+  });
+});
+
+describe("repositoriesApi.update", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sends only the updatable fields and adapts the response", async () => {
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo({ name: "Renamed" }), error: undefined });
+
+    const result = await repositoriesApi.update("maven-local", {
+      name: "Renamed",
+      description: "new desc",
+      is_public: false,
+      quota_bytes: 5000,
+      key: "maven-local",
+    });
+
+    expect(mockUpdateRepository).toHaveBeenCalledWith({
+      path: { key: "maven-local" },
+      body: {
+        name: "Renamed",
+        description: "new desc",
+        is_public: false,
+        quota_bytes: 5000,
+        key: "maven-local",
+      },
+    });
+    expect(result.name).toBe("Renamed");
+  });
+
+  it("throws on SDK error", async () => {
+    mockUpdateRepository.mockResolvedValue({ data: undefined, error: new Error("update failed") });
+    await expect(repositoriesApi.update("maven-local", { name: "x" })).rejects.toThrow("update failed");
+  });
+
+  it("forwards versioning_enabled to the update body (#571)", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "generic", versioning_enabled: true }),
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.update("configs", {
+      versioning_enabled: true,
+    });
+
+    expect(mockUpdateRepository).toHaveBeenCalledWith({
+      path: { key: "configs" },
+      body: expect.objectContaining({ versioning_enabled: true }),
+    });
+    expect(result.versioning_enabled).toBe(true);
+  });
+
+  it("omits versioning_enabled from the body when not provided so the flag is left unchanged", async () => {
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+
+    await repositoriesApi.update("maven-local", { name: "Renamed" });
+
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.versioning_enabled).toBeUndefined();
+  });
+});
+
+describe("repositoriesApi adaptation of versioning_enabled (#571)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("exposes versioning_enabled from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ format: "generic", versioning_enabled: true }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("configs");
+    expect(repo.versioning_enabled).toBe(true);
+  });
+
+  it("defaults versioning_enabled to false when the backend omits it", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.versioning_enabled).toBe(false);
+  });
+});
+
+describe("repositoriesApi.delete", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("calls deleteRepository with the key path", async () => {
+    mockDeleteRepository.mockResolvedValue({ error: undefined });
+    await repositoriesApi.delete("maven-local");
+    expect(mockDeleteRepository).toHaveBeenCalledWith({ path: { key: "maven-local" } });
+  });
+
+  it("throws on SDK error", async () => {
+    mockDeleteRepository.mockResolvedValue({ error: new Error("delete failed") });
+    await expect(repositoriesApi.delete("maven-local")).rejects.toThrow("delete failed");
+  });
+});
+
+describe("repositoriesApi.create error path", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("throws on SDK error", async () => {
+    mockCreateRepository.mockResolvedValue({ data: undefined, error: new Error("create failed") });
+    await expect(
+      repositoriesApi.create({ key: "k", name: "n", format: "maven", repo_type: "local" })
+    ).rejects.toThrow("create failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Virtual member management
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi virtual members", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const sdkMember = (overrides: Record<string, unknown> = {}) => ({
+    id: "m1",
+    member_repo_id: "rid1",
+    member_repo_key: "maven-local",
+    priority: 1,
+    created_at: "2025-01-01",
+    ...overrides,
+  });
+
+  it("listMembers adapts the members list", async () => {
+    mockListVirtualMembers.mockResolvedValue({
+      data: { members: [sdkMember(), sdkMember({ id: "m2", member_repo_key: "pypi-local", priority: 2 })] },
+      error: undefined,
+    });
+    const result = await repositoriesApi.listMembers("virt-1");
+    expect(mockListVirtualMembers).toHaveBeenCalledWith({ path: { key: "virt-1" } });
+    expect(result.members).toHaveLength(2);
+    expect(result.members[0].member_repo_key).toBe("maven-local");
+    expect(result.members[0].virtual_repo_id).toBe("");
+  });
+
+  it("listMembers throws on SDK error", async () => {
+    mockListVirtualMembers.mockResolvedValue({ data: undefined, error: new Error("nope") });
+    await expect(repositoriesApi.listMembers("virt-1")).rejects.toThrow("nope");
+  });
+
+  it("addMember sends key, member_key and priority and adapts the result", async () => {
+    mockAddVirtualMember.mockResolvedValue({ data: sdkMember({ priority: 5 }), error: undefined });
+    const result = await repositoriesApi.addMember("virt-1", "maven-local", 5);
+    expect(mockAddVirtualMember).toHaveBeenCalledWith({
+      path: { key: "virt-1" },
+      body: { member_key: "maven-local", priority: 5 },
+    });
+    expect(result.priority).toBe(5);
+  });
+
+  it("addMember works without an explicit priority", async () => {
+    mockAddVirtualMember.mockResolvedValue({ data: sdkMember(), error: undefined });
+    await repositoriesApi.addMember("virt-1", "maven-local");
+    expect(mockAddVirtualMember).toHaveBeenCalledWith({
+      path: { key: "virt-1" },
+      body: { member_key: "maven-local", priority: undefined },
+    });
+  });
+
+  it("addMember throws on SDK error", async () => {
+    mockAddVirtualMember.mockResolvedValue({ data: undefined, error: new Error("add failed") });
+    await expect(repositoriesApi.addMember("virt-1", "maven-local")).rejects.toThrow("add failed");
+  });
+
+  it("removeMember calls the SDK with both keys", async () => {
+    mockRemoveVirtualMember.mockResolvedValue({ error: undefined });
+    await repositoriesApi.removeMember("virt-1", "maven-local");
+    expect(mockRemoveVirtualMember).toHaveBeenCalledWith({
+      path: { key: "virt-1", member_key: "maven-local" },
+    });
+  });
+
+  it("removeMember throws on SDK error", async () => {
+    mockRemoveVirtualMember.mockResolvedValue({ error: new Error("remove failed") });
+    await expect(repositoriesApi.removeMember("virt-1", "maven-local")).rejects.toThrow("remove failed");
+  });
+
+  it("reorderMembers sends the new priorities and adapts the result", async () => {
+    mockUpdateVirtualMembers.mockResolvedValue({
+      data: { members: [sdkMember({ priority: 1 }), sdkMember({ id: "m2", priority: 2 })] },
+      error: undefined,
+    });
+    const result = await repositoriesApi.reorderMembers("virt-1", [
+      { member_key: "maven-local", priority: 1 },
+      { member_key: "pypi-local", priority: 2 },
+    ]);
+    expect(mockUpdateVirtualMembers).toHaveBeenCalledWith({
+      path: { key: "virt-1" },
+      body: { members: [
+        { member_key: "maven-local", priority: 1 },
+        { member_key: "pypi-local", priority: 2 },
+      ] },
+    });
+    expect(result.members).toHaveLength(2);
+  });
+
+  it("reorderMembers throws on SDK error", async () => {
+    mockUpdateVirtualMembers.mockResolvedValue({ data: undefined, error: new Error("reorder failed") });
+    await expect(
+      repositoriesApi.reorderMembers("virt-1", [{ member_key: "x", priority: 1 }])
+    ).rejects.toThrow("reorder failed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Routing rules (#263)
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi routing rules", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("getRoutingRules issues a GET to the routing-rules endpoint", async () => {
+    mockApiFetch.mockResolvedValue({ repository_key: "npm-proxy", rules: [] });
+    const result = await repositoriesApi.getRoutingRules("npm-proxy");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repositories/npm-proxy/routing-rules");
+    expect(result.repository_key).toBe("npm-proxy");
+  });
+
+  it("getRoutingRules encodes the repo key", async () => {
+    mockApiFetch.mockResolvedValue({ repository_key: "a/b", rules: [] });
+    await repositoriesApi.getRoutingRules("a/b");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repositories/a%2Fb/routing-rules");
+  });
+
+  it("setRoutingRules POSTs the rules array", async () => {
+    const rules = [{ path_pattern: "^/a/(.*)$", rewrite_to: "/b/$1" }];
+    mockApiFetch.mockResolvedValue({ repository_key: "npm-proxy", rules });
+    const result = await repositoriesApi.setRoutingRules("npm-proxy", rules);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/npm-proxy/routing-rules",
+      { method: "POST", body: JSON.stringify({ rules }) }
+    );
+    expect(result.rules).toEqual(rules);
+  });
+
+  it("deleteRoutingRules issues a DELETE", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    await repositoriesApi.deleteRoutingRules("npm-proxy");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/npm-proxy/routing-rules",
+      { method: "DELETE" }
+    );
+  });
+
+  it("propagates errors from apiFetch", async () => {
+    mockApiFetch.mockRejectedValue(new Error("routing boom"));
+    await expect(repositoriesApi.getRoutingRules("npm-proxy")).rejects.toThrow("routing boom");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Release target (#260) + age policy (#265)
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi.setReleaseTarget", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("PATCHes the release_repository_key and adapts the returned repo", async () => {
+    mockApiFetch.mockResolvedValue(sdkRepo({ key: "staging-repo" }));
+    const result = await repositoriesApi.setReleaseTarget("staging-repo", "maven-release");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/staging-repo",
+      { method: "PATCH", body: JSON.stringify({ release_repository_key: "maven-release" }) }
+    );
+    expect(result.key).toBe("staging-repo");
+  });
+
+  it("sends an empty string to unlink the release target", async () => {
+    mockApiFetch.mockResolvedValue(sdkRepo({ key: "staging-repo" }));
+    await repositoriesApi.setReleaseTarget("staging-repo", "");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/staging-repo",
+      { method: "PATCH", body: JSON.stringify({ release_repository_key: "" }) }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1.6.0 format-specific config (#602): RPM GPG (#2568), Debian (#2407…),
+// npm scope policy (#2424)
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi.create — 1.6.0 format config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forwards the RPM trusted_gpg_key to the SDK create body", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: true }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "rpm-proxy",
+      name: "RPM Proxy",
+      format: "rpm",
+      repo_type: "remote",
+      trusted_gpg_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----",
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBe(
+      "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+    );
+  });
+
+  it("forwards Debian apt_* + debian filter config", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "debian" }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "deb-proxy",
+      name: "Deb Proxy",
+      format: "debian",
+      repo_type: "remote",
+      apt_origin: "acme",
+      apt_label: "Acme",
+      debian: { distribution_paths: ["bookworm"], components: ["main"], architectures: ["amd64"] },
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.apt_origin).toBe("acme");
+    expect(body.apt_label).toBe("Acme");
+    expect(body.debian).toEqual({
+      distribution_paths: ["bookworm"],
+      components: ["main"],
+      architectures: ["amd64"],
+    });
+  });
+
+  it("forwards npm scope policy fields", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "npm", repo_type: "virtual" }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "npm-virt",
+      name: "NPM Virtual",
+      format: "npm",
+      repo_type: "virtual",
+      npm_allowed_scopes: ["@acme"],
+      npm_allowed_name_patterns: ["internal-*"],
+      npm_allow_unscoped: false,
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(body.npm_allowed_name_patterns).toEqual(["internal-*"]);
+    expect(body.npm_allow_unscoped).toBe(false);
+  });
+});
+
+describe("repositoriesApi.update — 1.6.0 format config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forwards a trusted_gpg_key string to set it", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: true }),
+      error: undefined,
+    });
+    await repositoriesApi.update("rpm-proxy", { trusted_gpg_key: "KEY" });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBe("KEY");
+  });
+
+  it("preserves an explicit null trusted_gpg_key (three-way clear)", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: false }),
+      error: undefined,
+    });
+    await repositoriesApi.update("rpm-proxy", { trusted_gpg_key: null });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBeNull();
+  });
+
+  it("forwards debian + npm config on update", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "npm", repo_type: "remote" }),
+      error: undefined,
+    });
+    await repositoriesApi.update("npm-remote", {
+      npm_allowed_scopes: ["@acme"],
+      npm_allow_unscoped: true,
+      debian: { components: ["main"] },
+    });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(body.npm_allow_unscoped).toBe(true);
+    expect(body.debian).toEqual({ components: ["main"] });
+  });
+});
+
+describe("repositoriesApi adaptation of 1.6.0 config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("exposes has_trusted_gpg_key, apt_*, debian and npm fields from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({
+        format: "debian",
+        has_trusted_gpg_key: true,
+        apt_origin: "acme",
+        apt_label: "Acme",
+        apt_release_version: "12",
+        apt_description: "internal",
+        debian: {
+          distribution_paths: ["bookworm"],
+          components: ["main"],
+          architectures: ["amd64"],
+        },
+        npm_allowed_scopes: ["@acme"],
+        npm_allowed_name_patterns: ["internal-*"],
+        npm_allow_unscoped: false,
+      }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("deb-proxy");
+    expect(repo.has_trusted_gpg_key).toBe(true);
+    expect(repo.apt_origin).toBe("acme");
+    expect(repo.apt_label).toBe("Acme");
+    expect(repo.apt_release_version).toBe("12");
+    expect(repo.apt_description).toBe("internal");
+    expect(repo.debian).toEqual({
+      distribution_paths: ["bookworm"],
+      components: ["main"],
+      architectures: ["amd64"],
+    });
+    expect(repo.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(repo.npm_allowed_name_patterns).toEqual(["internal-*"]);
+    expect(repo.npm_allow_unscoped).toBe(false);
+  });
+
+  it("defaults has_trusted_gpg_key to false and leaves optional config undefined when omitted", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.has_trusted_gpg_key).toBe(false);
+    expect(repo.apt_origin).toBeUndefined();
+    expect(repo.debian).toBeUndefined();
+    expect(repo.npm_allowed_scopes).toBeUndefined();
+  });
+});
+
+describe("repositoriesApi.updateAgePolicy", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("sends quarantine_enabled and duration when enabled", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    await repositoriesApi.updateAgePolicy("npm-proxy", { enabled: true, duration_minutes: 120 });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/npm-proxy",
+      { method: "PATCH", body: JSON.stringify({ quarantine_enabled: true, quarantine_duration_minutes: 120 }) }
+    );
+  });
+
+  it("still sends the duration when disabled so it is preserved", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    await repositoriesApi.updateAgePolicy("npm-proxy", { enabled: false, duration_minutes: 60 });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/npm-proxy",
+      { method: "PATCH", body: JSON.stringify({ quarantine_enabled: false, quarantine_duration_minutes: 60 }) }
+    );
+  });
+
+  it("propagates errors from apiFetch", async () => {
+    mockApiFetch.mockRejectedValue(new Error("age policy boom"));
+    await expect(
+      repositoriesApi.updateAgePolicy("npm-proxy", { enabled: true, duration_minutes: 10 })
+    ).rejects.toThrow("age policy boom");
   });
 });
