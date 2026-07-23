@@ -546,6 +546,17 @@ export default function SettingsPage() {
     return formatPasswordPolicy(passwordPolicy);
   }
 
+  // Deployment environment label, rendered as a badge in the General tab.
+  // The backend sources this from its ENVIRONMENT config; older servers omit
+  // it, so parseEnvironment yields "" and we fall back to "Unknown" (rather
+  // than the previous hardcoded "Production", which was wrong everywhere but
+  // prod). Same loading/error gating as the sibling rows.
+  const environmentLabel = settingsLoading
+    ? "Loading..."
+    : settingsError || !adminSettings?.environment
+      ? "Unknown"
+      : adminSettings.environment;
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -642,7 +653,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label className="text-sm">Environment</Label>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Production</Badge>
+                  <Badge variant="secondary">{environmentLabel}</Badge>
                 </div>
               </div>
             </CardContent>
