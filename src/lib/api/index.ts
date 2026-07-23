@@ -19,11 +19,27 @@ export { default as lifecycleApi } from './lifecycle';
 export { default as telemetryApi } from './telemetry';
 export { default as monitoringApi } from './monitoring';
 export { default as qualityGatesApi } from './quality-gates';
+export { default as pypiTracksApi } from './pypi-tracks';
+export type { PypiTrack } from './pypi-tracks';
+export { default as curationApi } from './curation';
+export type { CurationPackage, ListCurationParams } from './curation';
+export { default as signingApi } from './signing';
+export type { SigningKey, SigningConfig, CreateSigningKeyRequest } from './signing';
+export { default as syncPoliciesApi } from './sync-policies';
+export type { SyncPolicy, CreateSyncPolicyRequest } from './sync-policies';
+export { default as promotionRulesApi } from './promotion-rules';
+export type { PromotionRule, CreatePromotionRuleRequest } from './promotion-rules';
+export { default as formatHandlersApi } from './format-handlers';
+export type { FormatHandler } from './format-handlers';
+export { default as qualityChecksApi } from './quality-checks';
+export type { QualityCheck, QualityIssue } from './quality-checks';
+export { default as repoLabelsApi } from './repo-labels';
+export type { RepoLabel } from './repo-labels';
 
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
 export type { ListArtifactsParams } from './artifacts';
-export type { Group, CreateGroupRequest, GroupMember, ListGroupsParams } from './groups';
+export type { Group, GroupDetail, CreateGroupRequest, GroupMember, ListGroupsParams } from './groups';
 export type {
   Permission,
   CreatePermissionRequest,

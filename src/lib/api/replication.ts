@@ -165,6 +165,9 @@ function adaptAssignRequest(req: AssignRepoRequest): SdkAssignRepoRequest {
     sync_enabled: req.sync_enabled,
     replication_mode: req.replication_mode,
     replication_schedule: req.replication_schedule,
+    // 1.2.1 made replication_filter required; an empty filter means
+    // "replicate everything" (the web doesn't expose per-artifact filters yet).
+    replication_filter: {},
   };
 }
 

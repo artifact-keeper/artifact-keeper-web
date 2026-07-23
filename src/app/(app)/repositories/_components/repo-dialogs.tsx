@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
-import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
+import {
+  FORMAT_OPTIONS,
+  TYPE_OPTIONS,
+  hasRpmTrustedKeyConfig,
+  hasDebianConfig,
+  hasNpmScopePolicy,
+} from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
 
 // Alphabetised copy of FORMAT_OPTIONS for the create dialog's flat dropdown.
@@ -34,6 +40,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import {
+  RpmTrustedKeyField,
+  DebianConfigFields,
+  NpmScopePolicyFields,
+  buildRpmConfigFields,
+  buildDebianConfigFields,
+  buildNpmScopePolicyFields,
+  EMPTY_RPM_CONFIG,
+  EMPTY_DEBIAN_CONFIG,
+  EMPTY_NPM_SCOPE_POLICY,
+  type RpmConfigValue,
+  type DebianConfigValue,
+  type NpmScopePolicyValue,
+} from "./format-config-fields";
 
 type QuotaUnit = "MB" | "GB";
 
@@ -68,6 +88,14 @@ interface RepoDialogsProps {
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
   upstreamAuthPending?: boolean;
+  /**
+   * Result of the most recent upstream-auth save, surfaced to a live region
+   * inside the edit dialog so screen readers hear the outcome (#410). The
+   * save itself resolves via a parent mutation whose only feedback was a
+   * visual toast, which assistive tech outside the dialog does not reliably
+   * announce.
+   */
+  upstreamAuthStatus?: { state: "idle" | "success" | "error"; message?: string };
   deleteOpen: boolean;
   onDeleteOpenChange: (open: boolean) => void;
   deleteRepo: Repository | null;
@@ -89,6 +117,7 @@ export function RepoDialogs({
   editPending,
   onUpstreamAuthUpdate,
   upstreamAuthPending = false,
+  upstreamAuthStatus = { state: "idle" },
   deleteOpen,
   onDeleteOpenChange,
   deleteRepo,
@@ -120,6 +149,14 @@ export function RepoDialogs({
   const [upstreamUsername, setUpstreamUsername] = useState("");
   const [upstreamPassword, setUpstreamPassword] = useState("");
 
+  // 1.6.0 format-specific config state for the create dialog (#602).
+  const [rpmConfig, setRpmConfig] = useState<RpmConfigValue>(EMPTY_RPM_CONFIG);
+  const [debianConfig, setDebianConfig] =
+    useState<DebianConfigValue>(EMPTY_DEBIAN_CONFIG);
+  const [npmScopePolicy, setNpmScopePolicy] = useState<NpmScopePolicyValue>(
+    EMPTY_NPM_SCOPE_POLICY,
+  );
+
   /**
    * Suggest a default upstream URL when the repo type is "remote".
    * Only auto-fills if the current URL is empty or matches a known default
@@ -143,6 +180,33 @@ export function RepoDialogs({
   const [editAuthUsername, setEditAuthUsername] = useState("");
   const [editAuthPassword, setEditAuthPassword] = useState("");
   const [removeAuthConfirm, setRemoveAuthConfirm] = useState(false);
+
+  // Focus management for the upstream-auth view <-> edit toggle (#412).
+  // When the user switches modes the previously focused control unmounts, so
+  // focus would otherwise fall back to <body> and screen-reader / keyboard
+  // users lose their place. We move focus to the first control of whichever
+  // view just became visible. We target elements by id (rather than a ref)
+  // because the underlying shadcn SelectTrigger does not forward a ref.
+  // Skip the very first render (dialog open) so we don't steal focus from the
+  // dialog's own initial focus target; only react to genuine toggles.
+  const editAuthModeInitialized = useRef(false);
+  useEffect(() => {
+    if (!editOpen) {
+      editAuthModeInitialized.current = false;
+      return;
+    }
+    if (!editAuthModeInitialized.current) {
+      editAuthModeInitialized.current = true;
+      return;
+    }
+    const targetId =
+      editAuthMode === "edit" ? "edit-upstream-auth-type" : "edit-upstream-auth-toggle";
+    // Defer to the next frame so the newly-rendered control exists in the DOM.
+    const id = requestAnimationFrame(() => {
+      document.getElementById(targetId)?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [editAuthMode, editOpen]);
 
   // Quota state for edit dialog — initialized from editRepo
   const editQuotaDefaults = useMemo(() => bytesToQuota(editRepo?.quota_bytes), [editRepo]);
@@ -201,6 +265,9 @@ export function RepoDialogs({
     setUpstreamAuthType("none");
     setUpstreamUsername("");
     setUpstreamPassword("");
+    setRpmConfig(EMPTY_RPM_CONFIG);
+    setDebianConfig(EMPTY_DEBIAN_CONFIG);
+    setNpmScopePolicy(EMPTY_NPM_SCOPE_POLICY);
   };
 
   // Reset the create form whenever the dialog opens. The parent flips
@@ -259,6 +326,20 @@ export function RepoDialogs({
                 }
                 submitData.upstream_password = upstreamPassword;
               }
+              // 1.6.0 format-specific config (#602): attach only the group that
+              // matches the selected format so other formats send nothing.
+              if (hasRpmTrustedKeyConfig(createForm.format)) {
+                Object.assign(submitData, buildRpmConfigFields(rpmConfig));
+              } else if (hasDebianConfig(createForm.format)) {
+                Object.assign(submitData, buildDebianConfigFields(debianConfig));
+              } else if (
+                hasNpmScopePolicy(createForm.format, createForm.repo_type)
+              ) {
+                Object.assign(
+                  submitData,
+                  buildNpmScopePolicyFields(npmScopePolicy),
+                );
+              }
               onCreateSubmit(submitData);
             }}
           >
@@ -272,10 +353,13 @@ export function RepoDialogs({
                   setCreateForm((f) => ({ ...f, key: e.target.value }))
                 }
                 required
+                aria-required="true"
+                aria-invalid={keyTaken}
+                aria-describedby={keyTaken ? "create-key-error" : undefined}
                 className={keyTaken ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
               {keyTaken && (
-                <p className="text-sm text-red-500">
+                <p id="create-key-error" role="alert" className="text-sm text-red-500">
                   Repository key &quot;{createForm.key}&quot; is already taken. Please choose a different key.
                 </p>
               )}
@@ -290,6 +374,7 @@ export function RepoDialogs({
                   setCreateForm((f) => ({ ...f, name: e.target.value }))
                 }
                 required
+                aria-required="true"
               />
             </div>
             <div className="space-y-2">
@@ -483,6 +568,41 @@ export function RepoDialogs({
               </div>
             )}
 
+            {/* RPM curation trusted GPG key (#2568) */}
+            {hasRpmTrustedKeyConfig(createForm.format) && (
+              <div className="space-y-3 border-t pt-4">
+                <RpmTrustedKeyField
+                  idPrefix="create"
+                  value={rpmConfig}
+                  onChange={setRpmConfig}
+                />
+              </div>
+            )}
+
+            {/* Advanced Debian/APT config (#2407/#2460/#2489/#2459) */}
+            {hasDebianConfig(createForm.format) && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>Debian / APT Configuration</Label>
+                <DebianConfigFields
+                  idPrefix="create"
+                  value={debianConfig}
+                  onChange={setDebianConfig}
+                />
+              </div>
+            )}
+
+            {/* npm scope policy (#2424) */}
+            {hasNpmScopePolicy(createForm.format, createForm.repo_type) && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>npm Scope Policy</Label>
+                <NpmScopePolicyFields
+                  idPrefix="create"
+                  value={npmScopePolicy}
+                  onChange={setNpmScopePolicy}
+                />
+              </div>
+            )}
+
             <div className="flex items-center gap-3">
               <Switch
                 id="create-public"
@@ -582,9 +702,15 @@ export function RepoDialogs({
                   setEditFormOverrides((f) => ({ ...f, key: e.target.value.toLowerCase() }))
                 }
                 required
+                aria-required="true"
+                aria-describedby={editKeyChanged ? "edit-key-warning" : undefined}
               />
               {editKeyChanged && (
-                <p className="text-sm text-yellow-600 dark:text-yellow-500">
+                <p
+                  id="edit-key-warning"
+                  role="status"
+                  className="text-sm text-yellow-600 dark:text-yellow-500"
+                >
                   Changing the key will update all URLs for this repository.
                 </p>
               )}
@@ -598,6 +724,7 @@ export function RepoDialogs({
                   setEditFormOverrides((f) => ({ ...f, name: e.target.value }))
                 }
                 required
+                aria-required="true"
               />
             </div>
             <div className="space-y-2">
@@ -660,6 +787,29 @@ export function RepoDialogs({
                   Credentials are stored encrypted and saved separately from other repository settings.
                 </p>
 
+                {/*
+                  #410: Announce the outcome of the upstream-auth save to
+                  assistive technology. The save resolves via a parent mutation
+                  whose only feedback was a visual toast; this polite live
+                  region (role="status") gives screen-reader users the result
+                  inside the dialog where their focus already is. The error
+                  case uses role="alert" semantics via aria-live="assertive".
+                */}
+                <div
+                  data-testid="upstream-auth-status"
+                  role={upstreamAuthStatus.state === "error" ? "alert" : "status"}
+                  aria-live={upstreamAuthStatus.state === "error" ? "assertive" : "polite"}
+                  className={
+                    upstreamAuthStatus.state === "error"
+                      ? "text-sm text-destructive"
+                      : "text-sm text-emerald-600 dark:text-emerald-500"
+                  }
+                >
+                  {upstreamAuthStatus.state !== "idle" && upstreamAuthStatus.message
+                    ? upstreamAuthStatus.message
+                    : ""}
+                </div>
+
                 {editAuthMode === "view" ? (
                   <div className="space-y-2">
                     {editRepo.upstream_auth_configured ? (
@@ -669,6 +819,7 @@ export function RepoDialogs({
                         </p>
                         <div className="flex gap-2">
                           <Button
+                            id="edit-upstream-auth-toggle"
                             type="button"
                             variant="outline"
                             size="sm"
@@ -696,6 +847,7 @@ export function RepoDialogs({
                           No authentication configured
                         </p>
                         <Button
+                          id="edit-upstream-auth-toggle"
                           type="button"
                           variant="outline"
                           size="sm"
@@ -737,8 +889,12 @@ export function RepoDialogs({
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    <Label htmlFor="edit-upstream-auth-type">Authentication type</Label>
                     <Select value={editAuthType} onValueChange={setEditAuthType}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger
+                        className="w-full"
+                        id="edit-upstream-auth-type"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

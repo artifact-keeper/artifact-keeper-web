@@ -84,6 +84,11 @@ export interface MigrationConfig {
   conflict_resolution?: ConflictResolution;
   concurrent_transfers?: number;
   throttle_delay_ms?: number;
+  // Whether to verify that locally computed checksums match the digests
+  // advertised by the source registry. Backend `MigrationConfig.verify_checksums`
+  // (defaults true; issue artifact-keeper#856). Set false only when the source
+  // registry is known to return inaccurate digests.
+  verify_checksums?: boolean;
   date_from?: string;
   date_to?: string;
 }
@@ -137,13 +142,19 @@ export interface ItemSummary {
   skipped: number;
 }
 
+// The backend materializes `summary` dynamically: it only emits a per-category
+// key (repositories/artifacts/users/groups/permissions) when the job has at
+// least one migration item of that type (migration_service.rs `generate_report`
+// GROUP BYs item_type). Assessment jobs and full jobs that migrated no items of
+// a given category therefore omit that key entirely, so every category summary
+// is optional and consumers must guard for its absence (artifact-keeper#2455).
 export interface ReportSummary {
   duration_seconds: number;
-  repositories: ItemSummary;
-  artifacts: ItemSummary;
-  users: ItemSummary;
-  groups: ItemSummary;
-  permissions: ItemSummary;
+  repositories?: ItemSummary;
+  artifacts?: ItemSummary;
+  users?: ItemSummary;
+  groups?: ItemSummary;
+  permissions?: ItemSummary;
   total_bytes_transferred: number;
 }
 

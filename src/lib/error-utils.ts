@@ -161,6 +161,39 @@ export function toUserMessage(error: unknown, fallback: string): string {
 }
 
 /**
+ * Detect whether an error represents an HTTP 403 / authorization denial.
+ *
+ * Used by access-controlled pages to render a clear "not authorized" state
+ * instead of a generic error when the backend rejects a read/write because
+ * the caller lacks the required role (see backend #2512 plugin config and
+ * #2513 signing-key management, both now admin-gated).
+ *
+ * Checks the structured HTTP status first (most reliable), then an error/code
+ * field, then falls back to message text. Message matching is kept specific to
+ * authorization phrasing to avoid false positives from unrelated errors.
+ */
+export function isForbiddenError(error: unknown): boolean {
+  if (isPlainObject(error)) {
+    if (extractHttpStatus(error) === 403) return true;
+
+    const code = nonEmptyString(error.code);
+    if (code && /forbidden|not[_\s-]?authorized|unauthorized/i.test(code)) {
+      return true;
+    }
+  }
+
+  const msg = toUserMessage(error, '').toLowerCase();
+  return (
+    msg.includes('forbidden') ||
+    msg.includes('not authorized') ||
+    msg.includes('permission denied') ||
+    msg.includes('requires admin') ||
+    msg.includes('admin access') ||
+    /\bhttp 403\b/.test(msg)
+  );
+}
+
+/**
  * Patterns the backend uses when rejecting a password that was recently used.
  * Kept as a single source of truth so both the change-password page and
  * the profile security tab can detect this specific error.

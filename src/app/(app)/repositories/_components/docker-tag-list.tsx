@@ -14,6 +14,10 @@ import {
 import { CopyButton } from "@/components/common/copy-button";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { isActivelyQuarantined } from "@/lib/quarantine";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import { formatBytes } from "@/lib/utils";
 import type { Artifact } from "@/types";
 
@@ -225,22 +229,31 @@ export function DockerTagList({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center justify-end gap-1">
-                    {onScan && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => onScan(group.manifest)}
-                            disabled={scanPending}
-                            aria-label={`Scan ${group.image}:${group.tag}`}
-                          >
-                            <Shield className="size-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Scan</TooltipContent>
-                      </Tooltip>
-                    )}
+                    {onScan &&
+                      (() => {
+                        // Proxy-cached remote manifests can't be scanned
+                        // (artifact-keeper#2292) — keep the affordance visible
+                        // but disabled with an explanatory tooltip.
+                        const analyzable = isArtifactAnalyzable(group.manifest);
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => onScan(group.manifest)}
+                                disabled={scanPending || !analyzable}
+                                aria-label={`Scan ${group.image}:${group.tag}`}
+                              >
+                                <Shield className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {analyzable ? "Scan" : ANALYZABLE_DISABLED_REASON}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })()}
                   </div>
                 </td>
               </tr>

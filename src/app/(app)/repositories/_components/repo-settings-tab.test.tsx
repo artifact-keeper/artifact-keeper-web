@@ -37,10 +37,22 @@ vi.mock("sonner", () => ({
 
 // Mock repositories API
 const mockUpdate = vi.fn();
+const mockUpdateAgePolicy = vi.fn();
+const mockGetCacheTtl = vi.fn();
+const mockSetCacheTtl = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
   repositoriesApi: {
     update: (...args: unknown[]) => mockUpdate(...args),
+    updateAgePolicy: (...args: unknown[]) => mockUpdateAgePolicy(...args),
+    getCacheTtl: (...args: unknown[]) => mockGetCacheTtl(...args),
+    setCacheTtl: (...args: unknown[]) => mockSetCacheTtl(...args),
   },
+}));
+
+// Mock the shared admin-settings hook (used for the read-only upload limit, #189)
+const mockUseAdminSettings = vi.fn();
+vi.mock("@/hooks/use-admin-settings", () => ({
+  useAdminSettings: () => mockUseAdminSettings(),
 }));
 
 // Mock lifecycle API
@@ -207,6 +219,19 @@ const baseRepo: Repository = {
   created_at: "2024-01-15T10:00:00Z",
   updated_at: "2024-06-20T14:30:00Z",
 };
+
+// Default admin-settings return: upload limit available. Individual tests can
+// override. clearAllMocks() preserves this implementation (it only clears
+// call history), so it survives the per-describe beforeEach hooks.
+mockUseAdminSettings.mockReturnValue({
+  data: {
+    storageSettings: {
+      storage_backend: "filesystem",
+      storage_path: "/data",
+      max_upload_size_bytes: 1073741824,
+    },
+  },
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -749,5 +774,678 @@ describe("RepoSettingsTab - Quota unit switching", () => {
     // Should now show unsaved changes since unit changed
     // (the actual bytes value differs because 10 GB != 10 MB)
     expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+  });
+});
+
+import { ageToMinutes } from "./repo-settings-tab";
+
+describe("ageToMinutes helper", () => {
+  it("converts days to minutes", () => {
+    expect(ageToMinutes("3", "days")).toBe(4320);
+  });
+
+  it("converts hours to minutes", () => {
+    expect(ageToMinutes("12", "hours")).toBe(720);
+  });
+
+  it("returns 0 for empty, zero, or negative input", () => {
+    expect(ageToMinutes("", "days")).toBe(0);
+    expect(ageToMinutes("0", "hours")).toBe(0);
+    expect(ageToMinutes("-5", "days")).toBe(0);
+  });
+
+  it("rounds fractional values to whole minutes", () => {
+    expect(ageToMinutes("1.5", "hours")).toBe(90);
+  });
+});
+
+describe("RepoSettingsTab - Package Age Policy (#265)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("renders the age policy section with an enable toggle", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("Package Age Policy")).toBeTruthy();
+    expect(screen.getByLabelText("Enable age policy")).toBeTruthy();
+  });
+
+  it("keeps the cooldown input disabled until the policy is enabled", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
+    expect(duration.disabled).toBe(true);
+  });
+
+  it("saves the age policy with the configured duration in minutes", async () => {
+    mockUpdateAgePolicy.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable age policy"));
+
+    const duration = screen.getByLabelText("Cooldown period");
+    await user.clear(duration);
+    await user.type(duration, "7");
+
+    await user.click(screen.getByRole("button", { name: /save age policy/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateAgePolicy).toHaveBeenCalledWith("maven-releases", {
+        enabled: true,
+        duration_minutes: 10080,
+      });
+    });
+  });
+
+  it("disables save and shows an error when the duration is invalid", async () => {
+    const user = userEvent.setup();
+
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable age policy"));
+
+    const duration = screen.getByLabelText("Cooldown period");
+    await user.clear(duration);
+
+    const saveBtn = screen.getByRole("button", { name: /save age policy/i });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(mockUpdateAgePolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe("RepoSettingsTab - Upload size limit display (#189)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockUseAdminSettings.mockReturnValue({
+      data: {
+        storageSettings: {
+          storage_backend: "filesystem",
+          storage_path: "/data",
+          max_upload_size_bytes: 1073741824,
+        },
+      },
+    });
+  });
+
+  it("shows the effective upload size limit read-only", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    const limit = screen.getByLabelText("Upload size limit") as HTMLInputElement;
+    expect(limit.value).toBe("1.0 GB");
+    expect(limit.disabled).toBe(true);
+  });
+
+  it("shows 'No limit' when the configured limit is zero", () => {
+    mockUseAdminSettings.mockReturnValue({
+      data: {
+        storageSettings: {
+          storage_backend: "filesystem",
+          storage_path: "/data",
+          max_upload_size_bytes: 0,
+        },
+      },
+    });
+
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    const limit = screen.getByLabelText("Upload size limit") as HTMLInputElement;
+    expect(limit.value).toBe("No limit");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Proxy Cache section (#448) -- shown only for Remote (proxy) repos. Pin
+// the visibility gate, the editing flow that plugs into the existing
+// hasChanges / Save / Discard workflow, and the inline-validation that
+// mirrors the backend's validate_cache_ttl range (1..=2_592_000).
+// ---------------------------------------------------------------------------
+
+const remoteRepo: Repository = {
+  ...baseRepo,
+  id: "repo-2",
+  key: "pypi-remote",
+  name: "PyPI Remote",
+  repo_type: "remote",
+  upstream_url: "https://pypi.org",
+};
+
+describe("RepoSettingsTab - Proxy Cache section (#448)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    // Default to a stable success response so the Proxy Cache section
+    // can render its initial value -- per-test overrides via
+    // .mockResolvedValueOnce / .mockRejectedValueOnce.
+    mockGetCacheTtl.mockResolvedValue({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 86400,
+    });
+  });
+
+  it("hides the Proxy Cache section for Local repos", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByText("Proxy Cache")).toBeNull();
+    expect(screen.queryByLabelText("Cache TTL (seconds)")).toBeNull();
+    // No GET should be issued for non-Remote repos -- the useQuery is
+    // gated on `enabled: isRemote` to avoid wasted round-trips.
+    expect(mockGetCacheTtl).not.toHaveBeenCalled();
+  });
+
+  it("hides the Proxy Cache section for Virtual / Staging repos", () => {
+    const virtualRepo: Repository = { ...baseRepo, repo_type: "virtual" };
+    render(<RepoSettingsTab repository={virtualRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByText("Proxy Cache")).toBeNull();
+    expect(mockGetCacheTtl).not.toHaveBeenCalled();
+  });
+
+  it("renders the Proxy Cache section with the TTL fetched from the backend on Remote repos", async () => {
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText("Proxy Cache")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+    expect(mockGetCacheTtl).toHaveBeenCalledWith("pypi-remote");
+    // The human-readable hint should display alongside the input -- 86400s
+    // is the backend's default fallback (artifact-keeper#917) and the
+    // helper picks the largest unit that gives an integer magnitude, so
+    // "1 day" rather than "24 hours".
+    expect(screen.getByText(/1 day/)).toBeTruthy();
+  });
+
+  it("triggers the unsaved-changes bar when the TTL is edited", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    await user.type(input, "3600");
+
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+  });
+
+  it("calls setCacheTtl on save and shows a success toast", async () => {
+    mockSetCacheTtl.mockResolvedValue({
+      repository_key: "pypi-remote",
+      cache_ttl_seconds: 3600,
+    });
+    const { toast } = await import("sonner");
+
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    await user.type(input, "3600");
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockSetCacheTtl).toHaveBeenCalledWith("pypi-remote", 3600);
+    });
+    expect(toast.success).toHaveBeenCalledWith("Cache TTL saved");
+    // The general-fields update mutation must NOT fire when only the
+    // TTL changed -- the two endpoints are independent and we don't want
+    // to send an empty PATCH that the audit log would record as a no-op
+    // edit.
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("shows the inline error and disables Save for out-of-range TTL", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    // Above the backend max of 2,592,000 (30 days).
+    await user.type(input, "9999999");
+
+    expect(
+      screen.getByText(
+        /Must be a whole number between 1 and 2,592,000/i
+      )
+    ).toBeTruthy();
+    expect(input).toHaveProperty("ariaInvalid", "true");
+    const save = screen.getByRole("button", { name: /save changes/i });
+    expect(save).toHaveProperty("disabled", true);
+  });
+
+  it("zero is rejected as out-of-range (backend min is 1)", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    await user.type(input, "0");
+
+    expect(
+      screen.getByText(
+        /Must be a whole number between 1 and 2,592,000/i
+      )
+    ).toBeTruthy();
+  });
+
+  it("Discard reverts the TTL override back to the fetched value", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    await user.type(input, "3600");
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /discard/i }));
+
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+    expect(input).toHaveProperty("value", "86400");
+  });
+
+  it("shows an error toast when setCacheTtl fails (e.g. 503 from a misconfigured proxy)", async () => {
+    mockSetCacheTtl.mockRejectedValue(
+      new Error("proxy service not configured")
+    );
+    const { toast } = await import("sonner");
+
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cache TTL (seconds)")).toHaveProperty(
+        "value",
+        "86400"
+      );
+    });
+
+    const input = screen.getByLabelText("Cache TTL (seconds)");
+    await user.clear(input);
+    await user.type(input, "3600");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Failed to save cache TTL");
+    });
+  });
+});
+
+describe("RepoSettingsTab - Artifact Versioning Section (#571)", () => {
+  const genericRepo: Repository = {
+    ...baseRepo,
+    id: "repo-generic",
+    key: "configs",
+    name: "Configs",
+    format: "generic",
+    versioning_enabled: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("renders the section with the switch off for a generic repo without versioning", () => {
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.getByRole("heading", { name: /artifact versioning/i })
+    ).toBeTruthy();
+    const toggle = screen.getByLabelText("Enable versioning");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("seeds the switch from repository.versioning_enabled", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...genericRepo, versioning_enabled: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(
+      screen.getByLabelText("Enable versioning").getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("does not render the section for formats without first-class versioning", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.queryByRole("heading", { name: /artifact versioning/i })
+    ).toBeNull();
+    expect(screen.queryByLabelText("Enable versioning")).toBeNull();
+  });
+
+  it("renders the section for mlmodel repositories", () => {
+    render(
+      <RepoSettingsTab repository={{ ...genericRepo, format: "mlmodel" }} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /artifact versioning/i })
+    ).toBeTruthy();
+  });
+
+  it("saves versioning_enabled through the repository update endpoint", async () => {
+    mockUpdate.mockResolvedValue({ ...genericRepo, versioning_enabled: true });
+
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("configs", {
+        versioning_enabled: true,
+      });
+    });
+  });
+
+  it("can disable versioning on a repo where it is on", async () => {
+    mockUpdate.mockResolvedValue({ ...genericRepo, versioning_enabled: false });
+
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...genericRepo, versioning_enabled: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("configs", {
+        versioning_enabled: false,
+      });
+    });
+  });
+
+  it("discard resets a toggled versioning switch without saving", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={genericRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(screen.getByLabelText("Enable versioning"));
+    expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /discard/i }));
+
+    expect(screen.queryByText(/unsaved changes/i)).toBeNull();
+    expect(
+      screen.getByLabelText("Enable versioning").getAttribute("aria-checked")
+    ).toBe("false");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1.6.0 format-specific config sections (#602)
+// ---------------------------------------------------------------------------
+
+const rpmRepo: Repository = {
+  ...baseRepo,
+  id: "repo-rpm",
+  key: "rpm-proxy",
+  name: "RPM Proxy",
+  format: "rpm",
+  repo_type: "remote",
+  upstream_url: "https://mirror.example.com",
+  has_trusted_gpg_key: false,
+};
+
+const debianRepo: Repository = {
+  ...baseRepo,
+  id: "repo-deb",
+  key: "deb-proxy",
+  name: "Deb Proxy",
+  format: "debian",
+  repo_type: "remote",
+  upstream_url: "https://deb.example.com",
+  apt_origin: "acme",
+  apt_label: "Acme Mirror",
+  debian: {
+    distribution_paths: ["bookworm"],
+    components: ["main"],
+    architectures: ["amd64"],
+  },
+};
+
+const npmVirtualRepo: Repository = {
+  ...baseRepo,
+  id: "repo-npm",
+  key: "npm-virt",
+  name: "NPM Virtual",
+  format: "npm",
+  repo_type: "virtual",
+  npm_allowed_scopes: ["@acme"],
+  npm_allow_unscoped: false,
+};
+
+describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockGetCacheTtl.mockResolvedValue({
+      repository_key: "x",
+      cache_ttl_seconds: 86400,
+    });
+  });
+
+  it("hides all format-specific sections for a plain maven repo", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByText("RPM Curation Trust")).toBeNull();
+    expect(screen.queryByText("Debian / APT Configuration")).toBeNull();
+    expect(screen.queryByText("npm Scope Policy")).toBeNull();
+  });
+
+  it("shows the RPM section and saves a typed trusted key", async () => {
+    mockUpdate.mockResolvedValue({ ...rpmRepo, has_trusted_gpg_key: true });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={rpmRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("RPM Curation Trust")).toBeTruthy();
+    await user.type(
+      screen.getByLabelText(/trusted gpg public key/i),
+      "NEWKEY"
+    );
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "rpm-proxy",
+        expect.objectContaining({ trusted_gpg_key: "NEWKEY" })
+      );
+    });
+  });
+
+  it("clears the trusted key via Remove and saves null", async () => {
+    mockUpdate.mockResolvedValue({ ...rpmRepo, has_trusted_gpg_key: false });
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...rpmRepo, has_trusted_gpg_key: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
+    expect(
+      screen.getByText(/trusted key will be removed when you save/i)
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "rpm-proxy",
+        expect.objectContaining({ trusted_gpg_key: null })
+      );
+    });
+  });
+
+  it("undoes a pending key removal", async () => {
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...rpmRepo, has_trusted_gpg_key: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
+    await user.click(screen.getByRole("button", { name: /^undo$/i }));
+    expect(
+      screen.queryByText(/trusted key will be removed when you save/i)
+    ).toBeNull();
+    // No pending change -> no unsaved-changes bar.
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+  });
+
+  it("prefills and saves Debian config", async () => {
+    mockUpdate.mockResolvedValue(debianRepo);
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={debianRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("Debian / APT Configuration")).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/^origin$/i) as HTMLInputElement).value
+    ).toBe("acme");
+    expect(
+      (screen.getByLabelText(/distributions/i) as HTMLInputElement).value
+    ).toBe("bookworm");
+
+    const compInput = screen.getByLabelText(/^components$/i);
+    await user.clear(compInput);
+    await user.type(compInput, "main, contrib");
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "deb-proxy",
+        expect.objectContaining({
+          apt_origin: "acme",
+          debian: expect.objectContaining({
+            components: ["main", "contrib"],
+            distribution_paths: ["bookworm"],
+          }),
+        })
+      );
+    });
+  });
+
+  it("prefills and saves npm scope policy", async () => {
+    mockUpdate.mockResolvedValue(npmVirtualRepo);
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={npmVirtualRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("npm Scope Policy")).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/allowed scopes/i) as HTMLTextAreaElement).value
+    ).toBe("@acme");
+
+    await user.click(screen.getByLabelText("Allow unscoped names"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "npm-virt",
+        expect.objectContaining({
+          npm_allowed_scopes: ["@acme"],
+          npm_allow_unscoped: true,
+        })
+      );
+    });
+  });
+
+  it("does not show the npm section for an npm local repo", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...npmVirtualRepo, repo_type: "local" }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByText("npm Scope Policy")).toBeNull();
   });
 });

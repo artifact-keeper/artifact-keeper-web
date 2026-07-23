@@ -326,7 +326,9 @@ const sbomApi = {
   // CVE history operations
   getCveHistory: async (artifactId: string): Promise<CveHistoryEntry[]> => {
     const { data, error } = await sdkGetCveHistory({
-      path: { artifact_id: artifactId },
+      // 1.2.1 renamed the path param artifact_id -> id (accepts an artifact
+      // UUID or a CVE id); the route is /api/v1/sbom/cve/history/{id}.
+      path: { id: artifactId },
     });
     if (error) throw error;
     return assertData(data, 'sbomApi.getCveHistory').map(adaptCveHistory);
