@@ -1,0 +1,17 @@
+# GitGuardian / ggshield configuration
+# https://docs.gitguardian.com/ggshield-docs/configuration
+version: 2
+
+secret:
+  # Allowlist known, non-live test fixtures so they do not surface as
+  # "new" secrets when older PR branches are previewed against main.
+  ignored-matches:
+    # JWT_SECRET in docker-compose.e2e.yml — a static value used only by the
+    # end-to-end test stack (no production reach). Not a live secret.
+    # match = SHA256 of the fixture value.
+    - name: "E2E test fixture JWT_SECRET (docker-compose.e2e.yml)"
+      match: 5688dbb9bba09072e0aec7b2094b2256f8c5c39087028395a9c0879b076087cd
+
+  # Belt-and-suspenders: the e2e compose file only ever holds test fixtures.
+  ignored-paths:
+    - "docker-compose.e2e.yml"
