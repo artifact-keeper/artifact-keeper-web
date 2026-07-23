@@ -434,6 +434,7 @@ describe("settingsApi", () => {
           from_address: "noreply@example.com",
           tls_mode: "tls",
         },
+        environment: "staging",
       },
       error: undefined,
     });
@@ -449,6 +450,24 @@ describe("settingsApi", () => {
     expect(all.passwordPolicy.min_length).toBe(12);
     expect(all.smtpConfig.host).toBe("mail.example.com");
     expect(all.smtpConfig.tls_mode).toBe("tls");
+    expect(all.environment).toBe("staging");
+  });
+
+  it("getAllSettings defaults environment to '' when the field is absent (older backend)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 0,
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    const all = await mod.settingsApi.getAllSettings();
+
+    // Soft parse: a backend that predates the ENVIRONMENT field must not throw
+    // (all-or-nothing) — it degrades to "" so the page shows its own fallback.
+    expect(all.environment).toBe("");
   });
 
   it("getAllSettings throws on SDK error (#349)", async () => {
