@@ -32,7 +32,20 @@ const SEVERITY_BADGE: Record<string, string> = {
  * `securityApi.listArtifactScans(artifactId)` already existed but had no
  * consumer; this component is the consumer.
  */
-export function ArtifactScansSection({ artifactId }: { artifactId: string }) {
+export function ArtifactScansSection({
+  artifactId,
+  analyzable = true,
+}: {
+  artifactId: string;
+  /**
+   * Whether the artifact supports scanning. Proxy-cached remote artifacts are
+   * `analyzable: false` (artifact-keeper#2292) — no scan can be triggered for
+   * them, so the empty state must not tell the user to "trigger a scan".
+   * Defaults to `true` so hosted artifacts and existing callers are
+   * unaffected.
+   */
+  analyzable?: boolean;
+}) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["security", "artifact-scans", artifactId],
     queryFn: () => securityApi.listArtifactScans(artifactId),
@@ -139,10 +152,14 @@ export function ArtifactScansSection({ artifactId }: { artifactId: string }) {
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Clock className="size-10 text-muted-foreground/50 mb-3" />
           <p className="text-sm text-muted-foreground">
-            No security scans have been run against this artifact yet.
+            {analyzable
+              ? "No security scans have been run against this artifact yet."
+              : "This artifact cannot be scanned."}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Trigger a scan from the artifact actions menu to populate this section.
+            {analyzable
+              ? "Trigger a scan from the artifact actions menu to populate this section."
+              : "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."}
           </p>
         </div>
       ) : (

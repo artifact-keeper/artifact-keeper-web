@@ -8,7 +8,6 @@ import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { formatBytes } from "@/lib/utils";
 import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -78,6 +77,138 @@ const STORAGE_BACKEND_LABELS: Record<string, string> = {
 
 function formatStorageBackend(backend: string): string {
   return STORAGE_BACKEND_LABELS[backend] ?? backend;
+}
+
+// -- Upload size limit editor (#189) --
+
+type UploadSizeUnit = "MB" | "GB";
+
+const BYTES_PER_MB = 1024 * 1024;
+const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+/** Convert bytes to a friendly value + unit. 0 means "no limit". */
+export function bytesToUploadSize(bytes: number): { value: string; unit: UploadSizeUnit } {
+  if (!bytes || bytes <= 0) return { value: "", unit: "MB" };
+  if (bytes >= BYTES_PER_GB && bytes % BYTES_PER_GB === 0) {
+    return { value: String(bytes / BYTES_PER_GB), unit: "GB" };
+  }
+  return { value: String(Math.round(bytes / BYTES_PER_MB)), unit: "MB" };
+}
+
+/** Convert a value + unit to bytes. Empty/zero/invalid means "no limit" (0). */
+export function uploadSizeToBytes(value: string, unit: UploadSizeUnit): number {
+  const num = Number(value);
+  if (!num || num <= 0 || !Number.isFinite(num)) return 0;
+  return Math.round(num * (unit === "GB" ? BYTES_PER_GB : BYTES_PER_MB));
+}
+
+function UploadSizeSetting({
+  currentBytes,
+  loading,
+  unavailable,
+}: {
+  currentBytes: number | undefined;
+  loading: boolean;
+  unavailable: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const initial = bytesToUploadSize(currentBytes ?? 0);
+  const [value, setValue] = useState(initial.value);
+  const [unit, setUnit] = useState<UploadSizeUnit>(initial.unit);
+  const [dirty, setDirty] = useState(false);
+  // The persisted value arrives asynchronously, so a useState initializer would
+  // seed from `undefined` (rendering an empty "No limit") and never refresh once
+  // the query resolves. Sync local state during render whenever the persisted
+  // bytes change, but only while there are no unsaved edits so we never clobber
+  // what the operator is typing. (review fix #464)
+  const [seededBytes, setSeededBytes] = useState(currentBytes);
+  if (currentBytes !== seededBytes && !dirty) {
+    const next = bytesToUploadSize(currentBytes ?? 0);
+    setSeededBytes(currentBytes);
+    setValue(next.value);
+    setUnit(next.unit);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (bytes: number) => settingsApi.updateMaxUploadSize(bytes),
+    onSuccess: () => {
+      toast.success("Upload size limit saved");
+      queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
+      setDirty(false);
+    },
+    onError: mutationErrorToast("Failed to save upload size limit"),
+  });
+
+  if (loading) {
+    return (
+      <SettingRow
+        label="Max Upload Size"
+        value="Loading..."
+        description="Maximum allowed size for a single artifact upload."
+      />
+    );
+  }
+
+  if (unavailable) {
+    return (
+      <SettingRow
+        label="Max Upload Size"
+        value="Unavailable"
+        description="Maximum allowed size for a single artifact upload."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="max-upload-size" className="text-sm">
+        Max Upload Size
+      </Label>
+      <div className="flex gap-2">
+        <Input
+          id="max-upload-size"
+          type="number"
+          min={0}
+          step="any"
+          placeholder="No limit"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setDirty(true);
+          }}
+          className="flex-1"
+        />
+        <Select
+          value={unit}
+          onValueChange={(v) => {
+            setUnit(v as UploadSizeUnit);
+            setDirty(true);
+          }}
+        >
+          <SelectTrigger className="w-20" aria-label="Upload size unit">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="MB">MB</SelectItem>
+            <SelectItem value="GB">GB</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={() => saveMutation.mutate(uploadSizeToBytes(value, unit))}
+          disabled={saveMutation.isPending || !dirty}
+        >
+          {saveMutation.isPending && (
+            <Loader2 className="size-4 mr-2 animate-spin" />
+          )}
+          Save
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Maximum allowed size for a single artifact upload. Leave empty for no
+        limit. Applies to every repository.
+      </p>
+    </div>
+  );
 }
 
 // -- SMTP settings tab --
@@ -415,6 +546,17 @@ export default function SettingsPage() {
     return formatPasswordPolicy(passwordPolicy);
   }
 
+  // Deployment environment label, rendered as a badge in the General tab.
+  // The backend sources this from its ENVIRONMENT config; older servers omit
+  // it, so parseEnvironment yields "" and we fall back to "Unknown" (rather
+  // than the previous hardcoded "Production", which was wrong everywhere but
+  // prod). Same loading/error gating as the sibling rows.
+  const environmentLabel = settingsLoading
+    ? "Loading..."
+    : settingsError || !adminSettings?.environment
+      ? "Unknown"
+      : adminSettings.environment;
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -511,7 +653,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label className="text-sm">Environment</Label>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Production</Badge>
+                  <Badge variant="secondary">{environmentLabel}</Badge>
                 </div>
               </div>
             </CardContent>
@@ -539,10 +681,10 @@ export default function SettingsPage() {
                 description="The filesystem path where artifact files are stored (when storage backend is local)."
               />
               <Separator />
-              <SettingRow
-                label="Max Upload Size"
-                value={storageValue((s) => formatBytes(s.max_upload_size_bytes))}
-                description="Maximum allowed size for a single artifact upload."
+              <UploadSizeSetting
+                currentBytes={storageSettings?.max_upload_size_bytes}
+                loading={settingsLoading}
+                unavailable={settingsError || !storageSettings}
               />
               <Separator />
               {/* TODO(#334): swap for storageSettings.deduplication once the backend

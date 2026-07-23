@@ -24,7 +24,9 @@ test.describe('Analytics Page', () => {
     const artifacts = page.getByText(/total artifacts/i).first();
     const stale = page.getByText(/stale/i).first();
 
-    await expect(storage.or(artifacts).or(stale)).toBeVisible();
+    // The analytics page can render more than one of these labels, so the
+    // combined locator may match multiple elements; assert on the first.
+    await expect(storage.or(artifacts).or(stale).first()).toBeVisible();
   });
 
   test('Refresh button works without error', async ({ page }) => {

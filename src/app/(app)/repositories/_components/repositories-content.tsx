@@ -3,7 +3,7 @@
 import { useState, useCallback, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, RefreshCw, Package } from "lucide-react";
+import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { repositoriesApi, type UpstreamAuthPayload } from "@/lib/api/repositories";
 import { searchApi } from "@/lib/api/search";
@@ -35,7 +35,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { FORMAT_GROUPS, TYPE_OPTIONS } from "../_lib/constants";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
@@ -68,8 +68,15 @@ export function RepositoriesContent() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dialogRepo, setDialogRepo] = useState<Repository | null>(null);
 
+  // #410: outcome of the most recent upstream-auth save, mirrored into a live
+  // region inside the edit dialog so screen-reader users hear success/failure.
+  const [upstreamAuthStatus, setUpstreamAuthStatus] = useState<{
+    state: "idle" | "success" | "error";
+    message?: string;
+  }>({ state: "idle" });
+
   // --- query ---
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: [
       "repositories",
       formatFilter === "__all__" ? undefined : formatFilter,
@@ -144,11 +151,22 @@ export function RepositoriesContent() {
   const upstreamAuthMutation = useMutation({
     mutationFn: ({ key, payload }: { key: string; payload: UpstreamAuthPayload }) =>
       repositoriesApi.updateUpstreamAuth(key, payload),
+    onMutate: () => {
+      // Clear any previous outcome so the live region re-announces a repeat
+      // result (e.g. two consecutive successes).
+      setUpstreamAuthStatus({ state: "idle" });
+    },
     onSuccess: () => {
       invalidateAllRepoQueries();
-      toast.success("Upstream authentication updated");
+      const message = "Upstream authentication updated";
+      toast.success(message);
+      setUpstreamAuthStatus({ state: "success", message });
     },
-    onError: mutationErrorToast("Failed to update upstream authentication"),
+    onError: (err: unknown) => {
+      const message = toUserMessage(err, "Failed to update upstream authentication");
+      toast.error(message);
+      setUpstreamAuthStatus({ state: "error", message });
+    },
   });
 
   // --- handlers ---
@@ -318,7 +336,32 @@ export function RepositoriesContent() {
             ))}
           </div>
         )}
-        {!isLoading && filtered.length === 0 && (
+        {/* #478: a failed list request must be visually distinct from a
+            genuinely empty install, otherwise a transient backend outage reads
+            as "all repositories were deleted". */}
+        {!isLoading && isError && filtered.length === 0 && (
+          <div
+            className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground"
+            role="alert"
+          >
+            <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
+            <p className="text-sm font-medium text-foreground">Couldn&apos;t load repositories</p>
+            <p className="mt-1 text-xs max-w-sm">
+              {toUserMessage(error, "The server could not be reached. Your repositories are safe.")}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
+              Retry
+            </Button>
+          </div>
+        )}
+        {!isLoading && !isError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Package className="size-8 mb-2 opacity-50" />
             <p className="text-sm">No repositories found.</p>
@@ -448,13 +491,17 @@ export function RepositoriesContent() {
         editOpen={editOpen}
         onEditOpenChange={(o) => {
           setEditOpen(o);
-          if (!o) setDialogRepo(null);
+          if (!o) {
+            setDialogRepo(null);
+            setUpstreamAuthStatus({ state: "idle" });
+          }
         }}
         editRepo={dialogRepo}
         onEditSubmit={(key, d) => updateMutation.mutate({ key, data: d })}
         editPending={updateMutation.isPending}
         onUpstreamAuthUpdate={(key, payload) => upstreamAuthMutation.mutate({ key, payload })}
         upstreamAuthPending={upstreamAuthMutation.isPending}
+        upstreamAuthStatus={upstreamAuthStatus}
         deleteOpen={deleteOpen}
         onDeleteOpenChange={(o) => {
           setDeleteOpen(o);

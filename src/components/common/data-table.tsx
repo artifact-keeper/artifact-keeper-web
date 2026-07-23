@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -10,16 +10,9 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { DataTablePagination } from "@/components/common/data-table-pagination";
 
 export interface DataTableColumn<T> {
   id: string;
@@ -102,7 +95,6 @@ export function DataTable<T>({
   }, [data, sortColumn, sortDir, columns]);
 
   const totalItems = total ?? data.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   if (loading) {
     return (
@@ -239,56 +231,14 @@ export function DataTable<T>({
       </div>
 
       {/* Pagination */}
-      {(onPageChange || onPageSizeChange) && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Rows per page</span>
-            <Select
-              value={String(pageSize)}
-              onValueChange={(v) => onPageSizeChange?.(Number(v))}
-            >
-              <SelectTrigger size="sm" className="w-[70px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pageSizeOptions.map((size) => (
-                  <SelectItem key={size} value={String(size)}>
-                    {size}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="ml-2">
-              {totalItems > 0
-                ? `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, totalItems)} of ${totalItems}`
-                : "0 results"}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={page <= 1}
-              onClick={() => onPageChange?.(page - 1)}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <span className="px-2 text-sm text-muted-foreground">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={page >= totalPages}
-              onClick={() => onPageChange?.(page + 1)}
-              aria-label="Next page"
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <DataTablePagination
+        total={totalItems}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        pageSizeOptions={pageSizeOptions}
+      />
     </div>
   );
 }

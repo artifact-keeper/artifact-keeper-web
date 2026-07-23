@@ -434,6 +434,7 @@ describe("settingsApi", () => {
           from_address: "noreply@example.com",
           tls_mode: "tls",
         },
+        environment: "staging",
       },
       error: undefined,
     });
@@ -449,6 +450,24 @@ describe("settingsApi", () => {
     expect(all.passwordPolicy.min_length).toBe(12);
     expect(all.smtpConfig.host).toBe("mail.example.com");
     expect(all.smtpConfig.tls_mode).toBe("tls");
+    expect(all.environment).toBe("staging");
+  });
+
+  it("getAllSettings defaults environment to '' when the field is absent (older backend)", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 0,
+      },
+      error: undefined,
+    });
+    const mod = await import("../settings");
+    const all = await mod.settingsApi.getAllSettings();
+
+    // Soft parse: a backend that predates the ENVIRONMENT field must not throw
+    // (all-or-nothing) — it degrades to "" so the page shows its own fallback.
+    expect(all.environment).toBe("");
   });
 
   it("getAllSettings throws on SDK error (#349)", async () => {
@@ -507,6 +526,72 @@ describe("settingsApi", () => {
     const mod = await import("../settings");
     await expect(mod.settingsApi.getAllSettings()).rejects.toThrow(
       /response did not match expected shape/
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // parseStorageSettings non-object guard (line 128-132) + updateMaxUploadSize
+  // -------------------------------------------------------------------------
+
+  it("getStorageSettings throws when the response is not an object at all", async () => {
+    mockGetSettings.mockResolvedValue({ data: "nope", error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getStorageSettings()).rejects.toThrow(
+      /missing storage_backend, storage_path, or max_upload_size_bytes/
+    );
+  });
+
+  it("updateMaxUploadSize reads current settings then POSTs them with the new size", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: {
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 1024,
+        anonymous_download: true,
+      },
+      error: undefined,
+    });
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateMaxUploadSize(5000);
+
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({
+        storage_backend: "fs",
+        storage_path: "/data",
+        max_upload_size_bytes: 5000,
+        anonymous_download: true,
+      }),
+    });
+  });
+
+  it("updateMaxUploadSize accepts 0 as 'no limit'", async () => {
+    mockGetSettings.mockResolvedValue({
+      data: { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 1024 },
+      error: undefined,
+    });
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateMaxUploadSize(0);
+    const body = JSON.parse(mockApiFetch.mock.calls[0][1].body as string);
+    expect(body.max_upload_size_bytes).toBe(0);
+  });
+
+  it("updateMaxUploadSize throws when loading current settings fails", async () => {
+    mockGetSettings.mockResolvedValue({ data: undefined, error: "boom" });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.updateMaxUploadSize(100)).rejects.toThrow(
+      /Failed to load current settings: boom/
+    );
+    expect(mockApiFetch).not.toHaveBeenCalled();
+  });
+
+  it("updateMaxUploadSize throws when current settings are not an object", async () => {
+    mockGetSettings.mockResolvedValue({ data: 42, error: undefined });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.updateMaxUploadSize(100)).rejects.toThrow(
+      /System settings response was not an object/
     );
   });
 });
