@@ -8,6 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import '@/lib/sdk-client';
 import {
   login as sdkLogin,
@@ -33,6 +34,7 @@ interface AuthContextType {
   mustChangePassword: boolean;
   passwordExpiresAt: string | null;
   setupRequired: boolean;
+  setupPasswordHint: string | null;
   totpRequired: boolean;
   totpToken: string | null;
   login: (username: string, password: string) => Promise<boolean | "totp">;
@@ -59,11 +61,13 @@ function clearTokens(): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [passwordExpiresAt, setPasswordExpiresAt] = useState<string | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [setupPasswordHint, setSetupPasswordHint] = useState<string | null>(null);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpToken, setTotpToken] = useState<string | null>(null);
 
@@ -99,6 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       storeTokens(loginData as unknown as LoginResponse);
       await refreshUser();
+      // #487: the anonymous session may have cached auth-scoped queries
+      // (e.g. the repositories list returns only public repos when
+      // unauthenticated). Invalidate so they refetch under the new identity
+      // instead of showing stale/empty data until a manual refresh.
+      await queryClient.invalidateQueries();
 
       if (loginData.must_change_password) {
         setMustChangePassword(true);
@@ -106,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [refreshUser]
+    [refreshUser, queryClient]
   );
 
   const verifyTotp = useCallback(
@@ -120,11 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTotpRequired(false);
       setTotpToken(null);
       await refreshUser();
+      // #487: refetch auth-scoped queries under the now-authenticated identity.
+      await queryClient.invalidateQueries();
       if (tokenData.must_change_password) {
         setMustChangePassword(true);
       }
     },
-    [totpToken, refreshUser]
+    [totpToken, refreshUser, queryClient]
   );
 
   const clearTotpRequired = useCallback(() => {
@@ -142,8 +153,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setMustChangePassword(false);
       setPasswordExpiresAt(null);
+      // #487 / security: drop every cached query so the next (anonymous or
+      // next-user) session never sees the previous identity's private data.
+      queryClient.clear();
     }
-  }, []);
+  }, [queryClient]);
 
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
@@ -170,10 +184,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if first-boot setup is required
       try {
         const { data: setupData } = await sdkSetupStatus();
-        const status = setupData as unknown as SetupStatusResponse | undefined;
+        // The backend ships an optional `setup_password_hint` via
+        // artifact-keeper#2802, but the generated SDK type doesn't carry it
+        // until the SDK regenerates from the upgraded OpenAPI spec. Read it off
+        // the runtime object via a narrowed cast so the deployment-aware hint
+        // plumbs through as soon as the backend rolls out. Once the SDK is
+        // regenerated with the field, this extra type can collapse away.
+        const status = setupData as unknown as
+          | (SetupStatusResponse & { setup_password_hint?: string | null })
+          | undefined;
         if (status?.setup_required) {
           setSetupRequired(true);
         }
+        const hint = status?.setup_password_hint?.trim();
+        setSetupPasswordHint(hint ? hint : null);
       } catch {
         // Setup endpoint not available, continue normally
       }
@@ -235,6 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mustChangePassword,
         passwordExpiresAt,
         setupRequired,
+        setupPasswordHint,
         totpRequired,
         totpToken,
         login,

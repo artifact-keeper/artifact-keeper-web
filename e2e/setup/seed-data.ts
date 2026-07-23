@@ -42,6 +42,16 @@ export async function seedRepositories(request: APIRequestContext): Promise<void
     // Visibility test repos: one public, one private (default)
     { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', is_public: true },
     { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', is_public: false },
+    // Generic repo opted into first-class versioning (#571) so the
+    // version-history UI has real revisions to exercise. Harmless on a
+    // backend that predates the flag (the field is simply ignored).
+    {
+      key: 'e2e-generic-versioned',
+      name: 'E2E Generic Versioned',
+      format: 'generic',
+      repo_type: 'local',
+      versioning_enabled: true,
+    },
   ];
   for (const repo of repos) {
     await api(request, 'POST', '/repositories', repo);
@@ -132,6 +142,7 @@ export async function cleanupAll(request: APIRequestContext): Promise<void> {
   await api(request, 'DELETE', '/repositories/e2e-docker-virtual').catch(() => {});
   await api(request, 'DELETE', '/repositories/e2e-public-pypi').catch(() => {});
   await api(request, 'DELETE', '/repositories/e2e-private-pypi').catch(() => {});
+  await api(request, 'DELETE', '/repositories/e2e-generic-versioned').catch(() => {});
 
   // Users (non-admin)
   for (const [roleName, role] of Object.entries(TEST_ROLES)) {
