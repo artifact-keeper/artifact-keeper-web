@@ -3,15 +3,24 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, ScrollText } from "lucide-react";
+import { Download, Loader2, RefreshCw, ScrollText } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   auditApi,
   isValidUuid,
   AUDIT_DEFAULT_PER_PAGE,
+  AUDIT_EXPORT_CSV_MIME,
+  AUDIT_EXPORT_JSON_MIME,
+  auditItemsToCsv,
+  auditItemsToJson,
+  buildAuditExportFilename,
+  type AuditExportFormat,
   type AuditLogItem,
+  type AuditLogQuery,
 } from "@/lib/api/audit";
 import { adminApi } from "@/lib/api/admin";
+import { triggerBrowserDownload } from "@/lib/download";
 
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
@@ -20,6 +29,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const AUDIT_LOG_QUERY_KEY = ["admin-audit-log"] as const;
 
@@ -80,21 +95,27 @@ export default function AuditLogPage() {
   const [draft, setDraft] = useState<AuditFilters>(EMPTY_FILTERS);
   const [applied, setApplied] = useState<AuditFilters>(EMPTY_FILTERS);
   const [filterError, setFilterError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const hasAppliedFilters = Object.values(applied).some((v) => v !== "");
+
+  // The active filters as an `AuditLogQuery`, shared by the list query and the
+  // export action so both honor exactly the same criteria.
+  const appliedQuery: AuditLogQuery = useMemo(
+    () => ({
+      user_id: applied.user_id || undefined,
+      action: applied.action || undefined,
+      resource_type: applied.resource_type || undefined,
+      ...dateBoundsToIso(applied),
+    }),
+    [applied]
+  );
 
   // -- queries --
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: [...AUDIT_LOG_QUERY_KEY, page, pageSize, applied],
     queryFn: () =>
-      auditApi.list({
-        page,
-        per_page: pageSize,
-        user_id: applied.user_id || undefined,
-        action: applied.action || undefined,
-        resource_type: applied.resource_type || undefined,
-        ...dateBoundsToIso(applied),
-      }),
+      auditApi.list({ ...appliedQuery, page, per_page: pageSize }),
     enabled: !!user?.is_admin,
     retry: false,
     placeholderData: (prev) => prev,
@@ -133,6 +154,49 @@ export default function AuditLogPage() {
     setApplied(EMPTY_FILTERS);
     setFilterError(null);
     setPage(1);
+  }
+
+  // Nothing to export when the current filters match no events. Disabling the
+  // control is a friendlier signal than letting the user trigger an empty file.
+  const noEvents = !isLoading && data != null && data.total === 0;
+
+  async function handleExport(format: AuditExportFormat) {
+    setIsExporting(true);
+    try {
+      const result = await auditApi.export(appliedQuery);
+      if (result.items.length === 0) {
+        toast.info("No audit events match the current filters.");
+        return;
+      }
+      const content =
+        format === "csv"
+          ? auditItemsToCsv(result.items)
+          : auditItemsToJson(result.items, {
+              filters: appliedQuery,
+              total: result.total,
+              truncated: result.truncated,
+            });
+      triggerBrowserDownload(
+        buildAuditExportFilename(format),
+        content,
+        format === "csv" ? AUDIT_EXPORT_CSV_MIME : AUDIT_EXPORT_JSON_MIME
+      );
+
+      const n = result.items.length.toLocaleString();
+      if (result.truncated) {
+        toast.warning(
+          `Exported the first ${n} of ${result.total.toLocaleString()} matching events. Narrow the filters to export the rest.`
+        );
+      } else {
+        toast.success(
+          `Exported ${n} audit event${result.items.length === 1 ? "" : "s"}.`
+        );
+      }
+    } catch {
+      toast.error("Failed to export the audit log. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const columns: DataTableColumn<AuditLogItem>[] = [
@@ -235,6 +299,37 @@ export default function AuditLogPage() {
         actions={
           <div className="flex items-center gap-2">
             <ScrollText className="size-5 text-muted-foreground" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isExporting || noEvents}
+                  aria-label="Export audit log"
+                >
+                  {isExporting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => handleExport("csv")}
+                  disabled={isExporting}
+                >
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => handleExport("json")}
+                  disabled={isExporting}
+                >
+                  Export as JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               size="icon-sm"

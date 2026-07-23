@@ -76,8 +76,36 @@ export interface Repository {
   upstream_auth_configured?: boolean;
   // For virtual repositories
   member_repos?: VirtualRepoMember[];
+  // --- 1.6.0 format-specific config (#602) ---
+  /**
+   * Whether an RPM curation trusted GPG public key is configured (#2568). The
+   * key material itself is never returned by the backend; this boolean is the
+   * only exposure. Only meaningful for RPM-format repositories.
+   */
+  has_trusted_gpg_key?: boolean;
+  /** Debian/APT `Release` metadata + proxy filters (#2407/#2460/#2489/#2459). */
+  apt_origin?: string;
+  apt_label?: string;
+  apt_release_version?: string;
+  apt_description?: string;
+  debian?: DebianRepoConfig;
+  /** npm scope policy (#2424). Only meaningful for npm remote/virtual repos. */
+  npm_allowed_scopes?: string[];
+  npm_allowed_name_patterns?: string[];
+  npm_allow_unscoped?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Debian/APT proxy filter allowlists (#2407). Empty or `["*"]` selects
+ * everything (today's full-proxy behaviour); otherwise only exact matches are
+ * proxied. Mirrors the SDK `DebianRepositoryConfig` fields the UI edits.
+ */
+export interface DebianRepoConfig {
+  distribution_paths?: string[];
+  components?: string[];
+  architectures?: string[];
 }
 
 export type RepositoryFormat =
@@ -153,6 +181,24 @@ export interface CreateRepositoryRequest {
   upstream_password?: string;
   // For virtual repositories - array of member repo keys with priorities
   member_repos?: VirtualRepoMemberInput[];
+  // --- 1.6.0 format-specific config (#602) ---
+  /**
+   * RPM curation trusted GPG *public* key (#2568). Write-only: ASCII-armored
+   * public key block to set, `null` to clear (update only). Only valid for
+   * RPM-format repositories.
+   */
+  trusted_gpg_key?: string | null;
+  /** Debian/APT `Release` metadata (#2460). */
+  apt_origin?: string | null;
+  apt_label?: string | null;
+  apt_release_version?: string | null;
+  apt_description?: string | null;
+  /** Debian/APT proxy distro filters (#2407). */
+  debian?: DebianRepoConfig | null;
+  /** npm scope policy (#2424). */
+  npm_allowed_scopes?: string[] | null;
+  npm_allowed_name_patterns?: string[] | null;
+  npm_allow_unscoped?: boolean | null;
 }
 
 export interface VirtualRepoMemberInput {

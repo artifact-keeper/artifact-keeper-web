@@ -169,6 +169,24 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     upstream_url: sdk.upstream_url ?? undefined,
     upstream_auth_type: sdk.upstream_auth_type ?? undefined,
     upstream_auth_configured: sdk.upstream_auth_configured,
+    // --- 1.6.0 format-specific config (#602) ---
+    // `has_trusted_gpg_key` (#2568) is required on the current SDK type but
+    // `?? false` stays defensive against a backend/list handler that omits it.
+    has_trusted_gpg_key: sdk.has_trusted_gpg_key ?? false,
+    apt_origin: sdk.apt_origin ?? undefined,
+    apt_label: sdk.apt_label ?? undefined,
+    apt_release_version: sdk.apt_release_version ?? undefined,
+    apt_description: sdk.apt_description ?? undefined,
+    debian: sdk.debian
+      ? {
+          distribution_paths: sdk.debian.distribution_paths ?? undefined,
+          components: sdk.debian.components ?? undefined,
+          architectures: sdk.debian.architectures ?? undefined,
+        }
+      : undefined,
+    npm_allowed_scopes: sdk.npm_allowed_scopes ?? undefined,
+    npm_allowed_name_patterns: sdk.npm_allowed_name_patterns ?? undefined,
+    npm_allow_unscoped: sdk.npm_allow_unscoped ?? undefined,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
@@ -229,6 +247,17 @@ export const repositoriesApi = {
       upstream_auth_type: input.upstream_auth_type,
       upstream_username: input.upstream_username,
       upstream_password: input.upstream_password,
+      // --- 1.6.0 format-specific config (#602). Undefined fields are dropped
+      // by JSON serialization, so a repo of another format sends none of them.
+      trusted_gpg_key: input.trusted_gpg_key,
+      apt_origin: input.apt_origin,
+      apt_label: input.apt_label,
+      apt_release_version: input.apt_release_version,
+      apt_description: input.apt_description,
+      debian: input.debian,
+      npm_allowed_scopes: input.npm_allowed_scopes,
+      npm_allowed_name_patterns: input.npm_allowed_name_patterns,
+      npm_allow_unscoped: input.npm_allow_unscoped,
     };
     const { data, error } = await createRepository({ body });
     if (error) throw error;
@@ -245,6 +274,18 @@ export const repositoriesApi = {
       quota_bytes: input.quota_bytes,
       key: input.key,
       versioning_enabled: input.versioning_enabled,
+      // --- 1.6.0 format-specific config (#602). `trusted_gpg_key` uses
+      // three-way semantics: omit (undefined) = unchanged, `null` = clear,
+      // string = set. Undefined fields are dropped by JSON serialization.
+      trusted_gpg_key: input.trusted_gpg_key,
+      apt_origin: input.apt_origin,
+      apt_label: input.apt_label,
+      apt_release_version: input.apt_release_version,
+      apt_description: input.apt_description,
+      debian: input.debian,
+      npm_allowed_scopes: input.npm_allowed_scopes,
+      npm_allowed_name_patterns: input.npm_allowed_name_patterns,
+      npm_allow_unscoped: input.npm_allow_unscoped,
     };
     const { data, error } = await updateRepository({ path: { key }, body });
     if (error) throw error;

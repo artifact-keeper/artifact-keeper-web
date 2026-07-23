@@ -15,16 +15,19 @@ import {
   Lock,
   Network,
   RefreshCw,
+  ShieldAlert,
   Users,
 } from "lucide-react";
 
 import {
   blastRadiusApi,
+  accessibleUsersApi,
   isValidVulnId,
   normalizeVulnId,
   BLAST_RADIUS_DEFAULT_PER_PAGE,
   type AffectedRepo,
   type BlastRadiusDownloader,
+  type AccessibleUser,
 } from "@/lib/api/blast-radius";
 import { isValidUuid } from "@/lib/api/audit";
 
@@ -36,9 +39,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const BLAST_RADIUS_QUERY_KEY = ["admin-blast-radius"] as const;
+export const ACCESSIBLE_USERS_QUERY_KEY = ["admin-accessible-users"] as const;
 
 type TargetKind = "cve" | "artifact";
 
@@ -89,6 +100,62 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
   }
   // A scope this UI doesn't know yet degrades to a neutral badge.
   return <Badge variant="secondary">{scope}</Badge>;
+}
+
+/**
+ * Badge for the coarse breadth of latent access (1.6.0, #2386). `everyone` is
+ * the loud one — a public repo where every principal (and anonymous clients)
+ * can reach the artifact, so per-user enumeration is not applicable.
+ */
+export function ExposureBadge({ exposure }: { exposure: string }) {
+  if (exposure === "everyone") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+      >
+        <Globe className="mr-1 size-3" />
+        Everyone — public repository
+      </Badge>
+    );
+  }
+  if (exposure === "effectively-everyone") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+      >
+        <AlertTriangle className="mr-1 size-3" />
+        Effectively everyone
+      </Badge>
+    );
+  }
+  if (exposure === "enumerable") {
+    return (
+      <Badge variant="secondary">
+        <Users className="mr-1 size-3" />
+        Enumerable set
+      </Badge>
+    );
+  }
+  // A future exposure classification degrades to a neutral badge.
+  return <Badge variant="secondary">{exposure}</Badge>;
+}
+
+/**
+ * Badge describing how a principal is granted access: `admin` (global),
+ * `permission` (direct or group grant), or `role` (role assignment).
+ */
+export function ViaBadge({ via }: { via: string }) {
+  const label =
+    via === "admin"
+      ? "Administrator"
+      : via === "permission"
+        ? "Permission grant"
+        : via === "role"
+          ? "Role assignment"
+          : via;
+  return <Badge variant="secondary">{label}</Badge>;
 }
 
 /** Compact preview of a downloader's IP sample: first few, then "+n more". */
@@ -142,6 +209,13 @@ function BlastRadiusContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(BLAST_RADIUS_DEFAULT_PER_PAGE);
 
+  // Latent-exposure (accessible-but-not-downloaded) pagination + repository
+  // scope. A CVE spans many repos, so the accessible-users enumeration is
+  // scoped to one repository chosen from the report's affected list.
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
+  const [accPage, setAccPage] = useState(1);
+  const [accPageSize, setAccPageSize] = useState(BLAST_RADIUS_DEFAULT_PER_PAGE);
+
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: [...BLAST_RADIUS_QUERY_KEY, applied, page, pageSize],
     queryFn: () =>
@@ -152,6 +226,47 @@ function BlastRadiusContent() {
             per_page: pageSize,
           }),
     enabled: !!user?.is_admin && applied != null,
+    retry: false,
+    placeholderData: (prev) => prev,
+  });
+
+  // The affected repositories drive the CVE-mode repository scope selector.
+  const affectedRepos = data?.affected_repos ?? [];
+  // Artifact mode implies its repository (repository_id ignored server-side);
+  // CVE mode defaults to the first affected repo until the admin picks another.
+  const effectiveRepoId =
+    applied?.kind === "artifact"
+      ? null
+      : (selectedRepoId ?? affectedRepos[0]?.repository_id ?? null);
+
+  const {
+    data: accessibleData,
+    isLoading: accessibleLoading,
+    isError: accessibleError,
+    isFetching: accessibleFetching,
+  } = useQuery({
+    queryKey: [
+      ...ACCESSIBLE_USERS_QUERY_KEY,
+      applied,
+      effectiveRepoId,
+      accPage,
+      accPageSize,
+    ],
+    queryFn: () =>
+      applied!.kind === "cve"
+        ? accessibleUsersApi.forCve(applied!.value, {
+            repository_id: effectiveRepoId!,
+            page: accPage,
+            per_page: accPageSize,
+          })
+        : accessibleUsersApi.forArtifact(applied!.value, {
+            page: accPage,
+            per_page: accPageSize,
+          }),
+    enabled:
+      !!user?.is_admin &&
+      applied != null &&
+      (applied?.kind === "artifact" || !!effectiveRepoId),
     retry: false,
     placeholderData: (prev) => prev,
   });
@@ -176,6 +291,9 @@ function BlastRadiusContent() {
       setApplied({ kind: "artifact", value });
     }
     setPage(1);
+    // New target: reset the latent-exposure scope + pagination.
+    setSelectedRepoId(null);
+    setAccPage(1);
   }
 
   function switchMode(next: TargetKind) {
@@ -287,6 +405,29 @@ function BlastRadiusContent() {
     },
   ];
 
+  const accessibleColumns: DataTableColumn<AccessibleUser>[] = [
+    {
+      id: "user",
+      header: "User",
+      accessor: (u) => u.username,
+      cell: (u) => (
+        <span title={u.user_id}>
+          {u.username || (
+            <span className="font-mono text-xs">{truncateId(u.user_id)}</span>
+          )}
+        </span>
+      ),
+      sortable: true,
+    },
+    {
+      id: "via",
+      header: "Access via",
+      accessor: (u) => u.via,
+      cell: (u) => <ViaBadge via={u.via} />,
+      sortable: true,
+    },
+  ];
+
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
@@ -313,14 +454,19 @@ function BlastRadiusContent() {
               variant="outline"
               size="icon-sm"
               aria-label="Refresh blast radius"
-              onClick={() =>
+              onClick={() => {
                 queryClient.invalidateQueries({
                   queryKey: BLAST_RADIUS_QUERY_KEY,
-                })
-              }
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ACCESSIBLE_USERS_QUERY_KEY,
+                });
+              }}
             >
               <RefreshCw
-                className={`size-4 ${isFetching ? "animate-spin" : ""}`}
+                className={`size-4 ${
+                  isFetching || accessibleFetching ? "animate-spin" : ""
+                }`}
               />
             </Button>
           </div>
@@ -491,6 +637,129 @@ function BlastRadiusContent() {
               emptyMessage="No downloads of affected artifacts recorded."
               rowKey={(d) => d.user_id ?? "anonymous"}
             />
+          </section>
+
+          {/* Latent exposure: accessible but not downloaded (1.6.0, #2386).
+              Visually separated and tinted so it reads as *potential* reach,
+              distinct from the confirmed downloaders above. */}
+          <section
+            className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20"
+            aria-label="Accessible but not downloaded"
+          >
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <ShieldAlert className="size-5 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Accessible, not downloaded
+                </h2>
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                >
+                  Latent exposure
+                </Badge>
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Users who <strong>could</strong> read an affected artifact but
+                have <strong>not</strong> downloaded it. This is{" "}
+                <strong>potential</strong> reach, not confirmed exposure — the
+                downloaders above are who actually pulled the artifact.
+              </p>
+            </div>
+
+            {/* A CVE spans many repositories; scope the enumeration to one. */}
+            {applied.kind === "cve" && affectedRepos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Label htmlFor="accessible-repo" className="text-sm">
+                  Repository
+                </Label>
+                <Select
+                  value={effectiveRepoId ?? undefined}
+                  onValueChange={(v) => {
+                    setSelectedRepoId(v);
+                    setAccPage(1);
+                  }}
+                >
+                  <SelectTrigger id="accessible-repo" className="w-[280px]">
+                    <SelectValue placeholder="Select a repository" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {affectedRepos.map((r) => (
+                      <SelectItem key={r.repository_id} value={r.repository_id}>
+                        {r.repository_key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {accessibleError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Latent exposure unavailable</AlertTitle>
+                <AlertDescription>
+                  Unable to load the accessible-but-not-downloaded report. This
+                  server may not support the accessible-users endpoint yet, or
+                  the request failed.
+                </AlertDescription>
+              </Alert>
+            ) : accessibleLoading || !accessibleData ? (
+              <div className="flex h-24 items-center justify-center">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Exposure
+                  </span>
+                  <ExposureBadge exposure={accessibleData.exposure} />
+                  <Badge variant="outline" className="font-mono">
+                    {accessibleData.repository.repository_key}
+                  </Badge>
+                  {accessibleData.total != null && (
+                    <span className="text-sm text-muted-foreground">
+                      {accessibleData.total} with latent access
+                    </span>
+                  )}
+                </div>
+
+                {accessibleData.exposure === "enumerable" ? (
+                  <DataTable
+                    columns={accessibleColumns}
+                    data={accessibleData.accessible_not_downloaded}
+                    total={
+                      accessibleData.total ??
+                      accessibleData.accessible_not_downloaded.length
+                    }
+                    page={accPage}
+                    pageSize={accPageSize}
+                    onPageChange={setAccPage}
+                    onPageSizeChange={(s) => {
+                      setAccPageSize(s);
+                      setAccPage(1);
+                    }}
+                    pageSizeOptions={[20, 50, 100]}
+                    loading={false}
+                    emptyMessage="No users have latent access without a recorded download."
+                    rowKey={(u) => u.user_id}
+                  />
+                ) : (
+                  <Alert>
+                    <AlertTitle>
+                      {accessibleData.exposure === "everyone"
+                        ? "Public repository — everyone can access"
+                        : "Access is too broad to enumerate"}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {accessibleData.exposure === "everyone"
+                        ? "This artifact lives in an anonymous-readable repository, so every user (and unauthenticated clients) can reach it. A per-user list is not applicable."
+                        : "So many principals can reach this artifact that a per-user list is not meaningful. Tighten the repository's access scope to narrow the latent blast radius."}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            )}
           </section>
         </>
       )}

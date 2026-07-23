@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   toUserMessage,
   isAccountLocked,
+  isForbiddenError,
   isPasswordReuseError,
   mutationErrorToast,
   PASSWORD_REUSE_MESSAGE,
@@ -487,5 +488,34 @@ describe("mutationErrorToast", () => {
     handlerB({});
     expect(errorMock).toHaveBeenNthCalledWith(1, "Label A");
     expect(errorMock).toHaveBeenNthCalledWith(2, "Label B");
+  });
+});
+
+describe("isForbiddenError", () => {
+  it("detects an HTTP 403 status field", () => {
+    expect(isForbiddenError({ status: 403 })).toBe(true);
+    expect(isForbiddenError({ statusCode: 403 })).toBe(true);
+    expect(isForbiddenError({ body: { status: 403 } })).toBe(true);
+  });
+
+  it("detects a forbidden code field", () => {
+    expect(isForbiddenError({ code: "FORBIDDEN" })).toBe(true);
+    expect(isForbiddenError({ code: "not_authorized" })).toBe(true);
+  });
+
+  it("detects authorization phrasing in the message", () => {
+    expect(isForbiddenError({ error: "Forbidden" })).toBe(true);
+    expect(isForbiddenError({ message: "Admin access required" })).toBe(true);
+    expect(isForbiddenError(new Error("Permission denied"))).toBe(true);
+    expect(isForbiddenError({ detail: "You are not authorized" })).toBe(true);
+    expect(isForbiddenError("(HTTP 403) something")).toBe(true);
+  });
+
+  it("returns false for unrelated errors", () => {
+    expect(isForbiddenError({ status: 500 })).toBe(false);
+    expect(isForbiddenError(new Error("network down"))).toBe(false);
+    expect(isForbiddenError("Repository is locked for maintenance")).toBe(false);
+    expect(isForbiddenError(null)).toBe(false);
+    expect(isForbiddenError(undefined)).toBe(false);
   });
 });
