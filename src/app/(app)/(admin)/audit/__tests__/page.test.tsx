@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -18,6 +24,8 @@ vi.mock("lucide-react", () => {
   return {
     RefreshCw: stub("RefreshCw"),
     ScrollText: stub("ScrollText"),
+    Download: stub("Download"),
+    Loader2: stub("Loader2"),
   };
 });
 
@@ -26,13 +34,24 @@ const {
   mockUseQuery,
   mockInvalidateQueries,
   mockAuditList,
+  mockAuditExport,
   mockAdminListUsers,
+  mockTriggerDownload,
+  mockToast,
 } = vi.hoisted(() => ({
   mockUseAuth: vi.fn(),
   mockUseQuery: vi.fn(),
   mockInvalidateQueries: vi.fn(),
   mockAuditList: vi.fn(),
+  mockAuditExport: vi.fn(),
   mockAdminListUsers: vi.fn(),
+  mockTriggerDownload: vi.fn(),
+  mockToast: {
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 vi.mock("@/providers/auth-provider", () => ({
@@ -50,7 +69,10 @@ vi.mock("@/lib/api/audit", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/audit")>();
   return {
     ...actual,
-    auditApi: { list: (...args: any[]) => mockAuditList(...args) },
+    auditApi: {
+      list: (...args: any[]) => mockAuditList(...args),
+      export: (...args: any[]) => mockAuditExport(...args),
+    },
   };
 });
 
@@ -58,6 +80,25 @@ vi.mock("@/lib/api/admin", () => ({
   adminApi: {
     listUsers: (...args: any[]) => mockAdminListUsers(...args),
   },
+}));
+
+vi.mock("@/lib/download", () => ({
+  triggerBrowserDownload: (...args: any[]) => mockTriggerDownload(...args),
+}));
+
+vi.mock("sonner", () => ({ toast: mockToast }));
+
+// Minimal dropdown-menu that renders its items inline so the export actions are
+// clickable without portals/pointer events.
+vi.mock("@/components/ui/dropdown-menu", () => ({
+  DropdownMenu: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onSelect, disabled }: any) => (
+    <button disabled={disabled} onClick={() => onSelect?.()}>
+      {children}
+    </button>
+  ),
 }));
 
 // UI components
@@ -425,6 +466,114 @@ describe("AuditLogPage", () => {
     // The long payload preview is truncated to 80 chars with an ellipsis.
     const expectedPreview = `${JSON.stringify(longDetails).slice(0, 80)}…`;
     expect(screen.getByText(expectedPreview)).toBeInTheDocument();
+  });
+});
+
+describe("AuditLogPage export", () => {
+  function renderWithEvents(total = 3) {
+    queryState({
+      audit: {
+        data: { items: [EVENT], total, page: 1, per_page: 50 },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+      users: [{ id: ACTOR_ID, username: "alice-admin" }],
+    });
+    render(<AuditLogPage />);
+  }
+
+  it("exports CSV honoring the applied filters", async () => {
+    renderWithEvents();
+    mockAuditExport.mockResolvedValue({
+      items: [EVENT],
+      total: 1,
+      truncated: false,
+    });
+
+    fireEvent.change(screen.getByLabelText(/^action$/i), {
+      target: { value: "LOGIN" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: /export as csv/i }));
+
+    await waitFor(() => expect(mockTriggerDownload).toHaveBeenCalledTimes(1));
+
+    expect(mockAuditExport).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "LOGIN" })
+    );
+    const [filename, content, mime] = mockTriggerDownload.mock.calls[0];
+    expect(filename).toMatch(/^audit-log-.*\.csv$/);
+    expect(mime).toMatch(/text\/csv/);
+    expect(content).toContain("id,created_at,action"); // header row
+    expect(content).toContain("USER_CREATED");
+    expect(mockToast.success).toHaveBeenCalled();
+  });
+
+  it("exports JSON as a versioned structured envelope", async () => {
+    renderWithEvents();
+    mockAuditExport.mockResolvedValue({
+      items: [EVENT],
+      total: 1,
+      truncated: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /export as json/i }));
+
+    await waitFor(() => expect(mockTriggerDownload).toHaveBeenCalledTimes(1));
+    const [filename, content, mime] = mockTriggerDownload.mock.calls[0];
+    expect(filename).toMatch(/\.json$/);
+    expect(mime).toMatch(/application\/json/);
+    const parsed = JSON.parse(content);
+    expect(parsed.schema_version).toBe("1.0");
+    expect(parsed.count).toBe(1);
+    expect(parsed.items).toHaveLength(1);
+  });
+
+  it("shows an info toast and skips download when nothing matches", async () => {
+    renderWithEvents();
+    mockAuditExport.mockResolvedValue({
+      items: [],
+      total: 0,
+      truncated: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /export as csv/i }));
+
+    await waitFor(() => expect(mockToast.info).toHaveBeenCalled());
+    expect(mockTriggerDownload).not.toHaveBeenCalled();
+  });
+
+  it("warns when a large export is truncated", async () => {
+    renderWithEvents();
+    mockAuditExport.mockResolvedValue({
+      items: [EVENT, { ...EVENT, id: "e2" }],
+      total: 1000,
+      truncated: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /export as csv/i }));
+
+    await waitFor(() => expect(mockTriggerDownload).toHaveBeenCalledTimes(1));
+    expect(mockToast.warning).toHaveBeenCalled();
+    expect(mockToast.success).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error toast when the export fails", async () => {
+    renderWithEvents();
+    mockAuditExport.mockRejectedValue(new Error("network"));
+
+    fireEvent.click(screen.getByRole("button", { name: /export as json/i }));
+
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
+    expect(mockTriggerDownload).not.toHaveBeenCalled();
+  });
+
+  it("disables the export control when there are no events", () => {
+    renderWithEvents(0);
+    expect(
+      screen.getByRole("button", { name: /export audit log/i })
+    ).toBeDisabled();
   });
 });
 

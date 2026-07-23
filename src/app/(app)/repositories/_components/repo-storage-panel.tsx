@@ -344,18 +344,20 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span data-testid="storage-computed-at">
-                Computed {formatRelativeTimestamp(usage.computed_at)}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              {new Date(usage.computed_at).toLocaleString()}
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        {usage.computed_at && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span data-testid="storage-computed-at">
+                  Computed {formatRelativeTimestamp(usage.computed_at)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {new Date(usage.computed_at).toLocaleString()}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

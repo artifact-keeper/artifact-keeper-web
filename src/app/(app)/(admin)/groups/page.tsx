@@ -92,7 +92,7 @@ export default function GroupsPage() {
   // fetch group detail (with members) when members modal is open
   const { data: groupDetail, isLoading: membersLoading } = useQuery({
     queryKey: ["admin-group-detail", selectedGroup?.id],
-    queryFn: () => groupsApi.get(selectedGroup!.id),
+    queryFn: () => groupsApi.getDetail(selectedGroup!.id),
     enabled: membersOpen && !!selectedGroup?.id,
   });
 
@@ -186,8 +186,7 @@ export default function GroupsPage() {
   }, []);
 
   // Compute members with type safety
-  const members: GroupMember[] =
-    (groupDetail as { members?: GroupMember[] })?.members ?? [];
+  const members: GroupMember[] = groupDetail?.members ?? [];
 
   const memberIds = new Set(members.map((m) => m.user_id));
   const availableUsers = (allUsers ?? []).filter(

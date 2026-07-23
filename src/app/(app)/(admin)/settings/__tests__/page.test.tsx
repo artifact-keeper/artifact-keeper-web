@@ -313,6 +313,7 @@ describe("SettingsPage", () => {
       max_upload_size_bytes: 1_073_741_824,
     },
     smtpConfig: DEFAULT_SMTP_DATA,
+    environment: "production",
   };
 
   /** Mocks the shared `admin-settings` query for a given bundle (or default). */
@@ -389,6 +390,43 @@ describe("SettingsPage", () => {
     // 5 GiB shows as the value "5" in the editable number input (#189).
     const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
     expect(numberInputs.find((i) => i.value === "5")).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Environment badge tests (General tab)
+  // ---------------------------------------------------------------------------
+
+  it("renders the Environment badge from the loaded settings value", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings({ ...DEFAULT_ADMIN_SETTINGS, environment: "staging" });
+
+    render(<SettingsPage />);
+
+    // Badge value comes from adminSettings.environment, no longer hardcoded.
+    expect(screen.getByText("staging")).toBeDefined();
+    expect(screen.queryByText("Production")).toBeNull();
+  });
+
+  it("falls back to Unknown when the environment field is empty", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings({ ...DEFAULT_ADMIN_SETTINGS, environment: "" });
+
+    render(<SettingsPage />);
+
+    // An older backend that omits ENVIRONMENT yields "" — the badge degrades
+    // to "Unknown" instead of the previous misleading hardcoded "Production".
+    expect(screen.getByText("Unknown")).toBeDefined();
+  });
+
+  it("falls back to Unknown when admin-settings errors", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockQueriesByKey({
+      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: false, isError: true },
+    });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Unknown")).toBeDefined();
   });
 
   it("shows Loading… in Storage fields while admin-settings is loading (#349)", () => {

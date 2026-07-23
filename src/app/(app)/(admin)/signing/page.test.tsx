@@ -127,6 +127,22 @@ describe("SigningPage", () => {
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 
+  it("shows a dedicated permission state on a 403 (no crash, no retry)", () => {
+    queryResponse = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: { status: 403 },
+      refetch: vi.fn(),
+    };
+    render(<SigningPage />);
+    expect(
+      screen.getByText(/don't have permission to manage signing keys/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load signing keys/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
+  });
+
   it("lists keys with type and status badges", () => {
     queryResponse = { data: [KEY], isLoading: false };
     render(<SigningPage />);

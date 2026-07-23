@@ -647,9 +647,23 @@ export GONOSUMCHECK=*`,
     case "debian":
       return [
         {
-          title: "Add APT repository",
+          title: "Add repository signing key",
+          code: `sudo mkdir -m 0755 -p /etc/apt/keyrings
+sudo curl -Lo /etc/apt/keyrings/artifact-keeper.gpg.asc ${REGISTRY_URL}/debian/${repoKey}/gpg-key.asc`,
+        },
+        {
+          title: "Add APT repository (single-line, old)",
           description: "Add to /etc/apt/sources.list.d/artifact-keeper.list:",
-          code: `deb ${REGISTRY_URL}/debian/${repoKey}/ stable main`,
+          code: `deb [signed-by=/etc/apt/keyrings/artifact-keeper.gpg.asc] ${REGISTRY_URL}/debian/${repoKey}/ stable main`,
+        },
+        {
+          title: "Add APT repository (DEB822, modern)",
+          description: "Add to /etc/apt/sources.list.d/artifact-keeper.sources:",
+          code: `Types: deb
+URIs: ${REGISTRY_URL}/debian/${repoKey}
+Suites: stable
+Components: main
+Signed-By: /etc/apt/keyrings/artifact-keeper.gpg.asc`,
         },
         {
           title: "Update and install",
