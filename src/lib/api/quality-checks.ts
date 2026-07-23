@@ -1,6 +1,5 @@
 import '@/lib/sdk-client';
 import {
-  listChecks,
   getCheck,
   listCheckIssues,
   triggerChecks,
@@ -8,7 +7,7 @@ import {
   unsuppressIssue,
 } from '@artifact-keeper/sdk';
 import type { CheckResponse, IssueResponse } from '@artifact-keeper/sdk';
-import { assertData } from '@/lib/api/fetch';
+import { apiFetch, assertData } from '@/lib/api/fetch';
 
 /** A quality-check result for an artifact (e.g. metadata, naming, policy). */
 export interface QualityCheck {
@@ -46,6 +45,14 @@ export interface QualityIssue {
 export interface ListChecksParams {
   repository_id?: string;
   artifact_id?: string;
+}
+
+/** Paginated envelope returned by GET /api/v1/admin/quality-checks (#2419). */
+interface QualityCheckListResponse {
+  items: CheckResponse[];
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 // The web models a subset of CheckResponse/IssueResponse — add fields here
@@ -88,9 +95,23 @@ function adaptIssue(sdk: IssueResponse): QualityIssue {
 
 const qualityChecksApi = {
   list: async (params: ListChecksParams = {}): Promise<QualityCheck[]> => {
-    const { data, error } = await listChecks({ query: params });
-    if (error) throw error;
-    return assertData(data, 'qualityChecksApi.list').map(adaptCheck);
+    // The admin quality-checks view needs a list-all (or filter-by-repo) view.
+    // The artifact-scoped GET /api/v1/quality/checks 400s without `artifact_id`
+    // (its #2334 contract), so this goes through the dedicated admin list-all
+    // endpoint GET /api/v1/admin/quality-checks (#2419), which accepts optional
+    // `repository_id`/`artifact_id`/`status` and returns a paginated
+    // `{ items, total, page, per_page }` envelope. The SDK doesn't model this
+    // endpoint yet, so the call uses the shared `apiFetch` trust boundary (the
+    // same pattern repositories.ts uses for endpoints the SDK doesn't model);
+    // collapse back to a generated SDK call once the SDK is regenerated.
+    const qs = new URLSearchParams();
+    if (params.repository_id) qs.set('repository_id', params.repository_id);
+    if (params.artifact_id) qs.set('artifact_id', params.artifact_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const data = await apiFetch<QualityCheckListResponse>(
+      `/api/v1/admin/quality-checks${suffix}`,
+    );
+    return assertData(data, 'qualityChecksApi.list').items.map(adaptCheck);
   },
 
   get: async (id: string): Promise<QualityCheck> => {

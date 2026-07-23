@@ -16,7 +16,6 @@ import curationApi, { type CurationPackage } from "@/lib/api/curation";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
-import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,9 +122,10 @@ export default function CurationPage() {
 
   const rows = packages ?? [];
   const allSelected = rows.length > 0 && rows.every((p) => selected.has(p.id));
-  // PackageResponse carries no per-row curation status, so the queue's state is
-  // the active filter. Only offer the transition that actually changes it:
-  // don't show "Approve" on the approved queue or "Block" on the blocked queue.
+  // Actions follow the active queue filter: only offer the transition that
+  // actually changes state — don't show "Approve" on the approved queue or
+  // "Block" on the blocked queue. (Per-row state is rendered from the new
+  // CurationPackageResponse.status; #574 SDK 1.5.0 migration.)
   const canApprove = status !== "approved";
   const canBlock = status !== "blocked";
 
@@ -246,7 +246,6 @@ export default function CurationPage() {
                 <th className="px-3 py-2 font-medium">Package</th>
                 <th className="px-3 py-2 font-medium">Version</th>
                 <th className="px-3 py-2 font-medium">Format</th>
-                <th className="px-3 py-2 font-medium">Size</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2" />
               </tr>
@@ -264,13 +263,12 @@ export default function CurationPage() {
                   <td className="px-3 py-2 font-medium">{p.name}</td>
                   <td className="px-3 py-2 font-mono text-xs">{p.version}</td>
                   <td className="px-3 py-2"><Badge variant="outline" className="uppercase">{p.format}</Badge></td>
-                  <td className="px-3 py-2 text-muted-foreground">{formatBytes(p.size_bytes)}</td>
                   <td className="px-3 py-2">
                     <Badge
-                      variant={status === "blocked" ? "destructive" : status === "approved" ? "secondary" : "outline"}
+                      variant={p.status === "blocked" ? "destructive" : p.status === "approved" ? "secondary" : "outline"}
                       className="capitalize"
                     >
-                      {status}
+                      {p.status}
                     </Badge>
                   </td>
                   <td className="px-3 py-2">

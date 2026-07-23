@@ -30,6 +30,20 @@ const repository = {
   format: "generic",
   repo_type: "virtual",
   storage_backend: "filesystem",
+  versioning_enabled: false,
+};
+
+// One canned artifact so the (stubbed) DataTable can open the detail dialog.
+const artifactFixture = {
+  id: "a1",
+  repository_key: "demo",
+  path: "team/config.yaml",
+  name: "config.yaml",
+  size_bytes: 10,
+  checksum_sha256: "c".repeat(64),
+  content_type: "application/x-yaml",
+  download_count: 0,
+  created_at: "2026-07-01T00:00:00Z",
 };
 
 vi.mock("@tanstack/react-query", () => ({
@@ -42,7 +56,10 @@ vi.mock("@tanstack/react-query", () => ({
     }
     if (key === "artifacts") {
       return {
-        data: { artifacts: [], total: 0, page: 1, per_page: 20, total_pages: 0 },
+        data: {
+          items: [artifactFixture],
+          pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+        },
         isLoading: false,
         isFetching: false,
       };
@@ -81,11 +98,19 @@ vi.mock("lucide-react", async (importOriginal) => {
 
 // API modules — imported at module load; never invoked (queryFn is not run).
 vi.mock("@/lib/api/repositories", () => ({ repositoriesApi: { get: vi.fn() } }));
-vi.mock("@/lib/api/artifacts", () => ({ artifactsApi: { listGrouped: vi.fn() } }));
+vi.mock("@/lib/api/artifacts", () => ({
+  artifactsApi: {
+    listGrouped: vi.fn(),
+    getAbsoluteDownloadUrl: () => "http://localhost/download",
+    getDownloadUrl: () => "/download",
+    createDownloadTicket: vi.fn(),
+  },
+}));
 vi.mock("@/lib/api/security", () => ({ default: { getRepoSecurity: vi.fn() } }));
 
 // Heavy / out-of-scope children stubbed to nothing meaningful. (vi.mock
 // factories are hoisted, so each stub is inlined rather than sharing a helper.)
+vi.mock("./artifact-versions-section", () => ({ ArtifactVersionsSection: () => <div data-stub="versions-section" /> }));
 vi.mock("./sbom-tab-content", () => ({ SbomTabContent: () => <div data-stub="sbom" /> }));
 vi.mock("./security-tab-content", () => ({ SecurityTabContent: () => <div data-stub="security" /> }));
 vi.mock("./health-tab-content", () => ({ HealthTabContent: () => <div data-stub="health" /> }));
@@ -100,7 +125,27 @@ vi.mock("./artifact-browser-toggle", () => ({
   supportsGrouping: () => false,
 }));
 vi.mock("@/components/common/data-table", () => ({
-  DataTable: () => <div data-stub="DataTable" />,
+  // Minimal row rendering so tests can open the artifact detail dialog via
+  // onRowClick, without pulling in the real table.
+  DataTable: ({
+    data,
+    onRowClick,
+  }: {
+    data?: Array<{ id: string; name: string }>;
+    onRowClick?: (row: unknown) => void;
+  }) => (
+    <div data-stub="DataTable">
+      {(data ?? []).map((row) => (
+        <button
+          key={row.id}
+          data-testid={`stub-row-${row.id}`}
+          onClick={() => onRowClick?.(row)}
+        >
+          {row.name}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 vi.mock("@/components/common/file-upload", () => ({
   FileUpload: () => <div data-stub="FileUpload" />,
@@ -140,5 +185,46 @@ describe("RepoDetailContent tab strip", () => {
       tabsWithoutIcon,
       `every tab should render a leading icon, but these did not: ${tabsWithoutIcon.join(", ")}`,
     ).toEqual([]);
+  });
+});
+
+describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.versioning_enabled = false;
+    repository.format = "generic";
+  });
+  afterEach(() => {
+    cleanup();
+    repository.versioning_enabled = false;
+    repository.format = "generic";
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    const row = screen.getByTestId("stub-row-a1");
+    row.click();
+    // The dialog tablist renders synchronously once selectedArtifact is set.
+    return await screen.findByText("Artifact Details", {}, { timeout: 2000 }).catch(() => null);
+  }
+
+  it("does not offer a Versions tab when the repository has versioning disabled", async () => {
+    await openDetailDialog();
+    expect(screen.queryByRole("tab", { name: /versions/i })).toBeNull();
+    // The regular Details tab is still there — existing dialog unaffected.
+    expect(screen.getAllByRole("tab", { name: /details/i }).length).toBeGreaterThan(0);
+  });
+
+  it("offers a Versions tab when versioning is enabled on a generic repository", async () => {
+    repository.versioning_enabled = true;
+    await openDetailDialog();
+    expect(screen.getByRole("tab", { name: /versions/i })).toBeTruthy();
+  });
+
+  it("hides the Versions tab for formats without first-class versioning even if the flag is set", async () => {
+    repository.versioning_enabled = true;
+    repository.format = "maven";
+    await openDetailDialog();
+    expect(screen.queryByRole("tab", { name: /versions/i })).toBeNull();
   });
 });

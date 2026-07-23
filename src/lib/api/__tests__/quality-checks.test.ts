@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../fetch", () => ({ assertData: <T,>(d: T) => d }));
+const { mockApiFetch } = vi.hoisted(() => ({ mockApiFetch: vi.fn() }));
+vi.mock("../fetch", () => ({
+  assertData: <T,>(d: T) => d,
+  apiFetch: (...a: unknown[]) => mockApiFetch(...a),
+}));
 vi.mock("@/lib/sdk-client", () => ({}));
 
 const m = {
-  listChecks: vi.fn(),
   getCheck: vi.fn(),
   listCheckIssues: vi.fn(),
   triggerChecks: vi.fn(),
@@ -12,7 +15,6 @@ const m = {
   unsuppressIssue: vi.fn(),
 };
 vi.mock("@artifact-keeper/sdk", () => ({
-  listChecks: (...a: unknown[]) => m.listChecks(...a),
   getCheck: (...a: unknown[]) => m.getCheck(...a),
   listCheckIssues: (...a: unknown[]) => m.listCheckIssues(...a),
   triggerChecks: (...a: unknown[]) => m.triggerChecks(...a),
@@ -37,16 +39,30 @@ const ISSUE = {
 beforeEach(() => vi.clearAllMocks());
 
 describe("qualityChecksApi", () => {
-  it("list passes query params and maps CheckResponse[]", async () => {
-    m.listChecks.mockResolvedValue({ data: [CHECK], error: undefined });
+  it("list hits the admin list-all endpoint and unwraps the envelope", async () => {
+    mockApiFetch.mockResolvedValue({ items: [CHECK], total: 1, page: 1, per_page: 50 });
     const out = await qualityChecksApi.list({ repository_id: "r1" });
-    expect(m.listChecks).toHaveBeenCalledWith({ query: { repository_id: "r1" } });
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/quality-checks?repository_id=r1");
     expect(out[0]).toMatchObject({ id: "c1", check_type: "metadata", passed: false, critical_count: 1 });
   });
 
+  it("list with no params queries the unfiltered admin endpoint", async () => {
+    mockApiFetch.mockResolvedValue({ items: [], total: 0, page: 1, per_page: 50 });
+    await qualityChecksApi.list();
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/quality-checks");
+  });
+
+  it("list encodes both artifact_id and repository_id filters", async () => {
+    mockApiFetch.mockResolvedValue({ items: [], total: 0, page: 1, per_page: 50 });
+    await qualityChecksApi.list({ repository_id: "r1", artifact_id: "a1" });
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/admin/quality-checks?repository_id=r1&artifact_id=a1",
+    );
+  });
+
   it("list throws on error", async () => {
-    m.listChecks.mockResolvedValue({ data: undefined, error: { status: 500 } });
-    await expect(qualityChecksApi.list()).rejects.toEqual({ status: 500 });
+    mockApiFetch.mockRejectedValue(new Error("API error 500: boom"));
+    await expect(qualityChecksApi.list()).rejects.toThrow(/500/);
   });
 
   it("listIssues passes the check id and maps issues", async () => {

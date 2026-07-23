@@ -42,6 +42,9 @@ import {
   ClipboardCheck,
   Filter,
   Gauge,
+  ScrollText,
+  Network,
+  Crosshair,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -92,6 +95,7 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
   { title: "Quality Checks", href: "/quality-checks", icon: ListChecks },
@@ -104,6 +108,7 @@ const securityItems: NavItem[] = [
 
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Downloads", href: "/downloads", icon: Network },
   { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
   { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
   { title: "Health", href: "/system-health", icon: HeartPulse },
@@ -117,6 +122,7 @@ const adminItems: NavItem[] = [
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
   { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
+  { title: "Audit Log", href: "/audit", icon: ScrollText },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },

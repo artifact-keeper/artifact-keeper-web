@@ -2,7 +2,13 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
-import { FORMAT_OPTIONS, TYPE_OPTIONS } from "../_lib/constants";
+import {
+  FORMAT_OPTIONS,
+  TYPE_OPTIONS,
+  hasRpmTrustedKeyConfig,
+  hasDebianConfig,
+  hasNpmScopePolicy,
+} from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
 
 // Alphabetised copy of FORMAT_OPTIONS for the create dialog's flat dropdown.
@@ -34,6 +40,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import {
+  RpmTrustedKeyField,
+  DebianConfigFields,
+  NpmScopePolicyFields,
+  buildRpmConfigFields,
+  buildDebianConfigFields,
+  buildNpmScopePolicyFields,
+  EMPTY_RPM_CONFIG,
+  EMPTY_DEBIAN_CONFIG,
+  EMPTY_NPM_SCOPE_POLICY,
+  type RpmConfigValue,
+  type DebianConfigValue,
+  type NpmScopePolicyValue,
+} from "./format-config-fields";
 
 type QuotaUnit = "MB" | "GB";
 
@@ -128,6 +148,14 @@ export function RepoDialogs({
   const [upstreamAuthType, setUpstreamAuthType] = useState<string>("none");
   const [upstreamUsername, setUpstreamUsername] = useState("");
   const [upstreamPassword, setUpstreamPassword] = useState("");
+
+  // 1.6.0 format-specific config state for the create dialog (#602).
+  const [rpmConfig, setRpmConfig] = useState<RpmConfigValue>(EMPTY_RPM_CONFIG);
+  const [debianConfig, setDebianConfig] =
+    useState<DebianConfigValue>(EMPTY_DEBIAN_CONFIG);
+  const [npmScopePolicy, setNpmScopePolicy] = useState<NpmScopePolicyValue>(
+    EMPTY_NPM_SCOPE_POLICY,
+  );
 
   /**
    * Suggest a default upstream URL when the repo type is "remote".
@@ -237,6 +265,9 @@ export function RepoDialogs({
     setUpstreamAuthType("none");
     setUpstreamUsername("");
     setUpstreamPassword("");
+    setRpmConfig(EMPTY_RPM_CONFIG);
+    setDebianConfig(EMPTY_DEBIAN_CONFIG);
+    setNpmScopePolicy(EMPTY_NPM_SCOPE_POLICY);
   };
 
   // Reset the create form whenever the dialog opens. The parent flips
@@ -294,6 +325,20 @@ export function RepoDialogs({
                   submitData.upstream_username = upstreamUsername;
                 }
                 submitData.upstream_password = upstreamPassword;
+              }
+              // 1.6.0 format-specific config (#602): attach only the group that
+              // matches the selected format so other formats send nothing.
+              if (hasRpmTrustedKeyConfig(createForm.format)) {
+                Object.assign(submitData, buildRpmConfigFields(rpmConfig));
+              } else if (hasDebianConfig(createForm.format)) {
+                Object.assign(submitData, buildDebianConfigFields(debianConfig));
+              } else if (
+                hasNpmScopePolicy(createForm.format, createForm.repo_type)
+              ) {
+                Object.assign(
+                  submitData,
+                  buildNpmScopePolicyFields(npmScopePolicy),
+                );
               }
               onCreateSubmit(submitData);
             }}
@@ -520,6 +565,41 @@ export function RepoDialogs({
                 <p className="text-xs text-muted-foreground">
                   Select repositories to aggregate. Order determines priority.
                 </p>
+              </div>
+            )}
+
+            {/* RPM curation trusted GPG key (#2568) */}
+            {hasRpmTrustedKeyConfig(createForm.format) && (
+              <div className="space-y-3 border-t pt-4">
+                <RpmTrustedKeyField
+                  idPrefix="create"
+                  value={rpmConfig}
+                  onChange={setRpmConfig}
+                />
+              </div>
+            )}
+
+            {/* Advanced Debian/APT config (#2407/#2460/#2489/#2459) */}
+            {hasDebianConfig(createForm.format) && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>Debian / APT Configuration</Label>
+                <DebianConfigFields
+                  idPrefix="create"
+                  value={debianConfig}
+                  onChange={setDebianConfig}
+                />
+              </div>
+            )}
+
+            {/* npm scope policy (#2424) */}
+            {hasNpmScopePolicy(createForm.format, createForm.repo_type) && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>npm Scope Policy</Label>
+                <NpmScopePolicyFields
+                  idPrefix="create"
+                  value={npmScopePolicy}
+                  onChange={setNpmScopePolicy}
+                />
               </div>
             )}
 

@@ -40,8 +40,12 @@ test.describe('Migration Page', () => {
     await page.getByRole('button', { name: /add connection/i }).first().click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 });
 
-    await expect(page.getByLabel(/name/i)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByLabel(/endpoint url/i).or(page.getByLabel(/url/i))).toBeVisible({ timeout: 10000 });
+    // Scope to the dialog and match the exact "Name" label so we resolve the
+    // connection-name input, not the "Sort by Name" sort button on the
+    // Source Connections table rendered behind the dialog.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(dialog.getByLabel(/endpoint url/i)).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/authentication type|auth type/i).first()).toBeVisible({ timeout: 10000 });
 
     // Close dialog

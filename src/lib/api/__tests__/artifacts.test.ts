@@ -23,7 +23,12 @@ describe("artifactsApi", () => {
     const data = { items: [{ id: "a1" }], pagination: { total: 1 } };
     mockListArtifacts.mockResolvedValue({ data, error: undefined });
     const { artifactsApi } = await import("../artifacts");
-    expect(await artifactsApi.list("repo-key")).toEqual(data);
+    const result = await artifactsApi.list("repo-key");
+    // adaptArtifact defaults the new `analyzable` flag to true when the
+    // backend omits it (artifact-keeper#2292); other unset fields ride
+    // through as `undefined`, which toEqual ignores.
+    expect(result.items).toEqual([{ id: "a1", analyzable: true }]);
+    expect(result.pagination).toEqual({ total: 1 });
   });
 
   it("list throws on error", async () => {
@@ -146,6 +151,95 @@ describe("artifactsApi", () => {
     const result = await artifactsApi.list("pypi-remote");
     expect(result.items[0].cache_cached_at).toBeUndefined();
     expect(result.items[0].cache_expires_at).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // adaptArtifact: analyzable flag (artifact-keeper#2292 / backend #2291)
+  //
+  // The backend marks proxy-cached remote artifacts `analyzable: false` (no
+  // artifacts row → SBOM/scan 404). The wrapper must pass an explicit `false`
+  // through and default a missing/true field to `true` so hosted artifacts and
+  // pre-upgrade responses stay analyzable.
+  // -------------------------------------------------------------------------
+
+  it("passes analyzable: false through adaptArtifact for proxy-cached artifacts", async () => {
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "cached-1",
+            repository_key: "pypi-remote",
+            path: "requests/requests-2.31.0-py3-none-any.whl",
+            name: "requests-2.31.0-py3-none-any.whl",
+            size_bytes: 62500,
+            checksum_sha256: "deadbeef",
+            content_type: "application/octet-stream",
+            download_count: 0,
+            created_at: "2026-06-01T10:00:00Z",
+            analyzable: false,
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("pypi-remote");
+    expect(result.items[0].analyzable).toBe(false);
+  });
+
+  it("preserves analyzable: true through adaptArtifact for hosted artifacts", async () => {
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "hosted-1",
+            repository_key: "local-repo",
+            path: "lib.jar",
+            name: "lib.jar",
+            size_bytes: 100,
+            checksum_sha256: "x",
+            content_type: "application/octet-stream",
+            download_count: 0,
+            created_at: "2026-06-01T10:00:00Z",
+            analyzable: true,
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("local-repo");
+    expect(result.items[0].analyzable).toBe(true);
+  });
+
+  it("defaults analyzable to true on adaptArtifact when the backend omits the field", async () => {
+    // Older backends / not-yet-regenerated SDK responses have no `analyzable`
+    // key; the wrapper must treat that as analyzable so hosted artifacts keep
+    // offering SBOM/scan (safe default matching the backend).
+    mockListArtifacts.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "legacy-1",
+            repository_key: "local-repo",
+            path: "old.jar",
+            name: "old.jar",
+            size_bytes: 100,
+            checksum_sha256: "x",
+            content_type: "application/octet-stream",
+            download_count: 0,
+            created_at: "2026-06-01T10:00:00Z",
+          },
+        ],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const { artifactsApi } = await import("../artifacts");
+    const result = await artifactsApi.list("local-repo");
+    expect(result.items[0].analyzable).toBe(true);
   });
 
   // -------------------------------------------------------------------------

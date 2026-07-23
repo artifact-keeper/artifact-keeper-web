@@ -1444,7 +1444,100 @@ describe("MigrationPage — feature parity (#520)", () => {
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
     // Artifacts migrated/total from the report summary.
     expect(screen.getByText("9/10")).toBeInTheDocument();
+    expect(screen.getByText("2/2")).toBeInTheDocument();
     expect(screen.getByText("Re-run failed artifacts")).toBeInTheDocument();
+  });
+
+  // Regression for artifact-keeper#2455: the backend materializes `summary`
+  // dynamically and OMITS a per-category key (artifacts/repositories/...) when
+  // the completed job migrated no items of that type (assessment jobs, or full
+  // jobs that touched no artifacts). The detail modal used to read
+  // `report.summary.artifacts.migrated` unguarded, so an absent category threw
+  // "Cannot read properties of undefined (reading 'migrated')" and the admin
+  // error boundary replaced the whole page.
+  it("renders a completed job whose report omits the artifacts/repositories summary without crashing", async () => {
+    const job = makeJob({
+      id: "job-part-0001",
+      status: "completed",
+      job_type: "full",
+    });
+    // Partial report: only users were migrated, so artifacts/repositories keys
+    // are absent from `summary` — exactly what generate_report emits.
+    const partialReport = makeReport({
+      job_id: job.id,
+      summary: {
+        duration_seconds: 30,
+        users: { total: 2, migrated: 2, failed: 0, skipped: 0 },
+        total_bytes_transferred: 0,
+      } as MigrationReport["summary"],
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: partialReport },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-part...")));
+    // The report block renders; missing categories fall back to an em dash
+    // instead of crashing the page.
+    expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders a completed assessment job with a summary-only report (no category counts) without crashing", async () => {
+    const job = makeJob({
+      id: "job-asmt-9999",
+      status: "completed",
+      job_type: "assessment",
+    });
+    // Assessment jobs create no migration items → summary has only the scalar
+    // fields, and warnings/errors/recommendations may be empty.
+    const summaryOnly = makeReport({
+      job_id: job.id,
+      summary: {
+        duration_seconds: 5,
+        total_bytes_transferred: 0,
+      } as MigrationReport["summary"],
+      warnings: [],
+      errors: [],
+      recommendations: [],
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: summaryOnly },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-asmt...")));
+    expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
+    // Both category tiles show the em-dash fallback; warnings/errors show 0.
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows the progress view (and no reconciliation report) for a running job", async () => {
+    const job = makeJob({
+      id: "job-run-0001",
+      status: "running",
+      job_type: "full",
+      completed_items: 7,
+      total_items: 20,
+    });
+    // Running jobs are non-terminal, so the report query stays disabled/empty.
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: undefined },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-run-...")));
+    // Progress counts render (list row + dialog); the reconciliation report
+    // block does not.
+    expect(screen.getAllByText("7/20").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Reconciliation Report")).not.toBeInTheDocument();
   });
 
   it("downloads the HTML report on demand", async () => {

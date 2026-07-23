@@ -15,6 +15,7 @@ import {
   Shield,
   ExternalLink,
   HeartPulse,
+  History,
   Layers,
   Package as PackageIcon,
   Settings,
@@ -29,10 +30,16 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import securityApi from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isActivelyQuarantined } from "@/lib/quarantine";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
+import { supportsVersioning } from "@/lib/api/versions";
+import { ArtifactVersionsSection } from "./artifact-versions-section";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
 import { HealthTabContent } from "./health-tab-content";
@@ -51,6 +58,8 @@ import { DockerTagList } from "./docker-tag-list";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
+import { RepoStoragePanel } from "./repo-storage-panel";
+import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -163,6 +172,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
   const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
+  // First-class version history (#571, backend artifact-keeper#2367): only
+  // repositories that opted in via `versioning_enabled` AND whose format
+  // participates (Generic/Mlmodel) get the Versions tab in the artifact
+  // detail dialog. Everything else keeps the existing dialog unchanged.
+  const versioningActive =
+    !!repository?.versioning_enabled &&
+    !!repoFormat &&
+    supportsVersioning(repoFormat);
   // For Docker grouping we need all artifacts on one page so the client
   // aggregation sees everything.  Bound by a high cap to avoid runaway
   // responses on huge registries.
@@ -469,12 +486,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   variant="ghost"
                   size="icon-xs"
                   onClick={() => scanArtifactMutation.mutate(a.id)}
-                  disabled={scanArtifactMutation.isPending}
+                  disabled={
+                    scanArtifactMutation.isPending || !isArtifactAnalyzable(a)
+                  }
                 >
                   <Shield className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Scan</TooltipContent>
+              <TooltipContent>
+                {isArtifactAnalyzable(a) ? "Scan" : ANALYZABLE_DISABLED_REASON}
+              </TooltipContent>
             </Tooltip>
           )}
           {isAuthenticated && (
@@ -627,6 +648,27 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           )}
         </div>
       )}
+
+      {/* Deduplicated storage usage (epic artifact-keeper#2056). Renders the
+          real physical/logical footprint, dedup savings, and — for admins —
+          the instance total and reclaimable estimate. Field visibility for
+          non-admins on instance-scope backends is enforced by the backend and
+          handled gracefully by the panel. */}
+      <RepoStoragePanel
+        repository={repository}
+        isAdmin={!!user?.is_admin}
+      />
+
+      {/* Per-folder deduplicated storage (epic artifact-keeper#2056, sub-task
+          4). Lists each top-level folder's real physical footprint and dedup
+          split. The folder-level figures are not yet part of the generated SDK,
+          so the panel reads them from the tree response via a validated
+          trust-boundary adapter and renders nothing until a backend reports
+          them — no empty panel on backends that predate the folder API. */}
+      <RepoFolderStoragePanel
+        repository={repository}
+        isAdmin={!!user?.is_admin}
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="artifacts">
@@ -964,6 +1006,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Info className="size-3.5 mr-1" />
                   Details
                 </TabsTrigger>
+                {versioningActive && (
+                  <TabsTrigger value="versions">
+                    <History className="size-3.5 mr-1" />
+                    Versions
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="sbom">
                   <FileIcon className="size-3.5 mr-1" />
                   SBOM
@@ -1068,6 +1116,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 </div>
               </TabsContent>
 
+              {versioningActive && (
+                <TabsContent
+                  value="versions"
+                  className="flex-1 overflow-y-auto mt-4"
+                >
+                  <ArtifactVersionsSection
+                    repoKey={repoKey}
+                    artifact={selectedArtifact}
+                  />
+                </TabsContent>
+              )}
+
               <TabsContent value="sbom" className="flex-1 overflow-y-auto mt-4">
                 <SbomTabContent artifact={selectedArtifact} />
               </TabsContent>
@@ -1094,7 +1154,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Button
                     variant="outline"
                     onClick={() => scanArtifactMutation.mutate(selectedArtifact.id)}
-                    disabled={scanArtifactMutation.isPending}
+                    disabled={
+                      scanArtifactMutation.isPending ||
+                      !isArtifactAnalyzable(selectedArtifact)
+                    }
+                    title={
+                      isArtifactAnalyzable(selectedArtifact)
+                        ? undefined
+                        : ANALYZABLE_DISABLED_REASON
+                    }
                   >
                     <Shield className="size-4" />
                     {scanArtifactMutation.isPending ? "Scanning..." : "Scan"}

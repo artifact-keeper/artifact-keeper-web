@@ -12,8 +12,8 @@ import {
 import type {
   LifecyclePolicy as SdkLifecyclePolicy,
   PolicyExecutionResult as SdkPolicyExecutionResult,
-  CreatePolicyRequest as SdkCreatePolicyRequest,
-  UpdatePolicyRequest as SdkUpdatePolicyRequest,
+  CreateLifecyclePolicyRequest as SdkCreateLifecyclePolicyRequest,
+  UpdateLifecyclePolicyRequest as SdkUpdateLifecyclePolicyRequest,
 } from '@artifact-keeper/sdk';
 import type {
   LifecyclePolicy,
@@ -64,17 +64,15 @@ function adaptPolicyExecutionResult(
   };
 }
 
-// SDK type leak: the generated `createLifecyclePolicy` / `updateLifecyclePolicy`
-// declare their bodies as `CreatePolicyRequest` / `UpdatePolicyRequest`, which
-// belong to the *security policies* endpoints (block_on_fail, max_severity, …)
-// and have nothing to do with lifecycle policies. The actual backend accepts
-// the local `CreateLifecyclePolicyRequest` / `UpdateLifecyclePolicyRequest`
-// shape; we forward fields explicitly (typed as the local request shape so
-// adding a local field forces an adapter update) and double-cast through
-// `unknown` to satisfy the wrong SDK signature. Track removal in #359 once
-// the generator is rebuilt against the corrected OpenAPI spec.
-function adaptCreateRequest(req: CreateLifecyclePolicyRequest): SdkCreatePolicyRequest {
-  const body: CreateLifecyclePolicyRequest = {
+// SDK 1.5.0 (#359) split the lifecycle request schemas out from the *security
+// policies* schemas (block_on_fail, max_severity, …): `createLifecyclePolicy` /
+// `updateLifecyclePolicy` now correctly declare their bodies as
+// `CreateLifecyclePolicyRequest` / `UpdateLifecyclePolicyRequest`, so the old
+// double-cast-through-`unknown` workaround is gone. Fields are still forwarded
+// explicitly (typed as the local request shape) so adding a local field forces
+// an adapter update rather than silently drifting.
+function adaptCreateRequest(req: CreateLifecyclePolicyRequest): SdkCreateLifecyclePolicyRequest {
+  return {
     name: req.name,
     policy_type: req.policy_type,
     config: req.config,
@@ -82,17 +80,15 @@ function adaptCreateRequest(req: CreateLifecyclePolicyRequest): SdkCreatePolicyR
     description: req.description,
     priority: req.priority,
   };
-  return body as unknown as SdkCreatePolicyRequest;
 }
-function adaptUpdateRequest(req: UpdateLifecyclePolicyRequest): SdkUpdatePolicyRequest {
-  const body: UpdateLifecyclePolicyRequest = {
+function adaptUpdateRequest(req: UpdateLifecyclePolicyRequest): SdkUpdateLifecyclePolicyRequest {
+  return {
     name: req.name,
     description: req.description,
     enabled: req.enabled,
     config: req.config,
     priority: req.priority,
   };
-  return body as unknown as SdkUpdatePolicyRequest;
 }
 
 const lifecycleApi = {
