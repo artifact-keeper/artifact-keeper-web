@@ -39,6 +39,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { packagesApi } from "@/lib/api/packages";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { getInstallCommand, FORMAT_OPTIONS } from "@/lib/package-utils";
@@ -392,6 +398,7 @@ export default function PackagesPage() {
 function PackagesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   // Filters from URL
   const [search, setSearch] = useState(searchParams.get("search") || "");
@@ -435,45 +442,6 @@ function PackagesContent() {
   const totalPages = packagesData?.pagination?.total_pages ?? 0;
   const totalPackages = packagesData?.pagination?.total ?? 0;
 
-  // Selected package
-  const selectedPackage = packages.find((p) => p.id === selectedPackageId) || null;
-
-  // Fetch package details
-  const { data: packageDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ["package-detail", selectedPackageId],
-    queryFn: () =>
-      selectedPackageId ? packagesApi.get(selectedPackageId) : null,
-    enabled: !!selectedPackageId,
-  });
-
-  // Fetch versions
-  const { data: packageVersions, isLoading: versionsLoading } = useQuery({
-    queryKey: ["package-versions", selectedPackageId],
-    queryFn: () =>
-      selectedPackageId ? packagesApi.getVersions(selectedPackageId) : null,
-    enabled: !!selectedPackageId,
-  });
-
-  // Update URL with filters
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (format) params.set("format", format);
-    if (repository) params.set("repository", repository);
-    if (sortBy !== "downloads") params.set("sort", sortBy);
-    if (selectedPackageId) params.set("selected", selectedPackageId);
-    router.replace(`/packages?${params.toString()}`, { scroll: false });
-  }, [search, format, repository, sortBy, selectedPackageId, router]);
-
-  const handleSelectPackage = useCallback((pkg: Package) => {
-    setSelectedPackageId(pkg.id);
-  }, []);
-
-  const handleFilterChange = useCallback(() => {
-    setPage(1);
-    setSelectedPackageId(null);
-  }, []);
-
   // Sort packages client-side
   const sortedPackages = [...packages].sort((a, b) => {
     switch (sortBy) {
@@ -490,16 +458,64 @@ function PackagesContent() {
     }
   });
 
+  // Auto-select first package on desktop when none selected (matches repositories/staging)
+  const autoSelectedId =
+    !isMobile && !selectedPackageId && sortedPackages.length > 0 && !packagesLoading
+      ? sortedPackages[0].id
+      : null;
+  const effectiveSelectedId = selectedPackageId ?? autoSelectedId;
+
+  // Selected package
+  const selectedPackage =
+    packages.find((p) => p.id === effectiveSelectedId) || null;
+
+  // Fetch package details
+  const { data: packageDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ["package-detail", effectiveSelectedId],
+    queryFn: () =>
+      effectiveSelectedId ? packagesApi.get(effectiveSelectedId) : null,
+    enabled: !!effectiveSelectedId,
+  });
+
+  // Fetch versions
+  const { data: packageVersions, isLoading: versionsLoading } = useQuery({
+    queryKey: ["package-versions", effectiveSelectedId],
+    queryFn: () =>
+      effectiveSelectedId ? packagesApi.getVersions(effectiveSelectedId) : null,
+    enabled: !!effectiveSelectedId,
+  });
+
+  // Update URL with filters
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (format) params.set("format", format);
+    if (repository) params.set("repository", repository);
+    if (sortBy !== "downloads") params.set("sort", sortBy);
+    if (selectedPackageId) params.set("selected", selectedPackageId);
+    router.replace(`/packages?${params.toString()}`, { scroll: false });
+  }, [search, format, repository, sortBy, selectedPackageId, router]);
+
+  const handleSelectPackage = useCallback(
+    (pkg: Package) => {
+      if (isMobile) {
+        router.push(`/packages/${pkg.id}`);
+      } else {
+        setSelectedPackageId(pkg.id);
+      }
+    },
+    [isMobile, router]
+  );
+
+  const handleFilterChange = useCallback(() => {
+    setPage(1);
+    setSelectedPackageId(null);
+  }, []);
+
   const detailPkg = packageDetail ?? selectedPackage;
 
-  return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row">
-      {/* Left Panel */}
-      <div
-        className={`flex flex-col border-r ${
-          selectedPackageId ? "w-full md:w-[350px]" : "w-full"
-        } shrink-0`}
-      >
+  const masterContent = (
+    <div className="flex flex-col h-full">
         {/* Header */}
         <div className="p-4 border-b space-y-3">
           <div className="flex items-center justify-between">
@@ -625,7 +641,7 @@ function PackagesContent() {
                 <PackageListItem
                   key={pkg.id}
                   pkg={pkg}
-                  isSelected={selectedPackageId === pkg.id}
+                  isSelected={effectiveSelectedId === pkg.id}
                   onClick={() => handleSelectPackage(pkg)}
                   viewMode={viewMode}
                 />
@@ -659,57 +675,53 @@ function PackagesContent() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Right Panel - only show when there are packages to select */}
-      {(selectedPackageId || sortedPackages.length > 0) && (
-      <div className="flex-1 min-w-0 hidden md:flex">
-        {!selectedPackageId ? (
-          <div className="flex flex-col items-center justify-center w-full text-center">
-            <PackageIcon className="size-12 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Select a package to view details
-            </p>
-          </div>
-        ) : detailPkg ? (
-          <div className="w-full overflow-hidden">
-            <PackageDetailPanel
-              pkg={detailPkg}
-              versions={packageVersions ?? []}
-              isLoadingDetail={detailLoading || versionsLoading}
-            />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center w-full">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          </div>
-        )}
-      </div>
-      )}
-
-      {/* Mobile detail view */}
-      {selectedPackageId && detailPkg && (
-        <div className="md:hidden fixed inset-0 z-50 bg-background">
-          <div className="flex items-center gap-2 p-3 border-b">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedPackageId(null)}
-              className="gap-1"
-            >
-              <ChevronLeft className="size-4" />
-              Back
-            </Button>
-          </div>
-          <div className="h-[calc(100vh-3rem)] overflow-auto">
-            <PackageDetailPanel
-              pkg={detailPkg}
-              versions={packageVersions ?? []}
-              isLoadingDetail={detailLoading || versionsLoading}
-            />
-          </div>
-        </div>
-      )}
     </div>
+  );
+
+  const detailPanel = !effectiveSelectedId ? (
+    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+      <PackageIcon className="size-12 mb-3 opacity-30" />
+      <p className="text-sm font-medium">Select a package</p>
+      <p className="text-xs mt-1">
+        Choose a package from the list to view details.
+      </p>
+    </div>
+  ) : detailPkg ? (
+    <div className="h-full overflow-hidden">
+      <PackageDetailPanel
+        pkg={detailPkg}
+        versions={packageVersions ?? []}
+        isLoadingDetail={detailLoading || versionsLoading}
+      />
+    </div>
+  ) : (
+    <div className="flex items-center justify-center h-full">
+      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+
+  // Master-detail layout — matches repositories/staging
+  return isMobile ? (
+    // Mobile: just the list, clicking navigates to the detail page
+    <div
+      className="border rounded-lg overflow-hidden"
+      style={{ height: "calc(100vh - 8rem)" }}
+    >
+      {masterContent}
+    </div>
+  ) : (
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className="border rounded-lg overflow-hidden"
+      style={{ height: "calc(100vh - 8rem)" }}
+    >
+      <ResizablePanel defaultSize="30%" minSize="20%" maxSize="45%">
+        {masterContent}
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize="70%" minSize="55%">
+        {detailPanel}
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

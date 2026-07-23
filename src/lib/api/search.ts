@@ -4,6 +4,8 @@ import type {
   SearchResultItem,
   AdvancedSearchResponse,
   ChecksumArtifact,
+  FacetValue as SdkFacetValue,
+  FacetsResponse as SdkFacetsResponse,
 } from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
@@ -50,6 +52,33 @@ export interface AdvancedSearchParams {
 export interface ChecksumSearchParams {
   checksum: string;
   algorithm?: 'sha256' | 'sha1' | 'md5';
+}
+
+/** A single facet bucket: a value and how many results carry it. */
+export interface SearchFacet {
+  value: string;
+  count: number;
+}
+
+/**
+ * Aggregations returned alongside advanced search results. The OpenSearch
+ * backend computes these server-side so the UI can show counts per format and
+ * per repository without a second round trip. Each array is sorted by the
+ * backend in descending count order.
+ */
+export interface SearchFacets {
+  formats: SearchFacet[];
+  repositories: SearchFacet[];
+  content_types: SearchFacet[];
+}
+
+/**
+ * Advanced search response: a paginated result set plus the facet
+ * aggregations. This is `PaginatedResponse<SearchResult>` widened with
+ * `facets` so callers that only need items keep working unchanged.
+ */
+export interface AdvancedSearchResult extends PaginatedResponse<SearchResult> {
+  facets: SearchFacets;
 }
 
 const SEARCH_RESULT_TYPES = new Set<SearchResult['type']>(['artifact', 'package', 'repository']);
@@ -111,10 +140,23 @@ function adaptChecksumArtifact(sdk: ChecksumArtifact): Artifact {
   };
 }
 
-function adaptAdvancedSearch(sdk: AdvancedSearchResponse): PaginatedResponse<SearchResult> {
+function adaptFacet(f: SdkFacetValue): SearchFacet {
+  return { value: f.value, count: f.count };
+}
+
+function adaptFacets(f: SdkFacetsResponse | undefined): SearchFacets {
+  return {
+    formats: (f?.formats ?? []).map(adaptFacet),
+    repositories: (f?.repositories ?? []).map(adaptFacet),
+    content_types: (f?.content_types ?? []).map(adaptFacet),
+  };
+}
+
+function adaptAdvancedSearch(sdk: AdvancedSearchResponse): AdvancedSearchResult {
   return {
     items: sdk.items.map(adaptSearchResult),
     pagination: sdk.pagination,
+    facets: adaptFacets(sdk.facets),
   };
 }
 
@@ -133,7 +175,7 @@ export const searchApi = {
 
   advancedSearch: async (
     params: AdvancedSearchParams
-  ): Promise<PaginatedResponse<SearchResult>> => {
+  ): Promise<AdvancedSearchResult> => {
     const { data, error } = await advancedSearch({ query: params });
     if (error) throw error;
     return adaptAdvancedSearch(assertData(data, 'searchApi.advancedSearch'));

@@ -74,6 +74,9 @@ const SDK_OIDC: SdkOidcConfigResponse = {
   scopes: ["openid", "email"],
   attribute_mapping: { email: "email", name: "name" },
   auto_create_users: true,
+  map_groups_to_groups: false,
+  pkce_enabled: false,
+  allow_legacy_rsa_keys: false,
   is_enabled: true,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
@@ -113,6 +116,8 @@ const SDK_SAML: SdkSamlConfigResponse = {
   attribute_mapping: { email: "Email", name: "DisplayName" },
   sign_requests: true,
   require_signed_assertions: true,
+  use_absolute_acs_url: false,
+  map_groups_to_groups: false,
   admin_group: "Admins",
   is_enabled: true,
   created_at: "2026-04-01T00:00:00Z",
@@ -189,6 +194,54 @@ describe("ssoApi", () => {
     mockListOidc.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
     await expect(ssoApi.listOidc()).rejects.toBe("fail");
+  });
+
+  it("adaptOidc propagates map_groups_to_groups when present (#534)", async () => {
+    mockListOidc.mockResolvedValue({
+      data: [{ ...SDK_OIDC, map_groups_to_groups: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].map_groups_to_groups).toBe(true);
+  });
+
+  it("adaptOidc defaults map_groups_to_groups to false when absent (#534)", async () => {
+    // Older backends (pre artifact-keeper#1879) never emit the field.
+    const { map_groups_to_groups: _omit, ...withoutField } = SDK_OIDC;
+    void _omit;
+    mockListOidc.mockResolvedValue({
+      data: [withoutField],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listOidc();
+    expect(out[0].map_groups_to_groups).toBe(false);
+  });
+
+  it("createOidc forwards map_groups_to_groups (#534)", async () => {
+    mockCreateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.createOidc({
+      name: "Corp OIDC",
+      issuer_url: "https://accounts.example.com",
+      client_id: "client-1",
+      client_secret: "secret",
+      map_groups_to_groups: true,
+    });
+    expect(mockCreateOidc).toHaveBeenCalledWith({
+      body: expect.objectContaining({ map_groups_to_groups: true }),
+    });
+  });
+
+  it("updateOidc forwards map_groups_to_groups (#534)", async () => {
+    mockUpdateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.updateOidc("o1", { map_groups_to_groups: false });
+    expect(mockUpdateOidc).toHaveBeenCalledWith({
+      path: { id: "o1" },
+      body: expect.objectContaining({ map_groups_to_groups: false }),
+    });
   });
 
   it("getOidc returns config", async () => {
@@ -471,6 +524,24 @@ describe("ssoApi", () => {
     mockListSaml.mockResolvedValue({ data: undefined, error: "fail" });
     const { ssoApi } = await import("../sso");
     await expect(ssoApi.listSaml()).rejects.toBe("fail");
+  });
+
+  it("adaptSaml defaults use_absolute_acs_url to false when absent (#521)", async () => {
+    // Pre-migration-139 backend never emits the field.
+    mockListSaml.mockResolvedValue({ data: [SDK_SAML], error: undefined });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].use_absolute_acs_url).toBe(false);
+  });
+
+  it("adaptSaml propagates use_absolute_acs_url when present (#521)", async () => {
+    mockListSaml.mockResolvedValue({
+      data: [{ ...SDK_SAML, use_absolute_acs_url: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].use_absolute_acs_url).toBe(true);
   });
 
   it("getSaml returns config", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, FileIcon, Package as PackageIcon } from "lucide-react";
+import { ChevronRight, Download, FileIcon, Package as PackageIcon } from "lucide-react";
 
 import {
   Collapsible,
@@ -11,6 +11,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DataTablePagination } from "@/components/common/data-table-pagination";
+import { artifactsApi } from "@/lib/api/artifacts";
+import { isPomFile, mavenFilePath } from "@/lib/maven";
 import { cn, formatBytes } from "@/lib/utils";
 import type { MavenComponent } from "@/types";
 
@@ -20,16 +23,30 @@ interface MavenComponentListProps {
   emptyMessage?: string;
   /**
    * Total component count from the server.  Used for the "showing N of M"
-   * helper text when paginated.  Optional.
+   * helper text and to drive pagination when paginated.  Optional.
    */
   total?: number;
+  /** Current 1-based page (server-side pagination, issue #443). */
+  page?: number;
+  /** Components per page. */
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  /**
+   * Called when an individual file within a component group is clicked.
+   * Receives the repository-relative artifact path so the caller can open
+   * the artifact detail dialog (issue #444).  Without this, clicking a file
+   * row does nothing.
+   */
+  onFileSelect?: (filePath: string, filename: string) => void;
 }
 
 /**
  * Renders Maven/Gradle artifacts grouped by GAV (groupId, artifactId,
  * version).  Each component row is a collapsible disclosure: collapsed it
  * shows summary stats; expanded it reveals the individual filenames (jar,
- * pom, checksums, …) that share the same coordinates.
+ * pom, zip, checksums, …) that share the same coordinates.  Each file row is
+ * clickable and opens the artifact detail dialog (issues #444, #445).
  *
  * Source: backend ak#701 — `?group_by=maven_component`.
  */
@@ -39,6 +56,11 @@ export function MavenComponentList({
   // M7: actionable default — tells the user what to do, not just that it's empty.
   emptyMessage = "No Maven components found. Switch to Flat to see raw files, or push an artifact with valid GAV coordinates.",
   total,
+  page = 1,
+  pageSize = 20,
+  onPageChange,
+  onPageSizeChange,
+  onFileSelect,
 }: MavenComponentListProps) {
   if (loading) {
     return (
@@ -71,16 +93,28 @@ export function MavenComponentList({
   }
 
   return (
-    <div className="rounded-md border" data-testid="maven-component-list">
-      <ul className="divide-y" role="list">
-        {components.map((c) => (
-          <MavenComponentRow key={`${c.group_id}:${c.artifact_id}:${c.version}`} component={c} />
-        ))}
-      </ul>
-      {typeof total === "number" && total > components.length && (
-        <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-          Showing {components.length} of {total} components
-        </div>
+    <div className="space-y-4">
+      <div className="rounded-md border" data-testid="maven-component-list">
+        <ul className="divide-y" role="list">
+          {components.map((c) => (
+            <MavenComponentRow
+              key={`${c.group_id}:${c.artifact_id}:${c.version}`}
+              component={c}
+              onFileSelect={onFileSelect}
+            />
+          ))}
+        </ul>
+      </div>
+      {/* Pagination over the GAV components themselves (issue #443). */}
+      {typeof total === "number" && (
+        <DataTablePagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          itemLabel="components"
+        />
       )}
     </div>
   );
@@ -88,9 +122,10 @@ export function MavenComponentList({
 
 interface MavenComponentRowProps {
   component: MavenComponent;
+  onFileSelect?: (filePath: string, filename: string) => void;
 }
 
-function MavenComponentRow({ component }: MavenComponentRowProps) {
+function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) {
   const [open, setOpen] = useState(false);
   const fileCount = component.artifact_files.length;
 
@@ -162,15 +197,64 @@ function MavenComponentRow({ component }: MavenComponentRowProps) {
             data-testid="maven-component-files"
             role="list"
           >
-            {component.artifact_files.map((filename) => (
-              <li
-                key={filename}
-                className="flex items-center gap-2 px-12 py-2 text-xs text-muted-foreground"
-              >
-                <FileIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate font-mono">{filename}</span>
-              </li>
-            ))}
+            {component.artifact_files.map((filename) => {
+              const filePath = mavenFilePath(component, filename);
+              const isPom = isPomFile(filename);
+              // The POM is offered as a direct download link so it is reachable
+              // even without opening the detail dialog (issue #442). Every other
+              // file row stays a button that opens the artifact detail dialog
+              // (issues #444, #445).
+              if (isPom) {
+                const downloadUrl = artifactsApi.getDownloadUrl(
+                  component.repository_key,
+                  filePath,
+                );
+                return (
+                  <li
+                    key={filename}
+                    className="flex items-center gap-2 px-12 py-2 text-xs"
+                    data-testid="maven-component-pom-file"
+                    data-filename={filename}
+                  >
+                    <FileIcon
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <a
+                      href={downloadUrl}
+                      className="truncate rounded font-mono text-foreground hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      download
+                    >
+                      {filename}
+                    </a>
+                    <Badge variant="secondary" className="font-normal">
+                      POM
+                    </Badge>
+                    <Download
+                      className="ml-auto size-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  </li>
+                );
+              }
+              return (
+                <li key={filename} data-testid="maven-component-file" data-filename={filename}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded px-12 py-2 text-left text-xs text-muted-foreground",
+                      "hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    )}
+                    onClick={() => onFileSelect?.(filePath, filename)}
+                    aria-label={`Open details for ${filename}`}
+                  >
+                    <FileIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate font-mono">{filename}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </CollapsibleContent>
       </Collapsible>

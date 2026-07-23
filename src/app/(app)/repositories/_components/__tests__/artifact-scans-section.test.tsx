@@ -143,6 +143,33 @@ describe("ArtifactScansSection (#368)", () => {
     ).toBeDefined();
   });
 
+  it("shows the default 'trigger a scan' guidance when analyzable (absent prop)", () => {
+    mockUseQuery.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ArtifactScansSection artifactId="a1" />);
+    expect(
+      screen.getByText(/Trigger a scan from the artifact actions menu/i),
+    ).toBeDefined();
+  });
+
+  it("shows the honest 'cannot be scanned' guidance for non-analyzable artifacts (#2292)", () => {
+    mockUseQuery.mockReturnValue({
+      data: { items: [], total: 0 },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ArtifactScansSection artifactId="a1" analyzable={false} />);
+    expect(screen.getByText(/cannot be scanned/i)).toBeDefined();
+    expect(screen.getByText(/proxy-cached remote artifacts/i)).toBeDefined();
+    // Must NOT tell the user to trigger a scan they cannot run.
+    expect(
+      screen.queryByText(/Trigger a scan from the artifact actions menu/i),
+    ).toBeNull();
+  });
+
   it("renders a skeleton while loading", () => {
     mockUseQuery.mockReturnValue({
       data: undefined,

@@ -40,8 +40,12 @@ test.describe('Migration Page', () => {
     await page.getByRole('button', { name: /add connection/i }).first().click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 });
 
-    await expect(page.getByLabel(/name/i)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByLabel(/endpoint url/i).or(page.getByLabel(/url/i))).toBeVisible({ timeout: 10000 });
+    // Scope to the dialog and match the exact "Name" label so we resolve the
+    // connection-name input, not the "Sort by Name" sort button on the
+    // Source Connections table rendered behind the dialog.
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(dialog.getByLabel(/endpoint url/i)).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(/authentication type|auth type/i).first()).toBeVisible({ timeout: 10000 });
 
     // Close dialog
@@ -115,6 +119,14 @@ test.describe('Migration Page', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: /cancel/i }).click();
+  });
+
+  test('Source Connections table exposes a Connection ID column (#520)', async ({ page }) => {
+    await page.getByRole('tablist').getByRole('tab', { name: /source connections/i }).click();
+    // Either the table header (when connections exist) or the empty state.
+    const idHeader = page.getByRole('columnheader', { name: /connection id/i });
+    const emptyState = page.getByText(/no connections/i);
+    await expect(idHeader.or(emptyState).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('no console errors on the page', async ({ page }) => {

@@ -11,14 +11,19 @@ import {
   Globe,
   RefreshCw,
   Puzzle,
+  Blocks,
   Webhook,
   ArrowRightLeft,
   Bot,
   BookOpen,
   GitPullRequestArrow,
+  Workflow,
   Key,
+  PackageCheck,
+  FileSignature,
   Shield,
   ShieldCheck,
+  ListChecks,
   Search,
   FileCheck,
   Lock,
@@ -35,9 +40,15 @@ import {
   Scale,
   FolderSearch,
   ClipboardCheck,
+  Filter,
+  Gauge,
+  ScrollText,
+  Network,
+  Crosshair,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
+import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
 import {
   Sidebar,
@@ -73,7 +84,9 @@ const artifactItems: NavItem[] = [
 const integrationItems: NavItem[] = [
   { title: "Peers", href: "/peers", icon: Globe },
   { title: "Replication", href: "/replication", icon: RefreshCw },
+  { title: "Sync Policies", href: "/sync-policies", icon: Workflow },
   { title: "Plugins", href: "/plugins", icon: Puzzle },
+  { title: "Format Handlers", href: "/format-handlers", icon: Blocks },
   { title: "Webhooks", href: "/webhooks", icon: Webhook },
   { title: "Access Tokens", href: "/access-tokens", icon: Key },
   { title: "Migration", href: "/migration", icon: ArrowRightLeft },
@@ -82,16 +95,22 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
+  { title: "Quality Checks", href: "/quality-checks", icon: ListChecks },
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "License Policies", href: "/license-policies", icon: Scale },
+  { title: "Curation", href: "/curation", icon: PackageCheck },
+  { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
 
 const operationsItems: NavItem[] = [
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
+  { title: "Downloads", href: "/downloads", icon: Network },
   { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
+  { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
   { title: "Health", href: "/system-health", icon: HeartPulse },
   { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
   { title: "Monitoring", href: "/monitoring", icon: Activity },
@@ -102,6 +121,8 @@ const adminItems: NavItem[] = [
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
+  { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
+  { title: "Audit Log", href: "/audit", icon: ScrollText },
   { title: "Backups", href: "/backups", icon: HardDrive },
   { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
   { title: "Settings", href: "/settings", icon: Settings },
@@ -143,6 +164,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
+  const flags = useFeatureFlags();
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -155,6 +177,21 @@ export function AppSidebar() {
   const visibleIntegrationItems = isAdmin
     ? integrationItems
     : integrationItems.filter((item) => item.href !== "/migration");
+
+  // Hide scanner-dependent security entries when the backend reports no
+  // scanner configured (#271). "Scan Results" needs Trivy or OpenSCAP;
+  // "DT Projects" needs the Dependency-Track integration. The rest of the
+  // Security group (policies, permissions, quality gates) is always shown
+  // since it doesn't depend on a scanner being wired up.
+  const visibleSecurityItems = securityItems.filter((item) => {
+    if (item.href === "/security/scans") {
+      return flags.trivyEnabled || flags.openscapEnabled;
+    }
+    if (item.href === "/security/dt-projects") {
+      return flags.dependencyTrackEnabled;
+    }
+    return true;
+  });
 
   return (
     <Sidebar collapsible="icon">
@@ -204,7 +241,7 @@ export function AppSidebar() {
           <>
             <NavGroup
               label="Security"
-              items={securityItems}
+              items={visibleSecurityItems}
               pathname={pathname}
             />
             <NavGroup
