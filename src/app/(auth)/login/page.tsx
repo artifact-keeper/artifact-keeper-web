@@ -67,7 +67,7 @@ export function ssoButtonLabel(provider: SsoProvider): string {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, refreshUser, setupRequired, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
+  const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [accountLocked, setAccountLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -193,8 +193,16 @@ function LoginContent() {
           <AlertTitle className="text-amber-800 dark:text-amber-200">First-Time Setup</AlertTitle>
           <AlertDescription>
             <p>A random admin password was generated. Retrieve it from the server:</p>
-            <code className="mt-1.5 block rounded bg-amber-100 px-2 py-1.5 font-mono text-xs break-all dark:bg-amber-950/50">
-              docker exec artifact-keeper-backend cat /data/storage/admin.password
+            {/*
+              The deployment default (Docker Compose) is baked in here, but an
+              operator can override the retrieval instruction via the backend's
+              SETUP_PASSWORD_HINT env var (artifact-keeper#2802) so Kubernetes
+              and packaged installs can show the right command. When the backend
+              provides a hint we render it verbatim; otherwise the built-in
+              Docker Compose instruction below is shown unchanged.
+            */}
+            <code className="mt-1.5 block rounded bg-amber-100 px-2 py-1.5 font-mono text-xs break-all whitespace-pre-wrap dark:bg-amber-950/50">
+              {setupPasswordHint ?? "docker exec artifact-keeper-backend cat /data/storage/admin.password"}
             </code>
             <p className="mt-1.5">
               Log in with username <strong>admin</strong> and the password from the file.
