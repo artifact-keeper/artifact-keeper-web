@@ -301,6 +301,12 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("authenticated").textContent).toBe("true");
       expect(screen.getByTestId("expires-at").textContent).toBe(expiresAt);
       expect(screen.getByTestId("must-change").textContent).toBe("true");
+      // capturedAuthRef is assigned in a passive effect, which can lag the
+      // DOM commit observed above. changePassword is the one context method
+      // that closes over `user` (and throws "Not authenticated" when a
+      // pre-auth closure is invoked), so also wait until the captured
+      // context itself comes from the authenticated render.
+      expect(capturedAuthRef.current?.isAuthenticated).toBe(true);
     });
 
     await act(async () => {

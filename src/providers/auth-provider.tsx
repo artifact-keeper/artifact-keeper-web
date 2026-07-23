@@ -34,6 +34,7 @@ interface AuthContextType {
   mustChangePassword: boolean;
   passwordExpiresAt: string | null;
   setupRequired: boolean;
+  setupPasswordHint: string | null;
   totpRequired: boolean;
   totpToken: string | null;
   login: (username: string, password: string) => Promise<boolean | "totp">;
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [passwordExpiresAt, setPasswordExpiresAt] = useState<string | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [setupPasswordHint, setSetupPasswordHint] = useState<string | null>(null);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpToken, setTotpToken] = useState<string | null>(null);
 
@@ -182,10 +184,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if first-boot setup is required
       try {
         const { data: setupData } = await sdkSetupStatus();
-        const status = setupData as unknown as SetupStatusResponse | undefined;
+        // The backend ships an optional `setup_password_hint` via
+        // artifact-keeper#2802, but the generated SDK type doesn't carry it
+        // until the SDK regenerates from the upgraded OpenAPI spec. Read it off
+        // the runtime object via a narrowed cast so the deployment-aware hint
+        // plumbs through as soon as the backend rolls out. Once the SDK is
+        // regenerated with the field, this extra type can collapse away.
+        const status = setupData as unknown as
+          | (SetupStatusResponse & { setup_password_hint?: string | null })
+          | undefined;
         if (status?.setup_required) {
           setSetupRequired(true);
         }
+        const hint = status?.setup_password_hint?.trim();
+        setSetupPasswordHint(hint ? hint : null);
       } catch {
         // Setup endpoint not available, continue normally
       }
@@ -247,6 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mustChangePassword,
         passwordExpiresAt,
         setupRequired,
+        setupPasswordHint,
         totpRequired,
         totpToken,
         login,

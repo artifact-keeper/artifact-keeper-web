@@ -39,7 +39,7 @@ export type { RepoLabel } from './repo-labels';
 export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
 export type { ListArtifactsParams } from './artifacts';
-export type { Group, CreateGroupRequest, GroupMember, ListGroupsParams } from './groups';
+export type { Group, GroupDetail, CreateGroupRequest, GroupMember, ListGroupsParams } from './groups';
 export type {
   Permission,
   CreatePermissionRequest,
