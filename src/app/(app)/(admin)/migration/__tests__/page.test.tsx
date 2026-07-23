@@ -708,7 +708,9 @@ describe("MigrationPage — connections list and actions", () => {
       fireEvent.click(btn!);
     });
     expect(capturedMutations.testConn).toBeDefined();
-    expect(capturedMutations.testConn.mutate).toHaveBeenCalledWith("c1");
+    expect(capturedMutations.testConn.mutate).toHaveBeenCalledWith(
+      makeConnection({ id: "c1" }),
+    );
   });
 
   it("toasts success with version when testConnection succeeds and a version is returned", () => {
@@ -716,13 +718,42 @@ describe("MigrationPage — connections list and actions", () => {
     return renderPage().then(() => {
       const opts = capturedMutations.testConn.opts;
       // Drive the success branch directly so we exercise the success copy.
-      opts.onSuccess?.({
-        success: true,
-        message: "ok",
-        artifactory_version: "7.55.10",
-      });
+      opts.onSuccess?.(
+        {
+          success: true,
+          message: "ok",
+          artifactory_version: "7.55.10",
+        },
+        makeConnection(),
+      );
       expect(toast.success).toHaveBeenCalledWith(
-        expect.stringContaining("Artifactory 7.55.10"),
+        expect.stringContaining("Artifactory version 7.55.10"),
+      );
+    });
+  });
+
+  it("labels the toast with the connector type (nexus, not Artifactory)", () => {
+    configureQueries({ connections: { data: [makeConnection()], isLoading: false } });
+    return renderPage().then(() => {
+      capturedMutations.testConn.opts.onSuccess?.(
+        { success: true, message: "ok", artifactory_version: "3.61.0" },
+        makeConnection({ source_type: "nexus" }),
+      );
+      const msg = (toast.success as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(msg).toContain("Nexus version 3.61.0");
+      expect(msg).not.toContain("Artifactory");
+    });
+  });
+
+  it("falls back to 'unknown' when the backend supplies no version", () => {
+    configureQueries({ connections: { data: [makeConnection()], isLoading: false } });
+    return renderPage().then(() => {
+      capturedMutations.testConn.opts.onSuccess?.(
+        { success: true, message: "ok", artifactory_version: undefined },
+        makeConnection({ source_type: "nexus" }),
+      );
+      expect(toast.success).toHaveBeenCalledWith(
+        "Connection verified. Nexus version unknown",
       );
     });
   });

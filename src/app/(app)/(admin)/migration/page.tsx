@@ -403,11 +403,13 @@ export default function MigrationPage() {
   });
 
   const testConnMutation = useMutation({
-    mutationFn: (id: string) => migrationApi.testConnection(id),
-    onSuccess: (result) => {
+    mutationFn: (c: SourceConnection) => migrationApi.testConnection(c.id),
+    onSuccess: (result, c) => {
       if (result.success) {
+        const label =
+          c.source_type.charAt(0).toUpperCase() + c.source_type.slice(1);
         toast.success(
-          `Connection verified. ${result.artifactory_version ? `Artifactory ${result.artifactory_version}` : ""}`
+          `Connection verified. ${label} version ${result.artifactory_version || "unknown"}`
         );
       } else {
         toast.error(`Connection failed: ${result.message}`);
@@ -609,7 +611,7 @@ export default function MigrationPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => testConnMutation.mutate(c.id)}
+                onClick={() => testConnMutation.mutate(c)}
                 disabled={testConnMutation.isPending}
               >
                 <Unplug className="size-3.5" />
