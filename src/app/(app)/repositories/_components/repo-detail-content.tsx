@@ -59,6 +59,7 @@ import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { RepoStoragePanel } from "./repo-storage-panel";
+import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -654,6 +655,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           non-admins on instance-scope backends is enforced by the backend and
           handled gracefully by the panel. */}
       <RepoStoragePanel
+        repository={repository}
+        isAdmin={!!user?.is_admin}
+      />
+
+      {/* Per-folder deduplicated storage (epic artifact-keeper#2056, sub-task
+          4). Lists each top-level folder's real physical footprint and dedup
+          split. The folder-level figures are not yet part of the generated SDK,
+          so the panel reads them from the tree response via a validated
+          trust-boundary adapter and renders nothing until a backend reports
+          them — no empty panel on backends that predate the folder API. */}
+      <RepoFolderStoragePanel
         repository={repository}
         isAdmin={!!user?.is_admin}
       />

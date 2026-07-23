@@ -77,3 +77,29 @@ export const TYPE_OPTIONS: { value: RepositoryType; label: string }[] = [
   { value: "remote", label: "Remote" },
   { value: "virtual", label: "Virtual" },
 ];
+
+// ---------------------------------------------------------------------------
+// 1.6.0 format-specific config gating (#602)
+//
+// Centralised predicates so the create dialog and the settings tab show the
+// same sections for the same repositories. Each maps to a distinct backend
+// feature; see `format-config-fields.tsx` for the field groups themselves.
+// ---------------------------------------------------------------------------
+
+/** RPM curation trusted GPG key (#2568) — RPM-format repositories. */
+export function hasRpmTrustedKeyConfig(format: string): boolean {
+  return format === "rpm";
+}
+
+/** Advanced Debian/APT config (#2407/#2460/#2489/#2459) — Debian repos. */
+export function hasDebianConfig(format: string): boolean {
+  return format === "debian";
+}
+
+/**
+ * npm scope policy (#2424). Framed by #602 as the npm virtual-repo scope
+ * policy; the backend also reads it for npm remotes, so both types qualify.
+ */
+export function hasNpmScopePolicy(format: string, repoType: string): boolean {
+  return format === "npm" && (repoType === "virtual" || repoType === "remote");
+}
