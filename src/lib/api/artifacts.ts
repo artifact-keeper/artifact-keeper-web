@@ -37,6 +37,18 @@ export interface ListArtifactsParams {
 // doesn't model yet — leave those undefined and let callers fetch detail
 // endpoints if they need quarantine state.
 function adaptArtifact(sdk: ArtifactResponse): Artifact {
+  // The backend ships new optional fields (cache_cached_at, cache_expires_at)
+  // via artifact-keeper#1541, but the generated SDK type doesn't carry them
+  // until the SDK regenerates from the upgraded OpenAPI spec. Read them off
+  // the runtime object via a narrowed cast so the fields plumb through as
+  // soon as the backend rolls out, without blocking on SDK regen. Once the
+  // SDK is regenerated with the new fields, this cast can collapse to a
+  // direct property access.
+  const sdkAny = sdk as ArtifactResponse & {
+    cache_cached_at?: string | null;
+    cache_expires_at?: string | null;
+    analyzable?: boolean;
+  };
   return {
     id: sdk.id,
     repository_key: sdk.repository_key,
@@ -49,6 +61,13 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     download_count: sdk.download_count,
     created_at: sdk.created_at,
     metadata: sdk.metadata ?? undefined,
+    cache_cached_at: sdkAny.cache_cached_at ?? undefined,
+    cache_expires_at: sdkAny.cache_expires_at ?? undefined,
+    // Default to `true` when the backend omits the field (older responses /
+    // not-yet-regenerated SDK): only an explicit `false` disables SBOM/scan
+    // for an artifact (artifact-keeper#2292). Matches the backend's safe
+    // default so hosted artifacts always stay analyzable.
+    analyzable: sdkAny.analyzable ?? true,
   };
 }
 
@@ -127,12 +146,23 @@ export const artifactsApi = {
 
   get: async (repoKey: string, artifactPath: string): Promise<Artifact> => {
     // The SDK uses getRepositoryArtifactMetadata for GET /api/v1/repositories/{key}/artifacts/{path}
-    // but the original code uses a URL-encoded path. Use the SDK's downloadArtifact metadata or
-    // fall back to a direct fetch since the SDK's getArtifact uses /api/v1/artifacts/{id} which
-    // is a different endpoint.
+    // but the SDK's getArtifact uses /api/v1/artifacts/{id} which is a different endpoint, so we
+    // fetch directly.
+    //
+    // The backend route is `/:key/artifacts/*path` (an Axum wildcard), so the
+    // path segment separators must stay as literal slashes — encoding the
+    // whole path with encodeURIComponent (turning `/` into `%2F`) breaks the
+    // wildcard match and 404s.  Encode each segment individually instead so
+    // slashes survive but other reserved characters are still escaped.  This
+    // also matters for Maven grouped-mode detail lookups (#444, #445), where
+    // the path is reconstructed as groupId/artifactId/version/filename.
     const baseUrl = getActiveInstanceBaseUrl();
+    const encodedPath = artifactPath
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
     const response = await fetch(
-      `${baseUrl}/api/v1/repositories/${repoKey}/artifacts/${encodeURIComponent(artifactPath)}`,
+      `${baseUrl}/api/v1/repositories/${repoKey}/artifacts/${encodedPath}`,
       { credentials: 'include' }
     );
     if (!response.ok) {
@@ -146,13 +176,67 @@ export const artifactsApi = {
     if (error) throw error;
   },
 
+  /**
+   * Invalidate a single cached artifact entry on a Remote (proxy) repository
+   * (artifact-keeper#1539). Routes through `apiFetch` because the generated
+   * SDK has not been regenerated against the new endpoint yet; once it is,
+   * this can collapse to the typed SDK call.
+   *
+   * Idempotent on the backend: invalidating a path that was never cached
+   * still resolves successfully, matching `ProxyService::invalidate_cache`.
+   * Caller is responsible for invalidating any React-Query caches that
+   * depend on the artifact (the artifacts list, the repository row).
+   */
+  invalidateCache: async (
+    repoKey: string,
+    artifactPath: string,
+  ): Promise<{ repository_key: string; path: string; invalidated: boolean }> => {
+    const url =
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/cache/invalidate` +
+      `?path=${encodeURIComponent(artifactPath)}`;
+    return apiFetch<{ repository_key: string; path: string; invalidated: boolean }>(
+      url,
+      { method: 'POST' },
+    );
+  },
+
   getDownloadUrl: (repoKey: string, artifactPath: string): string => {
     return `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
   },
 
+  /**
+   * Returns the absolute download URL (origin + path) for an artifact.
+   *
+   * `getDownloadUrl` returns a host-less path, which works for issuing a
+   * download against the current origin but is broken when copied and pasted
+   * elsewhere (e.g. into a terminal or another browser). This resolves the
+   * path against the configured API base URL, falling back to the current
+   * window origin, so the copied value is a complete, working URL.
+   */
+  getAbsoluteDownloadUrl: (repoKey: string, artifactPath: string): string => {
+    const path = `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+    const origin =
+      apiBase ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+    if (!origin) return path;
+    try {
+      return new URL(path, origin).toString();
+    } catch {
+      return `${origin.replace(/\/$/, "")}${path}`;
+    }
+  },
+
   createDownloadTicket: async (repoKey: string, artifactPath: string): Promise<string> => {
+    // The backend binds the ticket to this exact path and, at consume time,
+    // compares it against request.uri().path() by byte equality. It must be the
+    // absolute path the subsequent download request will carry, which is the
+    // same value getDownloadUrl produces.
     const { data, error } = await createDownloadTicket({
-      body: { purpose: 'download', resource_path: `${repoKey}/${artifactPath}` },
+      body: {
+        purpose: 'download',
+        resource_path: `/api/v1/repositories/${repoKey}/download/${artifactPath}`,
+      },
     });
     if (error) throw error;
     return assertData(data, 'artifactsApi.createDownloadTicket').ticket;

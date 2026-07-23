@@ -272,6 +272,8 @@ describe("peersApi", () => {
         sync_enabled: true,
         replication_mode: "push",
         replication_schedule: "0 * * * *",
+        // 1.2.1 requires replication_filter; empty = replicate everything.
+        replication_filter: {},
       },
     });
   });

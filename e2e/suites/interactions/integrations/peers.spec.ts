@@ -99,6 +99,39 @@ test.describe('Peers Page', () => {
     expect(hasTable || hasRows || hasEmptyState).toBeTruthy();
   });
 
+  test('local peer row disables Sync and Unregister with explanations', async ({ page }) => {
+    // The E2E backend always self-registers the local instance, so the row
+    // with the LOCAL badge is guaranteed to exist.
+    const localRow = page.locator('tr').filter({
+      has: page.getByText('LOCAL', { exact: true }),
+    });
+    await expect(localRow).toBeVisible({ timeout: 10000 });
+
+    const syncButton = localRow.getByRole('button', { name: /^sync /i });
+    const unregisterButton = localRow.getByRole('button', { name: /^unregister /i });
+
+    await expect(syncButton).toBeDisabled();
+    await expect(unregisterButton).toBeDisabled();
+
+    // The disabled buttons are wrapped in focusable tooltip triggers so the
+    // explanation stays reachable despite disabled:pointer-events-none.
+    const syncTrigger = localRow
+      .locator('[data-slot="tooltip-trigger"]')
+      .filter({ has: page.getByRole('button', { name: /^sync /i }) });
+    await syncTrigger.hover();
+    await expect(
+      page.getByRole('tooltip').filter({ hasText: 'The local peer cannot sync with itself' })
+    ).toBeVisible({ timeout: 5000 });
+
+    const unregisterTrigger = localRow
+      .locator('[data-slot="tooltip-trigger"]')
+      .filter({ has: page.getByRole('button', { name: /^unregister /i }) });
+    await unregisterTrigger.hover();
+    await expect(
+      page.getByRole('tooltip').filter({ hasText: 'The local peer cannot be unregistered' })
+    ).toBeVisible({ timeout: 5000 });
+  });
+
   test('no console errors on page load', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => {

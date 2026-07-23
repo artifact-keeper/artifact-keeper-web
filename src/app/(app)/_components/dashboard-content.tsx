@@ -341,10 +341,13 @@ export function DashboardContent() {
                   status={health.checks.security_scanner.status}
                 />
               )}
-              {health?.checks?.meilisearch && (
+              {(health?.checks?.opensearch ?? health?.checks?.meilisearch) && (
                 <HealthCard
                   label="Search Engine"
-                  status={health.checks.meilisearch.status}
+                  status={
+                    (health?.checks?.opensearch ?? health?.checks?.meilisearch)!
+                      .status
+                  }
                 />
               )}
             </div>

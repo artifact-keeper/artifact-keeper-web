@@ -71,12 +71,15 @@ const SDK_SCORE: SdkScoreResponse = {
   medium_count: 2,
   low_count: 3,
   acknowledged_count: 1,
+  has_failed_scan: false,
+  total_findings: 6,
   last_scan_at: "2026-05-01T00:00:00Z",
   calculated_at: "2026-05-01T00:00:00Z",
 };
 
 const SDK_SCAN: SdkScanResponse = {
   id: "s1",
+  is_reused: false,
   artifact_id: "a1",
   artifact_name: "lib.jar",
   artifact_version: "1.0",

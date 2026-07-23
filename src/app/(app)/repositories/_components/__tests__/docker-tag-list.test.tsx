@@ -277,4 +277,46 @@ describe("DockerTagList", () => {
       screen.getByRole("button", { name: /scan library\/node:14/i }),
     ).toBeDisabled();
   });
+
+  // -------------------------------------------------------------------------
+  // analyzable gating (artifact-keeper#2292)
+  // -------------------------------------------------------------------------
+
+  it("disables the Scan button for a non-analyzable (proxy-cached) manifest", () => {
+    const cached = art({
+      id: "tagcached",
+      path: "library/node/manifests/14",
+      checksum_sha256: FULL_DIGEST,
+      analyzable: false,
+    });
+    render(<DockerTagList artifacts={[cached]} onScan={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: /scan library\/node:14/i }),
+    ).toBeDisabled();
+    // The tooltip explains why the action is unavailable.
+    expect(
+      screen.getByText(/proxy-cached remote artifacts/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the Scan button enabled when analyzable is true", () => {
+    const analyzableTag = art({
+      id: "taghosted",
+      path: "library/node/manifests/14",
+      checksum_sha256: FULL_DIGEST,
+      analyzable: true,
+    });
+    render(<DockerTagList artifacts={[analyzableTag]} onScan={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: /scan library\/node:14/i }),
+    ).not.toBeDisabled();
+  });
+
+  it("keeps the Scan button enabled when analyzable is absent (safe default)", () => {
+    // TAG_14 carries no `analyzable` flag — must default to analyzable.
+    render(<DockerTagList artifacts={[TAG_14]} onScan={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: /scan library\/node:14/i }),
+    ).not.toBeDisabled();
+  });
 });

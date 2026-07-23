@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
 import { execSync } from "child_process";
+import { buildSecurityHeaders, isHttpsEnabled } from "./src/lib/security-headers";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
@@ -37,44 +38,20 @@ const nextConfig: NextConfig = {
     proxyTimeout: 600_000,
   },
   async headers() {
+    // HSTS and the CSP `upgrade-insecure-requests` directive are only emitted
+    // when the deployment actually terminates TLS (AK_ENFORCE_HTTPS=true|1).
+    // On a plain-HTTP default deploy they would force http->https rewrites the
+    // server can't answer, breaking the whole UI. See #2222.
+    //
+    // NOTE: Next.js serializes `headers()` into the build output
+    // (routes-manifest.json), so AK_ENFORCE_HTTPS is read at BUILD time, not
+    // container runtime. Default (unset) keeps plain-HTTP deploys working out
+    // of the box; build with AK_ENFORCE_HTTPS=true for TLS deployments (see the
+    // Dockerfile build arg and src/lib/security-headers.ts).
     return [
       {
         source: "/(.*)",
-        headers: [
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-          {
-            key: "Referrer-Policy",
-            value: "strict-origin-when-cross-origin",
-          },
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
-          },
-          {
-            key: "X-DNS-Prefetch-Control",
-            value: "on",
-          },
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains",
-          },
-          {
-            key: "Content-Security-Policy",
-            // 'unsafe-inline' is still required for script-src because Next.js
-            // injects inline <script> tags for page data (__NEXT_DATA__) and
-            // runtime configuration. The long-term fix is to switch to
-            // nonce-based CSP via next.config.ts experimental.serverActions or a
-            // custom Document with per-request nonces.
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests",
-          },
-        ],
+        headers: buildSecurityHeaders(isHttpsEnabled()),
       },
     ];
   },

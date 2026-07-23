@@ -158,6 +158,9 @@ describe("middleware", () => {
     expect(config.matcher).toContain("/maven/:path*");
     expect(config.matcher).toContain("/v2");
     expect(config.matcher).toContain("/v2/:path*");
+    // lxc-format repos proxy on /lxc/* (artifact-keeper#1272), alongside /incus.
+    expect(config.matcher).toContain("/incus/:path*");
+    expect(config.matcher).toContain("/lxc/:path*");
     expect(config.matcher.length).toBeGreaterThan(30);
   });
 });

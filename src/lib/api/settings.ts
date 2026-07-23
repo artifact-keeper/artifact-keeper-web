@@ -117,6 +117,13 @@ export interface AdminSettings {
   passwordPolicy: PasswordPolicy;
   storageSettings: StorageSettings;
   smtpConfig: SmtpConfig;
+  /**
+   * Deployment environment label (e.g. "production", "staging") sourced from
+   * the backend's ENVIRONMENT config. Empty string when the backend doesn't
+   * expose the field (older servers) or leaves it blank; callers turn that
+   * into a display fallback rather than treating it as an error.
+   */
+  environment: string;
 }
 
 // ---- Pure parsers (#349 — extracted so getAllSettings can reuse them) ----
@@ -149,6 +156,22 @@ function parseStorageSettings(data: unknown): StorageSettings {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Read the deployment `environment` label off the settings response.
+ *
+ * Soft by design: returns "" when the field is absent, blank, or the wrong
+ * type. Unlike parseStorageSettings this must not throw, so a backend that
+ * predates the ENVIRONMENT field doesn't trip the all-or-nothing failure in
+ * getAllSettings (see the note on that method). The page turns "" into a
+ * display fallback.
+ */
+function parseEnvironment(data: unknown): string {
+  if (isPlainObject(data) && typeof data.environment === "string") {
+    return data.environment.trim();
+  }
+  return "";
 }
 
 function parsePasswordPolicy(data: unknown): PasswordPolicy {
@@ -238,6 +261,7 @@ export const settingsApi = {
       passwordPolicy: parsePasswordPolicy(data),
       storageSettings: parseStorageSettings(data),
       smtpConfig: parseSmtpConfig(data),
+      environment: parseEnvironment(data),
     };
   },
 
@@ -284,6 +308,32 @@ export const settingsApi = {
       throw new Error(`Failed to load SMTP config: ${String(error)}`);
     }
     return parseSmtpConfig(data);
+  },
+
+  /**
+   * Update the maximum upload size (issue #189).
+   *
+   * The backend `POST /api/v1/admin/settings` endpoint replaces the whole
+   * `SystemSettings` object, so this reads the current settings first and
+   * sends them back with only `max_upload_size_bytes` changed. This avoids
+   * resetting sibling values (retention, anonymous download, etc.) that the
+   * caller did not intend to touch.
+   *
+   * `bytes` of 0 means "no limit", matching the backend semantics.
+   */
+  updateMaxUploadSize: async (bytes: number): Promise<void> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load current settings: ${String(error)}`);
+    }
+    if (!isPlainObject(data)) {
+      throw new Error("System settings response was not an object");
+    }
+    const payload = { ...data, max_upload_size_bytes: bytes };
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   /**

@@ -34,6 +34,13 @@ interface FileUploadProps {
   chunkedThreshold?: number;
   /** Called when chunked upload completes */
   onChunkedComplete?: () => void;
+  /**
+   * Server-enforced maximum upload size in bytes, sourced from
+   * `/api/v1/system/config` (#271). When greater than 0 the limit is shown to
+   * the user and oversize files are rejected client-side before any request is
+   * sent. 0 or undefined means "no limit advertised".
+   */
+  maxUploadSizeBytes?: number;
 }
 
 function formatSpeed(bytesPerSecond: number): string {
@@ -102,6 +109,7 @@ export function FileUpload({
   chunkSize,
   chunkedThreshold = 100 * 1024 * 1024,
   onChunkedComplete,
+  maxUploadSizeBytes = 0,
 }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [customPath, setCustomPath] = useState("");
@@ -136,10 +144,22 @@ export function FileUpload({
 
   const handleFile = useCallback(
     (f: File) => {
-      setFile(f);
       setSimpleProgress(0);
       setShowResumePrompt(false);
       setError(null);
+
+      // Reject files over the server-advertised limit before selecting them,
+      // so the user gets immediate feedback instead of a failed upload (#271).
+      if (maxUploadSizeBytes > 0 && f.size > maxUploadSizeBytes) {
+        setFile(null);
+        setError(
+          `File is ${formatBytes(f.size)}, which exceeds the maximum upload size of ${formatBytes(maxUploadSizeBytes)}.`
+        );
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+
+      setFile(f);
 
       if (repositoryKey && f.size >= chunkedThreshold) {
         if (chunked.hasPendingSession(f)) {
@@ -147,7 +167,7 @@ export function FileUpload({
         }
       }
     },
-    [repositoryKey, chunkedThreshold, chunked]
+    [repositoryKey, chunkedThreshold, chunked, maxUploadSizeBytes]
   );
 
   const handleDrop = useCallback(
@@ -316,6 +336,9 @@ export function FileUpload({
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Upload a single artifact file
+                {maxUploadSizeBytes > 0 && (
+                  <> (max {formatBytes(maxUploadSizeBytes)})</>
+                )}
               </p>
             </div>
           </>

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle,
+  Crosshair,
   Undo2,
   AlertCircle,
   AlertTriangle,
@@ -16,6 +18,7 @@ import {
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
+import { blastRadiusHref } from "@/lib/api/blast-radius";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isScanIncomplete } from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
@@ -245,7 +248,18 @@ export default function SecurityScanDetailPage() {
       accessor: (r) => r.cve_id ?? "",
       cell: (r) =>
         r.cve_id ? (
-          <VulnIdLink id={r.cve_id} />
+          <div className="flex items-center gap-1.5">
+            <VulnIdLink id={r.cve_id} />
+            <Link
+              href={blastRadiusHref(r.cve_id)}
+              aria-label={`Blast radius of ${r.cve_id}`}
+              title="Who is exposed to this vulnerability?"
+              className="inline-flex items-center text-muted-foreground hover:text-foreground"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Crosshair className="size-3.5" />
+            </Link>
+          </div>
         ) : (
           <span className="text-sm text-muted-foreground">-</span>
         ),

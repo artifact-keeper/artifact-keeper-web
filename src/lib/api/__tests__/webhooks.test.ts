@@ -40,6 +40,8 @@ const SDK_WEBHOOK: SdkWebhookResponse = {
   is_enabled: true,
   repository_id: "repo-a",
   headers: { Authorization: "Bearer xyz" },
+  event_schema_version: "1",
+  payload_template: "generic",
   last_triggered_at: "2026-05-01T00:00:00Z",
   created_at: "2026-04-01T00:00:00Z",
 };
