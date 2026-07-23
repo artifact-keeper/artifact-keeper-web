@@ -32,6 +32,11 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockUseFeatureFlags = vi.fn();
+vi.mock("@/providers/system-config-provider", () => ({
+  useFeatureFlags: () => mockUseFeatureFlags(),
+}));
+
 const mockUseQuery = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
@@ -65,15 +70,20 @@ vi.mock("lucide-react", () => {
     Hammer: icon,
     Globe: icon,
     RefreshCw: icon,
+    Workflow: icon,
     Puzzle: icon,
+    Blocks: icon,
     Webhook: icon,
     ArrowRightLeft: icon,
     Bot: icon,
     BookOpen: icon,
     GitPullRequestArrow: icon,
     Key: icon,
+    PackageCheck: icon,
+    FileSignature: icon,
     Shield: icon,
     ShieldCheck: icon,
+    ListChecks: icon,
     Search: icon,
     FileCheck: icon,
     Lock: icon,
@@ -90,8 +100,27 @@ vi.mock("lucide-react", () => {
     Scale: icon,
     FolderSearch: icon,
     ClipboardCheck: icon,
+    Filter: icon,
+    Gauge: icon,
+    ScrollText: icon,
+    Network: icon,
+    Crosshair: icon,
   };
 });
+
+// Feature flags drive scanner-dependent nav visibility (#271). Default to all
+// scanners enabled so existing assertions about the Security group still hold.
+const ALL_FLAGS_ON = {
+  scanningEnabled: true,
+  trivyEnabled: true,
+  openscapEnabled: true,
+  dependencyTrackEnabled: true,
+  ssoEnabled: false,
+  oidcEnabled: false,
+  ldapEnabled: false,
+  guestAccessEnabled: true,
+  demoMode: false,
+};
 
 // ---------------------------------------------------------------------------
 // Component under test
@@ -126,6 +155,7 @@ describe("AppSidebar", () => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
     mockUseQuery.mockReturnValue({ data: undefined });
+    mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
   });
 
   it("shows web version only when health data is not available", () => {
@@ -244,5 +274,72 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.getByText("Operations")).toBeDefined();
     expect(screen.getByText("Administration")).toBeDefined();
+  });
+
+  it("hides Scan Results and DT Projects when no scanner is configured (#271)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockUseFeatureFlags.mockReturnValue({
+      ...ALL_FLAGS_ON,
+      scanningEnabled: false,
+      trivyEnabled: false,
+      openscapEnabled: false,
+      dependencyTrackEnabled: false,
+    });
+
+    render(<AppSidebar />);
+
+    // The Security group still renders (policies, permissions, quality gates),
+    // but the scanner-dependent entries are gone.
+    expect(screen.getByText("Security")).toBeDefined();
+    expect(screen.queryByText("Scan Results")).toBeNull();
+    expect(screen.queryByText("DT Projects")).toBeNull();
+    expect(screen.getByText("Quality Gates")).toBeDefined();
+  });
+
+  it("shows DT Projects only when Dependency-Track is enabled (#271)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockUseFeatureFlags.mockReturnValue({
+      ...ALL_FLAGS_ON,
+      trivyEnabled: false,
+      openscapEnabled: false,
+      dependencyTrackEnabled: true,
+    });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("DT Projects")).toBeDefined();
+    expect(screen.queryByText("Scan Results")).toBeNull();
+  });
+
+  it("renders the Rate Limits admin entry (#270)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Rate Limits")).toBeDefined();
+  });
+
+  it("renders the Audit Log admin entry (#568)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Audit Log")).toBeDefined();
+  });
+
+  it("renders the Downloads operations entry (#569)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Downloads")).toBeDefined();
+  });
+
+  it("renders the Blast Radius security entry (#570)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Blast Radius")).toBeDefined();
   });
 });

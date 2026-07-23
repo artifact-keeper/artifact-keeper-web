@@ -1,0 +1,81 @@
+name: Release
+
+# Creates a GitHub Release whenever a v* tag is pushed.
+#
+# Background (#440): v1.1.1 / v1.1.2 / v1.1.3 were tagged and published Docker
+# images via docker-publish.yml, but no GitHub Release object was ever created,
+# so there was no changelog, no provenance entry, and nothing for downstream
+# tooling to key off. This workflow closes that gap and mirrors the backend's
+# release step (softprops/action-gh-release with generated notes).
+#
+# This only creates the Release; image build/publish stays in docker-publish.yml
+# (which also triggers on v* tags). The two run in parallel off the same tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)create a Release for (e.g. v1.2.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          # Pre-release if the semver has a hyphenated label (e.g. 1.2.1-rc.1)
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES_FILE="$(mktemp)"
+          # Pull the "## [<version>]" section out of CHANGELOG.md (Keep a Changelog
+          # format) up to the next "## [" header. Missing section is non-fatal —
+          # generated notes still populate the body.
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { capture=1; next }
+              capture && /^## \[/ { exit }
+              capture { print }
+            ' CHANGELOG.md > "$NOTES_FILE"
+          fi
+          if [ -s "$NOTES_FILE" ]; then
+            echo "Found CHANGELOG.md section for ${VERSION}"
+          else
+            printf 'Release %s.\n' "$VERSION" > "$NOTES_FILE"
+            echo "No CHANGELOG.md section for ${VERSION}; using generated notes only"
+          fi
+          echo "path=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Artifact Keeper Web ${{ steps.version.outputs.version }}
+          body_path: ${{ steps.changelog.outputs.path }}
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}

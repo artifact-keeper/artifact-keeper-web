@@ -180,21 +180,84 @@ describe("MavenComponentList", () => {
   });
 
   // ---------------------------------------------------------------------
-  // "Showing N of M" footer
+  // Pagination (issue #443)
   // ---------------------------------------------------------------------
 
-  it("shows the 'showing N of M' helper when total exceeds rendered count", () => {
-    render(<MavenComponentList components={[COMP_A]} total={42} />);
-    expect(screen.getByText(/showing 1 of 42 components/i)).toBeInTheDocument();
+  it("renders pagination controls when total is provided", () => {
+    render(
+      <MavenComponentList
+        components={[COMP_A]}
+        total={42}
+        page={1}
+        pageSize={20}
+        onPageChange={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("data-table-pagination")).toBeInTheDocument();
+    // 42 components / 20 per page => 3 pages
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/1-20 of 42/i)).toBeInTheDocument();
   });
 
-  it("hides the helper footer when total equals rendered count", () => {
-    render(<MavenComponentList components={[COMP_A]} total={1} />);
-    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
-  });
-
-  it("hides the helper footer when total is undefined", () => {
+  it("does not render pagination when total is undefined", () => {
     render(<MavenComponentList components={[COMP_A]} />);
-    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("data-table-pagination")).not.toBeInTheDocument();
+  });
+
+  it("invokes onPageChange when the next-page button is clicked", async () => {
+    const onPageChange = vi.fn();
+    render(
+      <MavenComponentList
+        components={[COMP_A]}
+        total={42}
+        page={1}
+        pageSize={20}
+        onPageChange={onPageChange}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /next page/i }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  // ---------------------------------------------------------------------
+  // Clickable file rows (issues #444, #445)
+  // ---------------------------------------------------------------------
+
+  it("invokes onFileSelect with the reconstructed Maven path when a file is clicked", async () => {
+    const onFileSelect = vi.fn();
+    render(
+      <MavenComponentList components={[COMP_A]} onFileSelect={onFileSelect} />,
+    );
+    const trigger = screen.getByRole("button", { name: /org\.junit\.jupiter/ });
+    await userEvent.click(trigger);
+
+    const fileList = await screen.findByTestId("maven-component-files");
+    await userEvent.click(
+      within(fileList).getByText("junit-jupiter-api-5.11.0.jar"),
+    );
+
+    expect(onFileSelect).toHaveBeenCalledWith(
+      "org/junit/jupiter/junit-jupiter-api/5.11.0/junit-jupiter-api-5.11.0.jar",
+      "junit-jupiter-api-5.11.0.jar",
+    );
+  });
+
+  it("lists every file in a component, including non-jar files like .zip", async () => {
+    const withZip: MavenComponent = {
+      ...COMP_B,
+      artifact_files: [
+        "lib-1.0.0.pom",
+        "lib-1.0.0.zip",
+        "lib-1.0.0.jar.sha1",
+      ],
+    };
+    render(<MavenComponentList components={[withZip]} />);
+    const trigger = screen.getByRole("button", { name: /com\.example/ });
+    await userEvent.click(trigger);
+
+    const fileList = await screen.findByTestId("maven-component-files");
+    expect(within(fileList).getByText("lib-1.0.0.pom")).toBeInTheDocument();
+    expect(within(fileList).getByText("lib-1.0.0.zip")).toBeInTheDocument();
+    expect(within(fileList).getByText("lib-1.0.0.jar.sha1")).toBeInTheDocument();
   });
 });

@@ -106,11 +106,21 @@ describe("searchApi", () => {
             format: undefined,
             version: undefined,
             size_bytes: undefined,
+            is_quarantined: undefined,
+            quarantine_until: undefined,
+            quarantine_reason: undefined,
             created_at: "2025-01-01",
             highlights: undefined,
           },
         ],
         pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+        // #463: advancedSearch now surfaces OpenSearch facets, defaulting to
+        // empty buckets when the backend response omits them.
+        facets: {
+          formats: [],
+          repositories: [],
+          content_types: [],
+        },
       });
     });
 

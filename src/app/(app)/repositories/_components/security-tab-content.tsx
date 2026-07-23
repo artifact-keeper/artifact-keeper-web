@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import sbomApi from "@/lib/api/sbom";
 import dtApi from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
+import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
 import { ArtifactScansSection } from "./artifact-scans-section";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
@@ -120,6 +121,9 @@ function resolveDtProjectUuid(
 
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
+  // Proxy-cached remote artifacts can't be scanned (artifact-keeper#2292);
+  // used below to give honest guidance instead of "run a scan".
+  const analyzable = isArtifactAnalyzable(artifact);
   const [page, setPage] = useState(1);
   const [dtFindingsPage, setDtFindingsPage] = useState(1);
 
@@ -527,7 +531,9 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
             No vulnerabilities detected for this artifact.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Generate an SBOM and run a security scan to check for CVEs.
+            {analyzable
+              ? "Generate an SBOM and run a security scan to check for CVEs."
+              : "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."}
           </p>
         </div>
       ) : (
@@ -596,7 +602,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
           had to navigate to /security/scans to find it. Mounting the
           dedicated section here makes the tab a true single-pane-of-glass. */}
       <Separator />
-      <ArtifactScansSection artifactId={artifact.id} />
+      <ArtifactScansSection artifactId={artifact.id} analyzable={analyzable} />
 
       {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Findings Section */}

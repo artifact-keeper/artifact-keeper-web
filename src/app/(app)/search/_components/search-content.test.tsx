@@ -81,6 +81,9 @@ vi.mock("lucide-react", () => {
     FileSearch: stub("FileSearch"),
     ChevronLeft: stub("ChevronLeft"),
     ChevronRight: stub("ChevronRight"),
+    ArrowDownWideNarrow: stub("ArrowDownWideNarrow"),
+    ArrowUpWideNarrow: stub("ArrowUpWideNarrow"),
+    X: stub("X"),
   };
 });
 

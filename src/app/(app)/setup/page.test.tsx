@@ -217,6 +217,164 @@ describe("SetupPage - JVM client variants", () => {
   });
 });
 
+describe("SetupPage - npm client variants", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("renders Npm, Yarn (v2+), Pnpm, and Bun tabs for an npm repo", async () => {
+    await openRepoDialog(makeRepo({ format: "npm", key: "my-npm" }));
+
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Npm" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Yarn (v2+)" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Pnpm" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Bun" })).toBeTruthy();
+  });
+
+  it("opens on the Npm tab for an npm-format repo with CLI-driven config", async () => {
+    await openRepoDialog(makeRepo({ format: "npm", key: "my-npm" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Npm", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Npm" });
+    // CLI form (npm config set), scoped for a local repo
+    expect(panel.textContent).toContain("npm config set @my-npm:registry");
+    expect(panel.textContent).toContain(":_authToken YOUR_TOKEN");
+  });
+
+  it("opens on the Yarn (v2+) tab for a yarn-format repo", async () => {
+    await openRepoDialog(makeRepo({ format: "yarn", key: "my-npm" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Yarn (v2+)", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Yarn (v2+)" });
+    // Canonical Berry pattern: npmScopes routes, npmRegistries holds auth.
+    expect(panel.textContent).toContain("npmScopes:");
+    expect(panel.textContent).toContain("npmRegistryServer:");
+    expect(panel.textContent).toContain("npmRegistries:");
+    expect(panel.textContent).toContain("npmAuthToken:");
+  });
+
+  it("opens on the Pnpm tab for a pnpm-format repo", async () => {
+    await openRepoDialog(makeRepo({ format: "pnpm", key: "my-npm" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Pnpm", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Pnpm" });
+    expect(panel.textContent).toContain("pnpm add");
+  });
+
+  it("shows Bun-specific commands on the Bun tab", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "npm", key: "my-npm" }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Bun" }));
+    const panel = screen.getByRole("tabpanel", { name: "Bun" });
+    expect(panel.textContent).toContain("bun add");
+    expect(panel.textContent).toContain("bun publish");
+  });
+
+  it("uses top-level default registry config for a remote (proxy) npm repo", async () => {
+    // For a remote/proxy repo, scoped routing (@key:registry=) only catches
+    // @key/* packages, so `npm install react` would still hit public npm.
+    // The right config is the default registry — every install flows through
+    // the artifact keeper.
+    await openRepoDialog(
+      makeRepo({ format: "npm", key: "npm-remote", repo_type: "remote" }),
+    );
+    await screen.findByRole("dialog");
+
+    const npmPanel = screen.getByRole("tabpanel", { name: "Npm" });
+    // CLI form: top-level registry (NOT scoped)
+    expect(npmPanel.textContent).toContain("npm config set registry");
+    expect(npmPanel.textContent).not.toContain("@npm-remote:registry");
+    // Install example should be a generic package, not a scoped one.
+    expect(npmPanel.textContent).toContain("npm install <package-name>");
+  });
+
+  it("uses top-level npmRegistryServer in Yarn config for a remote (proxy) repo", async () => {
+    // The user reported the original npmScopes-only form failed against a
+    // proxy repo. Top-level npmRegistryServer is what actually works.
+    const user = await openRepoDialog(
+      makeRepo({ format: "yarn", key: "npm-remote", repo_type: "remote" }),
+    );
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Yarn (v2+)" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "Yarn (v2+)" });
+    const text = panel.textContent ?? "";
+    expect(text).toContain("npmRegistryServer:");
+    expect(text).toContain("npmRegistries:");
+    expect(text).toContain("npmAuthToken:");
+    // Must NOT nest npmRegistryServer under npmScopes for a proxy.
+    expect(text).not.toContain("npmScopes:");
+  });
+
+  it("uses top-level default registry config for a virtual (group) npm repo", async () => {
+    await openRepoDialog(
+      makeRepo({ format: "npm", key: "npm-group", repo_type: "virtual" }),
+    );
+    await screen.findByRole("dialog");
+    const pnpmTab = screen.getByRole("tab", { name: "Pnpm" });
+    const user = userEvent.setup();
+    await user.click(pnpmTab);
+    const panel = screen.getByRole("tabpanel", { name: "Pnpm" });
+    // Proxy form (top-level default registry) — URL follows `registry=`
+    // directly. Scoped form would have `@npm-group:registry=…` instead.
+    expect(panel.textContent).toContain("registry=http");
+    expect(panel.textContent).not.toContain("@npm-group:registry=");
+  });
+});
+
+describe("SetupPage - PyPI client variants", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("renders Pip, Poetry, Uv, Pipenv, and Twine tabs for a pypi repo", async () => {
+    await openRepoDialog(makeRepo({ format: "pypi", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Pip" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Poetry" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Uv" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Pipenv" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Twine" })).toBeTruthy();
+  });
+
+  it("opens on the Pip tab for a pypi-format repo", async () => {
+    await openRepoDialog(makeRepo({ format: "pypi", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Pip", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Pip" });
+    expect(panel.textContent).toContain("pip install");
+    expect(panel.textContent).toContain("index-url");
+  });
+
+  it("opens on the Poetry tab for a poetry-format repo", async () => {
+    await openRepoDialog(makeRepo({ format: "poetry", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Poetry", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "Poetry" });
+    expect(panel.textContent).toContain("poetry source add");
+    expect(panel.textContent).toContain("poetry config http-basic");
+  });
+
+  it("shows uv index config and env-var credential pattern", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "pypi", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Uv" }));
+    const panel = screen.getByRole("tabpanel", { name: "Uv" });
+    expect(panel.textContent).toContain("[[tool.uv.index]]");
+    // Repo key "my-pypi" → env var name "MY_PYPI"
+    expect(panel.textContent).toContain("UV_INDEX_MY_PYPI_USERNAME");
+    expect(panel.textContent).toContain("UV_INDEX_MY_PYPI_PASSWORD");
+  });
+
+  it("shows twine .pypirc and upload command on the Twine tab", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "pypi", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("tab", { name: "Twine" }));
+    const panel = screen.getByRole("tabpanel", { name: "Twine" });
+    expect(panel.textContent).toContain("[distutils]");
+    expect(panel.textContent).toContain("twine upload --repository my-pypi");
+  });
+});
+
 describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () => {
   beforeEach(() => {
     mockUseQuery.mockReset();
@@ -224,18 +382,6 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
 
   afterEach(() => {
     cleanup();
-  });
-
-  it("renders npm steps as a flat list, not tabs", async () => {
-    await openRepoDialog(makeRepo({ format: "npm", key: "my-npm" }));
-
-    const dialog = await screen.findByRole("dialog");
-    // npm snippet text should be present
-    expect(dialog.textContent).toContain("npm config set");
-    // No client-variant tablist inside the dialog (the outer page tabs don't
-    // count -- those are the Repositories/CI-CD tabs at the page level).
-    const tablistsInDialog = within(dialog).queryAllByRole("tablist");
-    expect(tablistsInDialog.length).toBe(0);
   });
 
   it("renders docker steps as a flat list, not tabs", async () => {
@@ -248,7 +394,6 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
   });
 
   it.each([
-    ["pypi", "pip"],
     ["helm", "helm"],
     ["rpm", "rpm"],
     ["debian", "deb"],

@@ -32,6 +32,23 @@ function sdkGroupFixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function sdkGroupDetailFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "g1",
+    name: "devs",
+    description: null,
+    member_count: 2,
+    created_at: "2025-01-01",
+    updated_at: "2025-01-01",
+    members: [
+      { user_id: "u1", username: "alice", display_name: null, joined_at: "2025-01-02" },
+      { user_id: "u2", username: "bob", display_name: "Bob", joined_at: "2025-01-03" },
+    ],
+    members_total: 2,
+    ...overrides,
+  };
+}
+
 function adaptedGroupFixture(overrides: Record<string, unknown> = {}) {
   return {
     id: "g1",
@@ -75,6 +92,31 @@ describe("groupsApi", () => {
     mockGetGroup.mockResolvedValue({ data: undefined, error: "not found" });
     const { groupsApi } = await import("../groups");
     await expect(groupsApi.get("g1")).rejects.toBe("not found");
+  });
+
+  it("getDetail returns group with members", async () => {
+    mockGetGroup.mockResolvedValue({ data: sdkGroupDetailFixture(), error: undefined });
+    const { groupsApi } = await import("../groups");
+    const result = await groupsApi.getDetail("g1");
+    expect(result.members).toHaveLength(2);
+    expect(result.members[0]).toEqual({
+      user_id: "u1",
+      username: "alice",
+      display_name: undefined,
+      joined_at: "2025-01-02",
+    });
+    expect(result.members[1]).toEqual({
+      user_id: "u2",
+      username: "bob",
+      display_name: "Bob",
+      joined_at: "2025-01-03",
+    });
+  });
+
+  it("getDetail throws on error", async () => {
+    mockGetGroup.mockResolvedValue({ data: undefined, error: "not found" });
+    const { groupsApi } = await import("../groups");
+    await expect(groupsApi.getDetail("g1")).rejects.toBe("not found");
   });
 
   it("create returns created group", async () => {

@@ -37,7 +37,7 @@ test.describe.serial('API Comprehensive - Repository CRUD', () => {
         name: 'e2e-test-repo',
         key: 'e2e-test-repo',
         format: 'generic',
-        type: 'local',
+        repo_type: 'local',
         description: 'E2E test repository - safe to delete',
       },
     });
