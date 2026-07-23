@@ -43,6 +43,7 @@ const SDK_REPO: SdkRepositoryResponse = {
   allow_anonymous_access: false,
   promotion_only: false,
   versioning_enabled: false,
+  has_trusted_gpg_key: false,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
 };

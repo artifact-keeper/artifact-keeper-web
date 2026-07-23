@@ -736,6 +736,166 @@ describe("repositoriesApi.setReleaseTarget", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// 1.6.0 format-specific config (#602): RPM GPG (#2568), Debian (#2407…),
+// npm scope policy (#2424)
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi.create — 1.6.0 format config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forwards the RPM trusted_gpg_key to the SDK create body", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: true }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "rpm-proxy",
+      name: "RPM Proxy",
+      format: "rpm",
+      repo_type: "remote",
+      trusted_gpg_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----",
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBe(
+      "-----BEGIN PGP PUBLIC KEY BLOCK-----"
+    );
+  });
+
+  it("forwards Debian apt_* + debian filter config", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "debian" }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "deb-proxy",
+      name: "Deb Proxy",
+      format: "debian",
+      repo_type: "remote",
+      apt_origin: "acme",
+      apt_label: "Acme",
+      debian: { distribution_paths: ["bookworm"], components: ["main"], architectures: ["amd64"] },
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.apt_origin).toBe("acme");
+    expect(body.apt_label).toBe("Acme");
+    expect(body.debian).toEqual({
+      distribution_paths: ["bookworm"],
+      components: ["main"],
+      architectures: ["amd64"],
+    });
+  });
+
+  it("forwards npm scope policy fields", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "npm", repo_type: "virtual" }),
+      error: undefined,
+    });
+    await repositoriesApi.create({
+      key: "npm-virt",
+      name: "NPM Virtual",
+      format: "npm",
+      repo_type: "virtual",
+      npm_allowed_scopes: ["@acme"],
+      npm_allowed_name_patterns: ["internal-*"],
+      npm_allow_unscoped: false,
+    });
+    const body = mockCreateRepository.mock.calls[0][0].body;
+    expect(body.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(body.npm_allowed_name_patterns).toEqual(["internal-*"]);
+    expect(body.npm_allow_unscoped).toBe(false);
+  });
+});
+
+describe("repositoriesApi.update — 1.6.0 format config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forwards a trusted_gpg_key string to set it", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: true }),
+      error: undefined,
+    });
+    await repositoriesApi.update("rpm-proxy", { trusted_gpg_key: "KEY" });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBe("KEY");
+  });
+
+  it("preserves an explicit null trusted_gpg_key (three-way clear)", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "rpm", has_trusted_gpg_key: false }),
+      error: undefined,
+    });
+    await repositoriesApi.update("rpm-proxy", { trusted_gpg_key: null });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.trusted_gpg_key).toBeNull();
+  });
+
+  it("forwards debian + npm config on update", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "npm", repo_type: "remote" }),
+      error: undefined,
+    });
+    await repositoriesApi.update("npm-remote", {
+      npm_allowed_scopes: ["@acme"],
+      npm_allow_unscoped: true,
+      debian: { components: ["main"] },
+    });
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect(body.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(body.npm_allow_unscoped).toBe(true);
+    expect(body.debian).toEqual({ components: ["main"] });
+  });
+});
+
+describe("repositoriesApi adaptation of 1.6.0 config (#602)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("exposes has_trusted_gpg_key, apt_*, debian and npm fields from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({
+        format: "debian",
+        has_trusted_gpg_key: true,
+        apt_origin: "acme",
+        apt_label: "Acme",
+        apt_release_version: "12",
+        apt_description: "internal",
+        debian: {
+          distribution_paths: ["bookworm"],
+          components: ["main"],
+          architectures: ["amd64"],
+        },
+        npm_allowed_scopes: ["@acme"],
+        npm_allowed_name_patterns: ["internal-*"],
+        npm_allow_unscoped: false,
+      }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("deb-proxy");
+    expect(repo.has_trusted_gpg_key).toBe(true);
+    expect(repo.apt_origin).toBe("acme");
+    expect(repo.apt_label).toBe("Acme");
+    expect(repo.apt_release_version).toBe("12");
+    expect(repo.apt_description).toBe("internal");
+    expect(repo.debian).toEqual({
+      distribution_paths: ["bookworm"],
+      components: ["main"],
+      architectures: ["amd64"],
+    });
+    expect(repo.npm_allowed_scopes).toEqual(["@acme"]);
+    expect(repo.npm_allowed_name_patterns).toEqual(["internal-*"]);
+    expect(repo.npm_allow_unscoped).toBe(false);
+  });
+
+  it("defaults has_trusted_gpg_key to false and leaves optional config undefined when omitted", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.has_trusted_gpg_key).toBe(false);
+    expect(repo.apt_origin).toBeUndefined();
+    expect(repo.debian).toBeUndefined();
+    expect(repo.npm_allowed_scopes).toBeUndefined();
+  });
+});
+
 describe("repositoriesApi.updateAgePolicy", () => {
   beforeEach(() => vi.clearAllMocks());
 

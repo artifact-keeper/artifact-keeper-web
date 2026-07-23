@@ -1777,3 +1777,132 @@ describe('RepoDialogs - Upstream Auth Edge Cases', () => {
     expect(within(dialog).getByRole('button', { name: /^change$/i })).toBeTruthy();
   });
 });
+
+describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('does not show format-specific sections for a generic repo', () => {
+    render(<RepoDialogs {...defaultProps} />);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText(/trusted gpg public key/i)).toBeNull();
+    expect(within(dialog).queryByText('Debian / APT Configuration')).toBeNull();
+    expect(within(dialog).queryByText('npm Scope Policy')).toBeNull();
+  });
+
+  it('shows the RPM trusted GPG key field for rpm format and submits it', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'rpm-repo');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'RPM Repo');
+
+    // Format select is index 0
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'rpm' },
+    });
+
+    const keyField = within(dialog).getByLabelText(/trusted gpg public key/i);
+    await user.type(keyField, 'PUBKEYDATA');
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'rpm',
+        trusted_gpg_key: 'PUBKEYDATA',
+      })
+    );
+  });
+
+  it('does not include trusted_gpg_key when left blank', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'rpm-blank');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'RPM Blank');
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'rpm' },
+    });
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    const submitData = onCreateSubmit.mock.calls[0][0];
+    expect(submitData.trusted_gpg_key).toBeUndefined();
+  });
+
+  it('shows Debian config and submits apt metadata + filter arrays', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'deb-repo');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'Deb Repo');
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'debian' },
+    });
+
+    expect(within(dialog).getByText('Debian / APT Configuration')).toBeTruthy();
+
+    await user.type(within(dialog).getByLabelText(/^origin$/i), 'acme');
+    await user.type(
+      within(dialog).getByLabelText(/distributions/i),
+      'bookworm, bullseye'
+    );
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'debian',
+        apt_origin: 'acme',
+        debian: expect.objectContaining({
+          distribution_paths: ['bookworm', 'bullseye'],
+        }),
+      })
+    );
+  });
+
+  it('shows npm scope policy only for npm virtual/remote and submits it', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'npm-virt');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'NPM Virtual');
+
+    // npm + local => hidden
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'npm' },
+    });
+    expect(within(dialog).queryByText('npm Scope Policy')).toBeNull();
+
+    // switch to virtual => shown
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], {
+      target: { value: 'virtual' },
+    });
+    expect(within(dialog).getByText('npm Scope Policy')).toBeTruthy();
+
+    await user.type(within(dialog).getByLabelText(/allowed scopes/i), '@acme');
+    await user.click(within(dialog).getByRole('switch', { name: /allow unscoped names/i }));
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'npm',
+        repo_type: 'virtual',
+        npm_allowed_scopes: ['@acme'],
+        npm_allow_unscoped: true,
+      })
+    );
+  });
+});

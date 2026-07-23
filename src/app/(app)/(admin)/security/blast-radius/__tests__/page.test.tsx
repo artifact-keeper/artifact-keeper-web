@@ -26,6 +26,7 @@ vi.mock("lucide-react", () => {
     Lock: stub("Lock"),
     Network: stub("Network"),
     RefreshCw: stub("RefreshCw"),
+    ShieldAlert: stub("ShieldAlert"),
     Users: stub("Users"),
   };
 });
@@ -36,6 +37,8 @@ const {
   mockInvalidateQueries,
   mockForCve,
   mockForArtifact,
+  mockAccForCve,
+  mockAccForArtifact,
   searchParamsState,
   tabsState,
 } = vi.hoisted(() => ({
@@ -44,6 +47,8 @@ const {
   mockInvalidateQueries: vi.fn(),
   mockForCve: vi.fn(),
   mockForArtifact: vi.fn(),
+  mockAccForCve: vi.fn(),
+  mockAccForArtifact: vi.fn(),
   searchParamsState: { value: "" },
   tabsState: { onValueChange: undefined as ((v: string) => void) | undefined },
 }));
@@ -71,6 +76,10 @@ vi.mock("@/lib/api/blast-radius", async (importOriginal) => {
     blastRadiusApi: {
       forCve: (...args: any[]) => mockForCve(...args),
       forArtifact: (...args: any[]) => mockForArtifact(...args),
+    },
+    accessibleUsersApi: {
+      forCve: (...args: any[]) => mockAccForCve(...args),
+      forArtifact: (...args: any[]) => mockAccForArtifact(...args),
     },
   };
 });
@@ -121,6 +130,23 @@ vi.mock("@/components/ui/tabs", () => ({
   TabsList: ({ children }: any) => <div>{children}</div>,
   TabsTrigger: ({ children, value }: any) => (
     <button onClick={() => tabsState.onValueChange?.(value)}>{children}</button>
+  ),
+}));
+
+// Minimal Select stand-in: exposes the current value and a button that fires
+// onValueChange with a fixed repo id so tests can switch the scoped repository.
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ children, value, onValueChange }: any) => (
+    <div data-testid="repo-select" data-value={value ?? ""}>
+      <button onClick={() => onValueChange?.("r2")}>select-r2</button>
+      {children}
+    </div>
+  ),
+  SelectTrigger: ({ children }: any) => <div>{children}</div>,
+  SelectValue: ({ placeholder }: any) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: any) => <div>{children}</div>,
+  SelectItem: ({ children, value }: any) => (
+    <div data-value={value}>{children}</div>
   ),
 }));
 
@@ -179,7 +205,12 @@ vi.mock("@/components/common/data-table", () => ({
   },
 }));
 
-import BlastRadiusPage, { AccessScopeBadge, ipPreview } from "../page";
+import BlastRadiusPage, {
+  AccessScopeBadge,
+  ExposureBadge,
+  ViaBadge,
+  ipPreview,
+} from "../page";
 
 // ---------------------------------------------------------------------------
 // Fixtures / helpers
@@ -253,6 +284,23 @@ const REPORT = {
   per_page: 20,
 };
 
+const ACCESSIBLE_REPORT = {
+  target: { kind: "cve", value: "CVE-2021-44228" },
+  repository: {
+    repository_id: "r1",
+    repository_key: "public-npm",
+    access_scope: "restricted_acl",
+  },
+  exposure: "enumerable",
+  accessible_not_downloaded: [
+    { reason: "has-access", user_id: "u1", username: "carol", via: "permission" },
+    { reason: "has-access", user_id: "u2", username: "dave", via: "role" },
+  ],
+  total: 2,
+  page: 1,
+  per_page: 20,
+};
+
 const IDLE = {
   data: undefined,
   isLoading: false,
@@ -260,10 +308,16 @@ const IDLE = {
   isFetching: false,
 };
 
-function queryState(state: Partial<typeof IDLE> & { data?: unknown } = {}) {
+function queryState(
+  state: Partial<typeof IDLE> & { data?: unknown } = {},
+  accessibleState: Partial<typeof IDLE> & { data?: unknown } = {}
+) {
   mockUseQuery.mockImplementation((opts: any) => {
     if (opts.queryKey?.[0] === "admin-blast-radius") {
       return { ...IDLE, ...state };
+    }
+    if (opts.queryKey?.[0] === "admin-accessible-users") {
+      return { ...IDLE, ...accessibleState };
     }
     throw new Error(`Unexpected query key: ${JSON.stringify(opts.queryKey)}`);
   });
@@ -273,6 +327,13 @@ function lastQueryOpts() {
   return mockUseQuery.mock.calls
     .map(([o]) => o)
     .filter((o) => o.queryKey?.[0] === "admin-blast-radius")
+    .at(-1);
+}
+
+function lastAccessibleOpts() {
+  return mockUseQuery.mock.calls
+    .map(([o]) => o)
+    .filter((o) => o.queryKey?.[0] === "admin-accessible-users")
     .at(-1);
 }
 
@@ -472,8 +533,9 @@ describe("BlastRadiusPage", () => {
     ).toBeInTheDocument();
 
     // Affected repos: the public repo is loudly flagged, the private scopes
-    // get their own labels.
-    expect(screen.getByText("public-npm")).toBeInTheDocument();
+    // get their own labels. (The repo key also appears in the latent-exposure
+    // repository selector, so there may be more than one match.)
+    expect(screen.getAllByText("public-npm").length).toBeGreaterThan(0);
     expect(
       screen.getByText(/public — everyone exposed/i)
     ).toBeInTheDocument();
@@ -545,12 +607,167 @@ describe("BlastRadiusPage", () => {
       screen.queryByText(/anonymous downloads present/i)
     ).not.toBeInTheDocument();
   });
+
+  it("renders the latent-exposure section, separated from confirmed downloaders", () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState({ data: REPORT }, { data: ACCESSIBLE_REPORT });
+
+    render(<BlastRadiusPage />);
+
+    // The section and its copy make the latent-vs-confirmed distinction clear.
+    expect(
+      screen.getByRole("heading", { name: /accessible, not downloaded/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/latent exposure/i)).toBeInTheDocument();
+    expect(screen.getByText(/potential/i)).toBeInTheDocument();
+    // The confirmed downloaders view is still intact alongside it.
+    expect(screen.getByText("jane")).toBeInTheDocument();
+
+    // Accessible-but-not-downloaded users render with their access path.
+    expect(screen.getByText("carol")).toBeInTheDocument();
+    expect(screen.getByText("dave")).toBeInTheDocument();
+    expect(screen.getByText(/permission grant/i)).toBeInTheDocument();
+    expect(screen.getByText(/role assignment/i)).toBeInTheDocument();
+    expect(screen.getByText(/enumerable set/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 with latent access/i)).toBeInTheDocument();
+  });
+
+  it("scopes the CVE accessible-users query to the first affected repo, switchable", async () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState({ data: REPORT }, { data: ACCESSIBLE_REPORT });
+    mockAccForCve.mockResolvedValue(ACCESSIBLE_REPORT);
+
+    render(<BlastRadiusPage />);
+
+    let opts = lastAccessibleOpts();
+    expect(opts.enabled).toBe(true);
+    await opts.queryFn();
+    // Defaults to the first affected repository (r1).
+    expect(mockAccForCve).toHaveBeenCalledWith("CVE-2021-44228", {
+      repository_id: "r1",
+      page: 1,
+      per_page: 20,
+    });
+
+    // Switching the repository selector re-scopes the enumeration to r2.
+    mockAccForCve.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "select-r2" }));
+    opts = lastAccessibleOpts();
+    await opts.queryFn();
+    expect(mockAccForCve).toHaveBeenCalledWith("CVE-2021-44228", {
+      repository_id: "r2",
+      page: 1,
+      per_page: 20,
+    });
+  });
+
+  it("runs the artifact accessible-users query without a repository_id", async () => {
+    searchParamsState.value = `artifact=${ARTIFACT_ID}`;
+    queryState(
+      { data: { ...REPORT, target: { kind: "artifact", value: ARTIFACT_ID } } },
+      {
+        data: {
+          ...ACCESSIBLE_REPORT,
+          target: { kind: "artifact", value: ARTIFACT_ID },
+        },
+      }
+    );
+    mockAccForArtifact.mockResolvedValue(ACCESSIBLE_REPORT);
+
+    render(<BlastRadiusPage />);
+
+    const opts = lastAccessibleOpts();
+    expect(opts.enabled).toBe(true);
+    await opts.queryFn();
+    expect(mockAccForArtifact).toHaveBeenCalledWith(ARTIFACT_ID, {
+      page: 1,
+      per_page: 20,
+    });
+    // No repository selector in artifact mode (the artifact implies the repo).
+    expect(
+      screen.queryByRole("button", { name: "select-r2" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the everyone banner for a public repo instead of a user list", () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState(
+      { data: REPORT },
+      {
+        data: {
+          ...ACCESSIBLE_REPORT,
+          repository: {
+            ...ACCESSIBLE_REPORT.repository,
+            access_scope: "public",
+          },
+          exposure: "everyone",
+          accessible_not_downloaded: [],
+          total: null,
+        },
+      }
+    );
+
+    render(<BlastRadiusPage />);
+
+    expect(
+      screen.getByText(/public repository — everyone can access/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("carol")).not.toBeInTheDocument();
+  });
+
+  it("shows a latent-exposure error without hiding the downloaders view", () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState({ data: REPORT }, { isError: true });
+
+    render(<BlastRadiusPage />);
+
+    expect(screen.getByText(/latent exposure unavailable/i)).toBeInTheDocument();
+    // The confirmed-downloaders view still renders.
+    expect(screen.getByText("jane")).toBeInTheDocument();
+  });
 });
 
 describe("AccessScopeBadge", () => {
   it("degrades unknown scopes to a neutral badge with the raw value", () => {
     render(<AccessScopeBadge scope="quarantined" />);
     expect(screen.getByText("quarantined")).toBeInTheDocument();
+  });
+});
+
+describe("ExposureBadge", () => {
+  it("loudly flags a public 'everyone' exposure", () => {
+    render(<ExposureBadge exposure="everyone" />);
+    expect(
+      screen.getByText(/everyone — public repository/i)
+    ).toBeInTheDocument();
+  });
+
+  it("labels the enumerable and effectively-everyone cases", () => {
+    const { rerender } = render(<ExposureBadge exposure="enumerable" />);
+    expect(screen.getByText(/enumerable set/i)).toBeInTheDocument();
+    rerender(<ExposureBadge exposure="effectively-everyone" />);
+    expect(screen.getByText(/effectively everyone/i)).toBeInTheDocument();
+  });
+
+  it("degrades an unknown exposure to a neutral badge with the raw value", () => {
+    render(<ExposureBadge exposure="quantum" />);
+    expect(screen.getByText("quantum")).toBeInTheDocument();
+  });
+});
+
+describe("ViaBadge", () => {
+  it("maps known access paths to friendly labels", () => {
+    const { rerender } = render(<ViaBadge via="admin" />);
+    expect(screen.getByText("Administrator")).toBeInTheDocument();
+    rerender(<ViaBadge via="permission" />);
+    expect(screen.getByText("Permission grant")).toBeInTheDocument();
+    rerender(<ViaBadge via="role" />);
+    expect(screen.getByText("Role assignment")).toBeInTheDocument();
+  });
+
+  it("falls back to the raw value for an unknown access path", () => {
+    render(<ViaBadge via="mystery" />);
+    expect(screen.getByText("mystery")).toBeInTheDocument();
   });
 });
 

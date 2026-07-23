@@ -1252,3 +1252,200 @@ describe("RepoSettingsTab - Artifact Versioning Section (#571)", () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 1.6.0 format-specific config sections (#602)
+// ---------------------------------------------------------------------------
+
+const rpmRepo: Repository = {
+  ...baseRepo,
+  id: "repo-rpm",
+  key: "rpm-proxy",
+  name: "RPM Proxy",
+  format: "rpm",
+  repo_type: "remote",
+  upstream_url: "https://mirror.example.com",
+  has_trusted_gpg_key: false,
+};
+
+const debianRepo: Repository = {
+  ...baseRepo,
+  id: "repo-deb",
+  key: "deb-proxy",
+  name: "Deb Proxy",
+  format: "debian",
+  repo_type: "remote",
+  upstream_url: "https://deb.example.com",
+  apt_origin: "acme",
+  apt_label: "Acme Mirror",
+  debian: {
+    distribution_paths: ["bookworm"],
+    components: ["main"],
+    architectures: ["amd64"],
+  },
+};
+
+const npmVirtualRepo: Repository = {
+  ...baseRepo,
+  id: "repo-npm",
+  key: "npm-virt",
+  name: "NPM Virtual",
+  format: "npm",
+  repo_type: "virtual",
+  npm_allowed_scopes: ["@acme"],
+  npm_allow_unscoped: false,
+};
+
+describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockGetCacheTtl.mockResolvedValue({
+      repository_key: "x",
+      cache_ttl_seconds: 86400,
+    });
+  });
+
+  it("hides all format-specific sections for a plain maven repo", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByText("RPM Curation Trust")).toBeNull();
+    expect(screen.queryByText("Debian / APT Configuration")).toBeNull();
+    expect(screen.queryByText("npm Scope Policy")).toBeNull();
+  });
+
+  it("shows the RPM section and saves a typed trusted key", async () => {
+    mockUpdate.mockResolvedValue({ ...rpmRepo, has_trusted_gpg_key: true });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={rpmRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("RPM Curation Trust")).toBeTruthy();
+    await user.type(
+      screen.getByLabelText(/trusted gpg public key/i),
+      "NEWKEY"
+    );
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "rpm-proxy",
+        expect.objectContaining({ trusted_gpg_key: "NEWKEY" })
+      );
+    });
+  });
+
+  it("clears the trusted key via Remove and saves null", async () => {
+    mockUpdate.mockResolvedValue({ ...rpmRepo, has_trusted_gpg_key: false });
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...rpmRepo, has_trusted_gpg_key: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
+    expect(
+      screen.getByText(/trusted key will be removed when you save/i)
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "rpm-proxy",
+        expect.objectContaining({ trusted_gpg_key: null })
+      );
+    });
+  });
+
+  it("undoes a pending key removal", async () => {
+    const user = userEvent.setup();
+    render(
+      <RepoSettingsTab
+        repository={{ ...rpmRepo, has_trusted_gpg_key: true }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole("button", { name: /^remove$/i }));
+    await user.click(screen.getByRole("button", { name: /^undo$/i }));
+    expect(
+      screen.queryByText(/trusted key will be removed when you save/i)
+    ).toBeNull();
+    // No pending change -> no unsaved-changes bar.
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+  });
+
+  it("prefills and saves Debian config", async () => {
+    mockUpdate.mockResolvedValue(debianRepo);
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={debianRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("Debian / APT Configuration")).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/^origin$/i) as HTMLInputElement).value
+    ).toBe("acme");
+    expect(
+      (screen.getByLabelText(/distributions/i) as HTMLInputElement).value
+    ).toBe("bookworm");
+
+    const compInput = screen.getByLabelText(/^components$/i);
+    await user.clear(compInput);
+    await user.type(compInput, "main, contrib");
+
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "deb-proxy",
+        expect.objectContaining({
+          apt_origin: "acme",
+          debian: expect.objectContaining({
+            components: ["main", "contrib"],
+            distribution_paths: ["bookworm"],
+          }),
+        })
+      );
+    });
+  });
+
+  it("prefills and saves npm scope policy", async () => {
+    mockUpdate.mockResolvedValue(npmVirtualRepo);
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={npmVirtualRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("npm Scope Policy")).toBeTruthy();
+    expect(
+      (screen.getByLabelText(/allowed scopes/i) as HTMLTextAreaElement).value
+    ).toBe("@acme");
+
+    await user.click(screen.getByLabelText("Allow unscoped names"));
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "npm-virt",
+        expect.objectContaining({
+          npm_allowed_scopes: ["@acme"],
+          npm_allow_unscoped: true,
+        })
+      );
+    });
+  });
+
+  it("does not show the npm section for an npm local repo", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...npmVirtualRepo, repo_type: "local" }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByText("npm Scope Policy")).toBeNull();
+  });
+});
