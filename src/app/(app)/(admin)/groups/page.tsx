@@ -122,7 +122,9 @@ export default function GroupsPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<GroupForm> }) =>
-      groupsApi.update(id, { description: data.description }),
+      // PUT is a full replacement: backend requires `name`, so resend the
+      // (unchanged, non-editable) name alongside the new description.
+      groupsApi.update(id, { name: data.name, description: data.description }),
     onSuccess: () => {
       toast.success("Group updated successfully");
       invalidateGroup(queryClient, "groups");
@@ -443,7 +445,7 @@ export default function GroupsPage() {
               if (selectedGroup) {
                 updateMutation.mutate({
                   id: selectedGroup.id,
-                  data: { description: form.description },
+                  data: { name: form.name, description: form.description },
                 });
               }
             }}
