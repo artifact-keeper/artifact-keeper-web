@@ -57,6 +57,7 @@ function adaptedGroupFixture(overrides: Record<string, unknown> = {}) {
     auto_join: false,
     member_count: 5,
     is_external: false,
+    external_source: null,
     created_at: "2025-01-01",
     updated_at: "2025-01-01",
     ...overrides,
@@ -119,8 +120,27 @@ describe("groupsApi", () => {
     await expect(groupsApi.getDetail("g1")).rejects.toBe("not found");
   });
 
+  it("derives is_external / external_source from the SDK external_source field", async () => {
+    mockListGroups.mockResolvedValue({
+      data: {
+        items: [
+          sdkGroupFixture({ id: "oidc", external_source: "oidc" }),
+          sdkGroupFixture({ id: "saml", external_source: "saml" }),
+          sdkGroupFixture({ id: "ldap", external_source: "ldap" }),
+          sdkGroupFixture({ id: "local", external_source: null }),
+        ],
+        pagination: { total: 4 },
+      },
+      error: undefined,
+    });
+    const { groupsApi } = await import("../groups");
+    const { items } = await groupsApi.list();
+    expect(items.map((g) => g.is_external)).toEqual([true, true, true, false]);
+    expect(items.map((g) => g.external_source)).toEqual(["oidc", "saml", "ldap", null]);
+  });
+
   it("create returns created group", async () => {
-    // CreatedGroupRow shape — no member_count.
+    // CreatedGroupRow shape, no member_count.
     mockCreateGroup.mockResolvedValue({
       data: { id: "g2", name: "ops", description: null, created_at: "x", updated_at: "x" },
       error: undefined,
@@ -133,6 +153,7 @@ describe("groupsApi", () => {
       auto_join: false,
       member_count: 0,
       is_external: false,
+      external_source: null,
       created_at: "x",
       updated_at: "x",
     });

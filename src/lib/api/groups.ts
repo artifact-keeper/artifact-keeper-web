@@ -27,32 +27,36 @@ export interface ListGroupsParams {
   search?: string;
 }
 
-// SDK GroupResponse / CreatedGroupRow don't surface auto_join or is_external.
-// Default them to false so the local Group contract is satisfied; pages that
-// rely on real values for these will need a backend/SDK update.
-// CreatedGroupRow (returned from createGroup) lacks member_count — default 0.
+// external_source ("oidc"|"saml"|"ldap"; null=local) drives is_external, read defensively since the 1.5.x SDK type lacks the field.
+// auto_join defaults false; CreatedGroupRow lacks member_count so default 0.
 function adaptGroup(sdk: GroupResponse | CreatedGroupRow): Group {
   const memberCount = 'member_count' in sdk ? sdk.member_count : 0;
+  const externalSource =
+    (sdk as { external_source?: string | null }).external_source ?? null;
   return {
     id: sdk.id,
     name: sdk.name,
     description: sdk.description ?? undefined,
     auto_join: false,
     member_count: memberCount,
-    is_external: false,
+    is_external: externalSource != null,
+    external_source: externalSource,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
 }
 
 function adaptGroupDetail(sdk: GroupDetailResponse): GroupDetail {
+  const externalSource =
+    (sdk as { external_source?: string | null }).external_source ?? null;
   return {
     id: sdk.id,
     name: sdk.name,
     description: sdk.description ?? undefined,
     auto_join: false,
     member_count: sdk.member_count,
-    is_external: false,
+    is_external: externalSource != null,
+    external_source: externalSource,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
     members: sdk.members.map((m) => ({
@@ -99,15 +103,15 @@ export const groupsApi = {
   update: async (groupId: string, input: Partial<CreateGroupRequest>): Promise<Group> => {
     // SDK updateGroup requires the full CreateGroupRequest (with `name`); the
     // existing API exposes Partial<> for description-only updates. Build a
-    // body type that allows omitting `name` — sending '' would overwrite the
-    // group name to blank — then cast at the SDK boundary.
+    // body type that allows omitting `name` (sending '' would blank the group
+    // name), then cast at the SDK boundary.
     type UpdateGroupBodyPartial = Omit<CreateGroupRequest, 'name'> & { name?: string };
     const body: UpdateGroupBodyPartial = {
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
     };
     // SDK marks `name` required for PUT, but the backend treats omission as
-    // "leave unchanged" — we want that semantic for description-only edits.
+    // "leave unchanged", which we want for description-only edits.
     const { data, error } = await updateGroup({
       path: { id: groupId },
       body: body as CreateGroupRequest,
