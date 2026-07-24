@@ -5,6 +5,8 @@ export interface Group {
   auto_join: boolean;
   member_count: number;
   is_external: boolean;
+  /** Federated SSO provider that owns the group: "oidc" | "saml" | "ldap"; null/absent for local groups. */
+  external_source?: string | null;
   created_at: string;
   updated_at: string;
 }
