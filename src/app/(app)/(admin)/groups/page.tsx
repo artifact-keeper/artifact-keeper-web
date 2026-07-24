@@ -64,6 +64,10 @@ interface GroupForm {
 
 const EMPTY_FORM: GroupForm = { name: "", description: "" };
 
+// SSO-synced groups (is_external) are owned by the IdP; the backend blocks edits (#2874).
+const SSO_DISABLED_LABEL = "Editing not permitted (synced via SSO)";
+const SSO_READONLY_LABEL = "Read-only, editing not permitted (synced via SSO)";
+
 // -- page --
 
 export default function GroupsPage() {
@@ -186,6 +190,9 @@ export default function GroupsPage() {
     setMembersOpen(true);
   }, []);
 
+  // SSO-synced groups: membership is read-only in the dialog (backend rejects edits).
+  const selectedIsExternal = !!selectedGroup?.is_external;
+
   // Compute members with type safety
   const members: GroupMember[] = groupDetail?.members ?? [];
 
@@ -255,15 +262,21 @@ export default function GroupsPage() {
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => handleEdit(g)}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
+              {/* span wrapper: disabled Button has pointer-events-none, so the tooltip fires on the span. */}
+              <span className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={g.is_external}
+                  onClick={() => handleEdit(g)}
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+              </span>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>
+              {g.is_external ? SSO_DISABLED_LABEL : "Edit"}
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -275,7 +288,9 @@ export default function GroupsPage() {
                 <Users2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Manage Members</TooltipContent>
+            <TooltipContent>
+              {g.is_external ? SSO_READONLY_LABEL : "Manage Members"}
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -490,7 +505,9 @@ export default function GroupsPage() {
               Manage Members: {selectedGroup?.name}
             </DialogTitle>
             <DialogDescription>
-              Add or remove users from this group.
+              {selectedIsExternal
+                ? SSO_READONLY_LABEL
+                : "Add or remove users from this group."}
             </DialogDescription>
           </DialogHeader>
 
@@ -498,7 +515,11 @@ export default function GroupsPage() {
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-2">
               <Label>Add Member</Label>
-              <Select value={addUserId} onValueChange={setAddUserId}>
+              <Select
+                value={addUserId}
+                onValueChange={setAddUserId}
+                disabled={selectedIsExternal}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a user..." />
                 </SelectTrigger>
@@ -516,21 +537,35 @@ export default function GroupsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              size="sm"
-              disabled={!addUserId || addMemberMutation.isPending}
-              onClick={() => {
-                if (selectedGroup && addUserId) {
-                  addMemberMutation.mutate({
-                    groupId: selectedGroup.id,
-                    userId: addUserId,
-                  });
-                }
-              }}
-            >
-              <UserPlus className="size-3.5 mr-1" />
-              Add
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* span wrapper so the tooltip fires on the disabled button */}
+                <span className="inline-flex">
+                  <Button
+                    size="sm"
+                    disabled={
+                      selectedIsExternal ||
+                      !addUserId ||
+                      addMemberMutation.isPending
+                    }
+                    onClick={() => {
+                      if (selectedGroup && addUserId) {
+                        addMemberMutation.mutate({
+                          groupId: selectedGroup.id,
+                          userId: addUserId,
+                        });
+                      }
+                    }}
+                  >
+                    <UserPlus className="size-3.5 mr-1" />
+                    Add
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {selectedIsExternal && (
+                <TooltipContent>{SSO_DISABLED_LABEL}</TooltipContent>
+              )}
+            </Tooltip>
           </div>
 
           <Separator />
@@ -582,24 +617,31 @@ export default function GroupsPage() {
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => {
-                              if (selectedGroup) {
-                                removeMemberMutation.mutate({
-                                  groupId: selectedGroup.id,
-                                  userId: m.user_id,
-                                });
+                          <span className="inline-flex">
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => {
+                                if (selectedGroup) {
+                                  removeMemberMutation.mutate({
+                                    groupId: selectedGroup.id,
+                                    userId: m.user_id,
+                                  });
+                                }
+                              }}
+                              disabled={
+                                selectedIsExternal ||
+                                removeMemberMutation.isPending
                               }
-                            }}
-                            disabled={removeMemberMutation.isPending}
-                          >
-                            <UserMinus className="size-3.5" />
-                          </Button>
+                            >
+                              <UserMinus className="size-3.5" />
+                            </Button>
+                          </span>
                         </TooltipTrigger>
-                        <TooltipContent>Remove</TooltipContent>
+                        <TooltipContent>
+                          {selectedIsExternal ? SSO_DISABLED_LABEL : "Remove"}
+                        </TooltipContent>
                       </Tooltip>
                     </div>
                   ))}
