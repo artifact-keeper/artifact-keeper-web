@@ -60,6 +60,7 @@ import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
+import { resolveInitialRepoTab } from "@/lib/repo-tabs";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -670,8 +671,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         isAdmin={!!user?.is_admin}
       />
 
-      {/* Tabs */}
-      <Tabs defaultValue="artifacts">
+      {/* Tabs. The default primary tab is format-driven (#2793): package-oriented
+          formats (Maven/npm/PyPI/…) open on Packages, where their catalog lives;
+          RAW/Generic and container formats keep Artifacts. An explicit `?tab=`
+          wins, and any `?view=` artifact deep-link pins Artifacts. `repository`
+          is loaded before this renders (guards above), so the format is known
+          when the uncontrolled Tabs mounts. */}
+      <Tabs
+        defaultValue={resolveInitialRepoTab(
+          searchParams.get("tab"),
+          searchParams.get("view"),
+          repoFormat,
+        )}
+      >
         <TabsList variant="line">
           <TabsTrigger value="artifacts">
             <FileArchive className="size-3.5 mr-1" />

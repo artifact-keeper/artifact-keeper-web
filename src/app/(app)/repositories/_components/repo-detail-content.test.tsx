@@ -3,6 +3,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -188,6 +189,49 @@ describe("RepoDetailContent tab strip", () => {
   });
 });
 
+describe("RepoDetailContent default primary tab (#2793)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+
+  it("defaults RAW/Generic repositories to the Artifacts tab", () => {
+    repository.format = "generic";
+    render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getByRole("tab", { name: /artifacts/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: /packages/i })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    // Active panel is the artifact browser (its stubbed row is mounted).
+    expect(screen.getByTestId("stub-row-a1")).toBeInTheDocument();
+  });
+
+  it("defaults package-oriented (Maven) repositories to the Packages tab", () => {
+    repository.format = "maven";
+    render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getByRole("tab", { name: /packages/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: /artifacts/i })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    // Active panel is the Packages view (stubbed), not the artifact browser.
+    expect(document.querySelector('[data-stub="packages"]')).toBeInTheDocument();
+  });
+});
+
 describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () => {
   beforeEach(() => {
     cleanup();
@@ -202,7 +246,11 @@ describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () 
 
   async function openDetailDialog() {
     render(<RepoDetailContent repoKey="demo" />);
-    const row = screen.getByTestId("stub-row-a1");
+    // The artifact row lives on the Artifacts tab. For package-oriented formats
+    // (e.g. maven) that tab is no longer the default (#2793), so select it
+    // explicitly before opening the detail dialog.
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
     row.click();
     // The dialog tablist renders synchronously once selectedArtifact is set.
     return await screen.findByText("Artifact Details", {}, { timeout: 2000 }).catch(() => null);
