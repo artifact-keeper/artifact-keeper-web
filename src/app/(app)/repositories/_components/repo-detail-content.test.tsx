@@ -120,9 +120,11 @@ vi.mock("./packages-tab-content", () => ({ PackagesTabContent: () => <div data-s
 vi.mock("./repo-settings-tab", () => ({ RepoSettingsTab: () => <div data-stub="settings" /> }));
 vi.mock("./maven-component-list", () => ({ MavenComponentList: () => <div data-stub="maven" /> }));
 vi.mock("./docker-tag-list", () => ({ DockerTagList: () => <div data-stub="docker" /> }));
+vi.mock("./artifact-folder-tree", () => ({ ArtifactFolderTree: () => <div data-stub="folder-tree" /> }));
 vi.mock("./artifact-browser-toggle", () => ({
   ArtifactBrowserToggle: () => <div data-stub="ArtifactBrowserToggle" />,
   supportsGrouping: () => false,
+  supportsTree: () => false,
 }));
 vi.mock("@/components/common/data-table", () => ({
   // Minimal row rendering so tests can open the artifact detail dialog via

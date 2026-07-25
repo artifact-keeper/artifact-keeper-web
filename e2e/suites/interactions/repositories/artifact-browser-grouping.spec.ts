@@ -216,10 +216,14 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
   // Non-groupable formats — toggle hidden
   // -------------------------------------------------------------------------
 
-  test('Non-groupable repos (npm, helm) do NOT show the grouping toggle', async ({
+  test('Non-groupable repos (npm, helm, pypi) do NOT show the grouping toggle', async ({
     page,
   }) => {
-    const key = await findRepoByFormat(page, ['npm', 'helm', 'pypi', 'generic']);
+    // `generic` is intentionally excluded: RAW/Generic repos now render the
+    // browser toggle for the Flat/Tree folder view (#2791), so they are no
+    // longer toggle-free. npm/helm/pypi remain neither groupable nor
+    // tree-capable, so the toggle must still be absent for them.
+    const key = await findRepoByFormat(page, ['npm', 'helm', 'pypi']);
     test.skip(!key, 'No non-groupable repository available');
     await gotoArtifactsTab(page, key!);
 
@@ -227,5 +231,23 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     expect(await toggle.isVisible({ timeout: 2000 }).catch(() => false)).toBe(
       false,
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // RAW/Generic — Flat/Tree folder-view toggle (#2791)
+  // -------------------------------------------------------------------------
+
+  test('Generic (RAW) repos show the Flat/Tree browser toggle (#2791)', async ({
+    page,
+  }) => {
+    const key = await findRepoByFormat(page, ['generic']);
+    test.skip(!key, 'No generic repository available');
+    await gotoArtifactsTab(page, key!);
+
+    await expect(page.getByTestId('artifact-browser-toggle')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('toggle-flat')).toBeVisible();
+    await expect(page.getByTestId('toggle-tree')).toBeVisible();
   });
 });

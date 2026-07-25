@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import {
   ArtifactBrowserToggle,
   supportsGrouping,
+  supportsTree,
 } from "../artifact-browser-toggle";
 import type { RepositoryFormat } from "@/types";
 
@@ -25,6 +26,62 @@ describe("supportsGrouping", () => {
     ["podman", false],
   ])("returns %s for %s repos", (format, expected) => {
     expect(supportsGrouping(format)).toBe(expected);
+  });
+});
+
+describe("supportsTree", () => {
+  it.each<[RepositoryFormat, boolean]>([
+    ["generic", true],
+    ["maven", false],
+    ["docker", false],
+    ["npm", false],
+    ["helm", false],
+  ])("returns %s for %s repos", (format, expected) => {
+    expect(supportsTree(format)).toBe(expected);
+  });
+});
+
+describe("ArtifactBrowserToggle — tree (RAW/Generic)", () => {
+  afterEach(cleanup);
+
+  it("renders a Flat/Tree toggle for generic repositories", () => {
+    render(
+      <ArtifactBrowserToggle value="flat" onChange={NOOP} format="generic" />,
+    );
+    expect(screen.getByTestId("artifact-browser-toggle")).toBeInTheDocument();
+    expect(screen.getByTestId("toggle-flat")).toBeInTheDocument();
+    expect(screen.getByTestId("toggle-tree")).toBeInTheDocument();
+    expect(screen.queryByTestId("toggle-grouped")).not.toBeInTheDocument();
+  });
+
+  it("marks the tree button pressed when value=tree", () => {
+    render(
+      <ArtifactBrowserToggle value="tree" onChange={NOOP} format="generic" />,
+    );
+    expect(screen.getByTestId("toggle-tree")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByTestId("toggle-flat")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("invokes onChange('tree') when the Tree button is clicked", async () => {
+    const onChange = vi.fn();
+    render(
+      <ArtifactBrowserToggle value="flat" onChange={onChange} format="generic" />,
+    );
+    await userEvent.click(screen.getByTestId("toggle-tree"));
+    expect(onChange).toHaveBeenCalledWith("tree");
+  });
+
+  it("renders nothing for formats with neither grouping nor tree (npm)", () => {
+    const { container } = render(
+      <ArtifactBrowserToggle value="flat" onChange={NOOP} format="npm" />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { List, Boxes } from "lucide-react";
+import { List, Boxes, FolderTree } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { RepositoryFormat } from "@/types";
 
-export type ArtifactViewMode = "flat" | "grouped";
+export type ArtifactViewMode = "flat" | "grouped" | "tree";
 
 /**
  * Repository formats for which a "grouped" artifact view is meaningful.
@@ -19,22 +19,36 @@ const GROUPABLE_FORMATS = new Set<RepositoryFormat>([
   "docker",
 ]);
 
+/**
+ * Repository formats for which a folder-tree view is meaningful (issue #2791).
+ * RAW/Generic repos have no package/version semantics — just files at arbitrary
+ * paths — so a directory tree built client-side from the flat artifact list is
+ * the natural way to browse them.
+ */
+const TREE_FORMATS = new Set<RepositoryFormat>(["generic"]);
+
 export function supportsGrouping(format: RepositoryFormat): boolean {
   return GROUPABLE_FORMATS.has(format);
+}
+
+export function supportsTree(format: RepositoryFormat): boolean {
+  return TREE_FORMATS.has(format);
 }
 
 interface ArtifactBrowserToggleProps {
   value: ArtifactViewMode;
   onChange: (next: ArtifactViewMode) => void;
-  /** Repository format — toggle only renders for groupable formats. */
+  /** Repository format — toggle only renders for formats that offer an
+   *  alternate (grouped or tree) view. */
   format: RepositoryFormat;
   className?: string;
 }
 
 /**
- * Two-state toggle between flat artifact list and grouped (by Maven
- * component or Docker tag) view.  Renders nothing for formats that don't
- * support grouping.
+ * Two-state toggle between the flat artifact list and an alternate view. The
+ * alternate is format-dependent: groupable formats (Maven/Gradle/Docker) toggle
+ * to a grouped view; RAW/Generic formats toggle to a folder tree (#2791).
+ * Renders nothing for formats that offer neither.
  *
  * Behaves as a single-select radio group for screen readers: each button
  * exposes `aria-pressed` so the selected state is announced.
@@ -45,9 +59,19 @@ export function ArtifactBrowserToggle({
   format,
   className,
 }: ArtifactBrowserToggleProps) {
-  if (!supportsGrouping(format)) return null;
+  const groupable = supportsGrouping(format);
+  const treeable = supportsTree(format);
+  if (!groupable && !treeable) return null;
 
-  const groupedLabel = format === "docker" ? "Group by tag" : "Group by component";
+  // Groupable formats keep their existing grouped alternate; otherwise offer
+  // the folder-tree alternate.
+  const altMode: ArtifactViewMode = groupable ? "grouped" : "tree";
+  const altLabel = groupable
+    ? format === "docker"
+      ? "Group by tag"
+      : "Group by component"
+    : "Folder tree view";
+  const AltIcon = groupable ? Boxes : FolderTree;
 
   return (
     <div
@@ -74,16 +98,16 @@ export function ArtifactBrowserToggle({
       </Button>
       <Button
         type="button"
-        variant={value === "grouped" ? "secondary" : "ghost"}
+        variant={value === altMode ? "secondary" : "ghost"}
         size="sm"
         className="h-8 px-3 text-xs"
-        aria-pressed={value === "grouped"}
-        aria-label={groupedLabel}
-        data-testid="toggle-grouped"
-        onClick={() => onChange("grouped")}
+        aria-pressed={value === altMode}
+        aria-label={altLabel}
+        data-testid={groupable ? "toggle-grouped" : "toggle-tree"}
+        onClick={() => onChange(altMode)}
       >
-        <Boxes className="size-3.5" aria-hidden="true" />
-        Grouped
+        <AltIcon className="size-3.5" aria-hidden="true" />
+        {groupable ? "Grouped" : "Tree"}
       </Button>
     </div>
   );
