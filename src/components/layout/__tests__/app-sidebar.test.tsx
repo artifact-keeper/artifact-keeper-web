@@ -105,6 +105,7 @@ vi.mock("lucide-react", () => {
     ScrollText: icon,
     Network: icon,
     Crosshair: icon,
+    Hourglass: icon,
   };
 });
 

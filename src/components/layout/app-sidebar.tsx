@@ -45,6 +45,7 @@ import {
   ScrollText,
   Network,
   Crosshair,
+  Hourglass,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -102,6 +103,7 @@ const securityItems: NavItem[] = [
   { title: "Policies", href: "/security/policies", icon: FileCheck },
   { title: "License Policies", href: "/license-policies", icon: Scale },
   { title: "Curation", href: "/curation", icon: PackageCheck },
+  { title: "Age Gate", href: "/age-gate", icon: Hourglass },
   { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
