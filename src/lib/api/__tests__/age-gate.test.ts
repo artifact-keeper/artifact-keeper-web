@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockApiFetch = vi.fn();
-vi.mock("../fetch", () => ({
-  assertData: <T,>(d: T) => d,
-  apiFetch: (...a: unknown[]) => mockApiFetch(...a),
-}));
+// Real ApiError so the capability guard's `instanceof` check is the production
+// one; only the transport is stubbed.
+vi.mock("../fetch", async () => {
+  const actual = await vi.importActual<typeof import("../fetch")>("../fetch");
+  return {
+    ApiError: actual.ApiError,
+    assertData: <T,>(d: T) => d,
+    apiFetch: (...a: unknown[]) => mockApiFetch(...a),
+  };
+});
 vi.mock("@/lib/sdk-client", () => ({}));
 
 const m = {
@@ -22,7 +28,13 @@ vi.mock("@artifact-keeper/sdk", () => ({
   getRepoAgeGate: (...a: unknown[]) => m.getRepoAgeGate(...a),
 }));
 
-import ageGateApi, { AgeGatePartialTransitionError } from "../age-gate";
+import { ApiError } from "../fetch";
+import ageGateApi, {
+  AgeGatePartialTransitionError,
+  ReopenUnsupportedError,
+  isReopenSupported,
+  resetReopenSupport,
+} from "../age-gate";
 
 /** The adapted (camelCase) shape the composite status change takes. */
 const LOCAL_REVIEW = {
@@ -56,7 +68,10 @@ const REVIEW = {
   upstream_published_at: "2026-07-10T00:00:00Z",
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  resetReopenSupport();
+});
 
 describe("ageGateApi", () => {
   it("listReviews sends the status filter and maps results, computing age at request", async () => {
@@ -203,6 +218,86 @@ describe("ageGateApi", () => {
       ageGateApi.changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "approved", "why not"),
     ).rejects.toThrow(/already approved/i);
     expect(mockApiFetch).not.toHaveBeenCalled();
+  });
+
+  describe("reopen capability detection", () => {
+    /** Framework default 404 for a path that was never routed: empty body. */
+    const missingEndpoint = () => new ApiError(404, "");
+    /** The handler's own 404 for an id that is not in the table. */
+    const missingReview = () =>
+      new ApiError(404, '{"code":"NOT_FOUND","message":"Age gate review not found"}');
+
+    it("reads a 404 with no error envelope as the endpoint being absent", async () => {
+      mockApiFetch.mockRejectedValue(missingEndpoint());
+      await expect(ageGateApi.reopenReview("rv1", "wrong package")).rejects.toBeInstanceOf(
+        ReopenUnsupportedError,
+      );
+      expect(isReopenSupported()).toBe(false);
+    });
+
+    it("stops calling the endpoint once it is known to be absent", async () => {
+      mockApiFetch.mockRejectedValue(missingEndpoint());
+      await expect(ageGateApi.reopenReview("rv1", "first try")).rejects.toBeInstanceOf(
+        ReopenUnsupportedError,
+      );
+      expect(mockApiFetch).toHaveBeenCalledTimes(1);
+
+      await expect(ageGateApi.reopenReview("rv2", "second try")).rejects.toBeInstanceOf(
+        ReopenUnsupportedError,
+      );
+      expect(mockApiFetch).toHaveBeenCalledTimes(1); // no re-probe
+    });
+
+    it("does not latch on a 404 for an unknown review id", async () => {
+      mockApiFetch.mockRejectedValue(missingReview());
+      const err = await ageGateApi.reopenReview("nope", "wrong package").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).not.toBeInstanceOf(ReopenUnsupportedError);
+      expect(isReopenSupported()).toBe(true);
+    });
+
+    it("does not latch on a non-404 failure", async () => {
+      mockApiFetch.mockRejectedValue(new ApiError(500, ""));
+      await expect(ageGateApi.reopenReview("rv1", "wrong package")).rejects.toBeInstanceOf(ApiError);
+      expect(isReopenSupported()).toBe(true);
+    });
+
+    it("blocks a reopen-dependent transition without touching either endpoint", async () => {
+      mockApiFetch.mockRejectedValue(missingEndpoint());
+      await ageGateApi.reopenReview("rv1", "probe").catch(() => {});
+      mockApiFetch.mockClear();
+
+      const err = await ageGateApi
+        .changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "rejected", "cve landed")
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ReopenUnsupportedError);
+      // Nothing was attempted, so this is not a partial transition: the review
+      // is still exactly where the operator found it.
+      expect(err).not.toBeInstanceOf(AgeGatePartialTransitionError);
+      expect(mockApiFetch).not.toHaveBeenCalled();
+      expect(m.rejectReview).not.toHaveBeenCalled();
+    });
+
+    it("still decides a pending review when reopen is unsupported", async () => {
+      mockApiFetch.mockRejectedValue(missingEndpoint());
+      await ageGateApi.reopenReview("rv1", "probe").catch(() => {});
+      expect(isReopenSupported()).toBe(false);
+
+      m.approveReview.mockResolvedValue({ data: { ...REVIEW, status: "approved" }, error: undefined });
+      m.rejectReview.mockResolvedValue({ data: { ...REVIEW, status: "rejected" }, error: undefined });
+
+      await expect(ageGateApi.changeReviewStatus(LOCAL_REVIEW, "approved", "known good")).resolves
+        .toMatchObject({ status: "approved" });
+      await expect(ageGateApi.changeReviewStatus(LOCAL_REVIEW, "rejected", "")).resolves
+        .toMatchObject({ status: "rejected" });
+    });
+
+    it("treats a successful reopen as proof the endpoint is there", async () => {
+      mockApiFetch.mockResolvedValue({ ...REVIEW, status: "pending" });
+      await ageGateApi.reopenReview("rv1", "wrong package");
+      expect(isReopenSupported()).toBe(true);
+    });
   });
 
   it("getRepoConfigs dedupes keys and returns a map keyed by repository_key", async () => {

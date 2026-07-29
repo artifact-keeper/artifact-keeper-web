@@ -66,6 +66,12 @@ vi.mock("sonner", () => ({
   },
 }));
 
+/**
+ * Reopen capability, as the page sees it. Hoisted so the `vi.mock` factory
+ * below can close over it; set before render to exercise an older backend.
+ */
+const capability = vi.hoisted(() => ({ reopenSupported: true }));
+
 const api = {
   listReviews: vi.fn(),
   getReview: vi.fn(),
@@ -91,9 +97,18 @@ vi.mock("@/lib/api/age-gate", () => {
       this.name = "AgeGatePartialTransitionError";
     }
   }
+  class ReopenUnsupportedError extends Error {
+    constructor() {
+      super("This server does not support reopening a decided age gate review.");
+      this.name = "ReopenUnsupportedError";
+    }
+  }
   return {
   AGE_GATE_STATUSES: ["pending", "approved", "rejected"],
   AgeGatePartialTransitionError,
+  ReopenUnsupportedError,
+  isReopenSupported: () => capability.reopenSupported,
+  subscribeReopenSupport: () => () => {},
   default: {
     listReviews: (...a: unknown[]) => api.listReviews(...a),
     getReview: (...a: unknown[]) => api.getReview(...a),
@@ -119,7 +134,7 @@ vi.mock("@/providers/auth-provider", () => ({
 // Native <select> that forwards aria-label so tests can target each one.
 vi.mock("@/components/ui/select", () => ({
   Select: ({ value, onValueChange, children }: { value?: string; onValueChange?: (v: string) => void; children: React.ReactNode }) => {
-    const items: Array<{ value: string; label: string }> = [];
+    const items: Array<{ value: string; label: string; disabled?: boolean }> = [];
     let ariaLabel = "";
     React.Children.forEach(children, (child) => {
       if (!React.isValidElement(child)) return;
@@ -127,15 +142,15 @@ vi.mock("@/components/ui/select", () => ({
       if (el.props["aria-label"]) ariaLabel = el.props["aria-label"];
       React.Children.forEach(el.props.children, (sub) => {
         if (React.isValidElement(sub) && (sub.props as Record<string, unknown>).value) {
-          const p = sub.props as { value: string; children: React.ReactNode };
-          items.push({ value: p.value, label: String(p.children) });
+          const p = sub.props as { value: string; children: React.ReactNode; disabled?: boolean };
+          items.push({ value: p.value, label: String(p.children), disabled: p.disabled });
         }
       });
     });
     return (
       <select aria-label={ariaLabel} value={value} onChange={(e) => onValueChange?.(e.target.value)}>
         {items.map((i) => (
-          <option key={i.value} value={i.value}>{i.label}</option>
+          <option key={i.value} value={i.value} disabled={i.disabled}>{i.label}</option>
         ))}
       </select>
     );
@@ -146,7 +161,7 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
 }));
 
-import { AgeGatePartialTransitionError } from "@/lib/api/age-gate";
+import { AgeGatePartialTransitionError, ReopenUnsupportedError } from "@/lib/api/age-gate";
 import AgeGatePage from "./page";
 
 const REVIEW = {
@@ -183,6 +198,7 @@ beforeEach(() => {
   reviewsData = { data: [], isLoading: false };
   repoConfigsData = {};
   usersData = [];
+  capability.reopenSupported = true;
 });
 afterEach(() => cleanup());
 
@@ -331,6 +347,75 @@ describe("AgeGatePage", () => {
       await user.selectOptions(control, "approved");
       dialog = await screen.findByRole("dialog");
       expect((within(dialog).getByLabelText("Reason") as HTMLTextAreaElement).value).toBe("");
+    });
+  });
+
+  describe("backend without the reopen endpoint", () => {
+    const optionsOf = (label: string) =>
+      Object.fromEntries(
+        Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => [
+          o.value,
+          o.disabled,
+        ]),
+      );
+
+    it("says nothing about the capability when the endpoint is there", () => {
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.queryByText(/does not support reopening/i)).not.toBeInTheDocument();
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: false,
+        approved: false,
+        rejected: false,
+      });
+    });
+
+    it("explains the gap and offers no reopen-dependent transition on a decided review", () => {
+      capability.reopenSupported = false;
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.getByText(/does not support reopening a decided review/i)).toBeInTheDocument();
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: true, // needs reopen
+        approved: false, // the status it is already in
+        rejected: true, // needs reopen, then reject
+      });
+    });
+
+    it("still offers approve and reject on a pending review", () => {
+      capability.reopenSupported = false;
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: false,
+        approved: false,
+        rejected: false,
+      });
+    });
+
+    it("submits an approval normally even though reopen is unavailable", async () => {
+      const user = userEvent.setup();
+      capability.reopenSupported = false;
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "approved");
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
+      expect(lastMutate()).toHaveBeenCalledWith({ review: REVIEW, target: "approved", why: "" });
+    });
+
+    it("surfaces the capability message rather than a raw 404", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      change.onError?.(new ReopenUnsupportedError(), {
+        review: APPROVED_REVIEW,
+        target: "rejected",
+        why: "cve landed",
+      });
+      expect(mockToastError).toHaveBeenCalledWith(
+        "This server does not support reopening a decided age gate review.",
+      );
+      expect(mockInvalidate).not.toHaveBeenCalled();
     });
   });
 

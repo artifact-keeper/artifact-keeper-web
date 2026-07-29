@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import ageGateApi, {
   AGE_GATE_STATUSES,
   AgeGatePartialTransitionError,
+  isReopenSupported,
+  subscribeReopenSupport,
   type AgeGateReview,
   type AgeGateStatus,
 } from "@/lib/api/age-gate";
@@ -66,6 +68,14 @@ function transitionVerb(target: AgeGateStatus): string {
 }
 
 /**
+ * Whether moving `from` to `to` has to reopen the review first. Only a review
+ * that already carries a decision does; a pending one is decided outright.
+ */
+function needsReopen(from: string, to: AgeGateStatus): boolean {
+  return from !== "pending" && from !== to;
+}
+
+/**
  * What a transition will do, said plainly enough that an admin can tell a
  * one-call decision from a reopen-then-decide before they commit to it.
  */
@@ -90,6 +100,14 @@ export default function AgeGatePage() {
     { review: AgeGateReview; target: AgeGateStatus } | null
   >(null);
   const [reason, setReason] = useState("");
+
+  // Latched off the first time the endpoint 404s, so a backend without
+  // artifact-keeper#2939 stops being offered transitions it cannot perform.
+  const reopenSupported = useSyncExternalStore(
+    subscribeReopenSupport,
+    isReopenSupported,
+    isReopenSupported,
+  );
 
   // A reopen carries a mandatory reason, and every transition out of a decided
   // status starts with one. Deciding a pending review does not.
@@ -233,6 +251,17 @@ export default function AgeGatePage() {
         </Button>
       </div>
 
+      {!reopenSupported && (
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertDescription>
+            This server does not support reopening a decided review, so approved and rejected
+            reviews cannot be changed here. Reviews that are still pending can be approved or
+            rejected as usual.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {statuses.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
           Select at least one status to list reviews.
@@ -326,7 +355,17 @@ export default function AgeGatePage() {
                       </SelectTrigger>
                       <SelectContent>
                         {AGE_GATE_STATUSES.map((s) => (
-                          <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                          <SelectItem
+                            key={s}
+                            value={s}
+                            className="capitalize"
+                            // Without the reopen endpoint these transitions
+                            // cannot even start, so they are shown unavailable
+                            // rather than offered and then failed.
+                            disabled={!reopenSupported && needsReopen(r.status, s)}
+                          >
+                            {s}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

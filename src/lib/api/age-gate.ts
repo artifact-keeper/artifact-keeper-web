@@ -7,7 +7,7 @@ import {
   getRepoAgeGate,
 } from '@artifact-keeper/sdk';
 import type { AgeGateReviewResponse, AgeGateConfigResponse } from '@artifact-keeper/sdk';
-import { apiFetch, assertData } from '@/lib/api/fetch';
+import { ApiError, apiFetch, assertData } from '@/lib/api/fetch';
 
 /** Every state a review can be in. */
 export const AGE_GATE_STATUSES = ['pending', 'approved', 'rejected'] as const;
@@ -60,6 +60,84 @@ export interface ListAgeGateReviewsParams {
   repositoryKey?: string;
   page?: number;
   perPage?: number;
+}
+
+/**
+ * Raised when a transition needs `reopen` and this backend has no such
+ * endpoint. Carries copy the page shows as-is, since the admin has done
+ * nothing wrong and there is no client-side retry that would help.
+ */
+export class ReopenUnsupportedError extends Error {
+  constructor() {
+    super(
+      'This server does not support reopening a decided age gate review, so its status cannot be changed. Deciding a review that is still pending works as usual.',
+    );
+    this.name = 'ReopenUnsupportedError';
+  }
+}
+
+/**
+ * Whether the backend serving this session has the reopen endpoint. Starts
+ * optimistic and only ever latches off, so a version check never has to enter
+ * the picture: the endpoint's own 404 is the signal.
+ *
+ * Module-level rather than component state because it is a property of the
+ * server, not of one mounted page, and it must survive navigating away and
+ * back. `useSyncExternalStore` in the page subscribes to it so the control
+ * updates the moment the first attempt discovers the gap.
+ */
+let reopenSupported = true;
+const reopenSupportListeners = new Set<() => void>();
+
+/** Current capability state. Stable identity for `useSyncExternalStore`. */
+export function isReopenSupported(): boolean {
+  return reopenSupported;
+}
+
+/** Subscribe to capability changes. Returns an unsubscribe function. */
+export function subscribeReopenSupport(onChange: () => void): () => void {
+  reopenSupportListeners.add(onChange);
+  return () => {
+    reopenSupportListeners.delete(onChange);
+  };
+}
+
+function setReopenSupported(next: boolean) {
+  if (reopenSupported === next) return;
+  reopenSupported = next;
+  for (const listener of reopenSupportListeners) listener();
+}
+
+/** Test seam: restore the optimistic starting state between cases. */
+export function resetReopenSupport() {
+  setReopenSupported(true);
+}
+
+/**
+ * True when a 404 came from the router rather than from the reopen handler.
+ *
+ * Both "no such endpoint" and "no such review" are 404s and they mean
+ * completely different things: the first is permanent for the session, the
+ * second is about one id. They are told apart by the body. A backend that has
+ * the endpoint answers an unknown id with its structured error envelope
+ * (`{"code":"NOT_FOUND","message":"Age gate review not found"}`); a backend
+ * that never routed the request has no handler to build one and falls through
+ * to the framework's default 404, which has an empty body.
+ *
+ * So only a 404 whose body is not that envelope is read as a missing
+ * endpoint. An unknown review id keeps its `code` and is surfaced as the
+ * ordinary error it is, leaving the capability alone.
+ */
+function isMissingEndpoint(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 404) return false;
+  try {
+    const parsed: unknown = JSON.parse(err.body);
+    const code = (parsed as { code?: unknown } | null)?.code;
+    return typeof code !== 'string';
+  } catch {
+    // Empty or non-JSON body: nothing on the API side answered.
+    return true;
+  }
 }
 
 /**
@@ -178,11 +256,23 @@ const ageGateApi = {
   reopenReview: async (id: string, reason: string): Promise<AgeGateReview> => {
     const why = reason.trim();
     if (!why) throw new Error('A reason is required to reopen a review.');
-    const sdk = await apiFetch<AgeGateReviewResponse>(
-      `/api/v1/admin/age-gate/reviews/${encodeURIComponent(id)}/reopen`,
-      { method: 'POST', body: JSON.stringify({ reason: why }) },
-    );
-    return adaptReview(sdk);
+    // Already known missing: fail without spending a round trip re-probing.
+    if (!reopenSupported) throw new ReopenUnsupportedError();
+    try {
+      const sdk = await apiFetch<AgeGateReviewResponse>(
+        `/api/v1/admin/age-gate/reviews/${encodeURIComponent(id)}/reopen`,
+        { method: 'POST', body: JSON.stringify({ reason: why }) },
+      );
+      // Reaching a response at all proves the endpoint is there.
+      setReopenSupported(true);
+      return adaptReview(sdk);
+    } catch (err) {
+      if (isMissingEndpoint(err)) {
+        setReopenSupported(false);
+        throw new ReopenUnsupportedError();
+      }
+      throw err;
+    }
   },
 
   /**
@@ -215,6 +305,10 @@ const ageGateApi = {
       return decide(review.id);
     }
 
+    // Outside the try below on purpose: a reopen that never happened, whether
+    // because the endpoint is missing or for any other reason, leaves the
+    // review exactly as it was. Only a failure after a successful reopen is a
+    // partial transition.
     const reopened = await ageGateApi.reopenReview(review.id, why);
     if (target === 'pending') return reopened;
     try {
