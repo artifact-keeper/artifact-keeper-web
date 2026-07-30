@@ -897,8 +897,8 @@ describe("RepoSettingsTab - Package Age Policy (#265)", () => {
       wrapper: createWrapper(),
     });
 
-    const toggle = screen.getByLabelText("Enable age policy") as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
+    const toggle = screen.getByLabelText("Enable age policy");
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
 
     const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
     expect(duration.value).toBe("7");
