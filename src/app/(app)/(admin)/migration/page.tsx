@@ -133,14 +133,39 @@ const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "cancelled",
 ]);
 
+// A completed job is 100% by definition; the item-count ratio the backend
+// returns can lag (e.g. a job with nothing to transfer reports 0). Other
+// statuses keep their real, rounded progress.
+function jobProgress(job: MigrationJob): number {
+  if (job.status === "completed") return 100;
+  return Math.round(job.progress_percent ?? 0);
+}
+
+// Denominator for the items ratio. The backend leaves total_items at 0 on some
+// jobs (it doesn't always pre-count), which renders as "102/0"; fall back to
+// what was actually processed so the ratio makes sense.
+function effectiveTotal(job: MigrationJob): number {
+  const processed =
+    job.completed_items + job.failed_items + job.skipped_items;
+  return Math.max(job.total_items, processed);
+}
+
+// Same story for bytes: total_bytes can be 0 while bytes were transferred.
+function effectiveTotalBytes(job: MigrationJob): number {
+  return Math.max(job.total_bytes, job.transferred_bytes);
+}
+
 // The reconciliation report's per-category summary (artifacts/repositories/...)
 // is only present when the job migrated at least one item of that type, so a
 // category can be absent on completed jobs (assessment runs, or a full job that
 // touched no artifacts). Render "migrated/total" defensively: an absent summary
 // shows "—" and a partial one falls back to 0 instead of crashing the whole
 // admin page with a TypeError (artifact-keeper#2455).
+// The backend omits a category from the report summary when the job migrated
+// nothing of that type (e.g. an artifacts-only job has no repositories key), so
+// show 0/0 rather than a bare em-dash, which reads as broken.
 function formatItemCount(summary: ItemSummary | undefined): string {
-  if (!summary) return "—";
+  if (!summary) return "0/0";
   return `${summary.migrated ?? 0}/${summary.total ?? 0}`;
 }
 
@@ -730,11 +755,11 @@ export default function MigrationPage() {
       cell: (j) => (
         <div className="flex items-center gap-2 min-w-[120px]">
           <Progress
-            value={j.progress_percent ?? 0}
+            value={jobProgress(j)}
             className="flex-1 h-1.5"
           />
           <span className="text-xs text-muted-foreground w-10 text-right">
-            {j.progress_percent ?? 0}%
+            {jobProgress(j)}%
           </span>
         </div>
       ),
@@ -744,7 +769,7 @@ export default function MigrationPage() {
       header: "Items",
       cell: (j) => (
         <span className="text-sm text-muted-foreground">
-          {j.completed_items}/{j.total_items}
+          {j.completed_items}/{effectiveTotal(j)}
           {j.failed_items > 0 && (
             <span className="text-red-500 ml-1">
               ({j.failed_items} failed)
@@ -1605,24 +1630,24 @@ export default function MigrationPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Progress</p>
                   <p className="font-semibold">
-                    {detailJob.progress_percent ?? 0}%
+                    {jobProgress(detailJob)}%
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Items</p>
                   <p className="font-semibold">
-                    {detailJob.completed_items}/{detailJob.total_items}
+                    {detailJob.completed_items}/{effectiveTotal(detailJob)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Transferred</p>
                   <p className="font-semibold">
-                    {formatBytes(detailJob.transferred_bytes)}/{formatBytes(detailJob.total_bytes)}
+                    {formatBytes(detailJob.transferred_bytes)}/{formatBytes(effectiveTotalBytes(detailJob))}
                   </p>
                 </div>
               </div>
               <Progress
-                value={detailJob.progress_percent ?? 0}
+                value={jobProgress(detailJob)}
                 className="h-2"
               />
               {/* Repositories this job handles (empty = whole connection). */}

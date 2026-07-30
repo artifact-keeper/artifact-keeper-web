@@ -1510,10 +1510,10 @@ describe("MigrationPage — feature parity (#520)", () => {
     await renderPage();
     await switchToJobsTab();
     await act(async () => fireEvent.click(screen.getByText("job-part...")));
-    // The report block renders; missing categories fall back to an em dash
+    // The report block renders; missing categories fall back to 0/0
     // instead of crashing the page.
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("0/0").length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders a completed assessment job with a summary-only report (no category counts) without crashing", async () => {
@@ -1543,8 +1543,8 @@ describe("MigrationPage — feature parity (#520)", () => {
     await switchToJobsTab();
     await act(async () => fireEvent.click(screen.getByText("job-asmt...")));
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
-    // Both category tiles show the em-dash fallback; warnings/errors show 0.
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    // Both category tiles show the 0/0 fallback; warnings/errors show 0.
+    expect(screen.getAllByText("0/0").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
   });
 
