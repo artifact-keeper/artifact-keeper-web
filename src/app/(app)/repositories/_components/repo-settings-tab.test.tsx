@@ -777,7 +777,7 @@ describe("RepoSettingsTab - Quota unit switching", () => {
   });
 });
 
-import { ageToMinutes } from "./repo-settings-tab";
+import { ageToMinutes, minutesToAge } from "./repo-settings-tab";
 
 describe("ageToMinutes helper", () => {
   it("converts days to minutes", () => {
@@ -796,6 +796,28 @@ describe("ageToMinutes helper", () => {
 
   it("rounds fractional values to whole minutes", () => {
     expect(ageToMinutes("1.5", "hours")).toBe(90);
+  });
+});
+
+describe("minutesToAge helper", () => {
+  it("converts whole days from minutes", () => {
+    expect(minutesToAge(4320)).toEqual({ value: "3", unit: "days" });
+    expect(minutesToAge(10080)).toEqual({ value: "7", unit: "days" });
+  });
+
+  it("prefers hours when not evenly divisible by days", () => {
+    expect(minutesToAge(90)).toEqual({ value: "2", unit: "hours" });
+    expect(minutesToAge(1500)).toEqual({ value: "25", unit: "hours" });
+  });
+
+  it("returns the default value for null, undefined, or zero", () => {
+    expect(minutesToAge(null)).toEqual({ value: "3", unit: "days" });
+    expect(minutesToAge(undefined)).toEqual({ value: "3", unit: "days" });
+    expect(minutesToAge(0)).toEqual({ value: "3", unit: "days" });
+  });
+
+  it("clamps negative values to the default", () => {
+    expect(minutesToAge(-1)).toEqual({ value: "3", unit: "days" });
   });
 });
 
@@ -862,6 +884,75 @@ describe("RepoSettingsTab - Package Age Policy (#265)", () => {
     const saveBtn = screen.getByRole("button", { name: /save age policy/i });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
     expect(mockUpdateAgePolicy).not.toHaveBeenCalled();
+  });
+
+  it("seeds the form from the repository when age policy is enabled", () => {
+    const repoWithAgePolicy: Repository = {
+      ...baseRepo,
+      quarantine_enabled: true,
+      quarantine_duration_minutes: 10080, // 7 days
+    };
+
+    render(<RepoSettingsTab repository={repoWithAgePolicy} />, {
+      wrapper: createWrapper(),
+    });
+
+    const toggle = screen.getByLabelText("Enable age policy") as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
+    expect(duration.value).toBe("7");
+    expect(duration.disabled).toBe(false);
+  });
+
+  it("seeds the form with hours when minutes are not evenly divisible by a day", () => {
+    const repoWithAgePolicy: Repository = {
+      ...baseRepo,
+      quarantine_enabled: true,
+      quarantine_duration_minutes: 150, // 2.5 hours
+    };
+
+    render(<RepoSettingsTab repository={repoWithAgePolicy} />, {
+      wrapper: createWrapper(),
+    });
+
+    const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
+    expect(duration.value).toBe("3"); // 150/60 = 2.5, rounded to 3
+  });
+
+  it("stays pristine (save disabled) when form matches persisted state", () => {
+    const repoWithAgePolicy: Repository = {
+      ...baseRepo,
+      quarantine_enabled: true,
+      quarantine_duration_minutes: 4320, // 3 days
+    };
+
+    render(<RepoSettingsTab repository={repoWithAgePolicy} />, {
+      wrapper: createWrapper(),
+    });
+
+    const saveBtn = screen.getByRole("button", { name: /save age policy/i });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("enables save after the user changes a seeded value", async () => {
+    const repoWithAgePolicy: Repository = {
+      ...baseRepo,
+      quarantine_enabled: true,
+      quarantine_duration_minutes: 4320, // 3 days
+    };
+
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={repoWithAgePolicy} />, {
+      wrapper: createWrapper(),
+    });
+
+    const duration = screen.getByLabelText("Cooldown period");
+    await user.clear(duration);
+    await user.type(duration, "7");
+
+    const saveBtn = screen.getByRole("button", { name: /save age policy/i });
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
