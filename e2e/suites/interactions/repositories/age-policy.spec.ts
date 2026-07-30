@@ -47,7 +47,17 @@ test.describe('Repository - Package Age Policy', () => {
     expect(resp.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('Settings tab exposes the age policy controls and saves', async ({ page }) => {
+  test('Settings tab exposes the age policy controls and saves', async ({ page, request }) => {
+    // Ensure the age policy is disabled before the UI flow so the cooldown
+    // input starts in a known disabled state regardless of previous tests.
+    await request
+      .fetch(`/api/v1/repositories/${REPO_KEY}`, {
+        method: 'PATCH',
+        data: { quarantine_enabled: false, quarantine_duration_minutes: 4320 },
+        headers: { 'Content-Type': 'application/json' },
+      })
+      .catch(() => {});
+
     await page.goto(`/repositories/${REPO_KEY}`);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(3000);
