@@ -8,7 +8,14 @@ import { toast } from "sonner";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
+import { useAuth } from "@/providers/auth-provider";
 import lifecycleApi from "@/lib/api/lifecycle";
+import scanConfigApi, {
+  SEVERITY_THRESHOLDS,
+  type RepoScanConfig,
+  type ProxyScanAction,
+  type UpsertScanConfigRequest,
+} from "@/lib/api/scan-config";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
@@ -526,6 +533,70 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const { data: adminSettings } = useAdminSettings();
   const maxUploadBytes = adminSettings?.storageSettings.max_upload_size_bytes;
 
+  // -- Scanning & enforcement (#2954 / #3003, "active blocking") --
+  // Repo-admin gated: the backend PUT is admin-only, so we only render the
+  // section (and only run the GET) for admins — mirroring how the quarantine
+  // decisions and other admin-only controls are gated on `user?.is_admin`
+  // elsewhere in the repository views.
+  const { user } = useAuth();
+  const isRepoAdmin = !!user?.is_admin;
+
+  const { data: scanConfig, isLoading: scanConfigLoading } = useQuery({
+    queryKey: ["scan-config", repository.key],
+    queryFn: () => scanConfigApi.get(repository.key),
+    enabled: isRepoAdmin,
+  });
+
+  // Override-based dirty tracking, like the general/debian/npm sections: the
+  // loaded config is the baseline, and only the operator's explicit edits are
+  // held in `scanOverrides` so a fresh load never counts as a change.
+  const [scanOverrides, setScanOverrides] = useState<Partial<RepoScanConfig>>(
+    {}
+  );
+  const scanForm: RepoScanConfig | undefined = useMemo(
+    () => (scanConfig ? { ...scanConfig, ...scanOverrides } : undefined),
+    [scanConfig, scanOverrides]
+  );
+  const scanChanged =
+    !!scanConfig &&
+    (Object.keys(scanOverrides) as (keyof RepoScanConfig)[]).some(
+      (k) => scanOverrides[k] !== undefined && scanOverrides[k] !== scanConfig[k]
+    );
+
+  const setScanField = useCallback(
+    <K extends keyof RepoScanConfig>(key: K, value: RepoScanConfig[K]) => {
+      setScanOverrides((o) => ({ ...o, [key]: value }));
+    },
+    []
+  );
+
+  const scanConfigMutation = useMutation({
+    mutationFn: (req: UpsertScanConfigRequest) =>
+      scanConfigApi.update(repository.key, req),
+    onSuccess: (updated) => {
+      // Seed the query cache with the server's echoed row and clear the local
+      // edits so the form re-baselines against what was actually persisted.
+      queryClient.setQueryData(["scan-config", repository.key], updated);
+      setScanOverrides({});
+      toast.success("Scanning & enforcement settings saved");
+    },
+    onError: mutationErrorToast("Failed to save scanning settings"),
+  });
+
+  const handleSaveScanConfig = useCallback(() => {
+    if (!scanForm) return;
+    // Send the full set — the backend upsert merges, but sending everything
+    // keeps the persisted row unambiguous and avoids a stale-field surprise.
+    scanConfigMutation.mutate({
+      scan_enabled: scanForm.scan_enabled,
+      scan_on_upload: scanForm.scan_on_upload,
+      scan_on_proxy: scanForm.scan_on_proxy,
+      block_on_policy_violation: scanForm.block_on_policy_violation,
+      severity_threshold: scanForm.severity_threshold,
+      proxy_scan_action: scanForm.proxy_scan_action,
+    });
+  }, [scanForm, scanConfigMutation]);
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* -- General Settings Section -- */}
@@ -993,6 +1064,199 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 )}
               </div>
             </div>
+          </section>
+
+          <Separator />
+        </>
+      )}
+
+      {/* -- Scanning & Enforcement Section (#2954 / #3003, repo-admin only) -- */}
+      {isRepoAdmin && (
+        <>
+          <section aria-labelledby="settings-scan-heading">
+            <div className="mb-4">
+              <h3
+                id="settings-scan-heading"
+                className="text-base font-semibold"
+              >
+                Scanning &amp; enforcement
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Vulnerability scanning and inline scan-and-block for this
+                repository. When blocking is on, artifacts that violate the
+                policy are actively prevented from being downloaded rather than
+                only flagged after the fact.
+              </p>
+            </div>
+
+            {scanConfigLoading || !scanForm ? (
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Master toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="settings-scan-enabled">
+                      Enable scanning
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Turn vulnerability scanning on for this repository.
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-scan-enabled"
+                    checked={scanForm.scan_enabled}
+                    onCheckedChange={(v) => setScanField("scan_enabled", v)}
+                  />
+                </div>
+
+                {/* Scan on upload */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="settings-scan-on-upload">
+                      Scan on upload
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Scan artifacts as they are published to this repository.
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-scan-on-upload"
+                    checked={scanForm.scan_on_upload}
+                    disabled={!scanForm.scan_enabled}
+                    onCheckedChange={(v) => setScanField("scan_on_upload", v)}
+                  />
+                </div>
+
+                {/* Scan on proxy */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="settings-scan-on-proxy">
+                      Scan on proxy download
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Scan upstream artifacts inline as they are proxied
+                      through this repository.
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-scan-on-proxy"
+                    checked={scanForm.scan_on_proxy}
+                    disabled={!scanForm.scan_enabled}
+                    onCheckedChange={(v) => setScanField("scan_on_proxy", v)}
+                  />
+                </div>
+
+                {/* Block on policy violation */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="settings-scan-block">
+                      Block on policy violation
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Actively block downloads of artifacts that violate the
+                      severity policy, instead of only recording a finding.
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-scan-block"
+                    checked={scanForm.block_on_policy_violation}
+                    disabled={!scanForm.scan_enabled}
+                    onCheckedChange={(v) =>
+                      setScanField("block_on_policy_violation", v)
+                    }
+                  />
+                </div>
+
+                {/* Severity threshold */}
+                <div className="space-y-2">
+                  <Label htmlFor="settings-scan-severity">
+                    Severity threshold
+                  </Label>
+                  <Select
+                    value={scanForm.severity_threshold}
+                    onValueChange={(v) =>
+                      setScanField("severity_threshold", v)
+                    }
+                    disabled={!scanForm.scan_enabled}
+                  >
+                    <SelectTrigger
+                      id="settings-scan-severity"
+                      className="w-40"
+                      aria-label="Severity threshold"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SEVERITY_THRESHOLDS.map((level) => (
+                        <SelectItem key={level} value={level}>
+                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Findings at or above this severity count as a policy
+                    violation.
+                  </p>
+                </div>
+
+                {/* Proxy scan action: fail-open vs fail-closed */}
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="settings-scan-fail-closed">
+                        Fail closed on proxy downloads
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {scanForm.proxy_scan_action === "fail_closed"
+                          ? "Fail closed: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is blocked. Security first — a proxy outage can interrupt availability."
+                          : "Fail open: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is served anyway. Availability first — an unscanned artifact can slip through."}
+                      </p>
+                    </div>
+                    <Switch
+                      id="settings-scan-fail-closed"
+                      checked={scanForm.proxy_scan_action === "fail_closed"}
+                      disabled={
+                        !scanForm.scan_enabled || !scanForm.scan_on_proxy
+                      }
+                      onCheckedChange={(v) =>
+                        setScanField(
+                          "proxy_scan_action",
+                          (v ? "fail_closed" : "fail_open") as ProxyScanAction
+                        )
+                      }
+                    />
+                  </div>
+                  {(!scanForm.scan_enabled || !scanForm.scan_on_proxy) && (
+                    <p className="text-xs text-muted-foreground">
+                      Enable scanning and &ldquo;Scan on proxy download&rdquo;
+                      to choose the fail-open / fail-closed behavior.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleSaveScanConfig}
+                    disabled={scanConfigMutation.isPending || !scanChanged}
+                  >
+                    {scanConfigMutation.isPending ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Scanning Settings"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </section>
 
           <Separator />
