@@ -279,7 +279,7 @@ export function RepositoriesContent() {
             value={formatFilter}
             onValueChange={(v) => { setFormatFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectTrigger className="h-7 text-xs flex-1" aria-label="Filter by format">
               <SelectValue placeholder="Format" />
             </SelectTrigger>
             <SelectContent>
@@ -302,7 +302,7 @@ export function RepositoriesContent() {
             value={typeFilter}
             onValueChange={(v) => { setTypeFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs w-[100px]">
+            <SelectTrigger className="h-7 text-xs w-[100px]" aria-label="Filter by type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
