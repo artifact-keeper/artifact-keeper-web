@@ -140,6 +140,7 @@ const SDK_CONFIG: SdkScanConfigResponse = {
   scan_on_proxy: false,
   block_on_policy_violation: true,
   severity_threshold: "high",
+  proxy_scan_action: "fail_open",
   created_at: "2026-05-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
 };
