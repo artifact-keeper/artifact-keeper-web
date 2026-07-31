@@ -416,19 +416,20 @@ describe("PermissionsPage", () => {
     expect(screen.getAllByText("npm-local").length).toBeGreaterThan(0);
   });
 
-  it("renders service account principal type with a human-readable label", async () => {
+  it("uses the loaded service account name when a permission row omits principal_name", async () => {
     mockPermissionsApi.list.mockResolvedValue({
       items: [{
         ...PERM_1,
         principal_type: "service_account" as const,
         principal_id: "service-account-1",
-        principal_name: "Release Bot",
+        principal_name: undefined,
       }],
       pagination: { page: 1, per_page: 1000, total: 1, total_pages: 1 },
     });
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("Service Account")).toBeTruthy();
+      expect(screen.getByText("Release Bot")).toBeTruthy();
     });
     expect(screen.queryByText("Service_account")).toBeNull();
   });
