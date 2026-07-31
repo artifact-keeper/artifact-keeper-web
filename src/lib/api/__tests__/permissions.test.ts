@@ -177,10 +177,20 @@ describe("permissionsApi", () => {
 
   // ---- Narrowing fallback warnings ----
 
+  it("preserves service_account principal_type", async () => {
+    mockGetPermission.mockResolvedValue({
+      data: sdkPermissionFixture({ principal_type: "service_account" }),
+      error: undefined,
+    });
+    const { permissionsApi } = await import("../permissions");
+    const result = await permissionsApi.get("perm1");
+    expect(result.principal_type).toBe("service_account");
+  });
+
   it("warns and defaults principal_type to 'user' on unknown variant", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockGetPermission.mockResolvedValue({
-      data: sdkPermissionFixture({ principal_type: "service_account" }),
+      data: sdkPermissionFixture({ principal_type: "api_key" }),
       error: undefined,
     });
     const { permissionsApi } = await import("../permissions");
