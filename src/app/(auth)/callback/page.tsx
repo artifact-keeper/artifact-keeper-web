@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
+import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/lib/sdk-client";
 
 function getSsoErrorMessage(errorCode: string | null): string {
   const messages: Record<string, string> = {
@@ -46,7 +47,10 @@ function CallbackHandler() {
       try {
         const response = await fetch("/api/v1/auth/sso/exchange", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+          },
           credentials: "include",
           body: JSON.stringify({ code }),
         });

@@ -51,6 +51,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- constants --
 
@@ -514,6 +515,10 @@ export default function PermissionsPage() {
           rowKey={(p) => p.id}
         />
       )}
+      <ListTruncationNotice
+        shown={permissions.length}
+        total={permissionsData?.pagination?.total ?? 0}
+      />
 
       {/* Create Permission Dialog */}
       <Dialog

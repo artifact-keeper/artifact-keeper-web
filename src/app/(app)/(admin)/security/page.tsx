@@ -58,6 +58,7 @@ import {
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- grade badge --
 
@@ -806,6 +807,10 @@ export default function SecurityDashboardPage() {
                       )}
                   </SelectContent>
                 </Select>
+                <ListTruncationNotice
+                  shown={artifactsList?.items.length ?? 0}
+                  total={artifactsList?.pagination?.total ?? 0}
+                />
               </div>
             )}
           </div>

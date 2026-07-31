@@ -61,6 +61,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- constants --
 
@@ -444,6 +445,10 @@ export default function WebhooksPage() {
           emptyMessage="No webhooks found."
         />
       )}
+      <ListTruncationNotice
+        shown={webhooks.length}
+        total={data?.total ?? 0}
+      />
 
       {/* -- Create Webhook Dialog -- */}
       <Dialog

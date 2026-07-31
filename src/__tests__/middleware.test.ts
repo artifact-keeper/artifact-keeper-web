@@ -7,15 +7,38 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mockRewrite = vi.fn();
 const mockNext = vi.fn();
 
+interface MockResponse {
+  type: string;
+  args: unknown[];
+  headers: {
+    set: (key: string, value: string) => void;
+    get: (key: string) => string | undefined;
+    entries: () => [string, string][];
+  };
+}
+
+function makeMockResponse(type: string, args: unknown[]): MockResponse {
+  const headers = new Map<string, string>();
+  return {
+    type,
+    args,
+    headers: {
+      set: (key, value) => void headers.set(key, value),
+      get: (key) => headers.get(key),
+      entries: () => [...headers.entries()],
+    },
+  };
+}
+
 vi.mock("next/server", () => ({
   NextResponse: {
     rewrite: (...args: unknown[]) => {
       mockRewrite(...args);
-      return { type: "rewrite", args };
+      return makeMockResponse("rewrite", args);
     },
     next: (...args: unknown[]) => {
       mockNext(...args);
-      return { type: "next" };
+      return makeMockResponse("next", args);
     },
   },
 }));
@@ -25,6 +48,7 @@ const originalEnv = process.env;
 beforeEach(() => {
   vi.resetModules();
   process.env = { ...originalEnv };
+  delete process.env.AK_ENFORCE_HTTPS;
   mockRewrite.mockClear();
   mockNext.mockClear();
 });
@@ -51,15 +75,15 @@ function expectRewriteTo(pathname: string, origin = "http://backend:8080") {
   return url;
 }
 
-describe("middleware", () => {
+describe("middleware proxying", () => {
   it("skips SSE event stream path and calls NextResponse.next()", async () => {
     const { middleware } = await import("../middleware");
     const request = createMockNextRequest("/api/v1/events/stream");
-    const result = middleware(request);
+    const result = middleware(request) as unknown as MockResponse;
 
     expect(mockNext).toHaveBeenCalled();
     expect(mockRewrite).not.toHaveBeenCalled();
-    expect(result).toEqual({ type: "next" });
+    expect(result.type).toBe("next");
   });
 
   it.each([
@@ -74,11 +98,11 @@ describe("middleware", () => {
     // accidental refactors to a single-slash variant. See #337.
     const { middleware } = await import("../middleware");
     const request = createMockNextRequest(path);
-    const result = middleware(request);
+    const result = middleware(request) as unknown as MockResponse;
 
     expect(mockNext).toHaveBeenCalled();
     expect(mockRewrite).not.toHaveBeenCalled();
-    expect(result).toEqual({ type: "next" });
+    expect(result.type).toBe("next");
   });
 
   it("rewrites other API paths to backend", async () => {
@@ -149,18 +173,130 @@ describe("middleware", () => {
     }
   });
 
-  it("exports matcher config for API, health, and native format routes", async () => {
+  it("passes page routes through with NextResponse.next()", async () => {
+    const { middleware } = await import("../middleware");
+
+    for (const path of ["/", "/login", "/repositories", "/repositories/npm/my-repo/packages/lodash/1.0.0"]) {
+      mockNext.mockClear();
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(mockRewrite).not.toHaveBeenCalled();
+    }
+  });
+
+  it("exports a catch-all matcher that excludes only Next.js internals", async () => {
+    // The matcher must cover page routes (for runtime security headers, #679)
+    // as well as the proxy paths; the middleware function itself decides
+    // which is which.
     const { config } = await import("../middleware");
-    expect(config.matcher).toContain("/api/:path*");
-    expect(config.matcher).toContain("/health");
-    expect(config.matcher).toContain("/pypi/:path*");
-    expect(config.matcher).toContain("/npm/:path*");
-    expect(config.matcher).toContain("/maven/:path*");
-    expect(config.matcher).toContain("/v2");
-    expect(config.matcher).toContain("/v2/:path*");
-    // lxc-format repos proxy on /lxc/* (artifact-keeper#1272), alongside /incus.
-    expect(config.matcher).toContain("/incus/:path*");
-    expect(config.matcher).toContain("/lxc/:path*");
-    expect(config.matcher.length).toBeGreaterThan(30);
+    expect(config.matcher).toHaveLength(1);
+    expect(config.matcher[0]).toBe(
+      "/((?!_next/static|_next/image|favicon.ico).*)",
+    );
+  });
+});
+
+describe("middleware security headers (#679)", () => {
+  it("emits the always-on baseline headers on page routes by default", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+
+    expect(result.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(result.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(result.headers.get("Referrer-Policy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+    expect(result.headers.get("Permissions-Policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
+    expect(result.headers.get("Content-Security-Policy")).toContain(
+      "default-src 'self'",
+    );
+  });
+
+  it("emits the baseline headers on proxied API responses too", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/api/v1/users"),
+    ) as unknown as MockResponse;
+
+    expect(result.type).toBe("rewrite");
+    expect(result.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(result.headers.get("Content-Security-Policy")).toContain(
+      "default-src 'self'",
+    );
+  });
+
+  it("emits the baseline headers on the SSE pass-through path", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/api/v1/events/stream"),
+    ) as unknown as MockResponse;
+
+    expect(result.type).toBe("next");
+    expect(result.headers.get("X-Frame-Options")).toBe("DENY");
+  });
+
+  it("omits HSTS and upgrade-insecure-requests when AK_ENFORCE_HTTPS is unset", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+
+    expect(result.headers.get("Strict-Transport-Security")).toBeUndefined();
+    expect(result.headers.get("Content-Security-Policy")).not.toContain(
+      "upgrade-insecure-requests",
+    );
+  });
+
+  it.each(["true", "1"])(
+    "emits HSTS and upgrade-insecure-requests when AK_ENFORCE_HTTPS=%s is set at runtime",
+    async (value) => {
+      // Set AFTER import to prove the flag is read per request, not at
+      // module load (i.e. not baked in at build time).
+      const { middleware } = await import("../middleware");
+      process.env.AK_ENFORCE_HTTPS = value;
+      const result = middleware(
+        createMockNextRequest("/repositories"),
+      ) as unknown as MockResponse;
+
+      expect(result.headers.get("Strict-Transport-Security")).toBe(
+        "max-age=31536000; includeSubDomains",
+      );
+      expect(result.headers.get("Content-Security-Policy")).toContain(
+        "upgrade-insecure-requests",
+      );
+    },
+  );
+
+  it("applies the runtime HTTPS headers on proxied API responses as well", async () => {
+    const { middleware } = await import("../middleware");
+    process.env.AK_ENFORCE_HTTPS = "true";
+    const result = middleware(
+      createMockNextRequest("/api/v1/users"),
+    ) as unknown as MockResponse;
+
+    expect(result.type).toBe("rewrite");
+    expect(result.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+  });
+
+  it("stops emitting HSTS when the flag is removed at runtime", async () => {
+    const { middleware } = await import("../middleware");
+    process.env.AK_ENFORCE_HTTPS = "true";
+    const on = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+    expect(on.headers.get("Strict-Transport-Security")).toBeDefined();
+
+    delete process.env.AK_ENFORCE_HTTPS;
+    const off = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+    expect(off.headers.get("Strict-Transport-Security")).toBeUndefined();
   });
 });

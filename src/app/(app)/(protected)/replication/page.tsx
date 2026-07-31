@@ -50,6 +50,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- helpers --
 
@@ -481,6 +482,11 @@ export default function ReplicationPage() {
               })}
             </div>
           )}
+          <ListTruncationNotice
+            className="mt-4"
+            shown={peers.length}
+            total={data?.total ?? 0}
+          />
         </TabsContent>
 
         {/* -- Subscriptions Tab -- */}
@@ -522,6 +528,10 @@ export default function ReplicationPage() {
               emptyMessage="No repositories found."
             />
           )}
+          <ListTruncationNotice
+            shown={repositories.length}
+            total={reposData?.pagination?.total ?? 0}
+          />
         </TabsContent>
 
         {/* -- Topology Tab -- */}

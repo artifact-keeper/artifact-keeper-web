@@ -21,7 +21,7 @@ import type {
   ArtifactResponse as SdkArtifactResponse,
   ArtifactListResponse as SdkArtifactListResponse,
 } from '@artifact-keeper/sdk';
-import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import { getActiveInstanceBaseUrl, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from '@/lib/sdk-client';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
 import type {
   PromoteArtifactRequest,
@@ -353,7 +353,10 @@ export const promotionApi = {
       {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+        },
         body: JSON.stringify(request),
       },
     );
