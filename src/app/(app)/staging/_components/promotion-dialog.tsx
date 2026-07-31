@@ -6,6 +6,7 @@ import { ArrowRight, AlertTriangle, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { promotionApi } from "@/lib/api/promotion";
+import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { StagingArtifact, BulkPromoteRequest, PolicyViolation } from "@/types/promotion";
 import type { Repository } from "@/types";
@@ -16,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -68,6 +70,19 @@ export function PromotionDialog({
     enabled: open,
   });
 
+  // If this staging repo has a linked release target, the backend requires
+  // promotions to go there, so lock the picker to it rather than making the
+  // operator re-pick (and risk a rejection) every time. Free picker otherwise.
+  const { data: releaseTarget, isLoading: targetLoading } = useQuery({
+    queryKey: ["repository", sourceRepoKey, "release-target"],
+    queryFn: () => repositoriesApi.getReleaseTarget(sourceRepoKey),
+    enabled: open,
+  });
+  const lockedKey =
+    releaseTarget?.linked && releaseTarget.release_repository_key
+      ? releaseTarget.release_repository_key
+      : null;
+
   // Collect all policy violations from selected artifacts
   const allViolations = useMemo(() => {
     const violations: Array<{ artifact: StagingArtifact; violation: PolicyViolation }> = [];
@@ -107,12 +122,13 @@ export function PromotionDialog({
   });
 
   const handlePromote = () => {
-    if (!targetRepo) {
+    const target = lockedKey ?? targetRepo;
+    if (!target) {
       toast.error("Please select a target repository");
       return;
     }
     promoteMutation.mutate({
-      target_repository: targetRepo,
+      target_repository: target,
       artifact_ids: selectedArtifacts.map((a) => a.id),
       skip_policy_check: skipPolicyCheck,
       notes: notes || undefined,
@@ -140,24 +156,41 @@ export function PromotionDialog({
           {/* Target Repository */}
           <div className="space-y-2">
             <Label>Target Repository</Label>
-            <Select value={targetRepo} onValueChange={setTargetRepo} disabled={reposLoading}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={reposLoading ? "Loading..." : "Select target repository"} />
-              </SelectTrigger>
-              <SelectContent>
-                {targetRepoList.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground">
-                    No release repositories found for {sourceRepoFormat}
-                  </div>
-                ) : (
-                  targetRepoList.map((repo: Repository) => (
-                    <SelectItem key={repo.id} value={repo.key}>
-                      {repo.key} ({repo.name})
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+            {targetLoading ? (
+              <Skeleton className="h-10 w-full" />
+            ) : lockedKey ? (
+              <>
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <span className="font-medium">{lockedKey}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    Linked release target
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This staging repository is linked to a release target, so
+                  promotions always go here.
+                </p>
+              </>
+            ) : (
+              <Select value={targetRepo} onValueChange={setTargetRepo} disabled={reposLoading}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={reposLoading ? "Loading..." : "Select target repository"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {targetRepoList.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      No release repositories found for {sourceRepoFormat}
+                    </div>
+                  ) : (
+                    targetRepoList.map((repo: Repository) => (
+                      <SelectItem key={repo.id} value={repo.key}>
+                        {repo.key} ({repo.name})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Selected Artifacts Summary */}
@@ -247,7 +280,7 @@ export function PromotionDialog({
             onClick={handlePromote}
             disabled={
               promoteMutation.isPending ||
-              !targetRepo ||
+              !(lockedKey ?? targetRepo) ||
               (hasBlockingViolations && !skipPolicyCheck)
             }
           >
