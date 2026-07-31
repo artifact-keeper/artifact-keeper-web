@@ -55,6 +55,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 - **v1.1.8 web image is permanently unavailable** (#320) - the web release process stopped at v1.1.3 while the backend continued through v1.1.8. There is no v1.1.8 source ref to rebuild from; backfilling would falsify provenance. See [docs/release-history/v1.1.8-web-postmortem.md](docs/release-history/v1.1.8-web-postmortem.md). Recurrence is prevented by `artifact-keeper#882` (image-publish gate).
 
+## [1.6.0] - 2026-07-31
+
+Surfaces the Artifact Keeper 1.6.0 backend capabilities in the web UI (epic #599), on `@artifact-keeper/sdk` 1.6.0. Highlights: audit-log SIEM export, per-folder deduplicated storage usage, CVE blast-radius latent-exposure disclosure, 1.6.0 format-specific repository config, the age-gate review queue, and a browseable folder tree for RAW/Generic repositories — plus authorization hardening and a round of admin-UI fixes.
+
+### Sponsors
+
+Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
+
+**Backers**
+
+- Ash A. ([@dragonpaw](https://github.com/dragonpaw))
+- Gabriel Rodriguez ([@injectedfusion](https://github.com/injectedfusion))
+
+[Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
+
+### Thank You
+
+- **[@rockdrilla](https://github.com/rockdrilla)** — single-line and DEB822 APT source formats in the setup guide (#595)
+- **[@nicola-preda](https://github.com/nicola-preda)** — packages empty-state layout fix (#622)
+- **[@cazlo](https://github.com/cazlo)** — disable actions for the local self-peer (#581) and auth test-timing hardening (#583)
+- **[@nicexe2e4](https://github.com/nicexe2e4)** — render the Environment badge from the settings API (#556)
+- **[@mymarche](https://github.com/mymarche)** — group members now show in the admin dialog (#525)
+
+### Added
+
+- **Audit-log SIEM export** — CSV and versioned JSON export of the audit log (#606).
+- **Per-folder deduplicated storage usage** plus a repository dedup storage panel; `storage.ts` migrated to the SDK (#608, #594).
+- **CVE blast-radius latent exposure** — surface users who can access a restricted repository but have not yet downloaded the affected artifact (#607).
+- **1.6.0 format-specific repository configuration** in the create dialog and the settings tab (#609).
+- **Age-gate review queue** admin page (#635).
+- **Browseable folder tree** for RAW/Generic repositories (#630).
+- **APT setup** offers both single-line and DEB822 source formats in the setup guide (#595).
+- **First-run setup hint** rendered on the login page from the backend (#620).
+
+### Changed
+
+- Consume **`@artifact-keeper/sdk` 1.6.0** (#601); web version bumped to 1.6.0 (#598).
+- Maintainer-focused **ARCHITECTURE.md** for the frontend (#617).
+- Routine dependency and CI-action bumps (Next.js, React, lucide-react, shiki, openapi-ts, and several GitHub Actions).
+
+### Fixed
+
+- Packages empty-state layout (#622).
+- Disable peer actions for the local self-peer (#581).
+- Render the Environment badge from the settings API (#556).
+- Group members now show in the admin dialog (#525).
+
+### Security
+
+- **Authorization hardening** — plugin-config Configure gate and signing-key-owner gate (#612).
+
 ## [1.1.0] - 2026-04-19
 
 First stable release of Artifact Keeper Web. Platform parity with `artifact-keeper` 1.1.0 backend. Consolidates `1.1.0-rc.5` through `1.1.0-rc.9` and post-RC work.
