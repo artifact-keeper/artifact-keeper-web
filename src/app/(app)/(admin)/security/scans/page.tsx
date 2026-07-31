@@ -39,6 +39,7 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- status & severity color maps --
 
@@ -511,6 +512,10 @@ export default function SecurityScansPage() {
                       )}
                   </SelectContent>
                 </Select>
+                <ListTruncationNotice
+                  shown={artifactsList?.items.length ?? 0}
+                  total={artifactsList?.pagination?.total ?? 0}
+                />
               </div>
             )}
           </div>

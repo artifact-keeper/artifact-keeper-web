@@ -64,6 +64,7 @@ import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- types --
 
@@ -551,6 +552,7 @@ export default function BackupsPage() {
           rowKey={(b) => b.id}
         />
       )}
+      <ListTruncationNotice shown={backups.length} total={data?.total ?? 0} />
 
       {/* Create Backup Dialog */}
       <Dialog
