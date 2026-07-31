@@ -55,6 +55,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env = originalEnv;
+  vi.unstubAllEnvs();
 });
 
 function createMockNextRequest(pathname: string, search = "") {
@@ -73,6 +74,32 @@ function expectRewriteTo(pathname: string, origin = "http://backend:8080") {
   expect(url.pathname).toBe(pathname);
   expect(url.origin).toBe(origin);
   return url;
+}
+
+/**
+ * Returns the request headers the middleware forwarded via
+ * `NextResponse.next|rewrite(url, { request: { headers } })` — this is how
+ * the per-request nonce reaches Next.js's SSR.
+ */
+function forwardedRequestHeaders(mock: ReturnType<typeof vi.fn>): Headers {
+  const init = mock.mock.calls[0][1] as
+    | { request?: { headers?: Headers } }
+    | undefined;
+  // NextResponse.next(init) passes init as the FIRST argument.
+  const first = mock.mock.calls[0][0] as
+    | { request?: { headers?: Headers } }
+    | URL;
+  const headers =
+    init?.request?.headers ??
+    (first as { request?: { headers?: Headers } })?.request?.headers;
+  expect(headers).toBeInstanceOf(Headers);
+  return headers as Headers;
+}
+
+function responseCsp(result: MockResponse): string {
+  const csp = result.headers.get("Content-Security-Policy");
+  expect(csp).toBeTruthy();
+  return csp as string;
 }
 
 describe("middleware proxying", () => {
@@ -191,9 +218,17 @@ describe("middleware proxying", () => {
     // which is which.
     const { config } = await import("../middleware");
     expect(config.matcher).toHaveLength(1);
-    expect(config.matcher[0]).toBe(
-      "/((?!_next/static|_next/image|favicon.ico).*)",
-    );
+    const rule = config.matcher[0] as {
+      source: string;
+      missing: { type: string; key: string; value?: string }[];
+    };
+    expect(rule.source).toBe("/((?!_next/static|_next/image|favicon.ico).*)");
+    // Prefetch responses are RSC payloads, not documents, and must not be
+    // cached with a per-request nonce (#674).
+    expect(rule.missing).toEqual([
+      { type: "header", key: "next-router-prefetch" },
+      { type: "header", key: "purpose", value: "prefetch" },
+    ]);
   });
 });
 
@@ -298,5 +333,79 @@ describe("middleware security headers (#679)", () => {
       createMockNextRequest("/repositories"),
     ) as unknown as MockResponse;
     expect(off.headers.get("Strict-Transport-Security")).toBeUndefined();
+  });
+});
+
+describe("middleware CSP nonce (#674)", () => {
+  it("sets a nonce-based script-src without 'unsafe-inline' on page responses", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+    const csp = responseCsp(result);
+
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+    const scriptSrc = csp.split("; ").find((d) => d.startsWith("script-src"));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).not.toContain("unsafe-inline");
+    expect(csp).toContain("object-src 'self'");
+    expect(csp).toContain("worker-src 'self'");
+    expect(csp).toContain("connect-src 'self' https:");
+  });
+
+  it("generates a fresh nonce per request", async () => {
+    const { middleware } = await import("../middleware");
+    const csp1 = responseCsp(
+      middleware(createMockNextRequest("/")) as unknown as MockResponse,
+    );
+    const csp2 = responseCsp(
+      middleware(createMockNextRequest("/")) as unknown as MockResponse,
+    );
+    expect(csp1).not.toBe(csp2);
+  });
+
+  it("forwards the nonce and CSP on the request so Next.js can stamp framework scripts", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/repositories"),
+    ) as unknown as MockResponse;
+    const csp = responseCsp(result);
+    const requestHeaders = forwardedRequestHeaders(mockNext);
+
+    // The forwarded nonce must match the nonce in the response CSP —
+    // otherwise Next.js stamps a different nonce than the policy allows.
+    const nonce = requestHeaders.get("x-nonce");
+    expect(nonce).toBeTruthy();
+    expect(csp).toContain(`'nonce-${nonce}'`);
+    expect(requestHeaders.get("content-security-policy")).toBe(csp);
+  });
+
+  it("forwards the nonce request headers on the proxy rewrite path too", async () => {
+    const { middleware } = await import("../middleware");
+    const result = middleware(
+      createMockNextRequest("/api/v1/users"),
+    ) as unknown as MockResponse;
+    const csp = responseCsp(result);
+    const requestHeaders = forwardedRequestHeaders(mockRewrite);
+
+    expect(csp).toContain(`'nonce-${requestHeaders.get("x-nonce")}'`);
+  });
+
+  it("adds 'unsafe-eval' outside production (React dev-mode error stacks)", async () => {
+    // vitest runs with NODE_ENV=test, i.e. not production.
+    const { middleware } = await import("../middleware");
+    const csp = responseCsp(
+      middleware(createMockNextRequest("/")) as unknown as MockResponse,
+    );
+    expect(csp).toContain("'unsafe-eval'");
+  });
+
+  it("never emits 'unsafe-eval' in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const { middleware } = await import("../middleware");
+    const csp = responseCsp(
+      middleware(createMockNextRequest("/")) as unknown as MockResponse,
+    );
+    expect(csp).not.toContain("unsafe-eval");
   });
 });
