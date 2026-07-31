@@ -178,7 +178,7 @@ describe("serviceAccountsApi", () => {
         id: "tok-1",
         name: "CI Token",
         token_prefix: "akt_abc",
-        scopes: ["read", "write"],
+        scopes: ["read:artifacts", "write:artifacts"],
         expires_at: "2026-01-01T00:00:00Z",
         last_used_at: "2025-12-01T00:00:00Z",
         created_at: "2025-01-01T00:00:00Z",
@@ -189,7 +189,7 @@ describe("serviceAccountsApi", () => {
         id: "tok-2",
         name: "Deploy Token",
         token_prefix: "akt_def",
-        scopes: ["read"],
+        scopes: ["read:artifacts"],
         created_at: "2025-06-01T00:00:00Z",
         is_expired: true,
         repository_ids: [],
@@ -221,7 +221,7 @@ describe("serviceAccountsApi", () => {
   it("createToken sends POST with token request body", async () => {
     const req = {
       name: "New Token",
-      scopes: ["read", "write"],
+      scopes: ["read:artifacts", "write:artifacts"],
       expires_in_days: 90,
       description: "For CI pipeline",
       repository_ids: ["repo-1", "repo-2"],
@@ -246,7 +246,7 @@ describe("serviceAccountsApi", () => {
   });
 
   it("createToken sends POST with minimal required fields", async () => {
-    const req = { name: "Minimal Token", scopes: ["read"] };
+    const req = { name: "Minimal Token", scopes: ["read:artifacts"] };
     mockApiFetch.mockResolvedValue({
       id: "tok-min",
       token: "akt_min_token",
@@ -259,7 +259,7 @@ describe("serviceAccountsApi", () => {
       "/api/v1/service-accounts/sa-2/tokens",
       {
         method: "POST",
-        body: JSON.stringify({ name: "Minimal Token", scopes: ["read"] }),
+        body: JSON.stringify({ name: "Minimal Token", scopes: ["read:artifacts"] }),
       }
     );
   });
@@ -267,7 +267,7 @@ describe("serviceAccountsApi", () => {
   it("createToken sends POST with repo_selector in request", async () => {
     const req = {
       name: "Scoped Token",
-      scopes: ["read"],
+      scopes: ["read:artifacts"],
       repo_selector: {
         match_formats: ["npm", "maven"],
         match_pattern: "prod-*",

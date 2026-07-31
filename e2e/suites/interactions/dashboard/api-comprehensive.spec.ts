@@ -251,7 +251,7 @@ test.describe.serial('API Comprehensive - Access Tokens', () => {
     const response = await request.post('/api/v1/auth/tokens', {
       data: {
         name: 'e2e-test-token',
-        scopes: ['read'],
+        scopes: ['read:artifacts'],
         expires_in_days: 1,
       },
     });
@@ -273,7 +273,7 @@ test.describe.serial('API Comprehensive - Access Tokens', () => {
     const response = await request.post('/api/v1/auth/tokens', {
       data: {
         name: '',
-        scopes: ['read'],
+        scopes: ['read:artifacts'],
       },
     });
     // Backend may accept empty names (200) or reject (400/422); either is valid
