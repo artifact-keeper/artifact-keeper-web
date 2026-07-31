@@ -37,6 +37,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import { CurationRulesManager } from "./_components/curation-rules-manager";
 
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
@@ -148,11 +155,19 @@ export default function CurationPage() {
         <div>
           <h1 className="text-xl font-semibold">Package Curation</h1>
           <p className="text-sm text-muted-foreground">
-            Review and approve or block packages staged from upstream repositories.
+            Review packages staged from upstream repositories and author the
+            rules that gate them.
           </p>
         </div>
       </div>
 
+      <Tabs defaultValue="queue" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="queue">Review Queue</TabsTrigger>
+          <TabsTrigger value="rules">Rules</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="queue" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Select value={repoId} onValueChange={(v) => { setRepoId(v); setSelected(new Set()); }}>
           <SelectTrigger className="w-64" aria-label="Staging repository">
@@ -327,6 +342,12 @@ export default function CurationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="rules">
+          <CurationRulesManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
