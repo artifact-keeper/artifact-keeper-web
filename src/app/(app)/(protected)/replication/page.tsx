@@ -16,6 +16,7 @@ import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { QUERY_KEYS } from "@/lib/query-keys";
 import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
@@ -98,9 +99,11 @@ export default function ReplicationPage() {
   const totalCacheUsed = peers.reduce((a, p) => a + p.cache_used_bytes, 0);
   const totalCacheSize = peers.reduce((a, p) => a + p.cache_size_bytes, 0);
 
-  // Subscriptions tab queries
+  // Subscriptions tab queries. The key is param-scoped so pages requesting a
+  // different page size don't collide on a shared cache entry (#668); prefix
+  // invalidation on ["repositories-list"] still matches.
   const { data: reposData } = useQuery({
-    queryKey: ["repositories-list"],
+    queryKey: [...QUERY_KEYS.REPOSITORIES_LIST, { per_page: 200 }],
     queryFn: () => repositoriesApi.list({ per_page: 200 }),
   });
   const repositories = reposData?.items ?? [];

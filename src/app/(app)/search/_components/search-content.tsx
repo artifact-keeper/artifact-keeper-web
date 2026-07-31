@@ -44,6 +44,7 @@ import {
 import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { repositoriesApi } from "@/lib/api/repositories";
+import { QUERY_KEYS } from "@/lib/query-keys";
 import { buildMavenSearchQuery } from "@/lib/maven";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
@@ -190,9 +191,11 @@ export function SearchContent() {
   const [searchTriggered, setSearchTriggered] = useState(false);
   const [searchKey, setSearchKey] = useState(0);
 
-  // Fetch repositories for select dropdown
+  // Fetch repositories for select dropdown. The key is param-scoped so pages
+  // requesting a different page size don't collide on a shared cache entry
+  // (#668); prefix invalidation on ["repositories-list"] still matches.
   const { data: reposData } = useQuery({
-    queryKey: ["repositories-list"],
+    queryKey: [...QUERY_KEYS.REPOSITORIES_LIST, { per_page: 100 }],
     queryFn: () => repositoriesApi.list({ per_page: 100 }),
   });
 
