@@ -93,6 +93,9 @@ export interface Repository {
   npm_allowed_scopes?: string[];
   npm_allowed_name_patterns?: string[];
   npm_allow_unscoped?: boolean;
+  // Package age policy (#265). Omitted by the backend when unset.
+  quarantine_enabled?: boolean;
+  quarantine_duration_minutes?: number;
   created_at: string;
   updated_at: string;
 }

@@ -777,7 +777,7 @@ describe("RepoSettingsTab - Quota unit switching", () => {
   });
 });
 
-import { ageToMinutes } from "./repo-settings-tab";
+import { ageToMinutes, minutesToAge } from "./repo-settings-tab";
 
 describe("ageToMinutes helper", () => {
   it("converts days to minutes", () => {
@@ -796,6 +796,26 @@ describe("ageToMinutes helper", () => {
 
   it("rounds fractional values to whole minutes", () => {
     expect(ageToMinutes("1.5", "hours")).toBe(90);
+  });
+});
+
+describe("minutesToAge helper", () => {
+  it("uses whole days when evenly divisible", () => {
+    expect(minutesToAge(4320)).toEqual({ value: "3", unit: "days" });
+  });
+
+  it("uses hours when not a whole number of days", () => {
+    expect(minutesToAge(120)).toEqual({ value: "2", unit: "hours" });
+  });
+
+  it("falls back to the 3-day default when unset", () => {
+    expect(minutesToAge(undefined)).toEqual({ value: "3", unit: "days" });
+    expect(minutesToAge(0)).toEqual({ value: "3", unit: "days" });
+  });
+
+  it("round-trips through ageToMinutes", () => {
+    const { value, unit } = minutesToAge(10080);
+    expect(ageToMinutes(value, unit)).toBe(10080);
   });
 });
 
@@ -821,6 +841,33 @@ describe("RepoSettingsTab - Package Age Policy (#265)", () => {
 
     const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
     expect(duration.disabled).toBe(true);
+  });
+
+  it("seeds the saved policy from the repository (#265 regression)", () => {
+    render(
+      <RepoSettingsTab
+        repository={{
+          ...baseRepo,
+          quarantine_enabled: true,
+          quarantine_duration_minutes: 4320,
+        }}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // Toggle reflects the persisted enabled flag and the duration is populated,
+    // instead of the hardcoded "disabled / 3" defaults.
+    expect(
+      screen.getByLabelText("Enable age policy").getAttribute("aria-checked")
+    ).toBe("true");
+    const duration = screen.getByLabelText("Cooldown period") as HTMLInputElement;
+    expect(duration.disabled).toBe(false);
+    expect(duration.value).toBe("3");
+    // Pristine (matches server) -> Save disabled.
+    expect(
+      (screen.getByRole("button", { name: /save age policy/i }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
   });
 
   it("saves the age policy with the configured duration in minutes", async () => {

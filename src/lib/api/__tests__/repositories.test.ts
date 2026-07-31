@@ -713,6 +713,38 @@ describe("repositoriesApi routing rules", () => {
 // Release target (#260) + age policy (#265)
 // ---------------------------------------------------------------------------
 
+describe("repositoriesApi.getReleaseTarget", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("GETs the promotion release-target endpoint", async () => {
+    mockApiFetch.mockResolvedValue({
+      linked: true,
+      release_repository_key: "maven-release",
+      release_repository_id: "rel-1",
+    });
+    const result = await repositoriesApi.getReleaseTarget("staging-repo");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/promotion/repositories/staging-repo/release-target"
+    );
+    expect(result.release_repository_key).toBe("maven-release");
+  });
+
+  it("encodes the repo key", async () => {
+    mockApiFetch.mockResolvedValue({ linked: false, release_repository_key: null, release_repository_id: null });
+    await repositoriesApi.getReleaseTarget("a/b");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/promotion/repositories/a%2Fb/release-target"
+    );
+  });
+
+  it("propagates errors from apiFetch", async () => {
+    mockApiFetch.mockRejectedValue(new Error("release-target boom"));
+    await expect(repositoriesApi.getReleaseTarget("staging-repo")).rejects.toThrow(
+      "release-target boom"
+    );
+  });
+});
+
 describe("repositoriesApi.setReleaseTarget", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -922,5 +954,26 @@ describe("repositoriesApi.updateAgePolicy", () => {
     await expect(
       repositoriesApi.updateAgePolicy("npm-proxy", { enabled: true, duration_minutes: 10 })
     ).rejects.toThrow("age policy boom");
+  });
+});
+
+describe("repositoriesApi adaptation of age policy (#265)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("exposes quarantine fields from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ quarantine_enabled: true, quarantine_duration_minutes: 4320 }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("npm-proxy");
+    expect(repo.quarantine_enabled).toBe(true);
+    expect(repo.quarantine_duration_minutes).toBe(4320);
+  });
+
+  it("leaves quarantine fields undefined when the backend omits them", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.quarantine_enabled).toBeUndefined();
+    expect(repo.quarantine_duration_minutes).toBeUndefined();
   });
 });

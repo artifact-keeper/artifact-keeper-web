@@ -86,6 +86,20 @@ export function ageToMinutes(value: string, unit: AgeUnit): number {
   return Math.round(num * factor);
 }
 
+/**
+ * Inverse of `ageToMinutes`: whole days when they divide evenly, else hours.
+ * Falls back to the 3-day form default when unset.
+ */
+export function minutesToAge(minutes: number | undefined): {
+  value: string;
+  unit: AgeUnit;
+} {
+  if (!minutes || minutes <= 0) return { value: "3", unit: "days" };
+  if (minutes % MINUTES_PER_DAY === 0)
+    return { value: String(minutes / MINUTES_PER_DAY), unit: "days" };
+  return { value: String(Math.round(minutes / MINUTES_PER_HOUR)), unit: "hours" };
+}
+
 // Backend constraints from `validate_cache_ttl` in repositories.rs: 1s..=30d.
 // The constants live here (not on the SDK) so the UI can show a clear inline
 // validation error before submitting; the backend would otherwise reject with
@@ -477,14 +491,27 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
-  // These seed from local defaults rather than persisted config, so Save stays
-  // disabled until the operator makes an explicit change. That prevents a
-  // pristine form from writing the defaults over an existing policy on save.
-  // (review fix #464)
+  // Seed from the saved config so a policy shows on revisit. `ageDirty` gates
+  // Save (a stray click can't overwrite an existing policy, #464) and guards
+  // the resync below from clobbering unsaved edits.
   const [ageEnabled, setAgeEnabledState] = useState(false);
   const [ageValue, setAgeValueState] = useState("3");
   const [ageUnit, setAgeUnitState] = useState<AgeUnit>("days");
   const [ageDirty, setAgeDirty] = useState(false);
+
+  // Seed during render (like routing-rules-settings). `ageSyncKey` encodes the
+  // server's enabled+duration so any change reseeds, unless the user has edits.
+  const serverAgeKey = `${repository.quarantine_enabled ?? false}:${
+    repository.quarantine_duration_minutes ?? ""
+  }`;
+  const [ageSyncKey, setAgeSyncKey] = useState<string | null>(null);
+  if (serverAgeKey !== ageSyncKey && !ageDirty) {
+    const seeded = minutesToAge(repository.quarantine_duration_minutes);
+    setAgeSyncKey(serverAgeKey);
+    setAgeEnabledState(repository.quarantine_enabled ?? false);
+    setAgeValueState(seeded.value);
+    setAgeUnitState(seeded.unit);
+  }
 
   const setAgeEnabled = (v: boolean) => {
     setAgeEnabledState(v);

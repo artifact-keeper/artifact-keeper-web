@@ -27,12 +27,20 @@ vi.mock("sonner", () => ({
 
 const mockList = vi.fn();
 const mockSetReleaseTarget = vi.fn();
+const mockGetReleaseTarget = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
   repositoriesApi: {
     list: (...args: unknown[]) => mockList(...args),
     setReleaseTarget: (...args: unknown[]) => mockSetReleaseTarget(...args),
+    getReleaseTarget: (...args: unknown[]) => mockGetReleaseTarget(...args),
   },
 }));
+
+const UNLINKED = {
+  linked: false,
+  release_repository_key: null,
+  release_repository_id: null,
+};
 
 vi.mock("@/lib/error-utils", async () => {
   const { toast } = await import("sonner");
@@ -97,7 +105,11 @@ describe("ReleaseTargetSettings non-staging repo", () => {
 });
 
 describe("ReleaseTargetSettings staging repo", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: no target linked. Individual tests override for the linked case.
+    mockGetReleaseTarget.mockResolvedValue(UNLINKED);
+  });
 
   it("shows a loading skeleton while candidates load", () => {
     mockList.mockReturnValue(new Promise(() => {}));
@@ -146,21 +158,42 @@ describe("ReleaseTargetSettings staging repo", () => {
     expect(save.closest("button")).toBeDisabled();
   });
 
-  it("saves an empty string to unlink when 'none' is re-selected", async () => {
+  it("preselects the saved release target on load (issue #260 regression)", async () => {
     mockList.mockResolvedValue({
       items: [{ ...makeRepo({ id: "rel-1", key: "maven-release", name: "Maven Release", repo_type: "local" }) }],
       pagination: { page: 1, per_page: 200, total: 1, total_pages: 1 },
     });
+    mockGetReleaseTarget.mockResolvedValue({
+      linked: true,
+      release_repository_key: "maven-release",
+      release_repository_id: "rel-1",
+    });
+    renderWith(makeRepo());
+
+    // The picker must show the saved link, not an empty "none" state.
+    expect(
+      await screen.findByText(/Maven Release \(maven-release\)/)
+    ).toBeInTheDocument();
+    // Pristine (matches server) -> Save stays disabled.
+    expect(screen.getByText("Save release target").closest("button")).toBeDisabled();
+  });
+
+  it("saves an empty string to unlink when a linked target is set to 'none'", async () => {
+    mockList.mockResolvedValue({
+      items: [{ ...makeRepo({ id: "rel-1", key: "maven-release", name: "Maven Release", repo_type: "local" }) }],
+      pagination: { page: 1, per_page: 200, total: 1, total_pages: 1 },
+    });
+    mockGetReleaseTarget.mockResolvedValue({
+      linked: true,
+      release_repository_key: "maven-release",
+      release_repository_id: "rel-1",
+    });
     mockSetReleaseTarget.mockResolvedValue(makeRepo());
     renderWith(makeRepo());
 
-    // Pick a real target first so re-selecting "none" is an actual change that
-    // fires Radix's onValueChange and flips `dirty`.
+    // Seeded to the linked target; selecting "none" is the actual change.
     const trigger = await screen.findByRole("combobox");
     fireEvent.click(trigger);
-    fireEvent.click(await screen.findByText(/Maven Release \(maven-release\)/));
-
-    fireEvent.click(screen.getByRole("combobox"));
     fireEvent.click(await screen.findByText("No release target (unlink)"));
 
     const save = screen.getByText("Save release target").closest("button")!;
