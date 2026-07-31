@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Type-safe API layer — replace double-casts with adapters and zod** (#206) - removed all `as unknown as T` and `as never` casts in 15 of `src/lib/api/*.ts` files. Each SDK call now goes through an adapter function or a Set-backed narrowing helper that warns on unknown enum values. `assertData` (new in `fetch.ts`) rejects empty body responses with a contextual error. `settings.ts` uses zod `.safeParse()` at the trust boundary for `getPasswordPolicy`/`getSmtpConfig`. Public `xxxApi` return types unchanged so consumer code is untouched.
 
 ### Fixed
+- **Security Policies form: choose a repository instead of typing its UUID** (#489) - the create-policy scope field was a free-text "Repository ID" input, but the UI exposed that UUID nowhere (you had to pull it from the API or DevTools), so operators could realistically only create Global policies. Replaced it with a repository `<Select>` (a "Global (all repositories)" option plus `{name} ({key})` per repo, sourced from `repositoriesApi.list({ per_page: 200 })`), mapping Global to `repository_id: null` and a chosen repo to its UUID. The policies list now resolves a scoped policy's `repository_id` to the repo name and key instead of a truncated `Repo: 00827aab...` prefix.
 - **OIDC claim config keys now match the backend's `<field>_claim` schema** (#516) - the OIDC provider form wrote its claim overrides to `attribute_mapping` under the bare keys `username` / `email` / `groups` (plus `display_name`), but the backend (`sso.rs::resolve_oidc_claim_name`) only reads `username_claim` / `email_claim` / `groups_claim`, so every configured OIDC claim override was silently ignored — logins fell back to the built-in defaults regardless of what the operator typed. `handleSubmit` now writes the `_claim`-suffixed keys (`display_name_claim` too, for parity, though the backend does not consume it yet) and drops the legacy bare keys from the JSONB blob on save. The edit dialog reads the new keys with a fallback to the legacy keys so a provider saved by the pre-fix UI still displays its configured claim names. Unrelated `attribute_mapping` keys still round-trip (regression #406 preserved).
 - **Extend SSE EVENT_TYPE_MAP to webhook/artifact/scan/backup/plugin events** (#213) - the per-domain map only covered 7 domains (users, groups, repositories, service accounts, permissions, quality gates, dashboard). When backend events fired for the missing domains over SSE, the UI didn't refetch stale data — operators had to hard-refresh. Adds 5 QUERY_KEYS (`WEBHOOKS`, `WEBHOOK_DELIVERIES`, `BACKUPS`, `SECURITY`, `PLUGINS`), 4 INVALIDATION_GROUPS (`webhooks`, `backups`, `security`, `plugins`), and 19 new event-type entries (`webhook.{created,updated,deleted,delivery}`, `artifact.{uploaded,deleted}`, `scan.{started,completed,failed}`, `finding.{acknowledged,acknowledgment_revoked}`, `backup.{created,completed,failed,restored}`, `plugin.{installed,uninstalled,enabled,disabled}`). Map size grew 20 → 39.
 - **Setup Guide: sanitize repo keys for Gradle/SBT property names + clearer SSR placeholder** (#362, partial) - the Gradle credentials snippet emitted property names like `my-jvm-repoUsername` for hyphenated repo keys; technically legal in `gradle.properties` but looks broken to readers expecting identifier rules. Added a `repoKeyToGradleId` helper that camelCases kebab/dot/underscore separators and strips remaining non-alphanumerics. URLs and `<id>` slots keep the raw key — only property names sanitize. Also replaced the SSR fallback `https://artifacts.example.com` with `__REPLACE_WITH_REGISTRY_URL__` so prerendered HTML doesn't ship with a real-looking domain a user could accidentally copy. Remaining `repo_type` (proxy/virtual hides publish steps) and `is_public` (anonymous mode) fixes deferred to follow-up.
@@ -54,6 +55,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 - **v1.1.8 web image is permanently unavailable** (#320) - the web release process stopped at v1.1.3 while the backend continued through v1.1.8. There is no v1.1.8 source ref to rebuild from; backfilling would falsify provenance. See [docs/release-history/v1.1.8-web-postmortem.md](docs/release-history/v1.1.8-web-postmortem.md). Recurrence is prevented by `artifact-keeper#882` (image-publish gate).
+
+## [1.6.0] - 2026-07-31
+
+Surfaces the Artifact Keeper 1.6.0 backend capabilities in the web UI (epic #599), on `@artifact-keeper/sdk` 1.6.0. Highlights: audit-log SIEM export, per-folder deduplicated storage usage, CVE blast-radius latent-exposure disclosure, 1.6.0 format-specific repository config, the age-gate review queue, and a browseable folder tree for RAW/Generic repositories — plus authorization hardening and a round of admin-UI fixes.
+
+### Sponsors
+
+Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
+
+**Backers**
+
+- Ash A. ([@dragonpaw](https://github.com/dragonpaw))
+- Gabriel Rodriguez ([@injectedfusion](https://github.com/injectedfusion))
+
+[Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
+
+### Thank You
+
+- **[@rockdrilla](https://github.com/rockdrilla)** — single-line and DEB822 APT source formats in the setup guide (#595)
+- **[@nicola-preda](https://github.com/nicola-preda)** — packages empty-state layout fix (#622)
+- **[@cazlo](https://github.com/cazlo)** — disable actions for the local self-peer (#581) and auth test-timing hardening (#583)
+- **[@nicexe2e4](https://github.com/nicexe2e4)** — render the Environment badge from the settings API (#556)
+- **[@mymarche](https://github.com/mymarche)** — group members now show in the admin dialog (#525)
+
+### Added
+
+- **Audit-log SIEM export** — CSV and versioned JSON export of the audit log (#606).
+- **Per-folder deduplicated storage usage** plus a repository dedup storage panel; `storage.ts` migrated to the SDK (#608, #594).
+- **CVE blast-radius latent exposure** — surface users who can access a restricted repository but have not yet downloaded the affected artifact (#607).
+- **1.6.0 format-specific repository configuration** in the create dialog and the settings tab (#609).
+- **Age-gate review queue** admin page (#635).
+- **Browseable folder tree** for RAW/Generic repositories (#630).
+- **APT setup** offers both single-line and DEB822 source formats in the setup guide (#595).
+- **First-run setup hint** rendered on the login page from the backend (#620).
+
+### Changed
+
+- Consume **`@artifact-keeper/sdk` 1.6.0** (#601); web version bumped to 1.6.0 (#598).
+- Maintainer-focused **ARCHITECTURE.md** for the frontend (#617).
+- Routine dependency and CI-action bumps (Next.js, React, lucide-react, shiki, openapi-ts, and several GitHub Actions).
+
+### Fixed
+
+- Packages empty-state layout (#622).
+- Disable peer actions for the local self-peer (#581).
+- Render the Environment badge from the settings API (#556).
+- Group members now show in the admin dialog (#525).
+
+### Security
+
+- **Authorization hardening** — plugin-config Configure gate and signing-key-owner gate (#612).
 
 ## [1.1.0] - 2026-04-19
 
