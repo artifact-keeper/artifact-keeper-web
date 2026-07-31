@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 
 import curationApi, { type CurationPackage } from "@/lib/api/curation";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -58,11 +58,10 @@ export default function CurationPage() {
   const [bulkAction, setBulkAction] = useState<null | "approve" | "block">(null);
   const [reason, setReason] = useState("");
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-all", "staging"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!user?.is_admin,
-  });
+  const { data: repos } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin },
+  );
   const stagingRepos = useMemo(
     () => (repos?.items ?? []).filter((r) => r.repo_type === "staging"),
     [repos?.items],

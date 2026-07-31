@@ -25,7 +25,7 @@ import curationRulesApi, {
   parseList,
   clampDistance,
 } from "@/lib/api/curation-rules";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
@@ -228,10 +228,7 @@ export function CurationRulesManager() {
       queryFn: () => curationRulesApi.list(),
     });
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-all"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-  });
+  const { data: repos } = useRepositories({ per_page: 1000 });
   const stagingRepos = useMemo(
     () => (repos?.items ?? []).filter((r) => r.repo_type === "staging"),
     [repos?.items],

@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import securityApi from "@/lib/api/security";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   ScanPolicy,
@@ -248,10 +248,7 @@ export default function SecurityPoliciesPage() {
   // Repositories for the scope picker and to resolve a policy's repository_id
   // (a UUID) to a human name+key in the list. Same call the release-target
   // picker uses.
-  const { data: repoList, isLoading: reposLoading } = useQuery({
-    queryKey: ["repositories", "policy-scope"],
-    queryFn: () => repositoriesApi.list({ per_page: 200 }),
-  });
+  const { data: repoList, isLoading: reposLoading } = useRepositories({ per_page: 200 });
   const repoById = useMemo(() => {
     const map = new Map<string, Repository>();
     for (const repo of repoList?.items ?? []) map.set(repo.id, repo);

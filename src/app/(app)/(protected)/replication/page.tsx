@@ -15,7 +15,7 @@ import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
@@ -100,10 +100,7 @@ export default function ReplicationPage() {
   const totalCacheSize = peers.reduce((a, p) => a + p.cache_size_bytes, 0);
 
   // Subscriptions tab queries
-  const { data: reposData } = useQuery({
-    queryKey: ["repositories-list"],
-    queryFn: () => repositoriesApi.list({ per_page: 200 }),
-  });
+  const { data: reposData } = useRepositories({ per_page: 200 });
   const repositories = reposData?.items ?? [];
 
   const { data: assignedRepos = [] } = useQuery({

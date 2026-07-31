@@ -33,7 +33,7 @@ let packagesData: { data: unknown; isLoading?: boolean; isError?: boolean; error
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: { queryKey: unknown[]; queryFn: () => unknown; enabled?: boolean }) => {
     const key = (opts.queryKey as string[])[0];
-    if (key === "repositories-all") return { data: reposData };
+    if (key === "repositories") return { data: reposData };
     // curation packages
     if (opts.enabled !== false) {
       try {

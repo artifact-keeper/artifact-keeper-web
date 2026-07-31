@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import lifecycleApi from "@/lib/api/lifecycle";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
@@ -134,11 +134,10 @@ export default function LifecyclePage() {
     data: repositoriesPage,
     isLoading: isLoadingRepositories,
     isError: repositoriesError,
-  } = useQuery({
-    queryKey: ["repositories", "lifecycle-policy-selector"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!user?.is_admin && createOpen && requiresRepositoryId,
-  });
+  } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin && createOpen && requiresRepositoryId },
+  );
 
   const repositories = useMemo(
     () => repositoriesPage?.items ?? [],

@@ -47,7 +47,7 @@ vi.mock("@tanstack/react-query", () => ({
     enabled?: boolean;
   }) => {
     const key = (opts.queryKey as string[])[0];
-    if (key === "repositories-all") return { data: reposData };
+    if (key === "repositories") return { data: reposData };
     if (opts.enabled !== false) {
       try {
         opts.queryFn();

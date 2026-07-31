@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useMemo } from "react";
@@ -20,11 +19,11 @@ import {
 } from "lucide-react";
 
 import "@/lib/sdk-client";
-import { listRepositories } from "@artifact-keeper/sdk";
 import securityApi from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import dtApi from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
+import { useRepositories } from "@/hooks/use-repositories";
 import type { RepoSecurityScore } from "@/types/security";
 import type { DtProjectMetrics } from "@/types/dependency-track";
 import {
@@ -188,22 +187,14 @@ export default function SecurityDashboardPage() {
     enabled: !!dtEnabled && !!dtProjects && dtProjects.length > 0,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-for-scan"],
-    queryFn: async () => {
-      const { data, error } = await listRepositories({
-        query: { per_page: 100 },
-      });
-      if (error) throw error;
-      return (data as any)?.items ?? data ?? [];
-    },
-  });
+  const { data: reposPage } = useRepositories({ per_page: 100 });
+  const repos = reposPage?.items;
 
   // Build a lookup map from repository ID to display name (key) for the scores table
   const repoNameMap = useMemo(() => {
     const map = new Map<string, string>();
     if (repos) {
-      for (const r of repos as Array<{ id: string; name: string; key: string }>) {
+      for (const r of repos) {
         map.set(r.id, r.name || r.key);
       }
     }
@@ -212,7 +203,7 @@ export default function SecurityDashboardPage() {
 
   // Find the repo key from repo id for the artifact list API call
   const selectedRepoKey = selectedRepoId
-    ? ((repos as Array<{ id: string; key: string }>) ?? []).find(
+    ? (repos ?? []).find(
         (r) => r.id === selectedRepoId
       )?.key
     : undefined;
@@ -776,14 +767,7 @@ export default function SecurityDashboardPage() {
                   <SelectValue placeholder="Select a repository..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {(
-                    (repos as Array<{
-                      id: string;
-                      name: string;
-                      key: string;
-                      format: string;
-                    }>) ?? []
-                  ).map((r) => (
+                  {(repos ?? []).map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.name || r.key} ({r.format})
                     </SelectItem>
