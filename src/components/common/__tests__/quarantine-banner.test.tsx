@@ -101,21 +101,49 @@ describe("QuarantineBanner", () => {
     expect(screen.getByText("Expires in 5 days")).toBeInTheDocument();
   });
 
-  it("shows default message when no reason and no expiry", () => {
+  it("says downloads are blocked when no reason and no expiry", () => {
     render(<QuarantineBanner />);
     expect(
       screen.getByText(
-        "Downloads may be restricted until the quarantine is lifted by an administrator."
+        "Downloads are blocked until the quarantine is lifted by an administrator."
       )
     ).toBeInTheDocument();
   });
 
-  it("does not show default message when reason is provided", () => {
+  // The reason is redacted for callers who cannot access the repository, so a
+  // banner without one still has to say what is going on.
+  it("still states the hold when the reason was redacted", () => {
+    render(<QuarantineBanner quarantineUntil="2026-04-22T12:00:00Z" />);
+    expect(
+      screen.getByText(
+        "Downloads are blocked until the quarantine is lifted by an administrator."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Expires in 5 days")).toBeInTheDocument();
+  });
+
+  it("keeps the blocked message alongside a reason", () => {
     render(<QuarantineBanner reason="Under review" />);
     expect(
-      screen.queryByText(
-        "Downloads may be restricted until the quarantine is lifted by an administrator."
+      screen.getByText(
+        "Downloads are blocked until the quarantine is lifted by an administrator."
       )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Under review")).toBeInTheDocument();
+  });
+
+  it("uses terminal wording for a rejected artifact", () => {
+    render(<QuarantineBanner status="rejected" reason="Confirmed malware" />);
+    expect(
+      screen.getByText("This artifact was rejected in review")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Downloads are blocked. A rejection is final; the artifact cannot be released."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("This artifact is quarantined")
     ).not.toBeInTheDocument();
   });
 });

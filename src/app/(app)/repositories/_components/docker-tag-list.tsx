@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/common/copy-button";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
-import { isActivelyQuarantined } from "@/lib/quarantine";
+import { isActivelyQuarantined, isQuarantineStateKnown } from "@/lib/quarantine";
 import {
   ANALYZABLE_DISABLED_REASON,
   isArtifactAnalyzable,
@@ -221,10 +221,14 @@ export function DockerTagList({
                       reason={group.manifest.quarantine_reason}
                       quarantineUntil={group.manifest.quarantine_until}
                     />
-                  ) : (
+                  ) : isQuarantineStateKnown(group.manifest) ? (
                     <Badge variant="outline" className="font-normal">
                       OK
                     </Badge>
+                  ) : (
+                    // The response carried no quarantine verdict, so "OK"
+                    // would be a claim nothing backs (#650).
+                    <span className="text-xs text-muted-foreground">-</span>
                   )}
                 </td>
                 <td className="px-3 py-2">
