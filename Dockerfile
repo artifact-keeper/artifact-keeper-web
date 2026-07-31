@@ -18,11 +18,13 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG GIT_SHA=unknown
 ARG APP_VERSION=dev
-# Enable HSTS + the CSP `upgrade-insecure-requests` directive. Next.js bakes
-# `headers()` into the build output (routes-manifest.json), so this must be set
-# at BUILD time, not container runtime. Leave unset (default) for plain-HTTP
-# deployments; set `--build-arg AK_ENFORCE_HTTPS=true` when building an image
-# that will be served behind TLS. See #2222.
+# Enable HSTS + the CSP `upgrade-insecure-requests` directive. The headers are
+# emitted by src/middleware.ts, which reads AK_ENFORCE_HTTPS per request at
+# container RUNTIME (#679), so this build arg only sets the image's default
+# value: operators can override it on the running container with
+# `docker run -e AK_ENFORCE_HTTPS=true ...` (or the compose `environment:`
+# block) without rebuilding. Leave unset (default) for plain-HTTP deployments;
+# set it when the UI will be served behind TLS. See #2222.
 ARG AK_ENFORCE_HTTPS
 ENV GIT_SHA=${GIT_SHA}
 ENV NEXT_PUBLIC_APP_VERSION=${APP_VERSION}
