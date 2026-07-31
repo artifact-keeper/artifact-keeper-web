@@ -120,7 +120,7 @@ export default function AccessTokensPage() {
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
   const [keyName, setKeyName] = useState("");
   const [keyExpiry, setKeyExpiry] = useState("90");
-  const [keyScopes, setKeyScopes] = useState<string[]>(["read"]);
+  const [keyScopes, setKeyScopes] = useState<string[]>(["read:artifacts"]);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
   const [revokeKeyId, setRevokeKeyId] = useState<string | null>(null);
 
@@ -128,7 +128,7 @@ export default function AccessTokensPage() {
   const [createTokenOpen, setCreateTokenOpen] = useState(false);
   const [tokenName, setTokenName] = useState("");
   const [tokenExpiry, setTokenExpiry] = useState("90");
-  const [tokenScopes, setTokenScopes] = useState<string[]>(["read"]);
+  const [tokenScopes, setTokenScopes] = useState<string[]>(["read:artifacts"]);
   const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
   const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(
     null
@@ -153,7 +153,7 @@ export default function AccessTokensPage() {
       queryClient.invalidateQueries({ queryKey: ["profile", "api-keys"] });
       setNewlyCreatedKey(result.token);
       setKeyName("");
-      setKeyScopes(["read"]);
+      setKeyScopes(["read:artifacts"]);
       setKeyExpiry("90");
       toast.success("API key created");
     },
@@ -179,7 +179,7 @@ export default function AccessTokensPage() {
       });
       setNewlyCreatedToken(result.token);
       setTokenName("");
-      setTokenScopes(["read"]);
+      setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
       setTokenRepoSelector({});
       toast.success("Access token created");
@@ -374,7 +374,7 @@ export default function AccessTokensPage() {
           setCreateKeyOpen(o);
           if (!o) {
             setKeyName("");
-            setKeyScopes(["read"]);
+            setKeyScopes(["read:artifacts"]);
             setKeyExpiry("90");
             setNewlyCreatedKey(null);
           }
@@ -426,7 +426,7 @@ export default function AccessTokensPage() {
           setCreateTokenOpen(o);
           if (!o) {
             setTokenName("");
-            setTokenScopes(["read"]);
+            setTokenScopes(["read:artifacts"]);
             setTokenExpiry("90");
             setTokenRepoSelector({});
             setNewlyCreatedToken(null);
