@@ -56,6 +56,26 @@ docker build --build-arg AK_ENFORCE_HTTPS=true -t artifact-keeper-web:tls .
 
 Leave it unset to build the default plain-HTTP-safe image.
 
+### CSRF protection
+
+The UI authenticates with httpOnly session cookies (`credentials: "include"`),
+so it relies on a CSRF contract with the backend:
+
+- **Frontend (implemented here):** every API request — SDK calls, `apiFetch`,
+  and the remaining raw `fetch` mutations — carries the custom header
+  `X-Requested-With: XMLHttpRequest` (see `CSRF_HEADER_NAME` in
+  `src/lib/sdk-client.ts`). Cross-site HTML forms cannot set custom headers,
+  so this header forces a CORS preflight a forged request cannot satisfy.
+- **Backend (contract):** the backend MUST
+  1. issue the session cookie with `SameSite=Lax` or `SameSite=Strict`, and
+  2. reject cookie-authenticated mutating requests (POST/PUT/PATCH/DELETE)
+     that lack the `X-Requested-With` header. Native package-manager clients
+     are unaffected — they authenticate with Basic/Bearer credentials, not
+     cookies, so the header requirement applies only to cookie auth.
+
+The backend enforcement half is tracked as a follow-up issue in the
+`artifact-keeper` repository (see issue #673 here for the full audit finding).
+
 ## Project Structure
 
 ```
