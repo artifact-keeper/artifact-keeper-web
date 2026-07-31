@@ -238,12 +238,15 @@ export default function LifecyclePage() {
     setRepositorySearch("");
   }
 
-  function handleCreate() {
-    if (requiresRepositoryId && !formRepositoryId) {
-      toast.error("Select a repository for this policy type");
-      return;
+  function handleCreateOpenChange(open: boolean) {
+    setCreateOpen(open);
+    if (!open) {
+      setRepositoryPickerOpen(false);
+      setRepositorySearch("");
     }
+  }
 
+  function handleCreate() {
     let config: Record<string, unknown>;
     try {
       config = JSON.parse(formConfig);
@@ -489,7 +492,7 @@ export default function LifecyclePage() {
       )}
 
       {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Lifecycle Policy</DialogTitle>
@@ -648,7 +651,7 @@ export default function LifecyclePage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
               Cancel
             </Button>
             <Button

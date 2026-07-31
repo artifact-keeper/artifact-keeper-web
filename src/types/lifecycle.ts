@@ -56,15 +56,13 @@ export type PolicyType =
  * Lifecycle policies that cannot run globally because their evaluation needs
  * a single repository scope. Keep this aligned with the backend validation.
  */
-export const POLICY_TYPES_REQUIRING_REPOSITORY_ID: readonly PolicyType[] = [
+export const POLICY_TYPES_REQUIRING_REPOSITORY_ID: readonly string[] = [
   "max_versions",
   "size_quota_bytes",
-];
+] satisfies readonly PolicyType[];
 
 export function policyTypeRequiresRepositoryId(policyType: string): boolean {
-  return POLICY_TYPES_REQUIRING_REPOSITORY_ID.includes(
-    policyType as PolicyType
-  );
+  return POLICY_TYPES_REQUIRING_REPOSITORY_ID.includes(policyType);
 }
 
 export const POLICY_TYPE_LABELS: Record<PolicyType, string> = {

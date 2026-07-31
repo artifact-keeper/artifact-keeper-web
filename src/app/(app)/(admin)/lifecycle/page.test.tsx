@@ -291,4 +291,64 @@ describe("LifecyclePage repository scope", () => {
     expect(screen.getByLabelText("Repository")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
   });
+
+  it("clears repository scope when switching back to a global policy", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.type(screen.getByLabelText("Name"), "Remove stale artifacts");
+    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
+    await user.click(screen.getByRole("button", { name: /docker-local/i }));
+    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_age_days");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(createMutate()).toHaveBeenCalledWith({
+      name: "Remove stale artifacts",
+      description: undefined,
+      policy_type: "max_age_days",
+      config: { days: 90 },
+      repository_id: undefined,
+    });
+  });
+
+  it("clears repository search when the create dialog is cancelled", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
+    await user.type(
+      screen.getByRole("textbox", { name: "Search repositories" }),
+      "docker"
+    );
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+
+    expect(
+      screen.getByRole("textbox", { name: "Search repositories" })
+    ).toHaveValue("");
+  });
+
+  it("shows an error when repositories cannot be loaded", async () => {
+    const user = userEvent.setup();
+    repositoriesQuery = { data: undefined, isLoading: false, isError: true };
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
+
+    expect(screen.getByText(/couldn't load repositories/i)).toBeInTheDocument();
+  });
+
+  it("shows an empty state when no repositories are available", async () => {
+    const user = userEvent.setup();
+    repositoriesQuery = { data: { items: [] }, isLoading: false };
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
+
+    expect(screen.getByText("No repositories are available.")).toBeInTheDocument();
+  });
 });
