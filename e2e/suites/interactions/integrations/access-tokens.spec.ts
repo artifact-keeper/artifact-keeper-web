@@ -109,8 +109,8 @@ test.describe.serial('Access Tokens - API Key CRUD', () => {
     // Key prefix column should show a truncated prefix (e.g., "ak_...")
     await expect(row.locator('code').first()).toBeVisible({ timeout: 5000 });
 
-    // Default scope "read" should be shown as a badge
-    await expect(row.getByText('read')).toBeVisible({ timeout: 5000 });
+    // Default scope "read:artifacts" should be shown as a badge
+    await expect(row.getByText('read:artifacts')).toBeVisible({ timeout: 5000 });
   });
 
   test('revoke the created API key', async ({ page }) => {
@@ -176,8 +176,8 @@ test.describe.serial('Access Tokens - Personal Token CRUD', () => {
     // Token prefix column should show a truncated prefix
     await expect(row.locator('code').first()).toBeVisible({ timeout: 5000 });
 
-    // Default scope "read" should be shown as a badge
-    await expect(row.getByText('read')).toBeVisible({ timeout: 5000 });
+    // Default scope "read:artifacts" should be shown as a badge
+    await expect(row.getByText('read:artifacts')).toBeVisible({ timeout: 5000 });
   });
 
   test('revoke the created access token', async ({ page }) => {

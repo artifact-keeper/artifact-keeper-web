@@ -67,8 +67,8 @@ vi.mock("@/lib/api/service-accounts", () => ({
 
 vi.mock("@/lib/constants/token", () => ({
   SCOPES: [
-    { value: "read", label: "Read" },
-    { value: "write", label: "Write" },
+    { value: "read:artifacts", label: "Read" },
+    { value: "write:artifacts", label: "Write" },
     { value: "admin", label: "Admin" },
   ],
 }));
@@ -268,7 +268,7 @@ const mockApiKeys = [
     id: "key-1",
     name: "CI Pipeline Key",
     key_prefix: "ak_ci12",
-    scopes: ["read", "write"],
+    scopes: ["read:artifacts", "write:artifacts"],
     expires_at: "2026-06-01T00:00:00Z",
     last_used_at: "2026-02-20T12:00:00Z",
     created_at: "2026-01-01T00:00:00Z",
@@ -277,7 +277,7 @@ const mockApiKeys = [
     id: "key-2",
     name: "Read Only Key",
     key_prefix: "ak_ro34",
-    scopes: ["read"],
+    scopes: ["read:artifacts"],
     expires_at: null,
     last_used_at: null,
     created_at: "2026-01-15T00:00:00Z",
@@ -289,7 +289,7 @@ const mockAccessTokens = [
     id: "token-1",
     name: "Local Dev Token",
     token_prefix: "at_dev1",
-    scopes: ["read", "write", "admin"],
+    scopes: ["read:artifacts", "write:artifacts", "admin"],
     expires_at: "2026-12-31T00:00:00Z",
     last_used_at: "2026-02-25T08:30:00Z",
     created_at: "2026-02-01T00:00:00Z",
@@ -301,7 +301,7 @@ const mockScopedAccessTokens = [
     id: "token-scoped-1",
     name: "Scoped Docker Token",
     token_prefix: "at_dck1",
-    scopes: ["read", "write"],
+    scopes: ["read:artifacts", "write:artifacts"],
     expires_at: "2026-12-31T00:00:00Z",
     last_used_at: null,
     created_at: "2026-03-01T00:00:00Z",
@@ -315,7 +315,7 @@ const mockScopedAccessTokens = [
     id: "token-scoped-2",
     name: "Repo ID Token",
     token_prefix: "at_rid1",
-    scopes: ["read"],
+    scopes: ["read:artifacts"],
     expires_at: null,
     last_used_at: "2026-03-10T12:00:00Z",
     created_at: "2026-03-05T00:00:00Z",
@@ -325,7 +325,7 @@ const mockScopedAccessTokens = [
     id: "token-unscoped",
     name: "All Repos Token",
     token_prefix: "at_all1",
-    scopes: ["read"],
+    scopes: ["read:artifacts"],
     expires_at: null,
     last_used_at: null,
     created_at: "2026-03-10T00:00:00Z",
@@ -532,10 +532,10 @@ describe("AccessTokensPage", () => {
     const scopeContainers = screen.getAllByTestId("available-scopes");
     expect(scopeContainers.length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByTestId("scope-read").length
+      screen.getAllByTestId("scope-read:artifacts").length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByTestId("scope-write").length
+      screen.getAllByTestId("scope-write:artifacts").length
     ).toBeGreaterThanOrEqual(1);
     // admin scope should NOT be present
     expect(screen.queryByTestId("scope-admin")).not.toBeInTheDocument();
@@ -1143,7 +1143,7 @@ describe("AccessTokensPage", () => {
 
     // Should have scopes but not admin
     expect(
-      screen.getAllByTestId("scope-read").length
+      screen.getAllByTestId("scope-read:artifacts").length
     ).toBeGreaterThanOrEqual(1);
     expect(screen.queryByTestId("scope-admin")).not.toBeInTheDocument();
   });

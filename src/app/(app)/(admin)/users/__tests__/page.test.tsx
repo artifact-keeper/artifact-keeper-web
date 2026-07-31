@@ -306,7 +306,7 @@ const mockTokens = [
     id: "tok-1",
     name: "CI Pipeline",
     key_prefix: "ak_ci",
-    scopes: ["read", "write"],
+    scopes: ["read:artifacts", "write:artifacts"],
     created_at: "2026-01-15T00:00:00Z",
     expires_at: "2026-07-15T00:00:00Z",
     last_used_at: "2026-03-10T00:00:00Z",
@@ -315,7 +315,7 @@ const mockTokens = [
     id: "tok-2",
     name: "Read Only",
     key_prefix: "ak_ro",
-    scopes: ["read"],
+    scopes: ["read:artifacts"],
     created_at: "2026-02-01T00:00:00Z",
     expires_at: null,
     last_used_at: null,
@@ -577,7 +577,7 @@ describe("UsersPage", () => {
     fireEvent.click(keyIcons[1]);
 
     const badges = screen.getAllByTestId("badge");
-    // mockTokens[0] has ["read", "write"], mockTokens[1] has ["read"]
+    // mockTokens[0] has ["read:artifacts", "write:artifacts"], mockTokens[1] has ["read:artifacts"]
     // Plus the admin badge from the admin user in the table
     expect(badges.length).toBeGreaterThanOrEqual(3);
   });

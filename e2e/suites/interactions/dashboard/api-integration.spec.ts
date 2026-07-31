@@ -30,7 +30,7 @@ test.describe('API Integration', () => {
 
   test('POST /api/v1/auth/tokens creates token', async ({ request }) => {
     const response = await request.post('/api/v1/auth/tokens', {
-      data: { name: 'e2e-integration-test', scopes: ['read'] },
+      data: { name: 'e2e-integration-test', scopes: ['read:artifacts'] },
     });
     // This is the endpoint that was 404ing — verify it works
     expect(response.status()).toBeLessThan(500);
