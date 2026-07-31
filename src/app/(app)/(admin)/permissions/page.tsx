@@ -189,15 +189,35 @@ export default function PermissionsPage() {
     [form.principal_id, principalOptions]
   );
 
+  const serviceAccountNames = useMemo(
+    () => new Map(
+      (serviceAccountsData ?? []).map((account: ServiceAccount) => [
+        account.id,
+        account.display_name || account.username,
+      ])
+    ),
+    [serviceAccountsData]
+  );
+
+  const getPrincipalLabel = useCallback(
+    (permission: Permission) =>
+      permission.principal_name ??
+      (permission.principal_type === "service_account"
+        ? serviceAccountNames.get(permission.principal_id)
+        : undefined) ??
+      permission.principal_id,
+    [serviceAccountNames]
+  );
+
   const filteredPrincipalOptions = useMemo(() => {
     const search = principalSearch.trim().toLowerCase();
     if (!search) return principalOptions;
 
-    return principalOptions.filter((principal) => [
-      principal.label,
-      principal.searchText,
-      principal.value,
-    ].some((value) => value?.toLowerCase().includes(search)));
+    return principalOptions.filter((principal) =>
+      principal.label.toLowerCase().includes(search) ||
+      principal.searchText?.toLowerCase().includes(search) ||
+      principal.value.toLowerCase().startsWith(search)
+    );
   }, [principalOptions, principalSearch]);
 
   const repositoryOptions = useMemo(() =>
@@ -293,7 +313,7 @@ export default function PermissionsPage() {
     {
       id: "principal",
       header: "Principal",
-      accessor: (p) => p.principal_name ?? p.principal_id,
+      accessor: getPrincipalLabel,
       sortable: true,
       cell: (p) => (
         <div className="flex items-center gap-2">
@@ -301,7 +321,7 @@ export default function PermissionsPage() {
             {PRINCIPAL_TYPE_LABELS[p.principal_type]}
           </Badge>
           <span className="text-sm font-medium">
-            {p.principal_name ?? p.principal_id}
+            {getPrincipalLabel(p)}
           </span>
         </div>
       ),
@@ -440,7 +460,10 @@ export default function PermissionsPage() {
               >
                 {form.principal_type === "service_account" && serviceAccountsLoading
                   ? "Loading service accounts..."
-                  : selectedPrincipal?.label ?? "Select..."}
+                  : selectedPrincipal?.label ??
+                    (editOpen && selectedPermission
+                      ? getPrincipalLabel(selectedPermission)
+                      : "Select...")}
                 <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -457,7 +480,11 @@ export default function PermissionsPage() {
                 />
                 <CommandList>
                   {filteredPrincipalOptions.length === 0 && (
-                    <CommandEmpty>No principals match your search.</CommandEmpty>
+                    <CommandEmpty>
+                      {principalSearch
+                        ? "No principals match your search."
+                        : "No principals are available."}
+                    </CommandEmpty>
                   )}
                   {filteredPrincipalOptions.length > 0 && (
                     <CommandGroup heading="Principals">
