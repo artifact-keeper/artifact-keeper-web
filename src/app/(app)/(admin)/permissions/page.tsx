@@ -88,12 +88,24 @@ interface PermissionForm {
   actions: PermissionAction[];
 }
 
+interface PrincipalOption {
+  value: string;
+  label: string;
+  searchText?: string;
+}
+
 const EMPTY_FORM: PermissionForm = {
   principal_type: "user",
   principal_id: "",
   target_type: "repository",
   target_id: "",
   actions: ["read"],
+};
+
+const PRINCIPAL_TYPE_LABELS: Record<PermissionPrincipalType, string> = {
+  user: "User",
+  service_account: "Service Account",
+  group: "Group",
 };
 
 // -- page --
@@ -152,17 +164,20 @@ export default function PermissionsPage() {
   const principalOptions = useMemo(() => {
     switch (form.principal_type) {
       case "user":
-        return users.map((u: User) => ({
+        return users.map((u: User): PrincipalOption => ({
           value: u.id,
           label: u.display_name || u.username,
         }));
       case "service_account":
-        return (serviceAccountsData ?? []).map((account: ServiceAccount) => ({
+        return (serviceAccountsData ?? []).map((account: ServiceAccount): PrincipalOption => ({
           value: account.id,
           label: account.display_name || account.username,
+          // Display names often contain a description, while tokens and API
+          // clients refer to the account by its stable svc-* username.
+          searchText: account.username,
         }));
       case "group":
-        return groups.map((g: Group) => ({
+        return groups.map((g: Group): PrincipalOption => ({
           value: g.id,
           label: g.name,
         }));
@@ -178,10 +193,11 @@ export default function PermissionsPage() {
     const search = principalSearch.trim().toLowerCase();
     if (!search) return principalOptions;
 
-    return principalOptions.filter((principal) =>
-      principal.label.toLowerCase().includes(search) ||
-      principal.value.toLowerCase().includes(search)
-    );
+    return principalOptions.filter((principal) => [
+      principal.label,
+      principal.searchText,
+      principal.value,
+    ].some((value) => value?.toLowerCase().includes(search)));
   }, [principalOptions, principalSearch]);
 
   const repositoryOptions = useMemo(() =>
@@ -281,11 +297,8 @@ export default function PermissionsPage() {
       sortable: true,
       cell: (p) => (
         <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="text-xs capitalize"
-          >
-            {p.principal_type}
+          <Badge variant="outline" className="text-xs">
+            {PRINCIPAL_TYPE_LABELS[p.principal_type]}
           </Badge>
           <span className="text-sm font-medium">
             {p.principal_name ?? p.principal_id}
@@ -732,7 +745,7 @@ export default function PermissionsPage() {
           if (!o) setSelectedPermission(null);
         }}
         title="Delete Permission"
-        description="Deleting this permission will revoke the associated access. Users or groups will lose the granted actions on the target resource. This action cannot be undone."
+        description="Deleting this permission will revoke the associated access. Users, service accounts, or groups will lose the granted actions on the target resource. This action cannot be undone."
         confirmText="Delete Permission"
         danger
         loading={deleteMutation.isPending}
