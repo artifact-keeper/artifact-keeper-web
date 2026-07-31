@@ -42,6 +42,32 @@ test.describe('Permissions Management', () => {
     await dialog.getByRole('button', { name: /cancel/i }).click();
   });
 
+  test('can select a service account as the permission principal', async ({ page }) => {
+    await page.getByRole('button', { name: /create permission/i }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'Create Permission', exact: true });
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    const principalType = dialog.locator('[role="combobox"]').filter({ hasText: /^User$/ });
+    await expect(principalType).toHaveCount(1);
+    await principalType.click();
+    await page.getByRole('option', { name: 'Service Account', exact: true }).click();
+
+    const principalPicker = dialog.getByRole('combobox', { name: 'Principal', exact: true });
+    await expect(principalPicker).toBeVisible();
+    await principalPicker.click();
+
+    const principalSearch = page.getByRole('combobox', { name: 'Search principals' });
+    await principalSearch.fill('e2e-ci-bot');
+
+    const seededServiceAccount = page.getByRole('option', { name: 'Service account for E2E tests' });
+    await expect(seededServiceAccount).toBeVisible({ timeout: 10000 });
+    await seededServiceAccount.click();
+    await expect(principalPicker).toContainText('Service account for E2E tests');
+
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+  });
+
   test('dialog has action checkboxes for Read, Write, Delete, Admin', async ({ page }) => {
     await page.getByRole('button', { name: /create permission/i }).first().click();
     const dialog = page.getByRole('dialog');

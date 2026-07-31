@@ -416,6 +416,23 @@ describe("PermissionsPage", () => {
     expect(screen.getAllByText("npm-local").length).toBeGreaterThan(0);
   });
 
+  it("renders service account principal type with a human-readable label", async () => {
+    mockPermissionsApi.list.mockResolvedValue({
+      items: [{
+        ...PERM_1,
+        principal_type: "service_account" as const,
+        principal_id: "service-account-1",
+        principal_name: "Release Bot",
+      }],
+      pagination: { page: 1, per_page: 1000, total: 1, total_pages: 1 },
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("Service Account")).toBeTruthy();
+    });
+    expect(screen.queryByText("Service_account")).toBeNull();
+  });
+
   it("shows empty state when no permissions exist", async () => {
     mockPermissionsApi.list.mockResolvedValue({
       items: [],
@@ -527,7 +544,7 @@ describe("PermissionsPage", () => {
       const principalPicker = screen.getByRole("combobox", { name: "Principal" });
       expect(principalPicker.textContent).toContain("Select...");
       await user.click(principalPicker);
-      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "release");
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "svc-release");
       expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Developers" })).toBeNull();
