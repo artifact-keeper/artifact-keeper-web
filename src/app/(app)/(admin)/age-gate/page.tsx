@@ -1,19 +1,29 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Hourglass, Check, X, RefreshCw, AlertCircle, Loader2 } from "lucide-react";
+import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import ageGateApi, { type AgeGateReview } from "@/lib/api/age-gate";
+import ageGateApi, {
+  AGE_GATE_STATUSES,
+  AgeGatePartialTransitionError,
+  isReopenSupported,
+  subscribeReopenSupport,
+  type AgeGateReview,
+  type AgeGateStatus,
+} from "@/lib/api/age-gate";
+import { adminApi } from "@/lib/api/admin";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { formatDate } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectTrigger,
@@ -30,7 +40,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-const STATUSES = ["pending", "approved", "rejected"] as const;
+/** Colour the status control so a decided row still reads at a glance. */
+const STATUS_TRIGGER_CLASS: Record<string, string> = {
+  pending: "text-amber-600 dark:text-amber-400",
+  approved: "text-emerald-600 dark:text-emerald-400",
+  rejected: "text-destructive",
+};
 
 /** How far a held release fell short of its repository's minimum age. */
 function formatAge(review: AgeGateReview, minAgeDays: number | undefined): string {
@@ -39,17 +54,67 @@ function formatAge(review: AgeGateReview, minAgeDays: number | undefined): strin
   return `${age} (min ${minAgeDays}d)`;
 }
 
+/** "pending", "pending or approved", "pending, approved or rejected". */
+function joinStatuses(statuses: readonly AgeGateStatus[]): string {
+  if (statuses.length <= 1) return statuses[0] ?? "";
+  return `${statuses.slice(0, -1).join(", ")} or ${statuses[statuses.length - 1]}`;
+}
+
+/** Past-tense verb for a completed transition, used in toasts. */
+function transitionVerb(target: AgeGateStatus): string {
+  if (target === "approved") return "Approved";
+  if (target === "rejected") return "Rejected";
+  return "Returned to pending";
+}
+
+/**
+ * Whether moving `from` to `to` has to reopen the review first. Only a review
+ * that already carries a decision does; a pending one is decided outright.
+ */
+function needsReopen(from: string, to: AgeGateStatus): boolean {
+  return from !== "pending" && from !== to;
+}
+
+/**
+ * What a transition will do, said plainly enough that an admin can tell a
+ * one-call decision from a reopen-then-decide before they commit to it.
+ */
+function describeTransition(from: string, to: AgeGateStatus): string {
+  if (from === "pending") {
+    return to === "approved"
+      ? "This releases the version to any client that requests it. The review can be reopened later to withhold it again."
+      : "The version stays withheld and clients requesting it keep getting the gate response.";
+  }
+  if (to === "pending") {
+    return `This reverses the recorded ${from} decision and puts the version back behind the gate until someone decides it again.`;
+  }
+  return `This runs in two steps: the recorded ${from} decision is reversed first, then the review is ${to}. If the second step fails the review is left pending, not ${from}.`;
+}
+
 export default function AgeGatePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<string>("pending");
-  const [actionTarget, setActionTarget] = useState<
-    { review: AgeGateReview; action: "approve" | "reject" } | null
+  const [statuses, setStatuses] = useState<AgeGateStatus[]>(["pending"]);
+  const [transition, setTransition] = useState<
+    { review: AgeGateReview; target: AgeGateStatus } | null
   >(null);
   const [reason, setReason] = useState("");
 
-  const reviewsQueryKey = ["age-gate-reviews", status];
+  // Latched off the first time the endpoint 404s, so a backend without
+  // artifact-keeper#2939 stops being offered transitions it cannot perform.
+  const reopenSupported = useSyncExternalStore(
+    subscribeReopenSupport,
+    isReopenSupported,
+    isReopenSupported,
+  );
+
+  // A reopen carries a mandatory reason, and every transition out of a decided
+  // status starts with one. Deciding a pending review does not.
+  const reasonRequired = transition !== null && transition.review.status !== "pending";
+  const reasonMissing = reasonRequired && reason.trim() === "";
+
+  const statusKey = [...statuses].sort().join(",");
   const {
     data: reviews,
     isLoading,
@@ -58,16 +123,13 @@ export default function AgeGatePage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: reviewsQueryKey,
-    queryFn: () => ageGateApi.listReviews({ status }),
-    enabled: !!user?.is_admin,
+    queryKey: ["age-gate-reviews", statusKey],
+    queryFn: () => ageGateApi.listReviews({ statuses }),
+    enabled: !!user?.is_admin && statuses.length > 0,
   });
 
-  const rows = reviews ?? [];
-  const repositoryKeys = useMemo(
-    () => [...new Set((reviews ?? []).map((r) => r.repositoryKey))],
-    [reviews],
-  );
+  const rows = useMemo(() => reviews ?? [], [reviews]);
+  const repositoryKeys = useMemo(() => [...new Set(rows.map((r) => r.repositoryKey))], [rows]);
 
   const { data: repoConfigs } = useQuery({
     queryKey: ["age-gate-repo-configs", repositoryKeys],
@@ -75,36 +137,70 @@ export default function AgeGatePage() {
     enabled: !!user?.is_admin && repositoryKeys.length > 0,
   });
 
+  // The review carries the reviewer's user id and nothing else, so the names
+  // come from the admin user list. A failed lookup degrades to a short id
+  // rather than hiding who decided.
+  const hasReviewers = rows.some((r) => r.reviewedBy);
+  const { data: users } = useQuery({
+    queryKey: ["age-gate-reviewers"],
+    queryFn: () => adminApi.listUsers(),
+    enabled: !!user?.is_admin && hasReviewers,
+  });
+  const reviewerNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const u of users ?? []) names[u.id] = u.display_name || u.username;
+    return names;
+  }, [users]);
+  const reviewerName = (id: string) => reviewerNames[id] ?? `${id.slice(0, 8)}…`;
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["age-gate-reviews"] });
   };
 
   const closeDialog = () => {
-    setActionTarget(null);
+    setTransition(null);
     setReason("");
   };
 
-  const actionMutation = useMutation({
+  const toggleStatus = (status: AgeGateStatus, checked: boolean) => {
+    setStatuses((current) =>
+      checked
+        ? AGE_GATE_STATUSES.filter((s) => s === status || current.includes(s))
+        : current.filter((s) => s !== status),
+    );
+  };
+
+  const changeStatusMutation = useMutation({
     mutationFn: ({
       review,
-      action,
+      target,
       why,
     }: {
       review: AgeGateReview;
-      action: "approve" | "reject";
+      target: AgeGateStatus;
       why: string;
-    }) =>
-      action === "approve"
-        ? ageGateApi.approveReview(review.id, why || undefined)
-        : ageGateApi.rejectReview(review.id, why || undefined),
-    onSuccess: (_result, { review, action }) => {
+    }) => ageGateApi.changeReviewStatus(review, target, why),
+    onSuccess: (_result, { review, target }) => {
       invalidate();
       closeDialog();
       toast.success(
-        `${action === "approve" ? "Approved" : "Rejected"} ${review.packageName}@${review.packageVersion}`,
+        `${transitionVerb(target)} ${review.packageName}@${review.packageVersion}`,
       );
     },
-    onError: mutationErrorToast("Age gate review failed"),
+    onError: (err, { review }) => {
+      // A half-completed reopen-then-decide really did change the review, so
+      // refetch and say what it is now. Reporting a plain failure here would
+      // leave the operator believing the old decision still stands.
+      if (err instanceof AgeGatePartialTransitionError) {
+        invalidate();
+        closeDialog();
+        toast.error(
+          `${review.packageName}@${review.packageVersion}: ${err.message} ${toUserMessage(err.failure, "The second step failed.")}`,
+        );
+        return;
+      }
+      mutationErrorToast("Age gate review failed")(err);
+    },
   });
 
   if (!user?.is_admin) {
@@ -115,9 +211,6 @@ export default function AgeGatePage() {
       </div>
     );
   }
-
-  const canApprove = status !== "approved";
-  const canReject = status !== "rejected";
 
   return (
     <div className="space-y-6 p-6">
@@ -131,17 +224,20 @@ export default function AgeGatePage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-40" aria-label="Status filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-center gap-4">
+        <fieldset className="flex flex-wrap items-center gap-4">
+          <legend className="sr-only">Filter by status</legend>
+          {AGE_GATE_STATUSES.map((s) => (
+            <label key={s} className="flex items-center gap-2 text-sm capitalize">
+              <Checkbox
+                checked={statuses.includes(s)}
+                onCheckedChange={(checked) => toggleStatus(s, checked === true)}
+                aria-label={`Show ${s}`}
+              />
+              {s}
+            </label>
+          ))}
+        </fieldset>
 
         <Button
           variant="outline"
@@ -155,14 +251,31 @@ export default function AgeGatePage() {
         </Button>
       </div>
 
-      {isLoading && (
+      {!reopenSupported && (
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertDescription>
+            This server does not support reopening a decided review, so approved and rejected
+            reviews cannot be changed here. Reviews that are still pending can be approved or
+            rejected as usual.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {statuses.length === 0 && (
+        <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
+          Select at least one status to list reviews.
+        </div>
+      )}
+
+      {statuses.length > 0 && isLoading && (
         <div className="space-y-2" role="status" aria-busy="true">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
         </div>
       )}
 
-      {!isLoading && isError && (
+      {statuses.length > 0 && !isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
           <p className="text-sm font-medium">Couldn&apos;t load the age gate queue</p>
@@ -174,14 +287,16 @@ export default function AgeGatePage() {
         </div>
       )}
 
-      {!isLoading && !isError && rows.length === 0 && (
+      {statuses.length > 0 && !isLoading && !isError && rows.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          No {status} releases in the age gate queue.
+          {statuses.length === AGE_GATE_STATUSES.length
+            ? "No releases in the age gate queue."
+            : `No ${joinStatuses(statuses)} releases in the age gate queue.`}
         </div>
       )}
 
-      {!isLoading && !isError && rows.length > 0 && (
-        <div className="overflow-hidden rounded-md border">
+      {statuses.length > 0 && !isLoading && !isError && rows.length > 0 && (
+        <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
               <tr>
@@ -190,8 +305,8 @@ export default function AgeGatePage() {
                 <th className="px-3 py-2 font-medium">Repository</th>
                 <th className="px-3 py-2 font-medium">Age at request</th>
                 <th className="px-3 py-2 font-medium">Requested</th>
+                <th className="px-3 py-2 font-medium">Decision</th>
                 <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -206,37 +321,54 @@ export default function AgeGatePage() {
                     {formatAge(r, repoConfigs?.[r.repositoryKey]?.minAgeDays)}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{formatDate(r.requestedAt)}</td>
-                  <td className="px-3 py-2">
-                    <Badge
-                      variant={r.status === "rejected" ? "destructive" : r.status === "approved" ? "secondary" : "outline"}
-                      className="capitalize"
-                    >
-                      {r.status}
-                    </Badge>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {r.reviewedBy || r.reviewedAt || r.reviewReason ? (
+                      <div className="max-w-xs space-y-0.5">
+                        {(r.reviewedBy || r.reviewedAt) && (
+                          <div>
+                            {r.reviewedBy ? reviewerName(r.reviewedBy) : "Unknown reviewer"}
+                            {r.reviewedAt && (
+                              <span title={r.reviewedAt}> on {formatDate(r.reviewedAt)}</span>
+                            )}
+                          </div>
+                        )}
+                        {r.reviewReason && <div className="italic">&ldquo;{r.reviewReason}&rdquo;</div>}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground/60">Not yet decided</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex justify-end gap-1">
-                      {canApprove && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Approve ${r.packageName}`}
-                          onClick={() => setActionTarget({ review: r, action: "approve" })}
-                        >
-                          <Check className="size-4 text-emerald-600" />
-                        </Button>
-                      )}
-                      {canReject && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Reject ${r.packageName}`}
-                          onClick={() => setActionTarget({ review: r, action: "reject" })}
-                        >
-                          <X className="size-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
+                    <Select
+                      value={r.status}
+                      onValueChange={(v) => {
+                        if (v === r.status) return;
+                        setReason("");
+                        setTransition({ review: r, target: v as AgeGateStatus });
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`w-36 capitalize ${STATUS_TRIGGER_CLASS[r.status] ?? ""}`}
+                        aria-label={`Status for ${r.packageName}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AGE_GATE_STATUSES.map((s) => (
+                          <SelectItem
+                            key={s}
+                            value={s}
+                            className="capitalize"
+                            // Without the reopen endpoint these transitions
+                            // cannot even start, so they are shown unavailable
+                            // rather than offered and then failed.
+                            disabled={!reopenSupported && needsReopen(r.status, s)}
+                          >
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </td>
                 </tr>
               ))}
@@ -245,35 +377,62 @@ export default function AgeGatePage() {
         </div>
       )}
 
-      <Dialog open={actionTarget !== null} onOpenChange={(o) => { if (!o) closeDialog(); }}>
+      <Dialog open={transition !== null} onOpenChange={(o) => { if (!o) closeDialog(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionTarget?.action === "approve" ? "Approve" : "Reject"} {actionTarget?.review.packageName}@{actionTarget?.review.packageVersion}
+              {transition?.target === "approved" && "Approve "}
+              {transition?.target === "rejected" && "Reject "}
+              {transition?.target === "pending" && "Return "}
+              {transition?.review.packageName}@{transition?.review.packageVersion}
+              {transition?.target === "pending" && " to pending"}
             </DialogTitle>
             <DialogDescription>
-              A reason is recorded in the audit log for this decision.
+              {transition ? describeTransition(transition.review.status, transition.target) : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <Input
-              placeholder="Reason (optional)"
+
+          {transition?.target === "approved" && (
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertDescription>
+                Confirm you mean to release {transition.review.packageName}@
+                {transition.review.packageVersion} into the estate.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-1 py-2">
+            <Textarea
+              placeholder={reasonRequired ? "Reason (required)" : "Reason (optional)"}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               aria-label="Reason"
+              aria-describedby="age-gate-reason-help"
+              aria-invalid={reasonMissing}
             />
+            <p id="age-gate-reason-help" className="text-xs text-muted-foreground">
+              {reasonRequired
+                ? "Required. Reversing a recorded decision needs a reason for the audit log."
+                : "Recorded in the audit log with this decision."}
+            </p>
           </div>
+
           <DialogFooter>
             <Button variant="ghost" onClick={closeDialog}>Cancel</Button>
             <Button
-              variant={actionTarget?.action === "reject" ? "destructive" : "default"}
-              disabled={actionMutation.isPending}
+              variant={transition?.target === "rejected" ? "destructive" : "default"}
+              disabled={changeStatusMutation.isPending || reasonMissing}
               onClick={() =>
-                actionTarget &&
-                actionMutation.mutate({ review: actionTarget.review, action: actionTarget.action, why: reason.trim() })
+                transition &&
+                changeStatusMutation.mutate({
+                  review: transition.review,
+                  target: transition.target,
+                  why: reason.trim(),
+                })
               }
             >
-              {actionMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {changeStatusMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
               Confirm
             </Button>
           </DialogFooter>

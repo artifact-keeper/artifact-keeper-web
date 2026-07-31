@@ -29,11 +29,16 @@ let reviewsData: { data: unknown; isLoading?: boolean; isError?: boolean; error?
   isLoading: false,
 };
 let repoConfigsData: unknown = {};
+let usersData: unknown = [];
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: { queryKey: unknown[]; queryFn: () => unknown; enabled?: boolean }) => {
     const key = (opts.queryKey as string[])[0];
     if (key === "age-gate-repo-configs") return { data: repoConfigsData };
+    if (key === "age-gate-reviewers") {
+      if (opts.enabled !== false) opts.queryFn();
+      return { data: usersData };
+    }
     if (opts.enabled !== false) {
       try {
         opts.queryFn();
@@ -53,23 +58,72 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 const mockToastSuccess = vi.fn();
-vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSuccess(...a), error: vi.fn() } }));
+const mockToastError = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...a: unknown[]) => mockToastSuccess(...a),
+    error: (...a: unknown[]) => mockToastError(...a),
+  },
+}));
+
+/**
+ * Reopen capability, as the page sees it. Hoisted so the `vi.mock` factory
+ * below can close over it; set before render to exercise an older backend.
+ */
+const capability = vi.hoisted(() => ({ reopenSupported: true }));
 
 const api = {
   listReviews: vi.fn(),
   getReview: vi.fn(),
   approveReview: vi.fn(),
   rejectReview: vi.fn(),
+  reopenReview: vi.fn(),
+  changeReviewStatus: vi.fn(),
   getRepoConfigs: vi.fn(),
 };
-vi.mock("@/lib/api/age-gate", () => ({
+vi.mock("@/lib/api/age-gate", () => {
+  // Declared inside the factory (vi.mock is hoisted) and re-imported below, so
+  // the page's `instanceof` check and the tests share one class. Constructor
+  // signature matches the real one.
+  class AgeGatePartialTransitionError extends Error {
+    constructor(
+      readonly currentStatus: string,
+      readonly intendedStatus: string,
+      readonly failure: unknown,
+    ) {
+      super(
+        `The review was reopened but could not be ${intendedStatus}. It is now ${currentStatus}.`,
+      );
+      this.name = "AgeGatePartialTransitionError";
+    }
+  }
+  class ReopenUnsupportedError extends Error {
+    constructor() {
+      super("This server does not support reopening a decided age gate review.");
+      this.name = "ReopenUnsupportedError";
+    }
+  }
+  return {
+  AGE_GATE_STATUSES: ["pending", "approved", "rejected"],
+  AgeGatePartialTransitionError,
+  ReopenUnsupportedError,
+  isReopenSupported: () => capability.reopenSupported,
+  subscribeReopenSupport: () => () => {},
   default: {
     listReviews: (...a: unknown[]) => api.listReviews(...a),
     getReview: (...a: unknown[]) => api.getReview(...a),
     approveReview: (...a: unknown[]) => api.approveReview(...a),
     rejectReview: (...a: unknown[]) => api.rejectReview(...a),
+    reopenReview: (...a: unknown[]) => api.reopenReview(...a),
+    changeReviewStatus: (...a: unknown[]) => api.changeReviewStatus(...a),
     getRepoConfigs: (...a: unknown[]) => api.getRepoConfigs(...a),
   },
+  };
+});
+
+const mockListUsers = vi.fn();
+vi.mock("@/lib/api/admin", () => ({
+  adminApi: { listUsers: (...a: unknown[]) => mockListUsers(...a) },
 }));
 
 let isAdmin = true;
@@ -80,7 +134,7 @@ vi.mock("@/providers/auth-provider", () => ({
 // Native <select> that forwards aria-label so tests can target each one.
 vi.mock("@/components/ui/select", () => ({
   Select: ({ value, onValueChange, children }: { value?: string; onValueChange?: (v: string) => void; children: React.ReactNode }) => {
-    const items: Array<{ value: string; label: string }> = [];
+    const items: Array<{ value: string; label: string; disabled?: boolean }> = [];
     let ariaLabel = "";
     React.Children.forEach(children, (child) => {
       if (!React.isValidElement(child)) return;
@@ -88,15 +142,15 @@ vi.mock("@/components/ui/select", () => ({
       if (el.props["aria-label"]) ariaLabel = el.props["aria-label"];
       React.Children.forEach(el.props.children, (sub) => {
         if (React.isValidElement(sub) && (sub.props as Record<string, unknown>).value) {
-          const p = sub.props as { value: string; children: React.ReactNode };
-          items.push({ value: p.value, label: String(p.children) });
+          const p = sub.props as { value: string; children: React.ReactNode; disabled?: boolean };
+          items.push({ value: p.value, label: String(p.children), disabled: p.disabled });
         }
       });
     });
     return (
       <select aria-label={ariaLabel} value={value} onChange={(e) => onValueChange?.(e.target.value)}>
         {items.map((i) => (
-          <option key={i.value} value={i.value}>{i.label}</option>
+          <option key={i.value} value={i.value} disabled={i.disabled}>{i.label}</option>
         ))}
       </select>
     );
@@ -107,6 +161,7 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
 }));
 
+import { AgeGatePartialTransitionError, ReopenUnsupportedError } from "@/lib/api/age-gate";
 import AgeGatePage from "./page";
 
 const REVIEW = {
@@ -125,7 +180,15 @@ const REVIEW = {
   reviewedBy: null,
 };
 
-const approveMutate = () => mutateFns[mutateFns.length - 1];
+const APPROVED_REVIEW = {
+  ...REVIEW,
+  status: "approved",
+  reviewReason: "vendor confirmed the release",
+  reviewedAt: "2026-07-21T00:00:00Z",
+  reviewedBy: "11111111-2222-3333-4444-555555555555",
+};
+
+const lastMutate = () => mutateFns[mutateFns.length - 1];
 
 beforeEach(() => {
   mutationConfigs.length = 0;
@@ -134,6 +197,8 @@ beforeEach(() => {
   isAdmin = true;
   reviewsData = { data: [], isLoading: false };
   repoConfigsData = {};
+  usersData = [];
+  capability.reopenSupported = true;
 });
 afterEach(() => cleanup());
 
@@ -147,13 +212,19 @@ describe("AgeGatePage", () => {
   it("shows the empty queue by default (pending)", () => {
     render(<AgeGatePage />);
     expect(screen.getByText(/No pending releases/i)).toBeInTheDocument();
-    expect(api.listReviews).toHaveBeenCalledWith({ status: "pending" });
+    expect(api.listReviews).toHaveBeenCalledWith({ statuses: ["pending"] });
   });
 
   it("shows an error state with retry", () => {
     reviewsData = { data: undefined, isLoading: false, isError: true, error: new Error("x") };
     render(<AgeGatePage />);
     expect(screen.getByText(/Couldn't load the age gate queue/i)).toBeInTheDocument();
+  });
+
+  it("shows a loading skeleton while the queue is fetching", () => {
+    reviewsData = { data: undefined, isLoading: true };
+    render(<AgeGatePage />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 
   it("lists held releases with age-at-request and repository", () => {
@@ -165,56 +236,235 @@ describe("AgeGatePage", () => {
     expect(screen.getByText(/5d old \(min 14d\)/)).toBeInTheDocument();
   });
 
-  it("approves a held release with a reason", async () => {
+  it("adds a status to the server-side filter when its checkbox is ticked", async () => {
     const user = userEvent.setup();
-    reviewsData = { data: [REVIEW], isLoading: false };
     render(<AgeGatePage />);
-    await user.click(screen.getByRole("button", { name: /Approve leftpad-clone/i }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText("Reason"), "verified safe");
-    await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
-    expect(approveMutate()).toHaveBeenCalledWith({ review: REVIEW, action: "approve", why: "verified safe" });
+    await user.click(screen.getByLabelText("Show approved"));
+    expect(api.listReviews).toHaveBeenLastCalledWith({ statuses: ["pending", "approved"] });
   });
 
-  it("rejects a held release without requiring a reason", async () => {
+  it("makes no request and says so when every status is unticked", async () => {
     const user = userEvent.setup();
-    reviewsData = { data: [REVIEW], isLoading: false };
     render(<AgeGatePage />);
-    await user.click(screen.getByRole("button", { name: /Reject leftpad-clone/i }));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
-    expect(approveMutate()).toHaveBeenCalledWith({ review: REVIEW, action: "reject", why: "" });
+    await user.click(screen.getByLabelText("Show pending"));
+    expect(screen.getByText(/Select at least one status/i)).toBeInTheDocument();
+    expect(api.listReviews).toHaveBeenCalledTimes(1); // only the initial pending fetch
   });
 
-  it("clears the reason when the dialog is cancelled", async () => {
-    const user = userEvent.setup();
-    reviewsData = { data: [REVIEW], isLoading: false };
-    render(<AgeGatePage />);
-    await user.click(screen.getByRole("button", { name: /Approve leftpad-clone/i }));
-    let dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText("Reason"), "typed");
-    await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
-    await user.click(screen.getByRole("button", { name: /Approve leftpad-clone/i }));
-    dialog = await screen.findByRole("dialog");
-    expect((within(dialog).getByLabelText("Reason") as HTMLInputElement).value).toBe("");
+  describe("decision metadata", () => {
+    it("shows the recorded reason, the reviewer's name and the decision date", () => {
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      usersData = [
+        { id: "11111111-2222-3333-4444-555555555555", username: "sam", display_name: "Sam Reviewer" },
+      ];
+      render(<AgeGatePage />);
+      expect(screen.getByText(/vendor confirmed the release/)).toBeInTheDocument();
+      expect(screen.getByText(/Sam Reviewer/)).toBeInTheDocument();
+      // Rendered in the viewer's local zone, so assert the shape and keep the
+      // exact instant on the title attribute.
+      expect(screen.getByTitle("2026-07-21T00:00:00Z")).toHaveTextContent(/on Jul \d+, 2026/);
+      expect(mockListUsers).toHaveBeenCalled();
+    });
+
+    it("falls back to a shortened user id when the reviewer is not in the user list", () => {
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      usersData = [];
+      render(<AgeGatePage />);
+      expect(screen.getByText(/11111111…/)).toBeInTheDocument();
+    });
+
+    it("marks a pending review as not yet decided", () => {
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.getByText(/Not yet decided/i)).toBeInTheDocument();
+      expect(mockListUsers).not.toHaveBeenCalled();
+    });
   });
 
-  it("hides the Approve action on the approved queue and Reject on the rejected queue", async () => {
-    const user = userEvent.setup();
-    reviewsData = { data: [{ ...REVIEW, status: "approved" }], isLoading: false };
-    render(<AgeGatePage />);
-    await user.selectOptions(screen.getByLabelText("Status filter"), "approved");
-    expect(screen.queryByRole("button", { name: /Approve leftpad-clone/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Reject leftpad-clone/i })).toBeInTheDocument();
+  describe("status control", () => {
+    it("confirms before approving, spelling out that the version gets released", async () => {
+      const user = userEvent.setup();
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "approved");
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/releases the version to any client/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Confirm you mean to release/i)).toBeInTheDocument();
+      await user.type(within(dialog).getByLabelText("Reason"), "verified safe");
+      await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
+      expect(lastMutate()).toHaveBeenCalledWith({ review: REVIEW, target: "approved", why: "verified safe" });
+    });
+
+    it("lets a pending review be rejected without a reason", async () => {
+      const user = userEvent.setup();
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "rejected");
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
+      expect(lastMutate()).toHaveBeenCalledWith({ review: REVIEW, target: "rejected", why: "" });
+    });
+
+    it("requires a reason to reverse a recorded decision", async () => {
+      const user = userEvent.setup();
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "pending");
+      const dialog = await screen.findByRole("dialog");
+      const confirm = within(dialog).getByRole("button", { name: /confirm/i });
+      expect(confirm).toBeDisabled();
+      await user.type(within(dialog).getByLabelText("Reason"), "   ");
+      expect(confirm).toBeDisabled();
+      await user.type(within(dialog).getByLabelText("Reason"), "approved the wrong package");
+      expect(confirm).toBeEnabled();
+      await user.click(confirm);
+      expect(lastMutate()).toHaveBeenCalledWith({
+        review: APPROVED_REVIEW,
+        target: "pending",
+        why: "approved the wrong package",
+      });
+    });
+
+    it("says a decided-to-decided change runs in two steps and can stop at pending", async () => {
+      const user = userEvent.setup();
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "rejected");
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/two steps/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/left pending, not approved/i)).toBeInTheDocument();
+    });
+
+    it("clears the reason when the dialog is cancelled", async () => {
+      const user = userEvent.setup();
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      const control = screen.getByLabelText("Status for leftpad-clone");
+      await user.selectOptions(control, "approved");
+      let dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Reason"), "typed");
+      await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
+      await user.selectOptions(control, "approved");
+      dialog = await screen.findByRole("dialog");
+      expect((within(dialog).getByLabelText("Reason") as HTMLTextAreaElement).value).toBe("");
+    });
   });
 
-  it("mutation callbacks invalidate and toast on success, and call the API on submit", () => {
-    render(<AgeGatePage />);
-    const [action] = mutationConfigs;
-    action.mutationFn({ review: REVIEW, action: "approve", why: "ok" });
-    expect(api.approveReview).toHaveBeenCalledWith("rv1", "ok");
-    action.onSuccess?.(REVIEW, { review: REVIEW, action: "approve" });
-    expect(mockInvalidate).toHaveBeenCalled();
-    expect(mockToastSuccess).toHaveBeenCalled();
+  describe("backend without the reopen endpoint", () => {
+    const optionsOf = (label: string) =>
+      Object.fromEntries(
+        Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => [
+          o.value,
+          o.disabled,
+        ]),
+      );
+
+    it("says nothing about the capability when the endpoint is there", () => {
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.queryByText(/does not support reopening/i)).not.toBeInTheDocument();
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: false,
+        approved: false,
+        rejected: false,
+      });
+    });
+
+    it("explains the gap and offers no reopen-dependent transition on a decided review", () => {
+      capability.reopenSupported = false;
+      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.getByText(/does not support reopening a decided review/i)).toBeInTheDocument();
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: true, // needs reopen
+        approved: false, // the status it is already in
+        rejected: true, // needs reopen, then reject
+      });
+    });
+
+    it("still offers approve and reject on a pending review", () => {
+      capability.reopenSupported = false;
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      expect(optionsOf("Status for leftpad-clone")).toEqual({
+        pending: false,
+        approved: false,
+        rejected: false,
+      });
+    });
+
+    it("submits an approval normally even though reopen is unavailable", async () => {
+      const user = userEvent.setup();
+      capability.reopenSupported = false;
+      reviewsData = { data: [REVIEW], isLoading: false };
+      render(<AgeGatePage />);
+      await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "approved");
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: /confirm/i }));
+      expect(lastMutate()).toHaveBeenCalledWith({ review: REVIEW, target: "approved", why: "" });
+    });
+
+    it("surfaces the capability message rather than a raw 404", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      change.onError?.(new ReopenUnsupportedError(), {
+        review: APPROVED_REVIEW,
+        target: "rejected",
+        why: "cve landed",
+      });
+      expect(mockToastError).toHaveBeenCalledWith(
+        "This server does not support reopening a decided age gate review.",
+      );
+      expect(mockInvalidate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("mutation callbacks", () => {
+    it("routes every transition through the composite status change", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      change.mutationFn({ review: APPROVED_REVIEW, target: "rejected", why: "cve landed" });
+      expect(api.changeReviewStatus).toHaveBeenCalledWith(APPROVED_REVIEW, "rejected", "cve landed");
+    });
+
+    it("invalidates and toasts the completed transition on success", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      change.onSuccess?.(REVIEW, { review: REVIEW, target: "pending" });
+      expect(mockInvalidate).toHaveBeenCalled();
+      expect(mockToastSuccess).toHaveBeenCalledWith("Returned to pending leftpad-clone@0.0.1");
+    });
+
+    it("reports a half-completed reopen-then-decide as pending, and refetches", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      const partial = new AgeGatePartialTransitionError("pending", "rejected", {
+        status: 500,
+        message: "boom",
+      });
+      change.onError?.(partial, { review: APPROVED_REVIEW, target: "rejected", why: "cve landed" });
+
+      // The review really did move, so the table must be refetched rather than
+      // left showing the approved state the operator started from.
+      expect(mockInvalidate).toHaveBeenCalled();
+      const message = mockToastError.mock.calls[0][0] as string;
+      expect(message).toMatch(/leftpad-clone@0\.0\.1/);
+      expect(message).toMatch(/reopened but could not be rejected/i);
+      expect(message).toMatch(/now pending/i);
+      expect(message).toMatch(/boom/);
+      expect(mockToastSuccess).not.toHaveBeenCalled();
+    });
+
+    it("leaves the queue alone when a transition fails outright", () => {
+      render(<AgeGatePage />);
+      const [change] = mutationConfigs;
+      change.onError?.(new Error("API error 403: forbidden"), {
+        review: APPROVED_REVIEW,
+        target: "rejected",
+        why: "cve landed",
+      });
+      expect(mockInvalidate).not.toHaveBeenCalled();
+      expect(mockToastError).toHaveBeenCalledWith("API error 403: forbidden");
+    });
   });
 });
