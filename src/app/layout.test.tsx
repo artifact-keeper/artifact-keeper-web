@@ -15,26 +15,29 @@ vi.mock('next/font/google', () => ({
   Geist_Mono: () => ({ variable: '--font-geist-mono' }),
 }));
 
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'test-nonce' }),
+}));
+
 describe('RootLayout', () => {
   it('renders the Toaster component', async () => {
     // Dynamic import after mocks are set up
     const { default: RootLayout } = await import('./layout');
-    const { container } = render(
-      <RootLayout>
-        <div>test content</div>
-      </RootLayout>
-    );
+    // RootLayout is an async Server Component — await it before rendering.
+    const ui = await RootLayout({
+      children: <div>test content</div>,
+    });
+    const { container } = render(ui);
 
     expect(container.querySelector('[data-testid="toaster"]')).toBeTruthy();
   });
 
   it('renders children inside Providers', async () => {
     const { default: RootLayout } = await import('./layout');
-    const { getByText } = render(
-      <RootLayout>
-        <div>hello world</div>
-      </RootLayout>
-    );
+    const ui = await RootLayout({
+      children: <div>hello world</div>,
+    });
+    const { getByText } = render(ui);
 
     expect(getByText('hello world')).toBeTruthy();
   });

@@ -50,10 +50,13 @@ const nextConfig: NextConfig = {
   },
   // API proxy AND security headers are handled by src/middleware.ts at runtime
   // (reads BACKEND_URL and AK_ENFORCE_HTTPS env vars on each request) so that
-  // Docker containers can be configured without rebuilding. A next.config.ts
-  // `headers()` block would be serialized into the build output
-  // (routes-manifest.json), making AK_ENFORCE_HTTPS build-time-only — see
-  // https://github.com/artifact-keeper/artifact-keeper-web/issues/679 and
+  // Docker containers can be configured without rebuilding. The
+  // Content-Security-Policy additionally carries a per-request nonce, which a
+  // static `headers()` block could never produce — see
+  // https://github.com/artifact-keeper/artifact-keeper-web/issues/674.
+  // A next.config.ts `headers()` block would be serialized into the build
+  // output (routes-manifest.json), making AK_ENFORCE_HTTPS build-time-only —
+  // see https://github.com/artifact-keeper/artifact-keeper-web/issues/679 and
   // https://github.com/artifact-keeper/artifact-keeper-web/issues/56
 };
 
