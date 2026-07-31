@@ -151,17 +151,18 @@ test.describe('Lifecycle Page', () => {
     const repositoryPicker = dialog.getByRole('combobox', { name: 'Repository' });
     await expect(repositoryPicker).toHaveAccessibleName('Repository');
     await expect(repositoryPicker).toBeEnabled();
-    await repositoryPicker.focus();
-    await page.keyboard.press('Enter');
-    const repositorySearch = page.getByLabel('Search repositories');
-    await expect(repositorySearch).toHaveAccessibleName('Search repositories');
+    await repositoryPicker.click();
+    const repositorySearch = page.getByRole('combobox', {
+      name: 'Search repositories',
+    });
+    await expect(repositorySearch).toBeVisible();
     await repositorySearch.fill(repository!.key);
-    const repositoryOption = page
-      .locator('[data-slot="command-item"]')
-      .filter({ hasText: repository!.key });
+    const repositoryOption = page.getByRole('option', {
+      name: repository!.key,
+      exact: false,
+    });
     await expect(repositoryOption).toBeVisible();
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
+    await repositoryOption.click();
 
     await expect(repositoryPicker).toContainText(repository!.key);
     await dialog.getByRole('button', { name: /^create$/i }).click();
