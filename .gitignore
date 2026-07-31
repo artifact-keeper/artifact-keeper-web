@@ -52,3 +52,4 @@ e2e/tutorials/output/
 
 # Worktrees created by Claude Code agents
 .claude/worktrees/
+npm-ci.log

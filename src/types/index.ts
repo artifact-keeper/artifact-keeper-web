@@ -229,7 +229,17 @@ export interface Artifact {
   checksum_sha256: string;
   content_type: string;
   download_count: number;
-  is_quarantined?: boolean;
+  /**
+   * Quarantine state, carried by every row of the repository artifacts
+   * listing (artifact-keeper#2940) and absent everywhere else. All four keys
+   * travel together and are omitted rather than nulled on surfaces that do
+   * not load quarantine state, so `undefined` means "the server did not
+   * look" while `is_blocked: false` means "it looked and this is
+   * downloadable". Read them through `@/lib/quarantine` rather than testing
+   * them directly, so the two never collapse into one falsy check (#650).
+   */
+  is_blocked?: boolean;
+  quarantine_status?: string | null;
   quarantine_until?: string | null;
   quarantine_reason?: string | null;
   created_at: string;

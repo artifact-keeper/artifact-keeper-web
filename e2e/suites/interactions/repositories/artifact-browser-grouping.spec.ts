@@ -44,10 +44,15 @@ async function findRepoByFormat(
 async function gotoArtifactsTab(page: Page, repoKey: string): Promise<void> {
   await page.goto(`/repositories/${repoKey}`);
   await page.waitForLoadState('domcontentloaded');
-  // The Artifacts tab is the default tab on repo detail
-  await expect(
-    page.locator('[role="tablist"]').getByText(/artifacts/i).first(),
-  ).toBeVisible({ timeout: 10000 });
+  // Package-oriented formats (Maven/Gradle) now default to the Packages tab
+  // (#2793), so select the Artifacts tab explicitly rather than assuming it is
+  // the default. Clicking it is a no-op when it is already active.
+  const artifactsTab = page
+    .locator('[role="tablist"]')
+    .getByText(/artifacts/i)
+    .first();
+  await expect(artifactsTab).toBeVisible({ timeout: 10000 });
+  await artifactsTab.click();
 }
 
 test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {

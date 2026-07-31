@@ -47,8 +47,8 @@ vi.mock("@/components/ui/select", () => ({
 }));
 vi.mock("@/lib/constants/token", () => ({
   SCOPES: [
-    { value: "read", label: "Read" },
-    { value: "write", label: "Write" },
+    { value: "read:artifacts", label: "Read" },
+    { value: "write:artifacts", label: "Write" },
     { value: "admin", label: "Admin" },
   ],
   EXPIRY_OPTIONS: [
@@ -142,31 +142,31 @@ describe("TokenCreateForm", () => {
     const onScopesChange = vi.fn();
     render(
       <TokenCreateForm
-        {...defaultProps({ scopes: ["write"], onScopesChange })}
+        {...defaultProps({ scopes: ["write:artifacts"], onScopesChange })}
       />
     );
     const checkboxes = screen.getAllByRole("checkbox");
-    // First checkbox is "read" scope
+    // First checkbox is "read:artifacts" scope
     fireEvent.click(checkboxes[0]);
-    expect(onScopesChange).toHaveBeenCalledWith(["write", "read"]);
+    expect(onScopesChange).toHaveBeenCalledWith(["write:artifacts", "read:artifacts"]);
   });
 
   it("toggles scope: removes scope when present", () => {
     const onScopesChange = vi.fn();
     render(
       <TokenCreateForm
-        {...defaultProps({ scopes: ["read", "write"], onScopesChange })}
+        {...defaultProps({ scopes: ["read:artifacts", "write:artifacts"], onScopesChange })}
       />
     );
     const checkboxes = screen.getAllByRole("checkbox");
-    // First checkbox is "read" scope, which is already in scopes
+    // First checkbox is "read:artifacts" scope, which is already in scopes
     fireEvent.click(checkboxes[0]);
-    expect(onScopesChange).toHaveBeenCalledWith(["write"]);
+    expect(onScopesChange).toHaveBeenCalledWith(["write:artifacts"]);
   });
 
   it("checks the correct scope checkboxes based on scopes prop", () => {
     render(
-      <TokenCreateForm {...defaultProps({ scopes: ["read", "admin"] })} />
+      <TokenCreateForm {...defaultProps({ scopes: ["read:artifacts", "admin"] })} />
     );
     const checkboxes = screen.getAllByRole("checkbox");
     // read (index 0) should be checked

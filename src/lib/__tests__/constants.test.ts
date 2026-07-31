@@ -6,7 +6,7 @@ describe("SCOPES", () => {
     expect(SCOPES).toHaveLength(4);
     const values = SCOPES.map((s) => s.value);
     const labels = SCOPES.map((s) => s.label);
-    expect(values).toEqual(expect.arrayContaining(["read", "write", "delete", "admin"]));
+    expect(values).toEqual(expect.arrayContaining(["read:artifacts", "write:artifacts", "delete:artifacts", "admin"]));
     expect(labels).toEqual(expect.arrayContaining(["Read", "Write", "Delete", "Admin"]));
     for (const scope of SCOPES) {
       expect(typeof scope.value).toBe("string");

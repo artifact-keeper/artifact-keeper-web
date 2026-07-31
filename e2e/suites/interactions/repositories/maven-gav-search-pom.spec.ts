@@ -119,7 +119,9 @@ test.describe('Maven GAV search and POM', () => {
   });
 
   test('POM file is listed and linked in the grouped Maven browser (#442)', async ({ page }) => {
-    await page.goto(`/repositories/${REPO_KEY}`);
+    // `?view=grouped` pins the Artifacts tab (Maven now defaults to Packages,
+    // #2793) and opens its grouped browser directly.
+    await page.goto(`/repositories/${REPO_KEY}?view=grouped`);
     await page.waitForLoadState('domcontentloaded');
 
     // The grouped Maven view renders <MavenComponentList>; find our GAV row.
