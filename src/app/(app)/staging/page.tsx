@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,6 +38,7 @@ import { StagingListItem } from "./_components/staging-list-item";
 import { StagingDetailPanel } from "./_components/staging-detail-panel";
 
 export default function StagingPage() {
+  useDocumentTitle("Staging");
   const router = useRouter();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();

@@ -2,6 +2,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { axe, toHaveNoViolations } from "jest-axe";
+
+expect.extend(toHaveNoViolations);
 
 vi.mock("lucide-react", () => {
   const stub = (name: string) => {
@@ -134,6 +137,15 @@ describe("DataTable", () => {
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument();
+  });
+
+  // ---- Accessibility ----
+
+  it("has no axe accessibility violations", async () => {
+    const { container } = render(<DataTable columns={columns} data={testData} />);
+
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 
   // ---- Sorting ----

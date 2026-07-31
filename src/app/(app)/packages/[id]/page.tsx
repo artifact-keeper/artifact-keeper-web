@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -137,6 +139,8 @@ export default function PackageDetailPage() {
     queryFn: () => packagesApi.get(packageId),
     enabled: !!packageId,
   });
+
+  useDocumentTitle(pkg?.name ?? "Package Details");
 
   // Fetch versions
   const { data: versions, isLoading: versionsLoading } = useQuery({

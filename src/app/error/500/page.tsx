@@ -1,9 +1,12 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import Link from "next/link";
 import { AlertTriangle, Home, RefreshCw } from "lucide-react";
 
 export default function ServerErrorPage() {
+  useDocumentTitle("Server Error");
   return (
     <div className="flex min-h-svh flex-col items-center justify-center px-6">
       <div className="flex flex-col items-center text-center max-w-md">

@@ -12,6 +12,7 @@ import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRepositories } from "@/hooks/use-repositories";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
 
 export function RepositoriesContent() {
+  useDocumentTitle("Repositories");
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();

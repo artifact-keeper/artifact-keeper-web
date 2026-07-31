@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -444,6 +446,7 @@ function LoginContent() {
 // wrap the inner content so /login can be statically generated. The fallback
 // is a brief skeleton matching the eventual loading spinner inside the form.
 export default function LoginPage() {
+  useDocumentTitle("Sign In");
   return (
     <Suspense
       fallback={

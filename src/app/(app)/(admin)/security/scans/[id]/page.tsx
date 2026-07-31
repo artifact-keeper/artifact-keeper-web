@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -99,6 +101,7 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export default function SecurityScanDetailPage() {
+  useDocumentTitle("Scan Details");
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
