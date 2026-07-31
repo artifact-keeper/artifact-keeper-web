@@ -21,19 +21,23 @@ interface RepoListItemProps {
 }
 
 export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount }: RepoListItemProps) {
+  // #672: the row's primary action is a real <button> that is a SIBLING of the
+  // actions dropdown trigger — never an ancestor — so no interactive element
+  // nests inside another and the row's accessible name stays clean (it no
+  // longer concatenates the "Repository actions" label).
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(repo)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(repo); }}
       className={cn(
-        "group w-full text-left px-3 py-2.5 border-l-2 border-transparent hover:bg-accent/50 transition-colors cursor-pointer",
+        "group flex items-start w-full border-l-2 border-transparent hover:bg-accent/50 transition-colors",
         isSelected && "bg-accent border-l-primary"
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={() => onSelect(repo)}
+        className="flex-1 min-w-0 text-left px-3 py-2.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <div className="flex items-start gap-2 min-w-0">
           <Package className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
@@ -70,35 +74,35 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
             )}
           </div>
         </div>
-        {(onEdit || onDelete) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-                aria-label={`Repository actions for ${repo.name}`}
-              >
-                <Settings className="size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(repo); }}>
-                  <Pencil className="size-3.5 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-              )}
-              {onDelete && (
-                <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(repo); }}>
-                  <Trash2 className="size-3.5 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      </button>
+      {(onEdit || onDelete) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="shrink-0 mt-2.5 mr-3 text-muted-foreground hover:text-foreground"
+              aria-label={`Repository actions for ${repo.name}`}
+            >
+              <Settings className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {onEdit && (
+              <DropdownMenuItem onClick={() => onEdit(repo)}>
+                <Pencil className="size-3.5 mr-2" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem className="text-destructive" onClick={() => onDelete(repo)}>
+                <Trash2 className="size-3.5 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
