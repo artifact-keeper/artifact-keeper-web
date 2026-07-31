@@ -286,7 +286,13 @@ export const repositoriesApi = {
       npm_allowed_scopes: input.npm_allowed_scopes,
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
-    };
+      // SDK 1.7.0 generates `curation_default_action` as a *required* field on
+      // the PATCH `UpdateRepositoryRequest` type, but this endpoint treats every
+      // field as optional (omit = leave unchanged) and the repository update
+      // dialog does not edit curation policy. Intentionally omit it from the
+      // wire so update behavior is unchanged; the cast satisfies the
+      // generated-required field without sending a spurious value.
+    } as SdkUpdateRepositoryRequest;
     const { data, error } = await updateRepository({ path: { key }, body });
     if (error) throw error;
     return adaptRepository(assertData(data, 'repositoriesApi.update'));
