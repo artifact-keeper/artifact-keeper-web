@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -11,11 +11,14 @@ import {
   Trash2,
   RefreshCw,
   CheckCircle2,
+  Check,
+  ChevronsUpDown,
   XCircle,
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import lifecycleApi from "@/lib/api/lifecycle";
+import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
@@ -23,7 +26,11 @@ import type {
   CreateLifecyclePolicyRequest,
   PolicyExecutionResult,
 } from "@/types/lifecycle";
-import { POLICY_TYPE_LABELS, type PolicyType } from "@/types/lifecycle";
+import {
+  POLICY_TYPE_LABELS,
+  policyTypeRequiresRepositoryId,
+  type PolicyType,
+} from "@/types/lifecycle";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
@@ -65,6 +72,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, {
@@ -99,12 +119,51 @@ export default function LifecyclePage() {
   const [formDescription, setFormDescription] = useState("");
   const [formType, setFormType] = useState<string>("max_age_days");
   const [formConfig, setFormConfig] = useState('{ "days": 90 }');
+  const [formRepositoryId, setFormRepositoryId] = useState("");
+  const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
+  const [repositorySearch, setRepositorySearch] = useState("");
+  const requiresRepositoryId = policyTypeRequiresRepositoryId(formType);
 
   const { data: policies, isLoading } = useQuery({
     queryKey: ["lifecycle-policies"],
     queryFn: () => lifecycleApi.list(),
     enabled: !!user?.is_admin,
   });
+
+  const {
+    data: repositoriesPage,
+    isLoading: isLoadingRepositories,
+    isError: repositoriesError,
+  } = useQuery({
+    queryKey: ["repositories", "lifecycle-policy-selector"],
+    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
+    enabled: !!user?.is_admin && createOpen && requiresRepositoryId,
+  });
+
+  const repositories = useMemo(
+    () => repositoriesPage?.items ?? [],
+    [repositoriesPage?.items]
+  );
+  const selectedRepository = useMemo(
+    () => repositories.find((repository) => repository.id === formRepositoryId),
+    [formRepositoryId, repositories]
+  );
+  const filteredRepositories = useMemo(() => {
+    const search = repositorySearch.trim().toLowerCase();
+    if (!search) return repositories;
+
+    return repositories.filter((repository) =>
+      [
+        repository.key,
+        repository.name,
+        repository.format,
+        repository.repo_type,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search)
+    );
+  }, [repositories, repositorySearch]);
 
   const createMutation = useMutation({
     mutationFn: (req: CreateLifecyclePolicyRequest) => lifecycleApi.create(req),
@@ -174,9 +233,17 @@ export default function LifecyclePage() {
     setFormDescription("");
     setFormType("max_age_days");
     setFormConfig('{ "days": 90 }');
+    setFormRepositoryId("");
+    setRepositoryPickerOpen(false);
+    setRepositorySearch("");
   }
 
   function handleCreate() {
+    if (requiresRepositoryId && !formRepositoryId) {
+      toast.error("Select a repository for this policy type");
+      return;
+    }
+
     let config: Record<string, unknown>;
     try {
       config = JSON.parse(formConfig);
@@ -189,6 +256,7 @@ export default function LifecyclePage() {
       description: formDescription || undefined,
       policy_type: formType,
       config,
+      repository_id: requiresRepositoryId ? formRepositoryId : undefined,
     });
   }
 
@@ -455,6 +523,11 @@ export default function LifecyclePage() {
                 onValueChange={(v) => {
                   setFormType(v);
                   setFormConfig(POLICY_CONFIG_HINTS[v] ?? "{}");
+                  if (!policyTypeRequiresRepositoryId(v)) {
+                    setFormRepositoryId("");
+                    setRepositoryPickerOpen(false);
+                    setRepositorySearch("");
+                  }
                 }}
               >
                 <SelectTrigger id="lifecycle-type">
@@ -469,6 +542,100 @@ export default function LifecyclePage() {
                 </SelectContent>
               </Select>
             </div>
+            {requiresRepositoryId && (
+              <div className="space-y-2">
+                <Label htmlFor="lifecycle-repository">Repository</Label>
+                <Popover
+                  open={repositoryPickerOpen}
+                  onOpenChange={(open) => {
+                    setRepositoryPickerOpen(open);
+                    if (!open) setRepositorySearch("");
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="lifecycle-repository"
+                      variant="outline"
+                      role="combobox"
+                      aria-label="Repository"
+                      aria-expanded={repositoryPickerOpen}
+                      className="w-full justify-between font-normal"
+                      disabled={isLoadingRepositories}
+                    >
+                      {isLoadingRepositories
+                        ? "Loading repositories..."
+                        : selectedRepository
+                          ? `${selectedRepository.key} (${selectedRepository.format}, ${selectedRepository.repo_type})`
+                          : "Select a repository"}
+                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                    align="start"
+                  >
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        aria-label="Search repositories"
+                        placeholder="Search repositories..."
+                        value={repositorySearch}
+                        onValueChange={setRepositorySearch}
+                      />
+                      <CommandList>
+                        {filteredRepositories.length === 0 && (
+                          <CommandEmpty>
+                            No repositories match your search.
+                          </CommandEmpty>
+                        )}
+                        {filteredRepositories.length > 0 && (
+                          <CommandGroup heading="Repositories">
+                            {filteredRepositories.map((repository) => (
+                              <CommandItem
+                                key={repository.id}
+                                value={repository.id}
+                                onSelect={() => {
+                                  setFormRepositoryId(repository.id);
+                                  setRepositoryPickerOpen(false);
+                                  setRepositorySearch("");
+                                }}
+                              >
+                                <Check
+                                  className={`size-4 ${
+                                    formRepositoryId === repository.id
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  }`}
+                                />
+                                <span className="min-w-0 flex-1 truncate">
+                                  {repository.key}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {repository.format}, {repository.repo_type}
+                                </span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Required for Max Versions and Size Quota policies.
+                </p>
+                {repositoriesError && (
+                  <p className="text-xs text-destructive">
+                    Couldn&apos;t load repositories. Close and reopen this dialog
+                    to retry.
+                  </p>
+                )}
+                {!isLoadingRepositories && !repositoriesError && repositories.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No repositories are available.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="lifecycle-config">Config (JSON)</Label>
               <Textarea
@@ -486,7 +653,12 @@ export default function LifecyclePage() {
             </Button>
             <Button
               onClick={handleCreate}
-              disabled={!formName || createMutation.isPending}
+              disabled={
+                !formName ||
+                createMutation.isPending ||
+                (requiresRepositoryId &&
+                  (!formRepositoryId || isLoadingRepositories))
+              }
             >
               {createMutation.isPending && (
                 <Loader2 className="size-4 mr-1.5 animate-spin" />
