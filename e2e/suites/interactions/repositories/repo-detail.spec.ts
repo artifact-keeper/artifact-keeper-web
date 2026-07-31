@@ -49,7 +49,7 @@ test.describe('Repository Detail Page', () => {
     expect(hasFormat).toBeTruthy();
   });
 
-  test('artifacts tab is default and shows artifacts or empty state', async ({ page }) => {
+  test('artifacts tab shows artifacts or empty state', async ({ page }) => {
     if (!repoKey) {
       const response = await page.request.get('/api/v1/repositories');
       if (response.ok()) {
@@ -65,9 +65,11 @@ test.describe('Repository Detail Page', () => {
     await page.goto(`/repositories/${repoKey}`);
     await page.waitForLoadState('domcontentloaded');
 
-    // Artifacts tab should be selected by default
+    // Select the Artifacts tab explicitly: package-oriented formats now default
+    // to the Packages tab (#2793), so we can't assume Artifacts is active.
     const artifactsTab = page.locator('[role="tablist"]').getByText(/artifacts/i);
     await expect(artifactsTab).toBeVisible({ timeout: 10000 });
+    await artifactsTab.first().click();
 
     // Should show either an artifacts table or an empty state message
     const hasTable = await page.locator('table').first().isVisible({ timeout: 5000 }).catch(() => false);
