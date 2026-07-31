@@ -713,6 +713,38 @@ describe("repositoriesApi routing rules", () => {
 // Release target (#260) + age policy (#265)
 // ---------------------------------------------------------------------------
 
+describe("repositoriesApi.getReleaseTarget", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("GETs the promotion release-target endpoint", async () => {
+    mockApiFetch.mockResolvedValue({
+      linked: true,
+      release_repository_key: "maven-release",
+      release_repository_id: "rel-1",
+    });
+    const result = await repositoriesApi.getReleaseTarget("staging-repo");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/promotion/repositories/staging-repo/release-target"
+    );
+    expect(result.release_repository_key).toBe("maven-release");
+  });
+
+  it("encodes the repo key", async () => {
+    mockApiFetch.mockResolvedValue({ linked: false, release_repository_key: null, release_repository_id: null });
+    await repositoriesApi.getReleaseTarget("a/b");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/promotion/repositories/a%2Fb/release-target"
+    );
+  });
+
+  it("propagates errors from apiFetch", async () => {
+    mockApiFetch.mockRejectedValue(new Error("release-target boom"));
+    await expect(repositoriesApi.getReleaseTarget("staging-repo")).rejects.toThrow(
+      "release-target boom"
+    );
+  });
+});
+
 describe("repositoriesApi.setReleaseTarget", () => {
   beforeEach(() => vi.clearAllMocks());
 
