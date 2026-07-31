@@ -9,7 +9,7 @@ import promotionRulesApi, {
   type PromotionRule,
   type CreatePromotionRuleRequest,
 } from "@/lib/api/promotion-rules";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -103,11 +103,10 @@ export default function PromotionRulesPage() {
     enabled: !!user?.is_admin,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-all"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!user?.is_admin,
-  });
+  const { data: repos } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin },
+  );
   const repoKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of repos?.items ?? []) map.set(r.id, r.key);

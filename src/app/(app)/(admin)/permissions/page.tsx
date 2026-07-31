@@ -14,7 +14,7 @@ import type {
   CreatePermissionRequest,
 } from "@/lib/api/permissions";
 import { groupsApi } from "@/lib/api/groups";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { adminApi } from "@/lib/api/admin";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -114,11 +114,10 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
-  const { data: repositoriesData } = useQuery({
-    queryKey: ["admin-repositories"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!currentUser?.is_admin,
-  });
+  const { data: repositoriesData } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!currentUser?.is_admin },
+  );
 
   const permissions = permissionsData?.items ?? [];
   const users = usersData ?? [];

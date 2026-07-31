@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Target, Info } from "lucide-react";
 import { toast } from "sonner";
 
+import { useRepositories } from "@/hooks/use-repositories";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { Repository } from "@/types";
@@ -46,18 +47,16 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
   // Only staging repositories support release-target linking.
   const isStaging = repository.repo_type === "staging";
 
-  const { data: repoList, isLoading: candidatesLoading } = useQuery({
-    queryKey: ["repositories", "release-target-candidates", repository.format],
+  const { data: repoList, isLoading: candidatesLoading } = useRepositories(
     // Pull local repos of the matching format. The backend enforces the same
     // format + local-type constraints, so this keeps the picker in sync.
-    queryFn: () =>
-      repositoriesApi.list({
-        repo_type: "local",
-        format: repository.format,
-        per_page: 200,
-      }),
-    enabled: isStaging,
-  });
+    {
+      repo_type: "local",
+      format: repository.format,
+      per_page: 200,
+    },
+    { enabled: isStaging },
+  );
 
   const candidates = useMemo(
     () => (repoList?.items ?? []).filter((r) => r.id !== repository.id),

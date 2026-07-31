@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   Code,
   Rocket,
@@ -10,7 +9,7 @@ import {
   Filter,
 } from "lucide-react";
 
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import type { Repository, RepositoryType } from "@/types";
 
 import { Button } from "@/components/ui/button";
@@ -962,10 +961,7 @@ export default function SetupPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
-  const { data: repositoriesData } = useQuery({
-    queryKey: ["repositories"],
-    queryFn: () => repositoriesApi.list({ per_page: 100 }),
-  });
+  const { data: repositoriesData } = useRepositories({ per_page: 100 });
 
   const repositories = repositoriesData?.items ?? [];
 

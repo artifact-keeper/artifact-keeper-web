@@ -75,6 +75,7 @@ vi.mock("@/lib/api/search", () => ({
 
 vi.mock("@/lib/query-keys", () => ({
   invalidateGroup: vi.fn(),
+  QUERY_KEYS: { REPOSITORIES: ["repositories"] },
 }));
 
 const mockUseAuth = vi.fn();

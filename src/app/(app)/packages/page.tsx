@@ -45,8 +45,8 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useRepositories } from "@/hooks/use-repositories";
 import { packagesApi } from "@/lib/api/packages";
-import { repositoriesApi } from "@/lib/api/repositories";
 import { getInstallCommand, FORMAT_OPTIONS } from "@/lib/package-utils";
 import { formatBytes as formatBytesUtil, formatDate, formatNumber, isSafeUrl } from "@/lib/utils";
 import type {
@@ -419,10 +419,7 @@ function PackagesContent() {
   const pageSize = 24;
 
   // Fetch repositories
-  const { data: reposData } = useQuery({
-    queryKey: ["repositories-for-packages"],
-    queryFn: () => repositoriesApi.list({ per_page: 100 }),
-  });
+  const { data: reposData } = useRepositories({ per_page: 100 });
   const repositories: Repository[] = reposData?.items ?? [];
 
   // Fetch packages

@@ -13,10 +13,11 @@ import type { QueryClient } from "@tanstack/react-query";
 export const QUERY_KEYS = {
   ADMIN_STATS: ["admin-stats"],
   RECENT_REPOS: ["recent-repositories"],
+  // Root of the single repository-list key family. All repository-list
+  // queries use param-scoped keys `["repositories", params]` (see
+  // repositoryListKey in src/hooks/use-repositories.ts), so prefix
+  // invalidation on this key catches every variant (#669).
   REPOSITORIES: ["repositories"],
-  REPOSITORIES_LIST: ["repositories-list"],
-  REPOSITORIES_FOR_SCAN: ["repositories-for-scan"],
-  REPOSITORIES_ALL: ["repositories-all"],
   QUALITY_HEALTH: ["quality-health-dashboard"],
   QUALITY_GATES: ["quality-gates"],
   ADMIN_USERS: ["admin-users"],
@@ -41,9 +42,6 @@ export const INVALIDATION_GROUPS: Record<string, readonly (readonly string[])[]>
   dashboard: [QUERY_KEYS.ADMIN_STATS, QUERY_KEYS.RECENT_REPOS],
   repositories: [
     QUERY_KEYS.REPOSITORIES,
-    QUERY_KEYS.REPOSITORIES_LIST,
-    QUERY_KEYS.REPOSITORIES_FOR_SCAN,
-    QUERY_KEYS.REPOSITORIES_ALL,
     QUERY_KEYS.RECENT_REPOS,
     QUERY_KEYS.QUALITY_HEALTH,
   ],

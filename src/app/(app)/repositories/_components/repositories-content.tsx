@@ -11,6 +11,7 @@ import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useRepositories } from "@/hooks/use-repositories";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,21 +77,11 @@ export function RepositoriesContent() {
   }>({ state: "idle" });
 
   // --- query ---
-  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
-    queryKey: [
-      "repositories",
-      formatFilter === "__all__" ? undefined : formatFilter,
-      typeFilter === "__all__" ? undefined : typeFilter,
-      page,
-      pageSize,
-    ],
-    queryFn: () =>
-      repositoriesApi.list({
-        per_page: pageSize,
-        page,
-        format: formatFilter === "__all__" ? undefined : formatFilter,
-        repo_type: typeFilter === "__all__" ? undefined : typeFilter,
-      }),
+  const { data, isLoading, isFetching, isError, error, refetch } = useRepositories({
+    per_page: pageSize,
+    page,
+    format: formatFilter === "__all__" ? undefined : formatFilter,
+    repo_type: typeFilter === "__all__" ? undefined : typeFilter,
   });
 
   // --- mutations ---

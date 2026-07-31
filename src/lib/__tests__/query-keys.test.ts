@@ -27,9 +27,6 @@ describe("QUERY_KEYS", () => {
     ADMIN_STATS: ["admin-stats"],
     RECENT_REPOS: ["recent-repositories"],
     REPOSITORIES: ["repositories"],
-    REPOSITORIES_LIST: ["repositories-list"],
-    REPOSITORIES_FOR_SCAN: ["repositories-for-scan"],
-    REPOSITORIES_ALL: ["repositories-all"],
     QUALITY_HEALTH: ["quality-health-dashboard"],
     QUALITY_GATES: ["quality-gates"],
     ADMIN_USERS: ["admin-users"],
@@ -43,8 +40,8 @@ describe("QUERY_KEYS", () => {
     PLUGINS: ["plugins"],
   };
 
-  it("has 17 key constants (#213)", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(17);
+  it("has 14 key constants (#213, #669)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(14);
   });
 
   it.each(Object.entries(expectedKeys))(
@@ -98,15 +95,23 @@ describe("INVALIDATION_GROUPS", () => {
     }
   });
 
-  it("repositories group contains all 6 repo-related keys", () => {
+  it("repositories group contains the repo key family root plus related keys (#669)", () => {
     const group = INVALIDATION_GROUPS.repositories;
-    expect(group).toHaveLength(6);
+    expect(group).toHaveLength(3);
     for (const key of [
-      ["repositories"], ["repositories-list"], ["repositories-for-scan"],
-      ["repositories-all"], ["recent-repositories"], ["quality-health-dashboard"],
+      ["repositories"], ["recent-repositories"], ["quality-health-dashboard"],
     ]) {
       expect(group).toContainEqual(key);
     }
+  });
+
+  it("repositories group invalidates by prefix, so param-scoped list keys are covered (#669)", () => {
+    // Every repository-list query uses ["repositories", params]; invalidating
+    // the ["repositories"] prefix matches all of them, so the group must not
+    // need per-variant entries.
+    const group = INVALIDATION_GROUPS.repositories;
+    expect(group).toContainEqual(["repositories"]);
+    expect(group.some((key) => key.length > 1 && key[0] === "repositories")).toBe(false);
   });
 
   it("every group value references existing QUERY_KEYS", () => {
@@ -205,9 +210,9 @@ describe("getKeysForEvent", () => {
 
   it("returns repository keys for repository.deleted", () => {
     const keys = getKeysForEvent("repository.deleted");
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(3);
     expect(keys).toContainEqual(["repositories"]);
-    expect(keys).toContainEqual(["repositories-list"]);
+    expect(keys).toContainEqual(["recent-repositories"]);
   });
 
   it("returns quality gate keys for quality_gate.updated", () => {
@@ -227,7 +232,7 @@ describe("getKeysForEvent", () => {
 
 describe("invalidateGroup", () => {
   it.each([
-    ["repositories", 6, [["repositories"], ["repositories-list"], ["repositories-for-scan"], ["repositories-all"], ["recent-repositories"], ["quality-health-dashboard"]]],
+    ["repositories", 3, [["repositories"], ["recent-repositories"], ["quality-health-dashboard"]]],
     ["dashboard", 2, [["admin-stats"], ["recent-repositories"]]],
     ["users", 2, [["admin-users"], ["admin-groups"]]],
     ["groups", 2, [["admin-groups"], ["admin-permissions"]]],
