@@ -1,6 +1,7 @@
 /**
- * Security response headers for every route (wired into `next.config.ts`'s
- * `async headers()`).
+ * Security response headers for every route (applied per-request from
+ * `src/middleware.ts`, so the HTTPS-gated headers below honor the
+ * `AK_ENFORCE_HTTPS` env var at container runtime, not just at build time).
  *
  * Two of these headers only make sense when the deployment actually terminates
  * TLS, and are actively harmful on a plain-HTTP deployment:
@@ -101,9 +102,9 @@ export function buildSecurityHeaders(httpsEnabled: boolean): SecurityHeader[] {
  * enable HSTS + `upgrade-insecure-requests`. Leave unset/false for plain-HTTP
  * deployments. Any other value is treated as false.
  *
- * NOTE: this is consumed from `next.config.ts` `headers()`, which Next.js
- * serializes into the build output, so the flag is read at BUILD time (e.g. the
- * Dockerfile `AK_ENFORCE_HTTPS` build arg), not container runtime.
+ * NOTE: this is consumed from `src/middleware.ts`, which runs per request, so
+ * the flag is read at container RUNTIME (e.g. `docker run -e
+ * AK_ENFORCE_HTTPS=true`), not baked into the image at build time. See #679.
  */
 export function isHttpsEnabled(
   env: Record<string, string | undefined> = process.env,

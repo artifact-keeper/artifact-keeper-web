@@ -46,15 +46,20 @@ re-enable `Strict-Transport-Security` and `upgrade-insecure-requests`. All other
 security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
 Permissions-Policy, and the rest of the CSP) are always emitted regardless.
 
-**Important:** Next.js bakes response headers into the build output, so
-`AK_ENFORCE_HTTPS` is read at **build time**, not container runtime. For the
-Docker image, pass it as a build arg:
+The flag is evaluated **at container runtime** — the headers are emitted by the
+middleware (`src/middleware.ts`), which reads the env var on every request, so
+no rebuild is needed. Set it on the running container:
 
 ```bash
-docker build --build-arg AK_ENFORCE_HTTPS=true -t artifact-keeper-web:tls .
+docker run -e AK_ENFORCE_HTTPS=true ... artifact-keeper-web
 ```
 
-Leave it unset to build the default plain-HTTP-safe image.
+or in the compose `environment:` block. The effective mode is logged once at
+server startup (`[security] AK_ENFORCE_HTTPS ...`) so you can confirm the
+container picked it up.
+
+For custom image builds, `--build-arg AK_ENFORCE_HTTPS=true` still works — it
+only sets the image's **default** value, which a runtime `-e` flag overrides.
 
 ### CSRF protection
 
