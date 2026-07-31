@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import {
   Tooltip,
   TooltipTrigger,
@@ -281,6 +282,11 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                 ))}
               </div>
             )}
+            <ListTruncationNotice
+              className="mt-3"
+              shown={allReposData?.items.length ?? 0}
+              total={allReposData?.pagination?.total ?? 0}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>

@@ -44,6 +44,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { CurationRulesManager } from "./_components/curation-rules-manager";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
@@ -218,6 +219,11 @@ export default function CurationPage() {
           </div>
         )}
       </div>
+
+      <ListTruncationNotice
+        shown={repos?.items.length ?? 0}
+        total={repos?.pagination?.total ?? 0}
+      />
 
       {!repoId && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">

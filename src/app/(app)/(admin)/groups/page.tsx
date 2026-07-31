@@ -53,6 +53,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- types --
 
@@ -340,6 +341,10 @@ export default function GroupsPage() {
           rowKey={(g) => g.id}
         />
       )}
+      <ListTruncationNotice
+        shown={groups.length}
+        total={groupsData?.pagination?.total ?? 0}
+      />
 
       {/* Create Group Dialog */}
       <Dialog
