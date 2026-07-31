@@ -104,12 +104,14 @@ test.describe('Repository - Edit and Actions', () => {
   });
 
   test('repository detail page has tab navigation with actions', async ({ page }) => {
-    // Click the first repository to navigate to its detail page
-    const repoLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
-    const hasLink = await repoLink.isVisible({ timeout: 10000 }).catch(() => false);
-    test.skip(!hasLink, 'No repository links visible');
+    // Click the first repository row to open its detail panel. Rows are
+    // <button> elements (not links) inside the divided list; scope to <main>
+    // so the skip-navigation link and sidebar nav can never match.
+    const repoRow = page.locator('main .divide-y button').first();
+    const hasRow = await repoRow.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!hasRow, 'No repository rows visible');
 
-    await repoLink.click();
+    await repoRow.click();
     await page.waitForLoadState('domcontentloaded');
     // Wait for initial data fetch and React renders to settle
     await page.waitForTimeout(5000);
