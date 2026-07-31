@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
+  CSRF_HEADER_NAME: "X-Requested-With",
+  CSRF_HEADER_VALUE: "XMLHttpRequest",
 }));
 
 const mockFetch = vi.fn();

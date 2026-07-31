@@ -1,4 +1,4 @@
-import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import { getActiveInstanceBaseUrl, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from '@/lib/sdk-client';
 
 /**
  * Throw if a successful SDK response had no body when the caller expects one.
@@ -68,7 +68,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const { headers: callerHeaders, ...rest } = init ?? {};
 
   // Build headers with defaults first so caller values take precedence.
-  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+  });
   const incoming = new Headers(callerHeaders);
   incoming.forEach((value, key) => {
     headers.set(key, value);

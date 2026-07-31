@@ -12,7 +12,7 @@ import type {
   ChunkResponse,
   CompleteResponse,
 } from '@artifact-keeper/sdk';
-import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import { getActiveInstanceBaseUrl, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from '@/lib/sdk-client';
 import { assertData } from '@/lib/api/fetch';
 
 // --- Re-export SDK types under the names the rest of the codebase expects ---
@@ -90,6 +90,7 @@ export async function uploadChunk(
     headers: {
       'Content-Type': 'application/octet-stream',
       'Content-Range': `bytes ${start}-${end - 1}/${total}`,
+      [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
     },
     body: data,
   });
