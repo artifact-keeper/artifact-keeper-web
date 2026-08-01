@@ -262,6 +262,133 @@ describe("buildAuditExportFilename", () => {
     expect(buildAuditExportFilename("json", at)).toBe(
       "audit-log-2026-07-19T12-34-56-789Z.json"
     );
+    expect(buildAuditExportFilename("ndjson", at)).toBe(
+      "audit-log-2026-07-19T12-34-56-789Z.ndjson"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// NDJSON export in the backend's SIEM schema v1 (#703 / backend #2413)
+// ---------------------------------------------------------------------------
+
+describe("auditActionOutcome", () => {
+  it("mirrors the backend's name-based outcome classification", async () => {
+    const { auditActionOutcome } = await import("../audit");
+    expect(auditActionOutcome("LOGIN_FAILED")).toBe("failure");
+    expect(auditActionOutcome("BACKUP_FAILED")).toBe("failure");
+    expect(auditActionOutcome("PERMISSION_DENIED")).toBe("denied");
+    expect(auditActionOutcome("AGE_GATE_REJECTED")).toBe("denied");
+    expect(auditActionOutcome("LOGIN")).toBe("success");
+    expect(auditActionOutcome("USER_CREATED")).toBe("success");
+  });
+});
+
+describe("auditItemToSiemRecord", () => {
+  it("projects a user-actor row into the audit-event v1 envelope", async () => {
+    const { auditItemToSiemRecord, AUDIT_EVENT_SCHEMA_VERSION } = await import(
+      "../audit"
+    );
+    const rec = auditItemToSiemRecord(ITEM as never);
+    expect(rec).toEqual({
+      schema_version: AUDIT_EVENT_SCHEMA_VERSION,
+      category: "audit",
+      event_id: ITEM.id,
+      timestamp: ITEM.created_at,
+      action: "USER_CREATED",
+      outcome: "success",
+      actor: { id: ITEM.user_id, name: "alice", type: "user" },
+      source_ip: "10.0.0.1",
+      resource: { type: "user", id: ITEM.resource_id, name: null },
+      correlation_id: ITEM.correlation_id,
+      details: { username: "alice" },
+    });
+  });
+
+  it("classifies a failed login without a principal as anonymous", async () => {
+    const { auditItemToSiemRecord } = await import("../audit");
+    const rec = auditItemToSiemRecord({
+      ...ITEM,
+      action: "LOGIN_FAILED",
+      user_id: null,
+      actor_username: null,
+      ip_address: null,
+      details: { username: "root" },
+    } as never);
+    expect(rec.outcome).toBe("failure");
+    expect(rec.actor).toEqual({ id: null, name: null, type: "anonymous" });
+    expect(rec.source_ip).toBeNull();
+  });
+
+  it("classifies system-initiated rows (no user id) as system actors", async () => {
+    const { auditItemToSiemRecord } = await import("../audit");
+    const rec = auditItemToSiemRecord({
+      ...ITEM,
+      action: "SCAN_REAPED",
+      user_id: null,
+      actor_username: null,
+    } as never);
+    expect(rec.actor.type).toBe("system");
+  });
+
+  it("drops non-object details so every record stays schema-valid", async () => {
+    const { auditItemToSiemRecord } = await import("../audit");
+    expect(
+      auditItemToSiemRecord({ ...ITEM, details: "plain" } as never).details
+    ).toBeNull();
+    expect(
+      auditItemToSiemRecord({ ...ITEM, details: [1, 2] } as never).details
+    ).toBeNull();
+    expect(
+      auditItemToSiemRecord({ ...ITEM, details: null } as never).details
+    ).toBeNull();
+  });
+});
+
+describe("auditItemsToNdjson", () => {
+  it("writes one LF-terminated JSON record per line", async () => {
+    const { auditItemsToNdjson, auditItemToSiemRecord } = await import(
+      "../audit"
+    );
+    const ndjson = auditItemsToNdjson([ITEM as never, ITEM as never]);
+    const lines = ndjson.split("\n");
+    expect(lines).toHaveLength(3); // two records + trailing newline
+    expect(lines[2]).toBe("");
+    expect(JSON.parse(lines[0])).toEqual(auditItemToSiemRecord(ITEM as never));
+    expect(JSON.parse(lines[1]).event_id).toBe(ITEM.id);
+  });
+
+  it("never embeds raw newlines inside a record", async () => {
+    const { auditItemsToNdjson } = await import("../audit");
+    const ndjson = auditItemsToNdjson([
+      { ...ITEM, details: { note: "line1\nline2" } } as never,
+    ]);
+    expect(ndjson.trimEnd().split("\n")).toHaveLength(1);
+  });
+
+  it("matches the required keys of the backend audit-event v1 schema", async () => {
+    const { auditItemsToNdjson } = await import("../audit");
+    const [line] = auditItemsToNdjson([ITEM as never]).trimEnd().split("\n");
+    const rec = JSON.parse(line);
+    // Required keys per backend/schemas/audit-event.v1.schema.json (#2413).
+    expect(Object.keys(rec).sort()).toEqual(
+      [
+        "schema_version",
+        "category",
+        "event_id",
+        "timestamp",
+        "action",
+        "outcome",
+        "actor",
+        "source_ip",
+        "resource",
+        "correlation_id",
+        "details",
+      ].sort()
+    );
+    expect(rec.schema_version).toBe(1);
+    expect(rec.category).toBe("audit");
+    expect(["success", "failure", "denied"]).toContain(rec.outcome);
   });
 });
 

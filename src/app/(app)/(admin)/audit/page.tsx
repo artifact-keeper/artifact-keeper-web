@@ -12,8 +12,10 @@ import {
   AUDIT_DEFAULT_PER_PAGE,
   AUDIT_EXPORT_CSV_MIME,
   AUDIT_EXPORT_JSON_MIME,
+  AUDIT_EXPORT_NDJSON_MIME,
   auditItemsToCsv,
   auditItemsToJson,
+  auditItemsToNdjson,
   buildAuditExportFilename,
   type AuditExportFormat,
   type AuditLogItem,
@@ -171,16 +173,20 @@ export default function AuditLogPage() {
       const content =
         format === "csv"
           ? auditItemsToCsv(result.items)
-          : auditItemsToJson(result.items, {
-              filters: appliedQuery,
-              total: result.total,
-              truncated: result.truncated,
-            });
-      triggerBrowserDownload(
-        buildAuditExportFilename(format),
-        content,
-        format === "csv" ? AUDIT_EXPORT_CSV_MIME : AUDIT_EXPORT_JSON_MIME
-      );
+          : format === "ndjson"
+            ? auditItemsToNdjson(result.items)
+            : auditItemsToJson(result.items, {
+                filters: appliedQuery,
+                total: result.total,
+                truncated: result.truncated,
+              });
+      const mime =
+        format === "csv"
+          ? AUDIT_EXPORT_CSV_MIME
+          : format === "ndjson"
+            ? AUDIT_EXPORT_NDJSON_MIME
+            : AUDIT_EXPORT_JSON_MIME;
+      triggerBrowserDownload(buildAuditExportFilename(format), content, mime);
 
       const n = result.items.length.toLocaleString();
       if (result.truncated) {
@@ -327,6 +333,12 @@ export default function AuditLogPage() {
                   disabled={isExporting}
                 >
                   Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => handleExport("ndjson")}
+                  disabled={isExporting}
+                >
+                  Export as NDJSON (SIEM schema v1)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
