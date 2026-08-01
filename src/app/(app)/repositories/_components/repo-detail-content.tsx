@@ -36,7 +36,7 @@ import { mutationErrorToast } from "@/lib/error-utils";
 import {
   isActivelyQuarantined,
   isQuarantineRejected,
-  isQuarantineStateKnown,
+  quarantineKnowledge,
   quarantineDownloadBlockedReason,
   type QuarantineFields,
 } from "@/lib/quarantine";
@@ -257,27 +257,29 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   // --- quarantine state for the artifact in the detail dialog ---
   //
-  // Listing rows carry a quarantine verdict on every artifact
-  // (artifact-keeper#2940), so an artifact opened from the table already has
-  // one and costs no extra request. An artifact opened from the Maven grouped
-  // view arrives through the by-path detail endpoint instead, which omits the
-  // four quarantine keys entirely. Absent means "the server did not look", not
-  // "not held" — reading it as the latter is what left the quarantine banner
-  // unreachable (#650) — so that case is resolved with an explicit status
-  // lookup rather than assumed clean.
+  // Every current artifact payload (listing, by-id, by-path) carries the
+  // verdict as `quarantine_status` (artifact-keeper#2966), but never the
+  // *reason* — that is disclosed only by the authenticated,
+  // repo-visibility-checked GET /api/v1/quarantine/{id} (#2912). So the
+  // status endpoint is queried exactly when the dialog has something to gain
+  // from it: the artifact is held (the reason is worth showing) or the
+  // payload carried no verdict at all (older backend — absent means "the
+  // server did not look", not "not held"; reading it as the latter is what
+  // left the quarantine banner unreachable, #650). A clear artifact costs no
+  // extra request.
   const selectedArtifactId = selectedArtifact?.id;
-  const selectedQuarantineLoaded = isQuarantineStateKnown(selectedArtifact);
+  const selectedKnowledge = quarantineKnowledge(selectedArtifact);
   const { data: fetchedQuarantine } = useQuery({
     queryKey: ["quarantine-status", selectedArtifactId],
     queryFn: async () =>
       selectedArtifactId ? await quarantineApi.getStatus(selectedArtifactId) : null,
-    enabled: detailOpen && !!selectedArtifactId && !selectedQuarantineLoaded,
+    enabled: detailOpen && !!selectedArtifactId && selectedKnowledge !== "clear",
   });
+  // Prefer the fetched status once it lands: it carries the reason and a
+  // freshly computed verdict, while the listing row only has the verdict.
   const quarantine: QuarantineFields | null = !selectedArtifact
     ? null
-    : selectedQuarantineLoaded
-      ? selectedArtifact
-      : (fetchedQuarantine ?? null);
+    : (fetchedQuarantine ?? selectedArtifact);
   const quarantineBlocked = isActivelyQuarantined(quarantine);
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
@@ -366,25 +368,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       action === "release"
         ? quarantineApi.release(artifactId)
         : quarantineApi.reject(artifactId, reason || undefined),
-    onSuccess: (_result, { artifactId, action, reason }) => {
+    onSuccess: (_result, { artifactId, action }) => {
       // The listing row for this artifact now carries a stale verdict, as does
       // any cached status lookup for it.
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["quarantine-status", artifactId] });
       // Apply the same transition the backend just wrote to the copy the open
       // dialog holds: both transitions clear `quarantine_until`, a release
-      // clears the reason, a rejection keeps or replaces it. Without this the
-      // dialog would keep describing the old hold until it was closed and
-      // reopened, and the refetched listing would silently disagree with it.
+      // moves the status to "released", a rejection to "rejected". The status
+      // lookup above was invalidated and refetches the reason on its own.
+      // Without this the dialog would keep describing the old hold until it
+      // was closed and reopened, and the refetched listing would silently
+      // disagree with it.
       setSelectedArtifact((prev) =>
         prev && prev.id === artifactId
           ? {
               ...prev,
-              is_blocked: action === "reject",
               quarantine_status: action === "release" ? "released" : "rejected",
               quarantine_until: null,
-              quarantine_reason:
-                action === "release" ? null : reason || prev.quarantine_reason,
             }
           : prev,
       );
@@ -510,10 +511,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             {a.name}
           </button>
           {isActivelyQuarantined(a) && (
-            <QuarantineBadge
-              reason={a.quarantine_reason}
-              quarantineUntil={a.quarantine_until}
-            />
+            // The listing carries no reason (#2966); the badge tooltip falls
+            // back to the hold expiry.
+            <QuarantineBadge quarantineUntil={a.quarantine_until} />
           )}
         </div>
       ),

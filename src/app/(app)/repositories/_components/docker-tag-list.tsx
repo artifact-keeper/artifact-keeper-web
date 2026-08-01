@@ -217,8 +217,9 @@ export function DockerTagList({
                 </td>
                 <td className="px-3 py-2">
                   {isActivelyQuarantined(group.manifest) ? (
+                    // The listing carries no reason (#2966); the badge
+                    // tooltip falls back to the hold expiry.
                     <QuarantineBadge
-                      reason={group.manifest.quarantine_reason}
                       quarantineUntil={group.manifest.quarantine_until}
                     />
                   ) : isQuarantineStateKnown(group.manifest) ? (

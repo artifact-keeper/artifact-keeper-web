@@ -39,9 +39,10 @@ function quarantinePath(artifactId: string, action?: string): string {
 }
 
 /**
- * The backend takes `reason` as an optional field of a required JSON body, so
- * the key is always sent; a blank or whitespace-only reason becomes null
- * rather than an empty string the audit log would have to store.
+ * The backend deserializes the body with a required JSON extractor, so a body
+ * is always sent; `reason` itself is optional, and a blank or whitespace-only
+ * reason becomes null rather than an empty string the audit log would have to
+ * store.
  */
 function reasonBody(reason?: string): string {
   const trimmed = reason?.trim();
@@ -50,10 +51,11 @@ function reasonBody(reason?: string): string {
 
 export const quarantineApi = {
   /**
-   * Read one artifact's quarantine state. Needed for artifacts reached through
-   * a surface that does not carry the quarantine fields (the by-path detail
-   * endpoint behind the Maven grouped view, for instance), where their absence
-   * means "not loaded" rather than "not held".
+   * Read one artifact's quarantine state, including the reason. Artifact
+   * payloads carry the verdict (`quarantine_status`) but never the reason
+   * (artifact-keeper#2966), so this is the only way to show why a held
+   * artifact is held — and the fallback verdict source for a response from
+   * a backend too old to serialize `quarantine_status` at all.
    */
   getStatus: (artifactId: string): Promise<QuarantineStatus> =>
     apiFetch<QuarantineStatus>(quarantinePath(artifactId)),
