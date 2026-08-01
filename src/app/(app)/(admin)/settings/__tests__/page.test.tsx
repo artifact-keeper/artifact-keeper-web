@@ -33,9 +33,9 @@ vi.mock("@/lib/api/admin", () => ({
 vi.mock("@/lib/api/settings", () => ({
   // useQuery is itself mocked above, so queryFns never actually run — but we
   // still expose the API surface the page imports so module resolution works.
+  // Note: no updateSmtpConfig — the backend has no SMTP save endpoint (#555).
   settingsApi: {
     getAllSettings: vi.fn(),
-    updateSmtpConfig: vi.fn(),
     sendTestEmail: vi.fn(),
   },
 }));
@@ -275,7 +275,7 @@ describe("SettingsPage", () => {
 
   // Mock useQuery's return value based on which queryKey it's called with,
   // instead of relying on a fragile call-order index. Keys in SettingsPage:
-  //   ["health"], ["admin-settings"]   — the latter is shared by SmtpSettingsTab.
+  //   ["health"], ["admin-settings"]
   function mockQueriesByKey(
     overrides: Record<string, ReturnType<typeof mockUseQuery>>
   ) {
@@ -463,42 +463,6 @@ describe("SettingsPage", () => {
     expect(inputs.find((i) => i.value === "/data/artifacts")).toBeUndefined();
   });
 
-  it("shows error alert in SMTP tab when admin-settings errors (#349)", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      [ADMIN_SETTINGS_KEY]: {
-        data: undefined,
-        isLoading: false,
-        isError: true,
-        error: new Error("Failed to load admin settings: unauthorized"),
-      },
-    });
-
-    render(<SettingsPage />);
-
-    expect(screen.getByText("SMTP configuration unavailable")).toBeDefined();
-    // The thrown Error's message is rendered so an operator sees the
-    // actual cause (not a generic placeholder).
-    expect(
-      screen.getByText("Failed to load admin settings: unauthorized")
-    ).toBeDefined();
-    // The buggy default form placeholders must NOT render on error.
-    expect(screen.queryByTestId("smtp-host")).toBeNull();
-  });
-
-  it("shows loader in SMTP tab while admin-settings is loading (#349)", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockQueriesByKey({
-      [ADMIN_SETTINGS_KEY]: { data: undefined, isLoading: true, isError: false },
-    });
-
-    render(<SettingsPage />);
-
-    // Neither the form nor the error alert should render during loading.
-    expect(screen.queryByTestId("smtp-host")).toBeNull();
-    expect(screen.queryByText("SMTP configuration unavailable")).toBeNull();
-  });
-
   it("renders the Email tab trigger", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
 
@@ -538,199 +502,34 @@ describe("SettingsPage", () => {
     expect(elements.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("renders SMTP form fields with placeholders", () => {
+  it("explains SMTP is configured via server environment variables (#555)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockAdminSettings();
 
     render(<SettingsPage />);
 
-    expect(screen.getByTestId("smtp-host")).toBeDefined();
-    expect(screen.getByTestId("smtp-port")).toBeDefined();
-    expect(screen.getByTestId("smtp-username")).toBeDefined();
-    expect(screen.getByTestId("smtp-password")).toBeDefined();
-    expect(screen.getByTestId("smtp-from")).toBeDefined();
-    expect(screen.getByTestId("smtp-tls")).toBeDefined();
+    expect(
+      screen.getByText("Configured via environment variables")
+    ).toBeDefined();
+    expect(screen.getByText(/SMTP_HOST/)).toBeDefined();
+    expect(screen.getByText(/SMTP_TLS_MODE/)).toBeDefined();
   });
 
-  it("populates SMTP fields from loaded config", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings({
-      ...DEFAULT_ADMIN_SETTINGS,
-      smtpConfig: {
-        host: "mail.example.com",
-        port: 465,
-        username: "sender",
-        password: "secret",
-        from_address: "no-reply@example.com",
-        tls_mode: "tls",
-      },
-    });
-
-    render(<SettingsPage />);
-
-    const hostInput = screen.getByTestId("smtp-host") as HTMLInputElement;
-    expect(hostInput.value).toBe("mail.example.com");
-
-    const portInput = screen.getByTestId("smtp-port") as HTMLInputElement;
-    expect(portInput.value).toBe("465");
-
-    const usernameInput = screen.getByTestId("smtp-username") as HTMLInputElement;
-    expect(usernameInput.value).toBe("sender");
-
-    const fromInput = screen.getByTestId("smtp-from") as HTMLInputElement;
-    expect(fromInput.value).toBe("no-reply@example.com");
-
-    // Password should not be populated from server response
-    const passwordInput = screen.getByTestId("smtp-password") as HTMLInputElement;
-    expect(passwordInput.value).toBe("");
-  });
-
-  it("disables Save button when form is not dirty", () => {
+  it("does not render a Save SMTP Settings button or edit form (#555)", () => {
+    // Regression: the backend has no SMTP save endpoint — PUT
+    // /api/v1/admin/smtp returns 404. The UI must not offer a save flow.
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockAdminSettings();
 
     render(<SettingsPage />);
 
-    const saveButton = screen.getByText("Save SMTP Settings");
-    expect(saveButton.closest("button")?.disabled).toBe(true);
-  });
-
-  it("enables Save button after editing a field", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    const hostInput = screen.getByTestId("smtp-host");
-    fireEvent.change(hostInput, { target: { value: "smtp.test.com" } });
-
-    const saveButton = screen.getByText("Save SMTP Settings");
-    expect(saveButton.closest("button")?.disabled).toBe(false);
-  });
-
-  it("calls save mutation with form values on Save click", () => {
-    const mutateFn = vi.fn();
-    mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    // Fill required fields
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "smtp.test.com" },
-    });
-    fireEvent.change(screen.getByTestId("smtp-from"), {
-      target: { value: "test@test.com" },
-    });
-
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mutateFn).toHaveBeenCalledWith({
-      host: "smtp.test.com",
-      port: 587,
-      username: "",
-      from_address: "test@test.com",
-      tls_mode: "starttls",
-    });
-  });
-
-  it("includes password in save payload only when modified", () => {
-    const mutateFn = vi.fn();
-    mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    // Fill required fields
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "smtp.test.com" },
-    });
-    fireEvent.change(screen.getByTestId("smtp-from"), {
-      target: { value: "test@test.com" },
-    });
-    // Modify the password field
-    fireEvent.change(screen.getByTestId("smtp-password"), {
-      target: { value: "new-secret" },
-    });
-
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mutateFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        host: "smtp.test.com",
-        password: "new-secret",
-      })
-    );
-  });
-
-  it("shows validation error for empty host on save", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    // Make form dirty by setting from address, but leave host blank
-    fireEvent.change(screen.getByTestId("smtp-from"), {
-      target: { value: "test@test.com" },
-    });
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mockToast.error).toHaveBeenCalledWith("SMTP host is required");
-  });
-
-  it("shows validation error for empty from address on save", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    // Make form dirty with a host but no from address
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "smtp.test.com" },
-    });
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mockToast.error).toHaveBeenCalledWith("From address is required");
-  });
-
-  it("shows validation error for invalid port on save", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "smtp.test.com" },
-    });
-    fireEvent.change(screen.getByTestId("smtp-port"), {
-      target: { value: "99999" },
-    });
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mockToast.error).toHaveBeenCalledWith(
-      "Port must be a number between 1 and 65535"
-    );
-  });
-
-  it("shows validation error for non-numeric port on save", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "smtp.test.com" },
-    });
-    fireEvent.change(screen.getByTestId("smtp-port"), {
-      target: { value: "abc" },
-    });
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mockToast.error).toHaveBeenCalledWith(
-      "Port must be a number between 1 and 65535"
-    );
+    expect(screen.queryByText("Save SMTP Settings")).toBeNull();
+    expect(screen.queryByTestId("smtp-host")).toBeNull();
+    expect(screen.queryByTestId("smtp-port")).toBeNull();
+    expect(screen.queryByTestId("smtp-username")).toBeNull();
+    expect(screen.queryByTestId("smtp-password")).toBeNull();
+    expect(screen.queryByTestId("smtp-from")).toBeNull();
+    expect(screen.queryByTestId("smtp-tls")).toBeNull();
   });
 
   it("calls test email mutation with recipient", () => {
@@ -770,20 +569,6 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("renders SMTP field labels", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    expect(screen.getByText("Host")).toBeDefined();
-    expect(screen.getByText("Port")).toBeDefined();
-    expect(screen.getByText("Username")).toBeDefined();
-    expect(screen.getByText("Password")).toBeDefined();
-    expect(screen.getByText("From Address")).toBeDefined();
-    expect(screen.getByText("TLS Mode")).toBeDefined();
-  });
-
   it("renders the test recipient input", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockAdminSettings();
@@ -795,75 +580,14 @@ describe("SettingsPage", () => {
     expect(recipientInput.type).toBe("email");
   });
 
-  it("trims whitespace from fields before saving", () => {
-    const mutateFn = vi.fn();
-    mockUseMutation.mockReturnValue(createMutationMock({ mutate: mutateFn }));
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    fireEvent.change(screen.getByTestId("smtp-host"), {
-      target: { value: "  smtp.test.com  " },
-    });
-    fireEvent.change(screen.getByTestId("smtp-from"), {
-      target: { value: "  test@test.com  " },
-    });
-    fireEvent.change(screen.getByTestId("smtp-username"), {
-      target: { value: "  user  " },
-    });
-
-    fireEvent.click(screen.getByText("Save SMTP Settings"));
-
-    expect(mutateFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        host: "smtp.test.com",
-        from_address: "test@test.com",
-        username: "user",
-      })
-    );
-  });
-
-  it("password field is type=password", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    const pwInput = screen.getByTestId("smtp-password") as HTMLInputElement;
-    expect(pwInput.type).toBe("password");
-  });
-
-  it("renders TLS mode options", () => {
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    expect(screen.getByText("None")).toBeDefined();
-    expect(screen.getByText("STARTTLS")).toBeDefined();
-    expect(screen.getByText("TLS")).toBeDefined();
-  });
-
-  it("disables Save button when mutation is pending", () => {
-    mockUseMutation.mockReturnValue(createMutationMock({ isPending: true }));
-    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
-    mockAdminSettings();
-
-    render(<SettingsPage />);
-
-    const saveButton = screen.getByText("Save SMTP Settings");
-    expect(saveButton.closest("button")?.disabled).toBe(true);
-  });
-
   it("disables Send Test Email button when test mutation is pending", () => {
     // useMutation call order is: [1] upload-size save (storage tab, #189),
-    // [2] SMTP save, [3] send-test-email. The test-email mutation is the
-    // third call, so mark only that one pending.
+    // [2] send-test-email (Email tab). The test-email mutation is the second
+    // call, so mark only that one pending.
     let mutationCallIndex = 0;
     mockUseMutation.mockImplementation(() => {
       mutationCallIndex++;
-      if (mutationCallIndex === 3) {
+      if (mutationCallIndex === 2) {
         return createMutationMock({ isPending: true });
       }
       return createMutationMock();

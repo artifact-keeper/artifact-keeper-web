@@ -355,43 +355,6 @@ describe("settingsApi", () => {
   });
 
   // -------------------------------------------------------------------------
-  // updateSmtpConfig tests
-  // -------------------------------------------------------------------------
-
-  it("updateSmtpConfig calls PUT /api/v1/admin/smtp", async () => {
-    mockApiFetch.mockResolvedValue(undefined);
-    const mod = await import("../settings");
-    const config = {
-      host: "smtp.test.com",
-      port: 587,
-      username: "user",
-      password: "pass",
-      from_address: "test@test.com",
-      tls_mode: "starttls" as const,
-    };
-    await mod.settingsApi.updateSmtpConfig(config);
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/smtp", {
-      method: "PUT",
-      body: JSON.stringify(config),
-    });
-  });
-
-  it("updateSmtpConfig propagates errors", async () => {
-    mockApiFetch.mockRejectedValue(new Error("API error 500: server error"));
-    const mod = await import("../settings");
-    await expect(
-      mod.settingsApi.updateSmtpConfig({
-        host: "smtp.test.com",
-        port: 587,
-        username: "",
-        password: "",
-        from_address: "test@test.com",
-        tls_mode: "starttls",
-      })
-    ).rejects.toThrow("API error 500");
-  });
-
-  // -------------------------------------------------------------------------
   // sendTestEmail tests
   // -------------------------------------------------------------------------
 
@@ -413,6 +376,17 @@ describe("settingsApi", () => {
     await expect(
       mod.settingsApi.sendTestEmail("admin@test.com")
     ).rejects.toThrow("API error 502");
+  });
+
+  it("exposes no SMTP save method — the backend has no save endpoint (#555)", async () => {
+    // Regression guard: the backend has never exposed PUT/POST
+    // /api/v1/admin/smtp (only /api/v1/admin/smtp/test). SMTP is configured
+    // via server env vars (SMTP_HOST et al.), so re-adding an
+    // `updateSmtpConfig` here would re-introduce the 404 from issue #555.
+    const mod = await import("../settings");
+    expect(
+      (mod.settingsApi as Record<string, unknown>).updateSmtpConfig
+    ).toBeUndefined();
   });
 
   // -------------------------------------------------------------------------

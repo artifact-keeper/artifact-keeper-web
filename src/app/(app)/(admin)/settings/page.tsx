@@ -28,7 +28,7 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
-import type { PasswordPolicy, SmtpConfig, SmtpTlsMode, StorageSettings } from "@/lib/api/settings";
+import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
 
@@ -215,78 +215,7 @@ function UploadSizeSetting({
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  // Shares one in-flight request and cache entry with SettingsPage's
-  // top-level call (#349). The shared hook is the dedup invariant.
-  const { data: settings, isLoading, isError, error, dataUpdatedAt } =
-    useAdminSettings();
-  const smtpConfig = settings?.smtpConfig;
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (isError || !smtpConfig) {
-    // `!smtpConfig` is logically dead once isLoading and isError are
-    // handled (the success path always returns an object), but stating
-    // it makes the invariant load-bearing for the type narrowing below
-    // and for any future maintainer reading the render flow (R3, #347).
-    return (
-      <Card>
-        <CardContent className="py-6">
-          <Alert variant="destructive">
-            <AlertTitle>SMTP configuration unavailable</AlertTitle>
-            <AlertDescription>
-              {error instanceof Error
-                ? error.message
-                : "Unable to load SMTP configuration from the server."}
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Remount the form when query data changes so initial state resets
-  // without needing setState inside an effect.
-  return <SmtpSettingsForm key={dataUpdatedAt} initialConfig={smtpConfig} />;
-}
-
-function SmtpSettingsForm({
-  initialConfig,
-}: {
-  initialConfig: SmtpConfig | undefined;
-}) {
-  const queryClient = useQueryClient();
-
-  const [host, setHost] = useState(initialConfig?.host ?? "");
-  const [port, setPort] = useState(String(initialConfig?.port ?? 587));
-  const [username, setUsername] = useState(initialConfig?.username ?? "");
-  const [password, setPassword] = useState("");
-  const [passwordDirty, setPasswordDirty] = useState(false);
-  const [fromAddress, setFromAddress] = useState(
-    initialConfig?.from_address ?? ""
-  );
-  const [tlsMode, setTlsMode] = useState<SmtpTlsMode>(
-    initialConfig?.tls_mode ?? "starttls"
-  );
   const [testRecipient, setTestRecipient] = useState("");
-  const [formDirty, setFormDirty] = useState(false);
-
-  const saveMutation = useMutation({
-    mutationFn: (config: SmtpConfig) => settingsApi.updateSmtpConfig(config),
-    onSuccess: () => {
-      toast.success("SMTP configuration saved");
-      queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
-      setFormDirty(false);
-    },
-    onError: mutationErrorToast("Failed to save SMTP configuration"),
-  });
 
   const testMutation = useMutation({
     mutationFn: (recipient: string) => settingsApi.sendTestEmail(recipient),
@@ -299,40 +228,6 @@ function SmtpSettingsForm({
     },
     onError: mutationErrorToast("Failed to send test email"),
   });
-
-  function handleFieldChange<T>(setter: (v: T) => void) {
-    return (value: T) => {
-      setter(value);
-      setFormDirty(true);
-    };
-  }
-
-  function handleSave() {
-    const portNum = parseInt(port, 10);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      toast.error("Port must be a number between 1 and 65535");
-      return;
-    }
-    if (!host.trim()) {
-      toast.error("SMTP host is required");
-      return;
-    }
-    if (!fromAddress.trim()) {
-      toast.error("From address is required");
-      return;
-    }
-    const payload: Record<string, unknown> = {
-      host: host.trim(),
-      port: portNum,
-      username: username.trim(),
-      from_address: fromAddress.trim(),
-      tls_mode: tlsMode,
-    };
-    if (passwordDirty) {
-      payload.password = password;
-    }
-    saveMutation.mutate(payload as unknown as SmtpConfig);
-  }
 
   function handleSendTest() {
     if (!testRecipient.trim()) {
@@ -348,127 +243,26 @@ function SmtpSettingsForm({
         <CardHeader>
           <CardTitle className="text-base">SMTP Configuration</CardTitle>
           <CardDescription>
-            Configure the outbound email server used for notifications, password
-            resets, and other system emails.
+            Outbound email server used for notifications, password resets, and
+            other system emails.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="smtp-host">Host</Label>
-              <Input
-                id="smtp-host"
-                placeholder="smtp.example.com"
-                value={host}
-                onChange={(e) => handleFieldChange(setHost)(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Hostname or IP address of the SMTP server.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-port">Port</Label>
-              <Input
-                id="smtp-port"
-                type="number"
-                min={1}
-                max={65535}
-                placeholder="587"
-                value={port}
-                onChange={(e) => handleFieldChange(setPort)(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Common ports: 25 (SMTP), 465 (SMTPS), 587 (Submission).
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="smtp-username">Username</Label>
-              <Input
-                id="smtp-username"
-                placeholder="user@example.com"
-                autoComplete="off"
-                value={username}
-                onChange={(e) => handleFieldChange(setUsername)(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank if the server does not require authentication.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-password">Password</Label>
-              <Input
-                id="smtp-password"
-                type="password"
-                placeholder="********"
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordDirty(true);
-                  setFormDirty(true);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Stored encrypted on the server. Leave blank to keep the existing value.
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="smtp-from">From Address</Label>
-              <Input
-                id="smtp-from"
-                type="email"
-                placeholder="noreply@example.com"
-                value={fromAddress}
-                onChange={(e) => handleFieldChange(setFromAddress)(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                The sender address used in outgoing emails.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-tls">TLS Mode</Label>
-              <Select
-                value={tlsMode}
-                onValueChange={(v) => handleFieldChange(setTlsMode)(v as SmtpTlsMode)}
-              >
-                <SelectTrigger id="smtp-tls">
-                  <SelectValue placeholder="Select TLS mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="starttls">STARTTLS</SelectItem>
-                  <SelectItem value="tls">TLS</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                STARTTLS upgrades an unencrypted connection. TLS connects with encryption from the start.
-              </p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSave}
-              disabled={saveMutation.isPending || !formDirty}
-            >
-              {saveMutation.isPending && (
-                <Loader2 className="size-4 mr-2 animate-spin" />
-              )}
-              Save SMTP Settings
-            </Button>
-          </div>
+        <CardContent>
+          {/* The backend exposes no SMTP save endpoint — PUT
+              /api/v1/admin/smtp does not exist and the old editable form's
+              Save button 404'd (issue #555). SMTP is server-side
+              configuration only, so this tab is informational. */}
+          <Alert>
+            <Info className="size-4" />
+            <AlertTitle>Configured via environment variables</AlertTitle>
+            <AlertDescription>
+              SMTP is configured on the server with the SMTP_HOST, SMTP_PORT,
+              SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_ADDRESS, and
+              SMTP_TLS_MODE environment variables; changes take effect on
+              server restart. When SMTP_HOST is not set, email delivery is
+              disabled.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
@@ -476,8 +270,8 @@ function SmtpSettingsForm({
         <CardHeader>
           <CardTitle className="text-base">Send Test Email</CardTitle>
           <CardDescription>
-            Verify the SMTP configuration by sending a test message. Save any
-            pending changes before testing.
+            Verify the server-side SMTP configuration by sending a test
+            message.
           </CardDescription>
         </CardHeader>
         <CardContent>
