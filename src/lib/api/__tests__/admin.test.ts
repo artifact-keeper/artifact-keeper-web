@@ -84,13 +84,69 @@ describe("adminApi", () => {
     mockListUsers.mockResolvedValue({ data: { items: [], pagination: {} }, error: undefined });
     const { adminApi } = await import("../admin");
     await adminApi.listUsers({ perPage: 100 });
-    expect(mockListUsers).toHaveBeenCalledWith({ query: { page: undefined, per_page: 100 } });
+    expect(mockListUsers).toHaveBeenCalledWith({
+      query: { page: undefined, per_page: 100, search: undefined },
+    });
+  });
+
+  it("listUsers passes search through to the SDK query", async () => {
+    mockListUsers.mockResolvedValue({ data: { items: [], pagination: {} }, error: undefined });
+    const { adminApi } = await import("../admin");
+    await adminApi.listUsers({ search: "alice" });
+    expect(mockListUsers).toHaveBeenCalledWith({
+      query: { page: undefined, per_page: undefined, search: "alice" },
+    });
   });
 
   it("listUsers throws on error", async () => {
     mockListUsers.mockResolvedValue({ data: undefined, error: "unauthorized" });
     const { adminApi } = await import("../admin");
     await expect(adminApi.listUsers()).rejects.toBe("unauthorized");
+  });
+
+  it("listUsersPage returns items and total from the pagination envelope", async () => {
+    const sdkUser = {
+      id: "1",
+      username: "admin",
+      email: "admin@example.com",
+      is_admin: true,
+      is_active: true,
+      must_change_password: false,
+      auth_provider: "local",
+      created_at: "2025-01-01",
+      display_name: null,
+    };
+    mockListUsers.mockResolvedValue({
+      data: {
+        items: [sdkUser],
+        pagination: { page: 2, per_page: 20, total: 41, total_pages: 3 },
+      },
+      error: undefined,
+    });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.listUsersPage({ page: 2, perPage: 20 });
+    expect(mockListUsers).toHaveBeenCalledWith({
+      query: { page: 2, per_page: 20, search: undefined },
+    });
+    expect(result.total).toBe(41);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].username).toBe("admin");
+  });
+
+  it("listUsersPage sends a trimmed search and drops blank search", async () => {
+    mockListUsers.mockResolvedValue({
+      data: { items: [], pagination: { total: 0 } },
+      error: undefined,
+    });
+    const { adminApi } = await import("../admin");
+    await adminApi.listUsersPage({ search: "  bob  " });
+    expect(mockListUsers).toHaveBeenLastCalledWith({
+      query: { page: undefined, per_page: undefined, search: "bob" },
+    });
+    await adminApi.listUsersPage({ search: "   " });
+    expect(mockListUsers).toHaveBeenLastCalledWith({
+      query: { page: undefined, per_page: undefined, search: undefined },
+    });
   });
 
   it("getHealth returns health response", async () => {

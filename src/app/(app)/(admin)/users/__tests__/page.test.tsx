@@ -49,6 +49,7 @@ const {
   mockSdkResetPassword,
   mockSdkDeleteUser,
   mockAdminListUsers,
+  mockAdminListUsersPage,
   mockAdminListUserTokens,
   mockAdminRevokeUserToken,
 } = vi.hoisted(() => ({
@@ -63,6 +64,7 @@ const {
   mockSdkResetPassword: vi.fn(),
   mockSdkDeleteUser: vi.fn(),
   mockAdminListUsers: vi.fn(),
+  mockAdminListUsersPage: vi.fn(),
   mockAdminListUserTokens: vi.fn(),
   mockAdminRevokeUserToken: vi.fn(),
 }));
@@ -93,6 +95,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
 vi.mock("@/lib/api/admin", () => ({
   adminApi: {
     listUsers: (...args: any[]) => mockAdminListUsers(...args),
+    listUsersPage: (...args: any[]) => mockAdminListUsersPage(...args),
     listUserTokens: (...args: any[]) => mockAdminListUserTokens(...args),
     revokeUserToken: (...args: any[]) => mockAdminRevokeUserToken(...args),
   },
@@ -200,32 +203,64 @@ vi.mock("@/components/common/page-header", () => ({
 }));
 
 vi.mock("@/components/common/data-table", () => ({
-  DataTable: ({ data, columns, loading, emptyMessage, rowKey }: any) => {
+  DataTable: ({
+    data,
+    columns,
+    loading,
+    emptyMessage,
+    rowKey,
+    total,
+    page,
+    pageSize,
+    onPageChange,
+    onPageSizeChange,
+  }: any) => {
     if (loading) return <div data-testid="data-table-loading">Loading...</div>;
     if (!data || data.length === 0)
       return <div data-testid="data-table-empty">{emptyMessage}</div>;
     return (
-      <table data-testid="data-table">
-        <thead>
-          <tr>
-            {columns.map((c: any) => (
-              <th key={c.id}>{c.header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row: any, i: number) => (
-            <tr key={rowKey ? rowKey(row) : i}>
-              {columns.map((c: any) => {
-                if (c.accessor) c.accessor(row);
-                return (
-                  <td key={c.id}>{c.cell ? c.cell(row) : null}</td>
-                );
-              })}
+      <div>
+        <table data-testid="data-table">
+          <thead>
+            <tr>
+              {columns.map((c: any) => (
+                <th key={c.id}>{c.header}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row: any, i: number) => (
+              <tr key={rowKey ? rowKey(row) : i}>
+                {columns.map((c: any) => {
+                  if (c.accessor) c.accessor(row);
+                  return (
+                    <td key={c.id}>{c.cell ? c.cell(row) : null}</td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(onPageChange || onPageSizeChange) && (
+          <div data-testid="data-table-pagination">
+            <span data-testid="pagination-total">{total}</span>
+            <span data-testid="pagination-page">{page}</span>
+            <span data-testid="pagination-page-size">{pageSize}</span>
+            <button
+              data-testid="next-page"
+              onClick={() => onPageChange?.((page ?? 1) + 1)}
+            >
+              Next
+            </button>
+            <button
+              data-testid="page-size-50"
+              onClick={() => onPageSizeChange?.(50)}
+            >
+              50 per page
+            </button>
+          </div>
+        )}
+      </div>
     );
   },
 }));
@@ -352,6 +387,7 @@ function getMutationConfig(name: keyof typeof MUTATION_INDEX) {
 function setupMocks(opts: {
   user?: any;
   users?: any[];
+  usersTotal?: number;
   usersLoading?: boolean;
   tokens?: any[];
   tokensLoading?: boolean;
@@ -360,6 +396,7 @@ function setupMocks(opts: {
   const {
     user = adminUser,
     users = mockUsers,
+    usersTotal,
     usersLoading = false,
     tokens = [],
     tokensLoading = false,
@@ -375,7 +412,13 @@ function setupMocks(opts: {
   mockUseQuery.mockImplementation((opts: any) => {
     capturedQueryConfigs.push(opts);
     if (opts.queryKey[0] === "admin-users") {
-      return { data: users, isLoading: usersLoading };
+      return {
+        data:
+          users === undefined
+            ? undefined
+            : { items: users, total: usersTotal ?? users.length },
+        isLoading: usersLoading,
+      };
     }
     if (opts.queryKey[0] === "admin-user-tokens") {
       return { data: tokens, isLoading: tokensLoading };
@@ -390,7 +433,7 @@ function setupMocks(opts: {
     mutationCallIndex++;
     const overrides = mutationOverrides[idx] ?? {};
     return {
-      mutate: vi.fn((arg: any) => {
+      mutate: vi.fn(() => {
         // For tests that want to trigger the mutation flow synchronously,
         // they can call getMutationConfig(name).onSuccess / onError directly.
       }),
@@ -1243,20 +1286,97 @@ describe("UsersPage", () => {
     });
   });
 
-  // -- Query queryFn callbacks --
+  // -- Server-side pagination (#564) --
 
-  it("users query queryFn calls adminApi.listUsers", async () => {
-    mockAdminListUsers.mockResolvedValue([]);
-    setupMocks();
-    render(<UsersPage />);
+  describe("pagination", () => {
+    it("requests page 1 with the default page size", () => {
+      setupMocks();
+      render(<UsersPage />);
 
-    const usersQuery = capturedQueryConfigs.find(
-      (c) => c.queryKey[0] === "admin-users"
-    );
-    expect(usersQuery).toBeDefined();
-    await usersQuery.queryFn();
-    expect(mockAdminListUsers).toHaveBeenCalled();
+      const usersQuery = capturedQueryConfigs.find(
+        (c) => c.queryKey[0] === "admin-users"
+      );
+      expect(usersQuery.queryKey).toEqual(["admin-users", 1, 20]);
+    });
+
+    it("queryFn calls adminApi.listUsersPage with the current page", async () => {
+      mockAdminListUsersPage.mockResolvedValue({ items: [], total: 0 });
+      setupMocks();
+      render(<UsersPage />);
+
+      const usersQuery = capturedQueryConfigs.find(
+        (c) => c.queryKey[0] === "admin-users"
+      );
+      expect(usersQuery).toBeDefined();
+      await usersQuery.queryFn();
+      expect(mockAdminListUsersPage).toHaveBeenCalledWith({
+        page: 1,
+        perPage: 20,
+      });
+    });
+
+    it("passes the server-reported total to the table", () => {
+      setupMocks({ usersTotal: 57 });
+      render(<UsersPage />);
+
+      expect(screen.getByTestId("data-table-pagination")).toBeInTheDocument();
+      expect(screen.getByTestId("pagination-total")).toHaveTextContent("57");
+      expect(screen.getByTestId("pagination-page")).toHaveTextContent("1");
+      expect(screen.getByTestId("pagination-page-size")).toHaveTextContent(
+        "20"
+      );
+    });
+
+    it("navigating to the next page re-queries with page 2", async () => {
+      mockAdminListUsersPage.mockResolvedValue({ items: mockUsers, total: 57 });
+      setupMocks({ usersTotal: 57 });
+      render(<UsersPage />);
+
+      fireEvent.click(screen.getByTestId("next-page"));
+
+      const pageTwoQuery = capturedQueryConfigs.find(
+        (c) => c.queryKey[0] === "admin-users" && c.queryKey[1] === 2
+      );
+      expect(pageTwoQuery).toBeDefined();
+      expect(pageTwoQuery.queryKey).toEqual(["admin-users", 2, 20]);
+      await pageTwoQuery.queryFn();
+      expect(mockAdminListUsersPage).toHaveBeenCalledWith({
+        page: 2,
+        perPage: 20,
+      });
+    });
+
+    it("changing the page size re-queries with the new size and resets to page 1", async () => {
+      mockAdminListUsersPage.mockResolvedValue({ items: mockUsers, total: 57 });
+      setupMocks({ usersTotal: 57 });
+      render(<UsersPage />);
+
+      // Move to page 2 first so the reset back to page 1 is observable.
+      fireEvent.click(screen.getByTestId("next-page"));
+      fireEvent.click(screen.getByTestId("page-size-50"));
+
+      const resizedQuery = capturedQueryConfigs.find(
+        (c) =>
+          c.queryKey[0] === "admin-users" &&
+          c.queryKey[1] === 1 &&
+          c.queryKey[2] === 50
+      );
+      expect(resizedQuery).toBeDefined();
+      await resizedQuery.queryFn();
+      expect(mockAdminListUsersPage).toHaveBeenCalledWith({
+        page: 1,
+        perPage: 50,
+      });
+    });
+
+    it("shows the empty state only when the server total is zero", () => {
+      setupMocks({ users: [], usersTotal: 0 });
+      render(<UsersPage />);
+      expect(screen.getByText("No users yet")).toBeInTheDocument();
+    });
   });
+
+  // -- Query queryFn callbacks --
 
   it("token query queryFn calls adminApi.listUserTokens", async () => {
     mockAdminListUserTokens.mockResolvedValue([]);
