@@ -165,15 +165,19 @@ describe("groupsApi", () => {
     await expect(groupsApi.create({ name: "ops" } as any)).rejects.toBe("dup");
   });
 
-  it("update returns updated group", async () => {
+  it("update resends name with the PUT body (backend requires it)", async () => {
     mockUpdateGroup.mockResolvedValue({
       data: sdkGroupFixture({ name: "devs-updated" }),
       error: undefined,
     });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.update("g1", { name: "devs-updated" } as any)).toEqual(
-      adaptedGroupFixture({ name: "devs-updated" })
-    );
+    expect(
+      await groupsApi.update("g1", { name: "devs", description: "new desc" })
+    ).toEqual(adaptedGroupFixture({ name: "devs-updated" }));
+    expect(mockUpdateGroup).toHaveBeenCalledWith({
+      path: { id: "g1" },
+      body: { name: "devs", description: "new desc" },
+    });
   });
 
   it("update throws on error", async () => {

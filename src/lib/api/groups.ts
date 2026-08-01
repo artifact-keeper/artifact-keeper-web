@@ -28,12 +28,13 @@ export interface ListGroupsParams {
   search?: string;
 }
 
-// external_source ("oidc"|"saml"|"ldap"; null=local) drives is_external, read defensively since the 1.5.x SDK type lacks the field.
-// auto_join defaults false; CreatedGroupRow lacks member_count so default 0.
+// external_source ("oidc"|"saml"|"ldap"; null/absent=local) drives is_external.
+// Typed optional in the SDK; `?? null` also covers backends predating #2874
+// that omit the field entirely. auto_join defaults false; CreatedGroupRow
+// lacks member_count so default 0.
 function adaptGroup(sdk: GroupResponse | CreatedGroupRow): Group {
   const memberCount = 'member_count' in sdk ? sdk.member_count : 0;
-  const externalSource =
-    (sdk as { external_source?: string | null }).external_source ?? null;
+  const externalSource = sdk.external_source ?? null;
   return {
     id: sdk.id,
     name: sdk.name,
@@ -48,8 +49,7 @@ function adaptGroup(sdk: GroupResponse | CreatedGroupRow): Group {
 }
 
 function adaptGroupDetail(sdk: GroupDetailResponse): GroupDetail {
-  const externalSource =
-    (sdk as { external_source?: string | null }).external_source ?? null;
+  const externalSource = sdk.external_source ?? null;
   return {
     id: sdk.id,
     name: sdk.name,
@@ -97,21 +97,14 @@ export const groupsApi = {
     return adaptGroup(assertData(data, 'groupsApi.create'));
   },
 
-  update: async (groupId: string, input: Partial<CreateGroupRequest>): Promise<Group> => {
-    // SDK updateGroup requires the full CreateGroupRequest (with `name`); the
-    // existing API exposes Partial<> for description-only updates. Build a
-    // body type that allows omitting `name` (sending '' would blank the group
-    // name), then cast at the SDK boundary.
-    type UpdateGroupBodyPartial = Omit<CreateGroupRequest, 'name'> & { name?: string };
-    const body: UpdateGroupBodyPartial = {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-    };
-    // SDK marks `name` required for PUT, but the backend treats omission as
-    // "leave unchanged", which we want for description-only edits.
+  update: async (groupId: string, input: CreateGroupRequest): Promise<Group> => {
+    // PUT is a full replacement: the backend's CreateGroupRequest requires
+    // `name` (omitting it fails body deserialization with 422, it is not
+    // treated as "leave unchanged"). Callers editing only the description
+    // must resend the current name.
     const data = await unwrap(updateGroup({
       path: { id: groupId },
-      body: body as CreateGroupRequest,
+      body: { name: input.name, description: input.description },
     }));
     return adaptGroup(assertData(data, 'groupsApi.update'));
   },
