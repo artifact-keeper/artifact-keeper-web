@@ -8,7 +8,7 @@ import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { Server, HardDrive, Lock, Info, Mail, Loader2 } from "lucide-react";
+import { Server, HardDrive, Lock, Info, Mail, Rss, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 
 import { PageHeader } from "@/components/common/page-header";
+import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
 import type { PasswordPolicy, SmtpConfig, SmtpTlsMode, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
@@ -605,6 +606,10 @@ export default function SettingsPage() {
             <Mail className="size-4 mr-1.5" />
             Email
           </TabsTrigger>
+          <TabsTrigger value="npm-upstream">
+            <Rss className="size-4 mr-1.5" />
+            npm Upstream
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4">
@@ -737,6 +742,10 @@ export default function SettingsPage() {
 
         <TabsContent value="email" className="mt-4">
           <SmtpSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="npm-upstream" className="mt-4">
+          <NpmUpstreamFeedCard />
         </TabsContent>
       </Tabs>
     </div>
