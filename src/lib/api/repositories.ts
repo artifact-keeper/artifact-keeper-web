@@ -67,6 +67,13 @@ export interface RoutingRulesResponse {
   rules: RoutingRule[];
 }
 
+/** The release repo linked to a staging repo (#260). */
+export interface ReleaseTargetInfo {
+  linked: boolean;
+  release_repository_key: string | null;
+  release_repository_id: string | null;
+}
+
 /**
  * Package age policy for a repository (issue #265, backend
  * artifact-keeper/artifact-keeper#709).
@@ -382,11 +389,16 @@ export const repositoriesApi = {
     );
   },
 
-  // Release target configuration for staging repositories (issue #260).
-  // Persisted via PATCH /repositories/{key} with the `release_repository_key`
-  // field. Pass an empty string to remove an existing link. The generated SDK's
-  // UpdateRepositoryRequest may not carry this field yet, so it is sent through
-  // apiFetch to guarantee it reaches the backend.
+  // Read a staging repo's linked release target (#260). The plain repository
+  // GET omits the link, so it lives on the promotion endpoint.
+  getReleaseTarget: async (repoKey: string): Promise<ReleaseTargetInfo> => {
+    return apiFetch<ReleaseTargetInfo>(
+      `/api/v1/promotion/repositories/${encodeURIComponent(repoKey)}/release-target`
+    );
+  },
+
+  // Save the link via PATCH (empty string unlinks). Sent through apiFetch since
+  // the SDK's UpdateRepositoryRequest may not carry this field yet.
   setReleaseTarget: async (
     repoKey: string,
     releaseRepositoryKey: string

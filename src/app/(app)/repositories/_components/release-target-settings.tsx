@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Target, Info } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,9 +37,8 @@ interface ReleaseTargetSettingsProps {
  * linked release repo, and promotions to any other repository are rejected by
  * the backend.
  *
- * The backend has no GET that returns the current link, so this control is a
- * write-through "set the release target" form. Eligible targets are local
- * repositories that share the staging repo's format.
+ * The picker seeds from the saved link so it survives a revisit. Eligible
+ * targets are local repositories sharing the staging repo's format.
  */
 export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps) {
   const queryClient = useQueryClient();
@@ -63,25 +62,40 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
     [repoList, repository.id]
   );
 
+  // The saved link, so the picker can show it.
+  const { data: currentTarget, isLoading: targetLoading } = useQuery({
+    queryKey: ["repository", repository.key, "release-target"],
+    queryFn: () => repositoriesApi.getReleaseTarget(repository.key),
+    enabled: isStaging,
+  });
+
   const [selected, setSelected] = useState<string>(NONE_VALUE);
-  // The backend exposes no GET for the current link, so the picker seeds to
-  // "none". Track an explicit change and keep Save disabled until then, so a
-  // pristine form cannot unlink an existing target on an accidental click.
-  // (review fix #462)
-  const [dirty, setDirty] = useState(false);
+  // The value we seeded from. Save stays disabled while the selection still
+  // matches it, so a stray click can't unlink an existing target (#462).
+  const [synced, setSynced] = useState<string | null>(null);
+
+  const serverValue = currentTarget?.release_repository_key ?? NONE_VALUE;
+  const dirty = synced !== null && selected !== synced;
+
+  // Seed from the server during render (same trick as routing-rules-settings),
+  // resyncing on change unless the user has unsaved edits.
+  if (currentTarget && serverValue !== synced && !dirty) {
+    setSynced(serverValue);
+    setSelected(serverValue);
+  }
 
   const handleSelect = (value: string) => {
     setSelected(value);
-    setDirty(true);
   };
 
   const saveMutation = useMutation({
     mutationFn: (releaseKey: string) =>
       repositoriesApi.setReleaseTarget(repository.key, releaseKey),
     onSuccess: () => {
+      // The saved value is the new baseline, so Save disables right away.
+      setSynced(selected);
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
-      setDirty(false);
       toast.success(
         selected === NONE_VALUE
           ? "Release target link removed"
@@ -148,7 +162,7 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="release-target-select">Release repository</Label>
-          {candidatesLoading ? (
+          {candidatesLoading || targetLoading ? (
             <Skeleton className="h-10 w-full" />
           ) : (
             <Select value={selected} onValueChange={handleSelect}>
