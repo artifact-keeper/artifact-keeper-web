@@ -664,7 +664,11 @@ export default function PermissionsPage() {
         open={createOpen}
         onOpenChange={(o) => {
           setCreateOpen(o);
-          if (!o) setForm(EMPTY_FORM);
+          if (!o) {
+            setForm(EMPTY_FORM);
+            setPrincipalPickerOpen(false);
+            setPrincipalSearch("");
+          }
         }}
       >
         <DialogContent className="sm:max-w-lg">
