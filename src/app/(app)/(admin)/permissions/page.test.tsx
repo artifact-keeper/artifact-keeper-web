@@ -98,11 +98,32 @@ vi.mock("@/components/ui/select", () => {
   return { Select, SelectTrigger, SelectValue, SelectContent, SelectItem };
 });
 
-vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  PopoverTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => <>{children}</>,
-  PopoverContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock("@/components/ui/popover", () => {
+  // Minimal stateful stand-in: the trigger toggles through the page's
+  // onOpenChange so tests exercise the page's own open/close handling
+  // (search reset on close), while content still renders inline.
+  let currentOpen = false;
+  let currentOnOpenChange: ((open: boolean) => void) | undefined;
+  return {
+    Popover: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => {
+      currentOpen = open ?? false;
+      currentOnOpenChange = onOpenChange;
+      return <>{children}</>;
+    },
+    PopoverTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
+      <span onClick={() => currentOnOpenChange?.(!currentOpen)}>{children}</span>
+    ),
+    PopoverContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock("@/components/ui/command", () => ({
   Command: ({ children }: { children: React.ReactNode; shouldFilter?: boolean }) => <div>{children}</div>,
@@ -162,12 +183,23 @@ vi.mock("@/components/ui/dialog", () => ({
   Dialog({
     children,
     open,
+    onOpenChange,
   }: {
     children: React.ReactNode;
     open?: boolean;
     onOpenChange?: (o: boolean) => void;
   }) {
-    return open ? <div role="dialog">{children}</div> : null;
+    // Mirror Radix: Escape closes the dialog through onOpenChange.
+    return open ? (
+      <div
+        role="dialog"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onOpenChange?.(false);
+        }}
+      >
+        {children}
+      </div>
+    ) : null;
   },
   DialogContent({ children }: { children: React.ReactNode; className?: string }) {
     return <div>{children}</div>;
@@ -564,6 +596,80 @@ describe("PermissionsPage", () => {
           actions: ["read"],
         });
       });
+    });
+  });
+
+  describe("group principals", () => {
+    it("lists groups when the principal type is group", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "group");
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(screen.getByRole("button", { name: "Developers" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "QA Team" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+    });
+  });
+
+  describe("principal picker state", () => {
+    it("clears the principal search when the picker is closed", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "service_account");
+
+      const picker = screen.getByRole("combobox", { name: "Principal" });
+      await user.click(picker);
+      const search = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      await user.type(search, "svc-release");
+      expect(search.value).toBe("svc-release");
+      expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
+
+      // Toggling the picker closed resets the search filter.
+      await user.click(picker);
+      const reopened = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      expect(reopened.value).toBe("");
+    });
+
+    it("resets the principal picker and search when the create dialog is closed", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "service_account");
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      const search = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      await user.type(search, "zzz");
+      expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+
+      // Escape closes the dialog (Radix behavior), discarding picker state.
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+
+      await openCreateDialog(user);
+      await user.selectOptions(getFormSelects()[0], "service_account");
+      const reopenedSearch = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      expect(reopenedSearch.value).toBe("");
+      expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
     });
   });
 
