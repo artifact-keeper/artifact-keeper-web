@@ -36,23 +36,31 @@ describe("quarantineKnowledge", () => {
     vi.useRealTimers();
   });
 
-  // The regression behind #650: the backend omits all four quarantine keys on
-  // surfaces that never load quarantine state, so "the server did not look"
-  // and "the server looked and it is fine" must stay distinguishable.
-  it("reports unknown when is_blocked is absent, not clear", () => {
+  // The shipped contract (artifact-keeper#2966) always serializes
+  // `quarantine_status` on artifact payloads; an absent status means the
+  // response came from an older backend that never looked. The regression
+  // behind #650: "the server did not look" and "the server looked and it is
+  // fine" must stay distinguishable.
+  it("reports unknown when quarantine_status is absent, not clear", () => {
     expect(quarantineKnowledge(makeArtifact())).toBe("unknown");
     expect(isQuarantineStateKnown(makeArtifact())).toBe(false);
   });
 
-  it("reports clear when is_blocked is explicitly false", () => {
-    const artifact = makeArtifact({ is_blocked: false });
+  it("reports clear for the explicit not_quarantined default", () => {
+    const artifact = makeArtifact({ quarantine_status: "not_quarantined" });
     expect(quarantineKnowledge(artifact)).toBe("clear");
     expect(isQuarantineStateKnown(artifact)).toBe(true);
   });
 
-  it("does not treat an absent field as a false one", () => {
+  it("reports clear for the scan-lifecycle states", () => {
+    for (const status of ["clean", "flagged", "unscanned", "released"]) {
+      expect(quarantineKnowledge(makeArtifact({ quarantine_status: status }))).toBe("clear");
+    }
+  });
+
+  it("does not treat an absent field as a clear one", () => {
     const absent = makeArtifact();
-    const looked = makeArtifact({ is_blocked: false });
+    const looked = makeArtifact({ quarantine_status: "not_quarantined" });
     // Both are "not blocked" ...
     expect(isActivelyQuarantined(absent)).toBe(false);
     expect(isActivelyQuarantined(looked)).toBe(false);
@@ -62,10 +70,12 @@ describe("quarantineKnowledge", () => {
     expect(isQuarantineStateKnown(looked)).toBe(true);
   });
 
-  it("treats a null is_blocked as unknown", () => {
-    // The contract omits the key rather than nulling it, but a deployment that
-    // sends null must not read as "the server looked and it is fine".
-    expect(quarantineKnowledge({ is_blocked: null })).toBe("unknown");
+  it("treats a null or empty status as unknown", () => {
+    // The status endpoint serializes `quarantine_status: null` for an artifact
+    // with no recorded state; that must not read as "the server looked and it
+    // is fine" either.
+    expect(quarantineKnowledge({ quarantine_status: null })).toBe("unknown");
+    expect(quarantineKnowledge({ quarantine_status: "" })).toBe("unknown");
   });
 
   it("reports unknown for a missing source", () => {
@@ -73,10 +83,16 @@ describe("quarantineKnowledge", () => {
     expect(quarantineKnowledge(undefined)).toBe("unknown");
   });
 
-  it("reports unknown when a status is present but the verdict is not", () => {
-    // Cannot happen under the contract (the four fields travel together), but
-    // a status without the verdict must not silently read as downloadable.
-    expect(quarantineKnowledge({ quarantine_status: "quarantined" })).toBe("unknown");
+  it("reports blocked for a live hold", () => {
+    expect(
+      quarantineKnowledge(makeArtifact({ quarantine_status: "quarantined" })),
+    ).toBe("blocked");
+  });
+
+  it("reports blocked for a rejection", () => {
+    expect(
+      quarantineKnowledge(makeArtifact({ quarantine_status: "rejected" })),
+    ).toBe("blocked");
   });
 });
 
@@ -90,21 +106,25 @@ describe("isActivelyQuarantined", () => {
     vi.useRealTimers();
   });
 
-  it("returns false when is_blocked is undefined", () => {
+  it("returns false when quarantine_status is undefined", () => {
     expect(isActivelyQuarantined(makeArtifact())).toBe(false);
   });
 
-  it("returns false when is_blocked is false", () => {
-    expect(isActivelyQuarantined(makeArtifact({ is_blocked: false }))).toBe(false);
+  it("returns false for a clear status", () => {
+    expect(
+      isActivelyQuarantined(makeArtifact({ quarantine_status: "not_quarantined" })),
+    ).toBe(false);
   });
 
-  it("returns true when is_blocked is true with no expiry", () => {
-    expect(isActivelyQuarantined(makeArtifact({ is_blocked: true }))).toBe(true);
+  it("returns true for a hold with no expiry", () => {
+    expect(
+      isActivelyQuarantined(makeArtifact({ quarantine_status: "quarantined" })),
+    ).toBe(true);
   });
 
-  it("returns true when is_blocked is true and quarantine_until is null", () => {
+  it("returns true for a hold with quarantine_until null", () => {
     const artifact = makeArtifact({
-      is_blocked: true,
+      quarantine_status: "quarantined",
       quarantine_until: null,
     });
     expect(isActivelyQuarantined(artifact)).toBe(true);
@@ -112,15 +132,18 @@ describe("isActivelyQuarantined", () => {
 
   it("returns true when quarantine_until is in the future", () => {
     const artifact = makeArtifact({
-      is_blocked: true,
+      quarantine_status: "quarantined",
       quarantine_until: "2026-04-20T00:00:00Z",
     });
     expect(isActivelyQuarantined(artifact)).toBe(true);
   });
 
-  it("returns false when quarantine_until has passed since the response was rendered", () => {
+  it("returns false when a timed hold has lapsed since the response was rendered", () => {
+    // Same semantics as the backend's check_download_allowed: the row keeps
+    // the "quarantined" label until the background job transitions it, but an
+    // expired hold no longer blocks downloads.
     const artifact = makeArtifact({
-      is_blocked: true,
+      quarantine_status: "quarantined",
       quarantine_until: "2026-04-10T00:00:00Z",
     });
     expect(isActivelyQuarantined(artifact)).toBe(false);
@@ -128,7 +151,7 @@ describe("isActivelyQuarantined", () => {
 
   it("stays blocked when quarantine_until is unparseable", () => {
     const artifact = makeArtifact({
-      is_blocked: true,
+      quarantine_status: "quarantined",
       quarantine_until: "not-a-date",
     });
     expect(isActivelyQuarantined(artifact)).toBe(true);
@@ -136,11 +159,18 @@ describe("isActivelyQuarantined", () => {
 
   it("keeps a rejected artifact blocked (the backend clears quarantine_until on reject)", () => {
     const artifact = makeArtifact({
-      is_blocked: true,
       quarantine_status: "rejected",
       quarantine_until: null,
     });
     expect(isActivelyQuarantined(artifact)).toBe(true);
+  });
+
+  it("ignores a stray quarantine_until on a clear status", () => {
+    const artifact = makeArtifact({
+      quarantine_status: "not_quarantined",
+      quarantine_until: "2099-01-01T00:00:00Z",
+    });
+    expect(isActivelyQuarantined(artifact)).toBe(false);
   });
 });
 
@@ -167,7 +197,7 @@ describe("quarantineDownloadBlockedReason", () => {
   });
 
   it("falls back to the hold wording when the status is absent", () => {
-    expect(quarantineDownloadBlockedReason({ is_blocked: true })).toBe(
+    expect(quarantineDownloadBlockedReason({})).toBe(
       QUARANTINE_HOLD_DOWNLOAD_REASON,
     );
   });

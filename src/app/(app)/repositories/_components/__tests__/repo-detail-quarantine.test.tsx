@@ -205,12 +205,23 @@ vi.mock("@/components/common/copy-button", () => ({ CopyButton: () => <div /> })
 
 import { RepoDetailContent } from "../repo-detail-content";
 
+// A listing row for a held artifact, exactly as the shipped backend
+// serializes it (artifact-keeper#2966): the verdict and the timed-hold expiry,
+// never `is_blocked`, never the reason.
 const HELD = {
   ...BASE_ARTIFACT,
+  quarantine_status: "quarantined",
+  quarantine_until: "2099-01-01T00:00:00Z",
+};
+
+// The status endpoint's answer for the same artifact: the only surface that
+// discloses the reason, and only to callers who hold the repository (#2912).
+const HELD_STATUS = {
+  artifact_id: "a1",
   is_blocked: true,
   quarantine_status: "quarantined",
-  quarantine_reason: "Policy block-critical: 3 critical findings",
   quarantine_until: "2099-01-01T00:00:00Z",
+  quarantine_reason: "Policy block-critical: 3 critical findings",
 };
 
 async function openDetailDialog() {
@@ -239,11 +250,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("artifact detail dialog — quarantine banner reachability", () => {
-  it("shows the banner for an artifact the listing reports as blocked", async () => {
+  it("shows the banner for an artifact the listing reports as held", async () => {
     artifactRow = HELD;
     await openDetailDialog();
 
     expect(screen.getByText("This artifact is quarantined")).toBeInTheDocument();
+  });
+
+  it("lazy-fetches the reason for a held artifact, which the listing never carries", async () => {
+    artifactRow = HELD;
+    quarantineStatusData = HELD_STATUS;
+    await openDetailDialog();
+
+    // Blocked is not clear, so the dialog asks the status endpoint for the
+    // reason rather than rendering the hold unexplained.
+    expect(quarantineStatusQuery()?.enabled).toBe(true);
+    expect(quarantineStatusQuery()?.queryKey).toEqual(["quarantine-status", "a1"]);
     // Banner and the Quarantine detail row both carry it.
     expect(
       screen.getAllByText("Policy block-critical: 3 critical findings").length,
@@ -251,7 +273,7 @@ describe("artifact detail dialog — quarantine banner reachability", () => {
   });
 
   it("shows no banner when the listing reports the artifact as clear", async () => {
-    artifactRow = { ...BASE_ARTIFACT, is_blocked: false, quarantine_status: null };
+    artifactRow = { ...BASE_ARTIFACT, quarantine_status: "not_quarantined" };
     await openDetailDialog();
 
     expect(screen.queryByText("This artifact is quarantined")).not.toBeInTheDocument();
@@ -260,10 +282,11 @@ describe("artifact detail dialog — quarantine banner reachability", () => {
   });
 
   it("renders the banner without a reason when the reason was redacted", async () => {
-    // Present status, absent reason: the caller cannot access the repository,
+    // Blocked verdict, absent reason: the caller cannot access the repository,
     // so the backend withholds the policy detail but not the verdict.
-    artifactRow = {
-      ...BASE_ARTIFACT,
+    artifactRow = HELD;
+    quarantineStatusData = {
+      artifact_id: "a1",
       is_blocked: true,
       quarantine_status: "quarantined",
       quarantine_until: "2099-01-01T00:00:00Z",
@@ -281,12 +304,13 @@ describe("artifact detail dialog — quarantine banner reachability", () => {
   });
 
   it("uses terminal wording and offers no admin action for a rejected artifact", async () => {
-    artifactRow = {
-      ...BASE_ARTIFACT,
+    artifactRow = { ...BASE_ARTIFACT, quarantine_status: "rejected" };
+    quarantineStatusData = {
+      artifact_id: "a1",
       is_blocked: true,
       quarantine_status: "rejected",
-      quarantine_reason: "Confirmed malware",
       quarantine_until: null,
+      quarantine_reason: "Confirmed malware",
     };
     await openDetailDialog();
 
@@ -299,10 +323,11 @@ describe("artifact detail dialog — quarantine banner reachability", () => {
 });
 
 describe("artifact detail dialog — absent quarantine state is not a clean bill of health", () => {
-  it("looks the verdict up when the response carried no quarantine fields", async () => {
-    // The by-path detail endpoint omits all four keys. Absent means the server
-    // did not look, so the dialog asks rather than assuming the artifact is
-    // fine — the collapse that made the banner dead code in the first place.
+  it("looks the verdict up when the response carried no quarantine status", async () => {
+    // An older backend serializes no `quarantine_status` at all. Absent means
+    // the server did not look, so the dialog asks rather than assuming the
+    // artifact is fine — the collapse that made the banner dead code in the
+    // first place.
     artifactRow = { ...BASE_ARTIFACT };
     await openDetailDialog();
 

@@ -230,18 +230,19 @@ export interface Artifact {
   content_type: string;
   download_count: number;
   /**
-   * Quarantine state, carried by every row of the repository artifacts
-   * listing (artifact-keeper#2940) and absent everywhere else. All four keys
-   * travel together and are omitted rather than nulled on surfaces that do
-   * not load quarantine state, so `undefined` means "the server did not
-   * look" while `is_blocked: false` means "it looked and this is
-   * downloadable". Read them through `@/lib/quarantine` rather than testing
-   * them directly, so the two never collapse into one falsy check (#650).
+   * Quarantine state, serialized on every artifact payload from a current
+   * backend (artifact-keeper#2966): the repository artifacts listing, the
+   * by-id and the by-path responses all carry `quarantine_status`
+   * ("quarantined", "rejected", a scan-lifecycle state, or
+   * "not_quarantined"), with `quarantine_until` present only for timed
+   * holds. Optional here only so an older backend that serializes neither
+   * degrades to "unknown" instead of crashing. The listing never carries
+   * `is_blocked` or the reason — the reason is disclosed only by
+   * `GET /api/v1/quarantine/{id}`. Read these through `@/lib/quarantine`
+   * rather than testing them directly (#650, #697).
    */
-  is_blocked?: boolean;
   quarantine_status?: string | null;
   quarantine_until?: string | null;
-  quarantine_reason?: string | null;
   created_at: string;
   metadata?: Record<string, unknown>;
   /**
