@@ -337,18 +337,14 @@ export const settingsApi = {
   },
 
   /**
-   * Save SMTP configuration. Uses the /api/v1/admin/smtp endpoint which
-   * is not yet in the generated SDK.
-   */
-  updateSmtpConfig: async (config: SmtpConfig): Promise<void> => {
-    await apiFetch<void>("/api/v1/admin/smtp", {
-      method: "PUT",
-      body: JSON.stringify(config),
-    });
-  },
-
-  /**
    * Send a test email through the configured SMTP server.
+   *
+   * Note: there is deliberately no `updateSmtpConfig` here. The backend has
+   * never exposed a save endpoint — `PUT /api/v1/admin/smtp` does not exist
+   * and calling it returns 404 (issue #555). SMTP is configured exclusively
+   * via server environment variables (SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
+   * SMTP_PASSWORD, SMTP_FROM_ADDRESS, SMTP_TLS_MODE); only the test-email
+   * endpoint below exists under /api/v1/admin/smtp.
    */
   sendTestEmail: async (recipient: string): Promise<SendTestEmailResponse> => {
     return apiFetch<SendTestEmailResponse>("/api/v1/admin/smtp/test", {
