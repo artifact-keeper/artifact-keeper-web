@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Workflow, Plus, Trash2, Pencil, AlertCircle, RotateCcw, Loader2 } from "lucide-react";
@@ -48,6 +50,7 @@ const emptyForm: CreateSyncPolicyRequest = {
 };
 
 export default function SyncPoliciesPage() {
+  useDocumentTitle("Sync Policies");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

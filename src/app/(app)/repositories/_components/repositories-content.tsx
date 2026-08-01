@@ -12,6 +12,7 @@ import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRepositories } from "@/hooks/use-repositories";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
 
 export function RepositoriesContent() {
+  useDocumentTitle("Repositories");
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
@@ -277,7 +279,7 @@ export function RepositoriesContent() {
             value={formatFilter}
             onValueChange={(v) => { setFormatFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectTrigger className="h-7 text-xs flex-1" aria-label="Filter by format">
               <SelectValue placeholder="Format" />
             </SelectTrigger>
             <SelectContent>
@@ -300,7 +302,7 @@ export function RepositoriesContent() {
             value={typeFilter}
             onValueChange={(v) => { setTypeFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs w-[100px]">
+            <SelectTrigger className="h-7 text-xs w-[100px]" aria-label="Filter by type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
