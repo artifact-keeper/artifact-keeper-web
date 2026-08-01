@@ -122,7 +122,7 @@ export default function GroupsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<GroupForm> }) =>
+    mutationFn: ({ id, data }: { id: string; data: GroupForm }) =>
       // PUT is a full replacement: backend requires `name`, so resend the
       // (unchanged, non-editable) name alongside the new description.
       groupsApi.update(id, { name: data.name, description: data.description }),
