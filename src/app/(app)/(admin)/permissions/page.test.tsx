@@ -41,6 +41,11 @@ vi.mock("@/lib/api/admin", () => ({
   adminApi: mockAdminApi,
 }));
 
+const mockServiceAccountsApi = { list: vi.fn() };
+vi.mock("@/lib/api/service-accounts", () => ({
+  serviceAccountsApi: mockServiceAccountsApi,
+}));
+
 const mockToast = { success: vi.fn(), error: vi.fn() };
 vi.mock("sonner", () => ({ toast: mockToast }));
 
@@ -93,6 +98,66 @@ vi.mock("@/components/ui/select", () => {
   return { Select, SelectTrigger, SelectValue, SelectContent, SelectItem };
 });
 
+vi.mock("@/components/ui/popover", () => {
+  // Minimal stateful stand-in: the trigger toggles through the page's
+  // onOpenChange so tests exercise the page's own open/close handling
+  // (search reset on close), while content still renders inline.
+  let currentOpen = false;
+  let currentOnOpenChange: ((open: boolean) => void) | undefined;
+  return {
+    Popover: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) => {
+      currentOpen = open ?? false;
+      currentOnOpenChange = onOpenChange;
+      return <>{children}</>;
+    },
+    PopoverTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
+      <span onClick={() => currentOnOpenChange?.(!currentOpen)}>{children}</span>
+    ),
+    PopoverContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  };
+});
+
+vi.mock("@/components/ui/command", () => ({
+  Command: ({ children }: { children: React.ReactNode; shouldFilter?: boolean }) => <div>{children}</div>,
+  CommandInput: ({
+    value,
+    onValueChange,
+    ...props
+  }: {
+    value?: string;
+    onValueChange?: (value: string) => void;
+  } & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input
+      {...props}
+      value={value ?? ""}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    />
+  ),
+  CommandList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  CommandEmpty: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  CommandGroup: ({ children }: { children: React.ReactNode; heading?: string }) => <div>{children}</div>,
+  CommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children: React.ReactNode;
+    value: string;
+    onSelect?: () => void;
+  }) => (
+    <button type="button" onClick={onSelect}>
+      {children}
+    </button>
+  ),
+}));
+
 // -- Radix UI Checkbox replaced with native <input type="checkbox"> ---------
 vi.mock("@/components/ui/checkbox", () => ({
   Checkbox: ({
@@ -118,12 +183,23 @@ vi.mock("@/components/ui/dialog", () => ({
   Dialog({
     children,
     open,
+    onOpenChange,
   }: {
     children: React.ReactNode;
     open?: boolean;
     onOpenChange?: (o: boolean) => void;
   }) {
-    return open ? <div role="dialog">{children}</div> : null;
+    // Mirror Radix: Escape closes the dialog through onOpenChange.
+    return open ? (
+      <div
+        role="dialog"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onOpenChange?.(false);
+        }}
+      >
+        {children}
+      </div>
+    ) : null;
   },
   DialogContent({ children }: { children: React.ReactNode; className?: string }) {
     return <div>{children}</div>;
@@ -203,6 +279,18 @@ const MOCK_GROUPS = [
   { id: "grp-2", name: "QA Team", description: "", auto_join: false, member_count: 2, is_external: false, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
 ];
 
+const MOCK_SERVICE_ACCOUNTS = [
+  {
+    id: "service-account-1",
+    username: "svc-release-bot",
+    display_name: "Release Bot",
+    is_active: true,
+    token_count: 1,
+    created_at: "2025-01-01T00:00:00Z",
+    updated_at: "2025-01-01T00:00:00Z",
+  },
+];
+
 const MOCK_REPOS = [
   { id: "repo-1", key: "npm-local", name: "NPM Local", format: "npm" as const, repo_type: "local" as const, is_public: false, storage_used_bytes: 0, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
   { id: "repo-2", key: "maven-remote", name: "", format: "maven" as const, repo_type: "remote" as const, is_public: true, storage_used_bytes: 0, created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z" },
@@ -261,7 +349,7 @@ async function openCreateDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(buttons[0]);
   await waitFor(() => {
     expect(
-      screen.getByText("Grant a user or group access to a target resource."),
+      screen.getByText("Grant a user, service account, or group access to a target resource."),
     ).toBeTruthy();
   });
 }
@@ -269,12 +357,20 @@ async function openCreateDialog(user: ReturnType<typeof userEvent.setup>) {
 /**
  * Return all native <select> elements inside a dialog.
  * In the create/edit form the order is:
- *   [0] principal_type   [1] principal_id
- *   [2] target_type      [3] target_id (absent when target_type=artifact)
+ *   [0] principal_type   [1] target_type
+ *   [2] target_id (absent when target_type=artifact)
  */
 function getFormSelects(): HTMLSelectElement[] {
   const dialog = screen.getByRole("dialog");
   return Array.from(dialog.querySelectorAll("select"));
+}
+
+async function selectPrincipal(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: "Principal" }));
+  await user.click(screen.getByRole("button", { name: label }));
 }
 
 /**
@@ -310,6 +406,7 @@ beforeEach(async () => {
     items: MOCK_GROUPS,
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
   });
+  mockServiceAccountsApi.list.mockResolvedValue(MOCK_SERVICE_ACCOUNTS);
   mockRepositoriesApi.list.mockResolvedValue({
     items: MOCK_REPOS,
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
@@ -351,6 +448,24 @@ describe("PermissionsPage", () => {
     expect(screen.getAllByText("npm-local").length).toBeGreaterThan(0);
   });
 
+  it("uses the loaded service account name when a permission row omits principal_name", async () => {
+    mockPermissionsApi.list.mockResolvedValue({
+      items: [{
+        ...PERM_1,
+        principal_type: "service_account" as const,
+        principal_id: "service-account-1",
+        principal_name: undefined,
+      }],
+      pagination: { page: 1, per_page: 1000, total: 1, total_pages: 1 },
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("Service Account")).toBeTruthy();
+      expect(screen.getByText("Release Bot")).toBeTruthy();
+    });
+    expect(screen.queryByText("Service_account")).toBeNull();
+  });
+
   it("shows empty state when no permissions exist", async () => {
     mockPermissionsApi.list.mockResolvedValue({
       items: [],
@@ -378,7 +493,7 @@ describe("PermissionsPage", () => {
 
       // The target_type select should have value "repository"
       const selects = getFormSelects();
-      expect(selects[2].value).toBe("repository");
+      expect(selects[1].value).toBe("repository");
     });
 
     it("shows text input with placeholder Artifact UUID for artifact target type", async () => {
@@ -388,14 +503,14 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      await user.selectOptions(selects[2], "artifact");
+      await user.selectOptions(selects[1], "artifact");
 
       // Label should change to "Artifact ID"
       expect(screen.getByText("Artifact ID")).toBeTruthy();
       // A text input with the UUID placeholder should appear
       expect(screen.getByPlaceholderText("Artifact UUID")).toBeTruthy();
-      // The target_id select should be replaced by the input, so only 3 selects remain
-      expect(getFormSelects().length).toBe(3);
+      // The target_id select should be replaced by the input, so only 2 selects remain
+      expect(getFormSelects().length).toBe(2);
     });
 
     it("shows Target Group label and group select for group target type", async () => {
@@ -405,13 +520,13 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      await user.selectOptions(selects[2], "group");
+      await user.selectOptions(selects[1], "group");
 
       expect(screen.getByText("Target Group")).toBeTruthy();
 
       // The target_id select should contain group options
       const updatedSelects = getFormSelects();
-      const targetIdSelect = updatedSelects[3];
+      const targetIdSelect = updatedSelects[2];
       const options = Array.from(targetIdSelect.querySelectorAll("option"));
       expect(options.some((o) => o.value === "grp-1")).toBe(true);
       expect(options.some((o) => o.textContent === "Developers")).toBe(true);
@@ -424,8 +539,8 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      const targetTypeSelect = selects[2];
-      const targetIdSelect = selects[3];
+      const targetTypeSelect = selects[1];
+      const targetIdSelect = selects[2];
 
       // Pick a repository
       await user.selectOptions(targetIdSelect, "repo-1");
@@ -435,7 +550,126 @@ describe("PermissionsPage", () => {
       await user.selectOptions(targetTypeSelect, "group");
 
       const refreshed = getFormSelects();
-      expect(refreshed[3].value).toBe("");
+      expect(refreshed[2].value).toBe("");
+    });
+  });
+
+  describe("service account principals", () => {
+    it("filters principals by type and sends service_account in the create payload", async () => {
+      const user = userEvent.setup();
+      mockPermissionsApi.create.mockResolvedValue({
+        ...PERM_1,
+        principal_type: "service_account",
+        principal_id: "service-account-1",
+        principal_name: "Release Bot",
+      });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await selectPrincipal(user, "Alice");
+      expect(screen.getByRole("combobox", { name: "Principal" }).textContent).toContain("Alice");
+
+      const selects = getFormSelects();
+
+      await user.selectOptions(selects[0], "service_account");
+
+      const principalPicker = screen.getByRole("combobox", { name: "Principal" });
+      expect(principalPicker.textContent).toContain("Select...");
+      await user.click(principalPicker);
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "svc-release");
+      expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Developers" })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Release Bot" }));
+      await user.selectOptions(getFormSelects()[2], "repo-1");
+      const submitButtons = screen.getAllByText(/Create Permission/);
+      await user.click(submitButtons[submitButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(mockPermissionsApi.create).toHaveBeenCalledWith({
+          principal_type: "service_account",
+          principal_id: "service-account-1",
+          target_type: "repository",
+          target_id: "repo-1",
+          actions: ["read"],
+        });
+      });
+    });
+  });
+
+  describe("group principals", () => {
+    it("lists groups when the principal type is group", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "group");
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(screen.getByRole("button", { name: "Developers" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "QA Team" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+    });
+  });
+
+  describe("principal picker state", () => {
+    it("clears the principal search when the picker is closed", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "service_account");
+
+      const picker = screen.getByRole("combobox", { name: "Principal" });
+      await user.click(picker);
+      const search = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      await user.type(search, "svc-release");
+      expect(search.value).toBe("svc-release");
+      expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
+
+      // Toggling the picker closed resets the search filter.
+      await user.click(picker);
+      const reopened = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      expect(reopened.value).toBe("");
+    });
+
+    it("resets the principal picker and search when the create dialog is closed", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.selectOptions(getFormSelects()[0], "service_account");
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      const search = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      await user.type(search, "zzz");
+      expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+
+      // Escape closes the dialog (Radix behavior), discarding picker state.
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+
+      await openCreateDialog(user);
+      await user.selectOptions(getFormSelects()[0], "service_account");
+      const reopenedSearch = screen.getByRole("textbox", {
+        name: "Search principals",
+      }) as HTMLInputElement;
+      expect(reopenedSearch.value).toBe("");
+      expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
     });
   });
 
@@ -449,7 +683,7 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      const targetIdSelect = selects[3];
+      const targetIdSelect = selects[2];
       const options = Array.from(targetIdSelect.querySelectorAll("option"));
       expect(options.some((o) => o.value === "repo-1")).toBe(true);
       expect(options.some((o) => o.value === "repo-2")).toBe(true);
@@ -462,7 +696,7 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      const targetIdSelect = selects[3];
+      const targetIdSelect = selects[2];
       const options = Array.from(targetIdSelect.querySelectorAll("option"));
       const npmOpt = options.find((o) => o.value === "repo-1");
       expect(npmOpt?.textContent).toContain("npm-local");
@@ -511,10 +745,10 @@ describe("PermissionsPage", () => {
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      // Fill required fields via the native selects inside the dialog
+      // Pick the default user principal and target repository.
       const selects = getFormSelects();
-      await user.selectOptions(selects[1], "user-2"); // principal_id
-      await user.selectOptions(selects[3], "repo-1"); // target_id
+      await selectPrincipal(user, "Alice");
+      await user.selectOptions(selects[2], "repo-1");
 
       // Click submit -- the last "Create Permission" match is the form button
       const submitBtns = screen.getAllByText(/Create Permission/);
@@ -535,8 +769,8 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      await user.selectOptions(selects[1], "user-2");
-      await user.selectOptions(selects[3], "repo-1");
+      await selectPrincipal(user, "Alice");
+      await user.selectOptions(selects[2], "repo-1");
 
       const submitBtns = screen.getAllByText(/Create Permission/);
       await user.click(submitBtns[submitBtns.length - 1]);
@@ -554,8 +788,8 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       const selects = getFormSelects();
-      await user.selectOptions(selects[1], "user-2");
-      await user.selectOptions(selects[3], "repo-1");
+      await selectPrincipal(user, "Alice");
+      await user.selectOptions(selects[2], "repo-1");
 
       const submitBtns = screen.getAllByText(/Create Permission/);
       await user.click(submitBtns[submitBtns.length - 1]);

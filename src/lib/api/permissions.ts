@@ -18,7 +18,7 @@ import { unwrap } from '@/lib/sdk-utils';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
 export type PermissionTargetType = 'repository' | 'group' | 'artifact';
-export type PermissionPrincipalType = 'user' | 'group';
+export type PermissionPrincipalType = 'user' | 'service_account' | 'group';
 
 export interface Permission {
   id: string;
@@ -50,13 +50,17 @@ export interface ListPermissionsParams {
   target_id?: string;
 }
 
-const PRINCIPAL_TYPES = new Set<PermissionPrincipalType>(['user', 'group']);
+const PRINCIPAL_TYPES = new Set<PermissionPrincipalType>([
+  'user',
+  'service_account',
+  'group',
+]);
 const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'artifact']);
 const ACTIONS = new Set<PermissionAction>(['read', 'write', 'delete', 'admin']);
 
-// A new backend principal_type variant (e.g. 'service_account') would otherwise
-// silently flatten to 'user' and show up under the wrong ACL row — warn so the
-// regression is observable.
+// A new backend principal_type variant would otherwise silently flatten to
+// 'user' and show up under the wrong ACL row — warn so the regression is
+// observable.
 function narrowPrincipal(v: string): PermissionPrincipalType {
   return narrowEnum(
     v,

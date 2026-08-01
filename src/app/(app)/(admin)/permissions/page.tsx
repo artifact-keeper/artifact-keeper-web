@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Shield } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Pencil, Trash2, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 import { permissionsApi } from "@/lib/api/permissions";
@@ -16,10 +16,12 @@ import type {
 import { groupsApi } from "@/lib/api/groups";
 import { useRepositories } from "@/hooks/use-repositories";
 import { adminApi } from "@/lib/api/admin";
+import { serviceAccountsApi } from "@/lib/api/service-accounts";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, Repository } from "@/types";
 import type { Group } from "@/types/groups";
+import type { ServiceAccount } from "@/lib/api/service-accounts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +43,19 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipTrigger,
@@ -74,12 +89,24 @@ interface PermissionForm {
   actions: PermissionAction[];
 }
 
+interface PrincipalOption {
+  value: string;
+  label: string;
+  searchText?: string;
+}
+
 const EMPTY_FORM: PermissionForm = {
   principal_type: "user",
   principal_id: "",
   target_type: "repository",
   target_id: "",
   actions: ["read"],
+};
+
+const PRINCIPAL_TYPE_LABELS: Record<PermissionPrincipalType, string> = {
+  user: "User",
+  service_account: "Service Account",
+  group: "Group",
 };
 
 // -- page --
@@ -95,6 +122,8 @@ export default function PermissionsPage() {
   const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
 
   const [form, setForm] = useState<PermissionForm>(EMPTY_FORM);
+  const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
+  const [principalSearch, setPrincipalSearch] = useState("");
 
   // -- queries --
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
@@ -120,6 +149,12 @@ export default function PermissionsPage() {
     { enabled: !!currentUser?.is_admin },
   );
 
+  const { data: serviceAccountsData, isLoading: serviceAccountsLoading } = useQuery({
+    queryKey: ["service-accounts"],
+    queryFn: () => serviceAccountsApi.list(),
+    enabled: !!currentUser?.is_admin,
+  });
+
   const permissions = permissionsData?.items ?? [];
   const users = usersData ?? [];
   const groups = groupsData?.items ?? [];
@@ -127,17 +162,63 @@ export default function PermissionsPage() {
 
   // principal options based on selected type
   const principalOptions = useMemo(() => {
-    if (form.principal_type === "user") {
-      return users.map((u: User) => ({
-        value: u.id,
-        label: u.display_name || u.username,
-      }));
+    switch (form.principal_type) {
+      case "user":
+        return users.map((u: User): PrincipalOption => ({
+          value: u.id,
+          label: u.display_name || u.username,
+        }));
+      case "service_account":
+        return (serviceAccountsData ?? []).map((account: ServiceAccount): PrincipalOption => ({
+          value: account.id,
+          label: account.display_name || account.username,
+          // Display names often contain a description, while tokens and API
+          // clients refer to the account by its stable svc-* username.
+          searchText: account.username,
+        }));
+      case "group":
+        return groups.map((g: Group): PrincipalOption => ({
+          value: g.id,
+          label: g.name,
+        }));
     }
-    return groups.map((g: Group) => ({
-      value: g.id,
-      label: g.name,
-    }));
-  }, [form.principal_type, users, groups]);
+  }, [form.principal_type, users, serviceAccountsData, groups]);
+
+  const selectedPrincipal = useMemo(
+    () => principalOptions.find((principal) => principal.value === form.principal_id),
+    [form.principal_id, principalOptions]
+  );
+
+  const serviceAccountNames = useMemo(
+    () => new Map(
+      (serviceAccountsData ?? []).map((account: ServiceAccount) => [
+        account.id,
+        account.display_name || account.username,
+      ])
+    ),
+    [serviceAccountsData]
+  );
+
+  const getPrincipalLabel = useCallback(
+    (permission: Permission) =>
+      permission.principal_name ??
+      (permission.principal_type === "service_account"
+        ? serviceAccountNames.get(permission.principal_id)
+        : undefined) ??
+      permission.principal_id,
+    [serviceAccountNames]
+  );
+
+  const filteredPrincipalOptions = useMemo(() => {
+    const search = principalSearch.trim().toLowerCase();
+    if (!search) return principalOptions;
+
+    return principalOptions.filter((principal) =>
+      principal.label.toLowerCase().includes(search) ||
+      principal.searchText?.toLowerCase().includes(search) ||
+      principal.value.toLowerCase().startsWith(search)
+    );
+  }, [principalOptions, principalSearch]);
 
   const repositoryOptions = useMemo(() =>
     repositories.map((r: Repository) => ({
@@ -232,18 +313,15 @@ export default function PermissionsPage() {
     {
       id: "principal",
       header: "Principal",
-      accessor: (p) => p.principal_name ?? p.principal_id,
+      accessor: getPrincipalLabel,
       sortable: true,
       cell: (p) => (
         <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="text-xs capitalize"
-          >
-            {p.principal_type}
+          <Badge variant="outline" className="text-xs">
+            {PRINCIPAL_TYPE_LABELS[p.principal_type]}
           </Badge>
           <span className="text-sm font-medium">
-            {p.principal_name ?? p.principal_id}
+            {getPrincipalLabel(p)}
           </span>
         </div>
       ),
@@ -337,13 +415,15 @@ export default function PermissionsPage() {
           <Label>Principal Type</Label>
           <Select
             value={form.principal_type}
-            onValueChange={(v) =>
+            onValueChange={(v) => {
               setForm((f) => ({
                 ...f,
                 principal_type: v as PermissionPrincipalType,
                 principal_id: "",
-              }))
-            }
+              }));
+              setPrincipalPickerOpen(false);
+              setPrincipalSearch("");
+            }}
             disabled={editOpen}
           >
             <SelectTrigger>
@@ -351,30 +431,89 @@ export default function PermissionsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="user">User</SelectItem>
+              <SelectItem value="service_account">Service Account</SelectItem>
               <SelectItem value="group">Group</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
           <Label>Principal</Label>
-          <Select
-            value={form.principal_id}
-            onValueChange={(v) =>
-              setForm((f) => ({ ...f, principal_id: v }))
-            }
-            disabled={editOpen}
+          <Popover
+            open={principalPickerOpen}
+            onOpenChange={(open) => {
+              setPrincipalPickerOpen(open);
+              if (!open) setPrincipalSearch("");
+            }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              {principalOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-label="Principal"
+                aria-expanded={principalPickerOpen}
+                className="w-full justify-between font-normal"
+                disabled={
+                  editOpen ||
+                  (form.principal_type === "service_account" && serviceAccountsLoading)
+                }
+              >
+                {form.principal_type === "service_account" && serviceAccountsLoading
+                  ? "Loading service accounts..."
+                  : selectedPrincipal?.label ??
+                    (editOpen && selectedPermission
+                      ? getPrincipalLabel(selectedPermission)
+                      : "Select...")}
+                <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[var(--radix-popover-trigger-width)] p-0"
+              align="start"
+            >
+              <Command shouldFilter={false}>
+                <CommandInput
+                  aria-label="Search principals"
+                  placeholder="Search principals..."
+                  value={principalSearch}
+                  onValueChange={setPrincipalSearch}
+                />
+                <CommandList>
+                  {filteredPrincipalOptions.length === 0 && (
+                    <CommandEmpty>
+                      {principalSearch
+                        ? "No principals match your search."
+                        : "No principals are available."}
+                    </CommandEmpty>
+                  )}
+                  {filteredPrincipalOptions.length > 0 && (
+                    <CommandGroup heading="Principals">
+                      {filteredPrincipalOptions.map((principal) => (
+                        <CommandItem
+                          key={principal.value}
+                          value={principal.value}
+                          onSelect={() => {
+                            setForm((f) => ({ ...f, principal_id: principal.value }));
+                            setPrincipalPickerOpen(false);
+                            setPrincipalSearch("");
+                          }}
+                        >
+                          <Check
+                            className={`size-4 ${
+                              form.principal_id === principal.value
+                                ? "opacity-100"
+                                : "opacity-0"
+                            }`}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{principal.label}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -525,14 +664,18 @@ export default function PermissionsPage() {
         open={createOpen}
         onOpenChange={(o) => {
           setCreateOpen(o);
-          if (!o) setForm(EMPTY_FORM);
+          if (!o) {
+            setForm(EMPTY_FORM);
+            setPrincipalPickerOpen(false);
+            setPrincipalSearch("");
+          }
         }}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Permission</DialogTitle>
             <DialogDescription>
-              Grant a user or group access to a target resource.
+              Grant a user, service account, or group access to a target resource.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -637,7 +780,7 @@ export default function PermissionsPage() {
           if (!o) setSelectedPermission(null);
         }}
         title="Delete Permission"
-        description="Deleting this permission will revoke the associated access. Users or groups will lose the granted actions on the target resource. This action cannot be undone."
+        description="Deleting this permission will revoke the associated access. Users, service accounts, or groups will lose the granted actions on the target resource. This action cannot be undone."
         confirmText="Delete Permission"
         danger
         loading={deleteMutation.isPending}
