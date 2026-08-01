@@ -57,6 +57,7 @@ function adaptedGroupFixture(overrides: Record<string, unknown> = {}) {
     auto_join: false,
     member_count: 5,
     is_external: false,
+    external_source: null,
     created_at: "2025-01-01",
     updated_at: "2025-01-01",
     ...overrides,
@@ -119,8 +120,27 @@ describe("groupsApi", () => {
     await expect(groupsApi.getDetail("g1")).rejects.toBe("not found");
   });
 
+  it("derives is_external / external_source from the SDK external_source field", async () => {
+    mockListGroups.mockResolvedValue({
+      data: {
+        items: [
+          sdkGroupFixture({ id: "oidc", external_source: "oidc" }),
+          sdkGroupFixture({ id: "saml", external_source: "saml" }),
+          sdkGroupFixture({ id: "ldap", external_source: "ldap" }),
+          sdkGroupFixture({ id: "local", external_source: null }),
+        ],
+        pagination: { total: 4 },
+      },
+      error: undefined,
+    });
+    const { groupsApi } = await import("../groups");
+    const { items } = await groupsApi.list();
+    expect(items.map((g) => g.is_external)).toEqual([true, true, true, false]);
+    expect(items.map((g) => g.external_source)).toEqual(["oidc", "saml", "ldap", null]);
+  });
+
   it("create returns created group", async () => {
-    // CreatedGroupRow shape — no member_count.
+    // CreatedGroupRow shape, no member_count.
     mockCreateGroup.mockResolvedValue({
       data: { id: "g2", name: "ops", description: null, created_at: "x", updated_at: "x" },
       error: undefined,
@@ -133,6 +153,7 @@ describe("groupsApi", () => {
       auto_join: false,
       member_count: 0,
       is_external: false,
+      external_source: null,
       created_at: "x",
       updated_at: "x",
     });
@@ -144,15 +165,19 @@ describe("groupsApi", () => {
     await expect(groupsApi.create({ name: "ops" } as any)).rejects.toBe("dup");
   });
 
-  it("update returns updated group", async () => {
+  it("update resends name with the PUT body (backend requires it)", async () => {
     mockUpdateGroup.mockResolvedValue({
       data: sdkGroupFixture({ name: "devs-updated" }),
       error: undefined,
     });
     const { groupsApi } = await import("../groups");
-    expect(await groupsApi.update("g1", { name: "devs-updated" } as any)).toEqual(
-      adaptedGroupFixture({ name: "devs-updated" })
-    );
+    expect(
+      await groupsApi.update("g1", { name: "devs", description: "new desc" })
+    ).toEqual(adaptedGroupFixture({ name: "devs-updated" }));
+    expect(mockUpdateGroup).toHaveBeenCalledWith({
+      path: { id: "g1" },
+      body: { name: "devs", description: "new desc" },
+    });
   });
 
   it("update throws on error", async () => {
