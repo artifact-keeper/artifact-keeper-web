@@ -25,7 +25,7 @@ const mutationConfigs: MutationConfig[] = [];
 const mutateFns: Array<ReturnType<typeof vi.fn>> = [];
 const mockInvalidate = vi.fn();
 let reviewsData: { data: unknown; isLoading?: boolean; isError?: boolean; error?: unknown } = {
-  data: [],
+  data: { items: [], total: 0 },
   isLoading: false,
 };
 let repoConfigsData: unknown = {};
@@ -83,20 +83,7 @@ const api = {
 };
 vi.mock("@/lib/api/age-gate", () => {
   // Declared inside the factory (vi.mock is hoisted) and re-imported below, so
-  // the page's `instanceof` check and the tests share one class. Constructor
-  // signature matches the real one.
-  class AgeGatePartialTransitionError extends Error {
-    constructor(
-      readonly currentStatus: string,
-      readonly intendedStatus: string,
-      readonly failure: unknown,
-    ) {
-      super(
-        `The review was reopened but could not be ${intendedStatus}. It is now ${currentStatus}.`,
-      );
-      this.name = "AgeGatePartialTransitionError";
-    }
-  }
+  // the page and the tests share one class.
   class ReopenUnsupportedError extends Error {
     constructor() {
       super("This server does not support reopening a decided age gate review.");
@@ -105,7 +92,6 @@ vi.mock("@/lib/api/age-gate", () => {
   }
   return {
   AGE_GATE_STATUSES: ["pending", "approved", "rejected"],
-  AgeGatePartialTransitionError,
   ReopenUnsupportedError,
   isReopenSupported: () => capability.reopenSupported,
   subscribeReopenSupport: () => () => {},
@@ -161,7 +147,7 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => <option value={value}>{children}</option>,
 }));
 
-import { AgeGatePartialTransitionError, ReopenUnsupportedError } from "@/lib/api/age-gate";
+import { ReopenUnsupportedError } from "@/lib/api/age-gate";
 import AgeGatePage from "./page";
 
 const REVIEW = {
@@ -195,7 +181,7 @@ beforeEach(() => {
   mutateFns.length = 0;
   vi.clearAllMocks();
   isAdmin = true;
-  reviewsData = { data: [], isLoading: false };
+  reviewsData = { data: { items: [], total: 0 }, isLoading: false };
   repoConfigsData = {};
   usersData = [];
   capability.reopenSupported = true;
@@ -212,7 +198,7 @@ describe("AgeGatePage", () => {
   it("shows the empty queue by default (pending)", () => {
     render(<AgeGatePage />);
     expect(screen.getByText(/No pending releases/i)).toBeInTheDocument();
-    expect(api.listReviews).toHaveBeenCalledWith({ statuses: ["pending"] });
+    expect(api.listReviews).toHaveBeenCalledWith({ statuses: ["pending"], perPage: 100 });
   });
 
   it("shows an error state with retry", () => {
@@ -228,7 +214,7 @@ describe("AgeGatePage", () => {
   });
 
   it("lists held releases with age-at-request and repository", () => {
-    reviewsData = { data: [REVIEW], isLoading: false };
+    reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
     repoConfigsData = { "npm-remote": { repositoryKey: "npm-remote", enabled: true, minAgeDays: 14 } };
     render(<AgeGatePage />);
     expect(screen.getByText("leftpad-clone")).toBeInTheDocument();
@@ -240,7 +226,7 @@ describe("AgeGatePage", () => {
     const user = userEvent.setup();
     render(<AgeGatePage />);
     await user.click(screen.getByLabelText("Show approved"));
-    expect(api.listReviews).toHaveBeenLastCalledWith({ statuses: ["pending", "approved"] });
+    expect(api.listReviews).toHaveBeenLastCalledWith({ statuses: ["pending", "approved"], perPage: 100 });
   });
 
   it("makes no request and says so when every status is unticked", async () => {
@@ -253,7 +239,7 @@ describe("AgeGatePage", () => {
 
   describe("decision metadata", () => {
     it("shows the recorded reason, the reviewer's name and the decision date", () => {
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       usersData = [
         { id: "11111111-2222-3333-4444-555555555555", username: "sam", display_name: "Sam Reviewer" },
       ];
@@ -263,28 +249,47 @@ describe("AgeGatePage", () => {
       // Rendered in the viewer's local zone, so assert the shape and keep the
       // exact instant on the title attribute.
       expect(screen.getByTitle("2026-07-21T00:00:00Z")).toHaveTextContent(/on Jul \d+, 2026/);
-      expect(mockListUsers).toHaveBeenCalled();
+      expect(mockListUsers).toHaveBeenCalledWith({ perPage: 100 });
     });
 
     it("falls back to a shortened user id when the reviewer is not in the user list", () => {
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       usersData = [];
       render(<AgeGatePage />);
       expect(screen.getByText(/11111111…/)).toBeInTheDocument();
     });
 
     it("marks a pending review as not yet decided", () => {
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       expect(screen.getByText(/Not yet decided/i)).toBeInTheDocument();
       expect(mockListUsers).not.toHaveBeenCalled();
+    });
+
+    it("marks a reopened review as not yet decided even though the backend leaves reviewer metadata on it", () => {
+      // Reopen sets reviewed_by to the reopening admin with reviewed_at = NOW()
+      // and keeps the reopen reason; the row is still pending and must not
+      // read as decided.
+      const reopened = {
+        ...APPROVED_REVIEW,
+        status: "pending",
+        reviewReason: "approved the wrong package",
+      };
+      reviewsData = { data: { items: [reopened], total: 1 }, isLoading: false };
+      usersData = [
+        { id: "11111111-2222-3333-4444-555555555555", username: "sam", display_name: "Sam Reviewer" },
+      ];
+      render(<AgeGatePage />);
+      expect(screen.getByText(/Not yet decided/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Sam Reviewer/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/approved the wrong package/)).not.toBeInTheDocument();
     });
   });
 
   describe("status control", () => {
     it("confirms before approving, spelling out that the version gets released", async () => {
       const user = userEvent.setup();
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "approved");
       const dialog = await screen.findByRole("dialog");
@@ -297,7 +302,7 @@ describe("AgeGatePage", () => {
 
     it("lets a pending review be rejected without a reason", async () => {
       const user = userEvent.setup();
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "rejected");
       const dialog = await screen.findByRole("dialog");
@@ -307,7 +312,7 @@ describe("AgeGatePage", () => {
 
     it("requires a reason to reverse a recorded decision", async () => {
       const user = userEvent.setup();
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "pending");
       const dialog = await screen.findByRole("dialog");
@@ -325,19 +330,21 @@ describe("AgeGatePage", () => {
       });
     });
 
-    it("says a decided-to-decided change runs in two steps and can stop at pending", async () => {
+    it("says a decided-to-decided change is a single step that reverses the recorded decision", async () => {
       const user = userEvent.setup();
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "rejected");
       const dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText(/two steps/i)).toBeInTheDocument();
-      expect(within(dialog).getByText(/left pending, not approved/i)).toBeInTheDocument();
+      expect(
+        within(dialog).getByText(/reverses the recorded approved decision and marks the review rejected instead, in a single step/i),
+      ).toBeInTheDocument();
+      expect(within(dialog).queryByText(/two steps/i)).not.toBeInTheDocument();
     });
 
     it("clears the reason when the dialog is cancelled", async () => {
       const user = userEvent.setup();
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       const control = screen.getByLabelText("Status for leftpad-clone");
       await user.selectOptions(control, "approved");
@@ -360,7 +367,7 @@ describe("AgeGatePage", () => {
       );
 
     it("says nothing about the capability when the endpoint is there", () => {
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       expect(screen.queryByText(/does not support reopening/i)).not.toBeInTheDocument();
       expect(optionsOf("Status for leftpad-clone")).toEqual({
@@ -372,19 +379,19 @@ describe("AgeGatePage", () => {
 
     it("explains the gap and offers no reopen-dependent transition on a decided review", () => {
       capability.reopenSupported = false;
-      reviewsData = { data: [APPROVED_REVIEW], isLoading: false };
+      reviewsData = { data: { items: [APPROVED_REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       expect(screen.getByText(/does not support reopening a decided review/i)).toBeInTheDocument();
       expect(optionsOf("Status for leftpad-clone")).toEqual({
         pending: true, // needs reopen
         approved: false, // the status it is already in
-        rejected: true, // needs reopen, then reject
+        rejected: true, // a backend without reopen also predates direct re-decide
       });
     });
 
     it("still offers approve and reject on a pending review", () => {
       capability.reopenSupported = false;
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       expect(optionsOf("Status for leftpad-clone")).toEqual({
         pending: false,
@@ -396,7 +403,7 @@ describe("AgeGatePage", () => {
     it("submits an approval normally even though reopen is unavailable", async () => {
       const user = userEvent.setup();
       capability.reopenSupported = false;
-      reviewsData = { data: [REVIEW], isLoading: false };
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
       render(<AgeGatePage />);
       await user.selectOptions(screen.getByLabelText("Status for leftpad-clone"), "approved");
       const dialog = await screen.findByRole("dialog");
@@ -407,11 +414,7 @@ describe("AgeGatePage", () => {
     it("surfaces the capability message rather than a raw 404", () => {
       render(<AgeGatePage />);
       const [change] = mutationConfigs;
-      change.onError?.(new ReopenUnsupportedError(), {
-        review: APPROVED_REVIEW,
-        target: "rejected",
-        why: "cve landed",
-      });
+      change.onError?.(new ReopenUnsupportedError());
       expect(mockToastError).toHaveBeenCalledWith(
         "This server does not support reopening a decided age gate review.",
       );
@@ -435,29 +438,11 @@ describe("AgeGatePage", () => {
       expect(mockToastSuccess).toHaveBeenCalledWith("Returned to pending leftpad-clone@0.0.1");
     });
 
-    it("reports a half-completed reopen-then-decide as pending, and refetches", () => {
-      render(<AgeGatePage />);
-      const [change] = mutationConfigs;
-      const partial = new AgeGatePartialTransitionError("pending", "rejected", {
-        status: 500,
-        message: "boom",
-      });
-      change.onError?.(partial, { review: APPROVED_REVIEW, target: "rejected", why: "cve landed" });
-
-      // The review really did move, so the table must be refetched rather than
-      // left showing the approved state the operator started from.
-      expect(mockInvalidate).toHaveBeenCalled();
-      const message = mockToastError.mock.calls[0][0] as string;
-      expect(message).toMatch(/leftpad-clone@0\.0\.1/);
-      expect(message).toMatch(/reopened but could not be rejected/i);
-      expect(message).toMatch(/now pending/i);
-      expect(message).toMatch(/boom/);
-      expect(mockToastSuccess).not.toHaveBeenCalled();
-    });
-
     it("leaves the queue alone when a transition fails outright", () => {
       render(<AgeGatePage />);
       const [change] = mutationConfigs;
+      // A transition is a single call now, so a failure means the review
+      // never moved: no refetch, no reconcile, just the error.
       change.onError?.(new Error("API error 403: forbidden"), {
         review: APPROVED_REVIEW,
         target: "rejected",
@@ -465,6 +450,20 @@ describe("AgeGatePage", () => {
       });
       expect(mockInvalidate).not.toHaveBeenCalled();
       expect(mockToastError).toHaveBeenCalledWith("API error 403: forbidden");
+    });
+  });
+
+  describe("truncation notice", () => {
+    it("warns when the server reports more reviews than the page fetched", () => {
+      reviewsData = { data: { items: [REVIEW], total: 240 }, isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.getByText(/Showing first 1 of 240/)).toBeInTheDocument();
+    });
+
+    it("stays hidden when every matching review is on the page", () => {
+      reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
+      render(<AgeGatePage />);
+      expect(screen.queryByText(/Showing first/)).not.toBeInTheDocument();
     });
   });
 });

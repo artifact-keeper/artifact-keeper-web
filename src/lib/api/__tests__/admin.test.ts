@@ -80,6 +80,13 @@ describe("adminApi", () => {
     ]);
   });
 
+  it("listUsers passes pagination params through to the SDK query", async () => {
+    mockListUsers.mockResolvedValue({ data: { items: [], pagination: {} }, error: undefined });
+    const { adminApi } = await import("../admin");
+    await adminApi.listUsers({ perPage: 100 });
+    expect(mockListUsers).toHaveBeenCalledWith({ query: { page: undefined, per_page: 100 } });
+  });
+
   it("listUsers throws on error", async () => {
     mockListUsers.mockResolvedValue({ data: undefined, error: "unauthorized" });
     const { adminApi } = await import("../admin");

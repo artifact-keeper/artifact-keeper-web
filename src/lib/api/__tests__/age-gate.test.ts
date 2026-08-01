@@ -31,7 +31,6 @@ vi.mock("@artifact-keeper/sdk", () => ({
 import { ApiError } from "../fetch";
 import {
   ageGateApi,
-  AgeGatePartialTransitionError,
   ReopenUnsupportedError,
   isReopenSupported,
   resetReopenSupport,
@@ -77,14 +76,14 @@ beforeEach(() => {
 describe("ageGateApi", () => {
   it("listReviews sends the status filter and maps results, computing age at request", async () => {
     m.listReviews.mockResolvedValue({
-      data: { items: [REVIEW], pagination: { page: 1, per_page: 20, total: 1 } },
+      data: { items: [REVIEW], pagination: { page: 1, per_page: 100, total: 1 } },
       error: undefined,
     });
-    const out = await ageGateApi.listReviews({ statuses: ["pending"] });
+    const out = await ageGateApi.listReviews({ statuses: ["pending"], perPage: 100 });
     expect(m.listReviews).toHaveBeenCalledWith({
-      query: { status: "pending", repository_key: undefined, page: undefined, per_page: undefined },
+      query: { status: "pending", repository_key: undefined, page: undefined, per_page: 100 },
     });
-    expect(out[0]).toMatchObject({
+    expect(out.items[0]).toMatchObject({
       id: "rv1",
       packageName: "leftpad-clone",
       packageVersion: "0.0.1",
@@ -92,6 +91,17 @@ describe("ageGateApi", () => {
       status: "pending",
       ageDaysAtRequest: 5,
     });
+    expect(out.total).toBe(1);
+  });
+
+  it("listReviews surfaces the server-reported total so callers can spot truncation", async () => {
+    m.listReviews.mockResolvedValue({
+      data: { items: [REVIEW], pagination: { page: 1, per_page: 100, total: 240 } },
+      error: undefined,
+    });
+    const out = await ageGateApi.listReviews({ perPage: 100 });
+    expect(out.items).toHaveLength(1);
+    expect(out.total).toBe(240);
   });
 
   it("listReviews throws on error", async () => {
@@ -105,7 +115,7 @@ describe("ageGateApi", () => {
       error: undefined,
     });
     const out = await ageGateApi.listReviews();
-    expect(out[0].ageDaysAtRequest).toBeNull();
+    expect(out.items[0].ageDaysAtRequest).toBeNull();
   });
 
   it("getReview / approveReview / rejectReview pass the id path param and an optional reason", async () => {
@@ -126,7 +136,7 @@ describe("ageGateApi", () => {
   });
 
   it("listReviews joins several statuses into one comma-separated filter", async () => {
-    m.listReviews.mockResolvedValue({ data: { items: [], pagination: {} }, error: undefined });
+    m.listReviews.mockResolvedValue({ data: { items: [], pagination: { page: 1, per_page: 20, total: 0 } }, error: undefined });
     await ageGateApi.listReviews({ statuses: ["approved", "rejected"] });
     expect(m.listReviews).toHaveBeenCalledWith({
       query: { status: "approved,rejected", repository_key: undefined, page: undefined, per_page: undefined },
@@ -134,7 +144,7 @@ describe("ageGateApi", () => {
   });
 
   it("listReviews omits the status filter entirely when no statuses are given", async () => {
-    m.listReviews.mockResolvedValue({ data: { items: [], pagination: {} }, error: undefined });
+    m.listReviews.mockResolvedValue({ data: { items: [], pagination: { page: 1, per_page: 20, total: 0 } }, error: undefined });
     await ageGateApi.listReviews({ statuses: [] });
     expect(m.listReviews.mock.calls[0][0].query.status).toBeUndefined();
   });
@@ -163,55 +173,64 @@ describe("ageGateApi", () => {
     expect(out.status).toBe("approved");
   });
 
-  it("changeReviewStatus reopens a decided review on its way to the other decision", async () => {
-    mockApiFetch.mockResolvedValue({ ...REVIEW, status: "pending" });
+  it("changeReviewStatus re-decides a decided review with a single direct call, no reopen", async () => {
     m.rejectReview.mockResolvedValue({ data: { ...REVIEW, status: "rejected" }, error: undefined });
     const out = await ageGateApi.changeReviewStatus(
       { ...LOCAL_REVIEW, status: "approved" },
       "rejected",
       "cve landed",
     );
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/age-gate/reviews/rv1/reopen", {
-      method: "POST",
-      body: JSON.stringify({ reason: "cve landed" }),
-    });
+    // Never a pending halfway state: the version is never un-gated mid-flip.
+    expect(mockApiFetch).not.toHaveBeenCalled();
+    expect(m.approveReview).not.toHaveBeenCalled();
+    expect(m.rejectReview).toHaveBeenCalledTimes(1);
     expect(m.rejectReview).toHaveBeenCalledWith({ path: { id: "rv1" }, body: { reason: "cve landed" } });
     expect(out.status).toBe("rejected");
   });
 
-  it("changeReviewStatus stops after the reopen when the target is pending", async () => {
+  it("changeReviewStatus re-decides rejected back to approved directly", async () => {
+    m.approveReview.mockResolvedValue({ data: { ...REVIEW, status: "approved" }, error: undefined });
+    const out = await ageGateApi.changeReviewStatus(
+      { ...LOCAL_REVIEW, status: "rejected" },
+      "approved",
+      "false positive",
+    );
+    expect(mockApiFetch).not.toHaveBeenCalled();
+    expect(m.approveReview).toHaveBeenCalledWith({ path: { id: "rv1" }, body: { reason: "false positive" } });
+    expect(out.status).toBe("approved");
+  });
+
+  it("changeReviewStatus goes through reopen only when the target is pending", async () => {
     mockApiFetch.mockResolvedValue({ ...REVIEW, status: "pending" });
     const out = await ageGateApi.changeReviewStatus(
       { ...LOCAL_REVIEW, status: "approved" },
       "pending",
       "needs another look",
     );
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/age-gate/reviews/rv1/reopen", {
+      method: "POST",
+      body: JSON.stringify({ reason: "needs another look" }),
+    });
     expect(m.approveReview).not.toHaveBeenCalled();
     expect(m.rejectReview).not.toHaveBeenCalled();
     expect(out.status).toBe("pending");
   });
 
-  it("changeReviewStatus reports the review as pending when the reopen lands but the decision fails", async () => {
-    mockApiFetch.mockResolvedValue({ ...REVIEW, status: "pending" });
+  it("changeReviewStatus surfaces a failed re-decide as an ordinary error, with no state change", async () => {
     m.rejectReview.mockResolvedValue({ data: undefined, error: { status: 500 } });
-    const err = await ageGateApi
-      .changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "rejected", "cve landed")
-      .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(AgeGatePartialTransitionError);
-    const partial = err as AgeGatePartialTransitionError;
-    expect(partial.currentStatus).toBe("pending");
-    expect(partial.intendedStatus).toBe("rejected");
-    expect(partial.failure).toEqual({ status: 500 });
-    expect(partial.message).toMatch(/reopened but could not be rejected.*now pending/i);
+    await expect(
+      ageGateApi.changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "rejected", "cve landed"),
+    ).rejects.toEqual({ status: 500 });
+    // A single failed call means the review is still approved; nothing to
+    // reconcile and no halfway state to report.
+    expect(mockApiFetch).not.toHaveBeenCalled();
   });
 
-  it("changeReviewStatus surfaces a failed reopen as an ordinary error, not a partial transition", async () => {
+  it("changeReviewStatus surfaces a failed reopen as an ordinary error", async () => {
     mockApiFetch.mockRejectedValue(new Error("API error 403: forbidden"));
-    const err = await ageGateApi
-      .changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "rejected", "cve landed")
-      .catch((e: unknown) => e);
-    expect(err).not.toBeInstanceOf(AgeGatePartialTransitionError);
-    expect(m.rejectReview).not.toHaveBeenCalled();
+    await expect(
+      ageGateApi.changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "pending", "needs another look"),
+    ).rejects.toThrow(/403/);
   });
 
   it("changeReviewStatus refuses a no-op transition to the status already recorded", async () => {
@@ -263,21 +282,37 @@ describe("ageGateApi", () => {
       expect(isReopenSupported()).toBe(true);
     });
 
-    it("blocks a reopen-dependent transition without touching either endpoint", async () => {
+    it("blocks a return to pending without touching the endpoint once it is known to be absent", async () => {
       mockApiFetch.mockRejectedValue(missingEndpoint());
       await ageGateApi.reopenReview("rv1", "probe").catch(() => {});
       mockApiFetch.mockClear();
 
-      const err = await ageGateApi
-        .changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "rejected", "cve landed")
-        .catch((e: unknown) => e);
-
-      expect(err).toBeInstanceOf(ReopenUnsupportedError);
-      // Nothing was attempted, so this is not a partial transition: the review
-      // is still exactly where the operator found it.
-      expect(err).not.toBeInstanceOf(AgeGatePartialTransitionError);
+      await expect(
+        ageGateApi.changeReviewStatus({ ...LOCAL_REVIEW, status: "approved" }, "pending", "needs another look"),
+      ).rejects.toBeInstanceOf(ReopenUnsupportedError);
+      // Nothing was attempted: the review is still exactly where the operator
+      // found it.
       expect(mockApiFetch).not.toHaveBeenCalled();
+      expect(m.approveReview).not.toHaveBeenCalled();
       expect(m.rejectReview).not.toHaveBeenCalled();
+    });
+
+    it("still re-decides a decided review directly when reopen is unsupported", async () => {
+      mockApiFetch.mockRejectedValue(missingEndpoint());
+      await ageGateApi.reopenReview("rv1", "probe").catch(() => {});
+      expect(isReopenSupported()).toBe(false);
+
+      // The direct decide endpoints exist on every backend; only a backend
+      // old enough to lack reopen also rejects the re-decide server-side,
+      // and that error surfaces as an ordinary failure.
+      m.rejectReview.mockResolvedValue({ data: { ...REVIEW, status: "rejected" }, error: undefined });
+      const out = await ageGateApi.changeReviewStatus(
+        { ...LOCAL_REVIEW, status: "approved" },
+        "rejected",
+        "cve landed",
+      );
+      expect(out.status).toBe("rejected");
+      expect(mockApiFetch).toHaveBeenCalledTimes(1); // the probe only
     });
 
     it("still decides a pending review when reopen is unsupported", async () => {
