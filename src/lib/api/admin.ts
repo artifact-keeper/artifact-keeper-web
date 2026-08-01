@@ -104,8 +104,10 @@ export const adminApi = {
     return adaptStats(assertData(data, 'adminApi.getStats'));
   },
 
-  listUsers: async (): Promise<User[]> => {
-    const data = await unwrap(listUsers());
+  listUsers: async (params: { page?: number; perPage?: number } = {}): Promise<User[]> => {
+    const data = await unwrap(listUsers({
+      query: { page: params.page, per_page: params.perPage },
+    }));
     return assertData(data, 'adminApi.listUsers').items.map(adaptUser);
   },
 

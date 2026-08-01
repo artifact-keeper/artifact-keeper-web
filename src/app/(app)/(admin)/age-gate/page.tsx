@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import {
   ageGateApi,
   AGE_GATE_STATUSES,
-  AgeGatePartialTransitionError,
   isReopenSupported,
   subscribeReopenSupport,
   type AgeGateReview,
@@ -27,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import {
   Select,
   SelectTrigger,
@@ -71,8 +71,11 @@ function transitionVerb(target: AgeGateStatus): string {
 }
 
 /**
- * Whether moving `from` to `to` has to reopen the review first. Only a review
- * that already carries a decision does; a pending one is decided outright.
+ * Whether moving `from` to `to` needs a backend with the reopen endpoint.
+ * Reopen is only called for transitions TO pending, but the backend that
+ * shipped it (artifact-keeper#2968) is also the one that allowed direct
+ * re-decide of a decided review — so a backend without reopen rejects every
+ * transition out of a decided status, and all of them are gated on it.
  */
 function needsReopen(from: string, to: AgeGateStatus): boolean {
   return from !== "pending" && from !== to;
@@ -80,7 +83,7 @@ function needsReopen(from: string, to: AgeGateStatus): boolean {
 
 /**
  * What a transition will do, said plainly enough that an admin can tell a
- * one-call decision from a reopen-then-decide before they commit to it.
+ * first decision from a reversal before they commit to it.
  */
 function describeTransition(from: string, to: AgeGateStatus): string {
   if (from === "pending") {
@@ -91,7 +94,7 @@ function describeTransition(from: string, to: AgeGateStatus): string {
   if (to === "pending") {
     return `This reverses the recorded ${from} decision and puts the version back behind the gate until someone decides it again.`;
   }
-  return `This runs in two steps: the recorded ${from} decision is reversed first, then the review is ${to}. If the second step fails the review is left pending, not ${from}.`;
+  return `This reverses the recorded ${from} decision and marks the review ${to} instead, in a single step.`;
 }
 
 export default function AgeGatePage() {
@@ -106,21 +109,21 @@ export default function AgeGatePage() {
   const [reason, setReason] = useState("");
 
   // Latched off the first time the endpoint 404s, so a backend without
-  // artifact-keeper#2939 stops being offered transitions it cannot perform.
+  // artifact-keeper#2968 stops being offered transitions it cannot perform.
   const reopenSupported = useSyncExternalStore(
     subscribeReopenSupport,
     isReopenSupported,
     isReopenSupported,
   );
 
-  // A reopen carries a mandatory reason, and every transition out of a decided
-  // status starts with one. Deciding a pending review does not.
+  // Reversing a recorded decision always requires a reason for the audit
+  // log; deciding a pending review for the first time does not.
   const reasonRequired = transition !== null && transition.review.status !== "pending";
   const reasonMissing = reasonRequired && reason.trim() === "";
 
   const statusKey = [...statuses].sort().join(",");
   const {
-    data: reviews,
+    data: reviewPage,
     isLoading,
     isError,
     error,
@@ -128,11 +131,13 @@ export default function AgeGatePage() {
     isFetching,
   } = useQuery({
     queryKey: ["age-gate-reviews", statusKey],
-    queryFn: () => ageGateApi.listReviews({ statuses }),
+    // Capped page without pagination; the truncation notice below surfaces it
+    // when the server's total exceeds what this one fetch returned.
+    queryFn: () => ageGateApi.listReviews({ statuses, perPage: 100 }),
     enabled: !!user?.is_admin && statuses.length > 0,
   });
 
-  const rows = useMemo(() => reviews ?? [], [reviews]);
+  const rows = useMemo(() => reviewPage?.items ?? [], [reviewPage]);
   const repositoryKeys = useMemo(() => [...new Set(rows.map((r) => r.repositoryKey))], [rows]);
 
   const { data: repoConfigs } = useQuery({
@@ -142,12 +147,12 @@ export default function AgeGatePage() {
   });
 
   // The review carries the reviewer's user id and nothing else, so the names
-  // come from the admin user list. A failed lookup degrades to a short id
-  // rather than hiding who decided.
+  // come from the admin user list. Only the first page is fetched: a reviewer
+  // beyond it degrades to a shortened id rather than hiding who decided.
   const hasReviewers = rows.some((r) => r.reviewedBy);
   const { data: users } = useQuery({
     queryKey: ["age-gate-reviewers"],
-    queryFn: () => adminApi.listUsers(),
+    queryFn: () => adminApi.listUsers({ perPage: 100 }),
     enabled: !!user?.is_admin && hasReviewers,
   });
   const reviewerNames = useMemo(() => {
@@ -191,20 +196,7 @@ export default function AgeGatePage() {
         `${transitionVerb(target)} ${review.packageName}@${review.packageVersion}`,
       );
     },
-    onError: (err, { review }) => {
-      // A half-completed reopen-then-decide really did change the review, so
-      // refetch and say what it is now. Reporting a plain failure here would
-      // leave the operator believing the old decision still stands.
-      if (err instanceof AgeGatePartialTransitionError) {
-        invalidate();
-        closeDialog();
-        toast.error(
-          `${review.packageName}@${review.packageVersion}: ${err.message} ${toUserMessage(err.failure, "The second step failed.")}`,
-        );
-        return;
-      }
-      mutationErrorToast("Age gate review failed")(err);
-    },
+    onError: mutationErrorToast("Age gate review failed"),
   });
 
   if (!user?.is_admin) {
@@ -326,7 +318,10 @@ export default function AgeGatePage() {
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{formatDate(r.requestedAt)}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {r.reviewedBy || r.reviewedAt || r.reviewReason ? (
+                    {/* Keyed off status, not reviewer metadata: the backend
+                        leaves reviewed_by/reviewed_at set on a reopened
+                        (pending) row, pointing at the admin who reopened it. */}
+                    {r.status !== "pending" && (r.reviewedBy || r.reviewedAt || r.reviewReason) ? (
                       <div className="max-w-xs space-y-0.5">
                         {(r.reviewedBy || r.reviewedAt) && (
                           <div>
@@ -380,6 +375,8 @@ export default function AgeGatePage() {
           </table>
         </div>
       )}
+
+      <ListTruncationNotice shown={rows.length} total={reviewPage?.total ?? 0} />
 
       <Dialog open={transition !== null} onOpenChange={(o) => { if (!o) closeDialog(); }}>
         <DialogContent>

@@ -44,9 +44,11 @@ export interface AgeGateReview {
   reviewReason: string | null;
   reviewedAt: string | null;
   /**
-   * User id of the admin who decided, not a username. Null on a pending
-   * review, including one that was reopened: the backend clears the reviewer
-   * so a reopened row does not read as already handled.
+   * User id of the admin who last acted on the review, not a username. The
+   * backend does NOT clear this on reopen: reopening sets it to the
+   * reopening admin with `reviewed_at = NOW()`, so a reopened row is pending
+   * yet still carries reviewer metadata. Key "decided or not" off `status`,
+   * never off this field.
    */
   reviewedBy: string | null;
 }
@@ -141,35 +143,6 @@ function isMissingEndpoint(err: unknown): boolean {
   }
 }
 
-/**
- * Raised when a status change that took two calls completed the first and
- * failed on the second.
- *
- * Moving a decided review straight to the other decision is reopen followed by
- * approve or reject. If the second call fails the review is not in the status
- * the operator saw when they picked, and it is not in the one they asked for
- * either: it is pending, and the gate is back on. Reporting a plain failure
- * would leave them believing the original decision still stands.
- */
-export class AgeGatePartialTransitionError extends Error {
-  /** What the review is actually in now. */
-  readonly currentStatus: AgeGateStatus;
-  /** What the operator asked for and did not get. */
-  readonly intendedStatus: AgeGateStatus;
-  /** Whatever the failing second call threw, for the underlying detail. */
-  readonly failure: unknown;
-
-  constructor(currentStatus: AgeGateStatus, intendedStatus: AgeGateStatus, failure: unknown) {
-    super(
-      `The review was reopened but could not be ${intendedStatus === 'approved' ? 'approved' : 'rejected'}. It is now ${currentStatus}.`,
-    );
-    this.name = 'AgeGatePartialTransitionError';
-    this.currentStatus = currentStatus;
-    this.intendedStatus = intendedStatus;
-    this.failure = failure;
-  }
-}
-
 /** A repository's age gate policy: hold releases younger than `minAgeDays`. */
 export interface AgeGateRepoConfig {
   repositoryKey: string;
@@ -211,9 +184,16 @@ function adaptConfig(sdk: AgeGateConfigResponse): AgeGateRepoConfig {
   };
 }
 
+/** One page of the review queue plus the server-reported total across pages. */
+export interface AgeGateReviewPage {
+  items: AgeGateReview[];
+  /** Total matching reviews on the server; larger than `items.length` when the page was truncated. */
+  total: number;
+}
+
 export const ageGateApi = {
   /** List package versions in the age gate review queue. */
-  listReviews: async (params: ListAgeGateReviewsParams = {}): Promise<AgeGateReview[]> => {
+  listReviews: async (params: ListAgeGateReviewsParams = {}): Promise<AgeGateReviewPage> => {
     const data = await unwrap(listReviews({
       query: {
         status: params.statuses?.length ? params.statuses.join(',') : undefined,
@@ -222,7 +202,11 @@ export const ageGateApi = {
         per_page: params.perPage,
       },
     }));
-    return assertData(data, 'ageGateApi.listReviews').items.map(adaptReview);
+    const response = assertData(data, 'ageGateApi.listReviews');
+    return {
+      items: response.items.map(adaptReview),
+      total: response.pagination.total,
+    };
   },
 
   getReview: async (id: string): Promise<AgeGateReview> => {
@@ -245,10 +229,10 @@ export const ageGateApi = {
    * version is withheld again until someone decides it a second time.
    *
    * Goes through `apiFetch` because `reopen` is not in the generated SDK yet.
-   * The reason is required and non-blank here as well as on the server, since
-   * a blank one costs a round trip to learn nothing, and the reopen is the one
-   * action whose audit entry has nothing else to say why a recorded decision
-   * was reversed.
+   * The reason is required and non-blank here; the server accepts a blank one
+   * (`reason` is `Option<String>` and goes unvalidated), so the guard lives
+   * client-side. Reopen is the one action whose audit entry has nothing else
+   * to say why a recorded decision was reversed.
    */
   reopenReview: async (id: string, reason: string): Promise<AgeGateReview> => {
     const why = reason.trim();
@@ -273,14 +257,14 @@ export const ageGateApi = {
   },
 
   /**
-   * Move a review to `target`, whatever it is in now.
+   * Move a review to `target`, whatever it is in now, with a single call.
    *
-   * Approve and reject only accept a pending review, so changing a decision
-   * means reopening first and deciding second. That is two calls presented as
-   * one action, and the halfway state is real: if the second call fails the
-   * review sits at `pending` rather than at either end. That case throws
-   * `AgeGatePartialTransitionError` so the caller can say what actually
-   * happened instead of reporting the whole thing as a no-op.
+   * The backend accepts approve and reject from any status but the one
+   * already recorded (artifact-keeper#2968 relaxed the pending-only guard to
+   * "no no-op transitions"), so changing a decision is one direct decide
+   * call — never reopen-then-decide, which would briefly leave the review
+   * pending and un-gate a version that has aged past `min_age_days`. Only a
+   * transition TO `pending` goes through `reopenReview`.
    */
   changeReviewStatus: async (
     review: AgeGateReview,
@@ -292,27 +276,13 @@ export const ageGateApi = {
       throw new Error(`This review is already ${target}.`);
     }
 
-    const decide = (id: string) =>
-      target === 'approved'
-        ? ageGateApi.approveReview(id, why || undefined)
-        : ageGateApi.rejectReview(id, why || undefined);
-
-    if (review.status === 'pending') {
-      // target cannot be 'pending' here: the equality guard above covers it.
-      return decide(review.id);
+    if (target === 'pending') {
+      return ageGateApi.reopenReview(review.id, why);
     }
 
-    // Outside the try below on purpose: a reopen that never happened, whether
-    // because the endpoint is missing or for any other reason, leaves the
-    // review exactly as it was. Only a failure after a successful reopen is a
-    // partial transition.
-    const reopened = await ageGateApi.reopenReview(review.id, why);
-    if (target === 'pending') return reopened;
-    try {
-      return await decide(review.id);
-    } catch (failure) {
-      throw new AgeGatePartialTransitionError('pending', target, failure);
-    }
+    return target === 'approved'
+      ? ageGateApi.approveReview(review.id, why || undefined)
+      : ageGateApi.rejectReview(review.id, why || undefined);
   },
 
   /**
