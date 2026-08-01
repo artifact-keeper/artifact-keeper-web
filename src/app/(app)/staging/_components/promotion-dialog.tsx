@@ -63,13 +63,6 @@ export function PromotionDialog({
   const [notes, setNotes] = useState("");
   const [skipPolicyCheck, setSkipPolicyCheck] = useState(false);
 
-  // Fetch release repositories matching the source format
-  const { data: releaseRepos, isLoading: reposLoading } = useQuery({
-    queryKey: ["release-repos", sourceRepoFormat],
-    queryFn: () => promotionApi.listReleaseRepos({ format: sourceRepoFormat }),
-    enabled: open,
-  });
-
   // If this staging repo has a linked release target, the backend requires
   // promotions to go there, so lock the picker to it rather than making the
   // operator re-pick (and risk a rejection) every time. Free picker otherwise.
@@ -82,6 +75,14 @@ export function PromotionDialog({
     releaseTarget?.linked && releaseTarget.release_repository_key
       ? releaseTarget.release_repository_key
       : null;
+
+  // Fetch release repositories matching the source format. Skipped when a
+  // linked target locks the picker — the list is never shown in that case.
+  const { data: releaseRepos, isLoading: reposLoading } = useQuery({
+    queryKey: ["release-repos", sourceRepoFormat],
+    queryFn: () => promotionApi.listReleaseRepos({ format: sourceRepoFormat }),
+    enabled: open && !lockedKey,
+  });
 
   // Collect all policy violations from selected artifacts
   const allViolations = useMemo(() => {
