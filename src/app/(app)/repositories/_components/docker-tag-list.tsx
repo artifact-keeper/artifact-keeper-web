@@ -59,6 +59,16 @@ function scanStatusLabel(status: string | null | undefined): string {
  * found" even though tags existed; it also could not compute true image
  * sizes.  The server rollup returns every tag with its real (multi-arch
  * aware) total size, last push time, and scan status.
+ *
+ * Two things the old client-side rows had that the rollup does not:
+ * quarantine verdicts and the `analyzable` flag.  The grouped view
+ * therefore renders no quarantine claim at all — per the listing-badge
+ * contract (#697/#700), an absent verdict means "the server did not
+ * look", never "clear", so an OK badge here would be unbacked (#650).
+ * Quarantine state stays visible in Flat view and in the artifact detail
+ * dialog (which fetches GET /api/v1/quarantine/{id}).  Scan is likewise
+ * not gated on `analyzable` (#2292): the backend rejects scans of
+ * proxy-cached manifests and the mutation surfaces that as a toast.
  */
 export function DockerTagList({
   tags,
