@@ -119,6 +119,31 @@ describe("webhooksApi", () => {
     warn.mockRestore();
   });
 
+  it("list keeps age gate events without narrowing (#701)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockListWebhooks.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ...SDK_WEBHOOK,
+            events: ["age_gate_queued", "age_gate_approved", "age_gate_rejected"],
+          },
+        ],
+        total: 1,
+      },
+      error: undefined,
+    });
+    const { webhooksApi } = await import("../webhooks");
+    const out = await webhooksApi.list();
+    expect(out.items[0].events).toEqual([
+      "age_gate_queued",
+      "age_gate_approved",
+      "age_gate_rejected",
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("list throws on error", async () => {
     mockListWebhooks.mockResolvedValue({ data: undefined, error: "fail" });
     const { webhooksApi } = await import("../webhooks");

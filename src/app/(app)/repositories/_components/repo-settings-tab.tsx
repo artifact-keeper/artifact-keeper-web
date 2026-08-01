@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 import { repositoriesApi } from "@/lib/api/repositories";
+import { ageGateApi } from "@/lib/api/age-gate";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { useAuth } from "@/providers/auth-provider";
@@ -111,6 +112,14 @@ export function minutesToAge(minutes: number | undefined | null): { value: strin
 // a 400 + opaque message.
 const CACHE_TTL_MIN_SECONDS = 1;
 const CACHE_TTL_MAX_SECONDS = 30 * 24 * 60 * 60; // 2,592,000
+
+// Backend constraint from `validate_min_age_days` in age_gate_service.rs:
+// 0..=3650. 0 is meaningful — the "trusted remote" setting (#1558): no age
+// delay, but explicit rejections still block. The constants live here (not on
+// the SDK) so the UI can show a clear inline validation error before
+// submitting, mirroring the cache-TTL field above.
+const AGE_GATE_MIN_DAYS = 0;
+const AGE_GATE_MAX_DAYS = 3650;
 
 /**
  * Format a TTL in seconds as a short human-readable hint
@@ -625,6 +634,74 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     });
   }, [scanForm, scanConfigMutation]);
 
+  // -- Age Gate (#701). Remote repos only: the backend PUT rejects other repo
+  // types with 400 (`require_remote_repo_for_age_gate`) and is admin-only, so
+  // the section mirrors the Scanning & enforcement gating above. --
+  const { data: ageGateConfig, isLoading: ageGateLoading } = useQuery({
+    queryKey: ["age-gate-config", repository.key],
+    queryFn: () => ageGateApi.getRepoConfig(repository.key),
+    enabled: isRemote && isRepoAdmin,
+  });
+
+  // Same override pattern as the cache-TTL field: a string-typed override for
+  // the days input so typing stays controlled mid-edit, and an optional
+  // boolean override for the toggle. A fresh load never counts as a change.
+  const [ageGateEnabledOverride, setAgeGateEnabledOverride] = useState<
+    boolean | undefined
+  >(undefined);
+  const [ageGateDaysOverride, setAgeGateDaysOverride] = useState<
+    string | undefined
+  >(undefined);
+  const ageGateEnabled =
+    ageGateEnabledOverride ?? ageGateConfig?.enabled ?? false;
+  const ageGateDaysInput =
+    ageGateDaysOverride ??
+    (ageGateConfig ? String(ageGateConfig.minAgeDays) : "");
+  const parsedAgeGateDays =
+    ageGateDaysInput.trim() === "" ? null : Number(ageGateDaysInput);
+  const ageGateDaysValid =
+    parsedAgeGateDays != null &&
+    Number.isInteger(parsedAgeGateDays) &&
+    parsedAgeGateDays >= AGE_GATE_MIN_DAYS &&
+    parsedAgeGateDays <= AGE_GATE_MAX_DAYS;
+  const ageGateChanged =
+    !!ageGateConfig &&
+    ((ageGateEnabledOverride !== undefined &&
+      ageGateEnabledOverride !== ageGateConfig.enabled) ||
+      (ageGateDaysOverride !== undefined &&
+        parsedAgeGateDays !== ageGateConfig.minAgeDays));
+
+  const ageGateMutation = useMutation({
+    mutationFn: (cfg: { enabled: boolean; minAgeDays: number }) =>
+      ageGateApi.updateRepoConfig(repository.key, cfg),
+    onSuccess: (updated) => {
+      // Seed the query cache with the server's echoed config and clear the
+      // local edits so the form re-baselines against what was persisted.
+      queryClient.setQueryData(["age-gate-config", repository.key], updated);
+      setAgeGateEnabledOverride(undefined);
+      setAgeGateDaysOverride(undefined);
+      toast.success(
+        updated.enabled ? "Age gate enabled" : "Age gate settings saved"
+      );
+    },
+    onError: mutationErrorToast("Failed to save age gate settings"),
+  });
+
+  const handleSaveAgeGate = useCallback(() => {
+    if (!ageGateConfig || !ageGateDaysValid || parsedAgeGateDays == null)
+      return;
+    ageGateMutation.mutate({
+      enabled: ageGateEnabled,
+      minAgeDays: parsedAgeGateDays,
+    });
+  }, [
+    ageGateConfig,
+    ageGateDaysValid,
+    parsedAgeGateDays,
+    ageGateEnabled,
+    ageGateMutation,
+  ]);
+
   return (
     <div className="max-w-2xl space-y-8">
       {/* -- General Settings Section -- */}
@@ -1012,6 +1089,113 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       </section>
 
       <Separator />
+
+      {/* -- Age Gate Section (#701, remote repos, repo-admin only) -- */}
+      {isRemote && isRepoAdmin && (
+        <>
+          <section aria-labelledby="settings-age-gate-heading">
+            <div className="mb-4">
+              <h3
+                id="settings-age-gate-heading"
+                className="text-base font-semibold"
+              >
+                Age Gate
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Withhold upstream releases younger than a minimum age until
+                they mature or an admin approves them from the age gate review
+                queue.
+              </p>
+            </div>
+
+            {ageGateLoading || !ageGateConfig ? (
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="settings-age-gate-enabled">
+                      Enable age gate
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Queue too-new releases for admin review instead of
+                      serving them to clients.
+                    </p>
+                  </div>
+                  <Switch
+                    id="settings-age-gate-enabled"
+                    checked={ageGateEnabled}
+                    onCheckedChange={setAgeGateEnabledOverride}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="settings-age-gate-days">
+                    Minimum age (days)
+                  </Label>
+                  <Input
+                    id="settings-age-gate-days"
+                    type="number"
+                    min={AGE_GATE_MIN_DAYS}
+                    max={AGE_GATE_MAX_DAYS}
+                    step={1}
+                    value={ageGateDaysInput}
+                    onChange={(e) => setAgeGateDaysOverride(e.target.value)}
+                    disabled={!ageGateEnabled}
+                    aria-invalid={
+                      ageGateDaysOverride !== undefined && !ageGateDaysValid
+                    }
+                    aria-describedby="settings-age-gate-days-error"
+                  />
+                  {/* Persistent live region, mirroring the age-policy and
+                      cache-TTL fields. */}
+                  <p
+                    id="settings-age-gate-days-error"
+                    role="alert"
+                    className="text-sm text-destructive empty:hidden"
+                  >
+                    {ageGateDaysOverride !== undefined && !ageGateDaysValid
+                      ? `Must be a whole number between ${AGE_GATE_MIN_DAYS} and ${AGE_GATE_MAX_DAYS.toLocaleString()}.`
+                      : ""}
+                  </p>
+                  {ageGateDaysValid && (
+                    <p className="text-xs text-muted-foreground">
+                      Releases published fewer than this many days ago are
+                      withheld. 0 disables the age delay but keeps admin
+                      rejections enforced.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleSaveAgeGate}
+                    disabled={
+                      ageGateMutation.isPending ||
+                      !ageGateChanged ||
+                      !ageGateDaysValid
+                    }
+                  >
+                    {ageGateMutation.isPending ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Age Gate Settings"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <Separator />
+        </>
+      )}
 
       {/* -- Release Target Section (staging promotion, #260) -- */}
       {repository.repo_type === "staging" && (

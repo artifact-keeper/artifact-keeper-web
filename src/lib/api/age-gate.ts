@@ -5,6 +5,7 @@ import {
   approveReview,
   rejectReview,
   getRepoAgeGate,
+  updateRepoAgeGate,
 } from '@artifact-keeper/sdk';
 import type { AgeGateReviewResponse, AgeGateConfigResponse } from '@artifact-keeper/sdk';
 import { ApiError, apiFetch, assertData } from '@/lib/api/fetch';
@@ -283,6 +284,34 @@ export const ageGateApi = {
     return target === 'approved'
       ? ageGateApi.approveReview(review.id, why || undefined)
       : ageGateApi.rejectReview(review.id, why || undefined);
+  },
+
+  /**
+   * Fetch the age gate policy for one repository. Unlike `getRepoConfigs`
+   * (which swallows a failed lookup as "no policy" for the review queue),
+   * this throws so the repository settings panel can surface the error.
+   */
+  getRepoConfig: async (repositoryKey: string): Promise<AgeGateRepoConfig> => {
+    const data = await unwrap(getRepoAgeGate({ path: { key: repositoryKey } }));
+    return adaptConfig(assertData(data, 'ageGateApi.getRepoConfig'));
+  },
+
+  /**
+   * Replace a repository's age gate policy. The backend PUT is admin-only
+   * and rejects non-remote repositories with 400
+   * (`require_remote_repo_for_age_gate`), so callers gate the UI the same
+   * way. `minAgeDays` must be within 0..=3650 (`validate_min_age_days`); 0 is
+   * the "trusted remote" setting — no age delay, but rejections still block.
+   */
+  updateRepoConfig: async (
+    repositoryKey: string,
+    config: { enabled: boolean; minAgeDays: number },
+  ): Promise<AgeGateRepoConfig> => {
+    const data = await unwrap(updateRepoAgeGate({
+      path: { key: repositoryKey },
+      body: { enabled: config.enabled, min_age_days: config.minAgeDays },
+    }));
+    return adaptConfig(assertData(data, 'ageGateApi.updateRepoConfig'));
   },
 
   /**

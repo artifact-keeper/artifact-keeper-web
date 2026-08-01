@@ -3,6 +3,7 @@
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useMemo, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -311,7 +312,14 @@ export default function AgeGatePage() {
                   <td className="px-3 py-2 font-medium">{r.packageName}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.packageVersion}</td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline">{r.repositoryKey}</Badge>
+                    {/* Deep-link to the repo's settings tab, where the same
+                        repository's age gate policy is configured (#701). */}
+                    <Link
+                      href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=settings`}
+                      title={`Age gate settings for ${r.repositoryKey}`}
+                    >
+                      <Badge variant="outline">{r.repositoryKey}</Badge>
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {formatAge(r, repoConfigs?.[r.repositoryKey]?.minAgeDays)}

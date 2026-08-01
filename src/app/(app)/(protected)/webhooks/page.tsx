@@ -75,14 +75,23 @@ const WEBHOOK_EVENTS: { value: WebhookEvent; label: string }[] = [
   { value: "build_started", label: "Build Started" },
   { value: "build_completed", label: "Build Completed" },
   { value: "build_failed", label: "Build Failed" },
+  { value: "age_gate_queued", label: "Age Gate Queued" },
+  { value: "age_gate_approved", label: "Age Gate Approved" },
+  { value: "age_gate_rejected", label: "Age Gate Rejected" },
 ];
 
 function eventColor(event: string): "green" | "red" | "blue" | "default" {
-  if (event.includes("deleted") || event.includes("failed")) return "red";
+  if (
+    event.includes("deleted") ||
+    event.includes("failed") ||
+    event.includes("rejected")
+  )
+    return "red";
   if (
     event.includes("created") ||
     event.includes("uploaded") ||
-    event.includes("completed")
+    event.includes("completed") ||
+    event.includes("approved")
   )
     return "green";
   if (event.includes("started")) return "blue";
