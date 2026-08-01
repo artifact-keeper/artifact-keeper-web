@@ -157,8 +157,9 @@ export const AUDIT_EXPORT_MAX_ROWS = 50_000;
 
 export const AUDIT_EXPORT_CSV_MIME = "text/csv;charset=utf-8";
 export const AUDIT_EXPORT_JSON_MIME = "application/json;charset=utf-8";
+export const AUDIT_EXPORT_NDJSON_MIME = "application/x-ndjson;charset=utf-8";
 
-export type AuditExportFormat = "csv" | "json";
+export type AuditExportFormat = "csv" | "json" | "ndjson";
 
 /**
  * Column order for the flat CSV / structured JSON export. Kept explicit (rather
@@ -291,6 +292,117 @@ export function buildAuditExportFilename(
 ): string {
   const ts = now.toISOString().replace(/[:.]/g, "-");
   return `audit-log-${ts}.${format}`;
+}
+
+// ---------------------------------------------------------------------------
+// NDJSON export in the backend's published SIEM schema (#703 / backend #2413)
+// ---------------------------------------------------------------------------
+//
+// Backend #2413 publishes a versioned JSON Schema for SIEM ingestion at
+// `backend/schemas/audit-event.v1.schema.json` (documented in
+// `docs/audit-events.md`): one self-contained record per NDJSON line with
+// `schema_version: 1`, `category: "audit"`, `event_id` (the audit_log row id),
+// `outcome` derived from the action name, and structured `actor` / `resource`
+// objects. There is no HTTP export endpoint — the backend emits this shape to
+// stdout for log collectors — so this format projects the admin-API rows into
+// the same envelope client-side, giving a SIEM the exact schema it is
+// configured for when an operator needs an on-demand file instead of a
+// collector pipeline. The stdout stream remains the authoritative source for
+// typed `details` payloads; this projection passes `details` through as
+// stored.
+
+/** `schema_version` of the backend's published audit-event schema (#2413). */
+export const AUDIT_EVENT_SCHEMA_VERSION = 1;
+
+/** `outcome` enum of the audit-event v1 schema. */
+export type AuditEventOutcome = "success" | "failure" | "denied";
+
+/** One record of the backend's audit-event v1 schema (one NDJSON line). */
+export interface AuditEventV1Record {
+  schema_version: number;
+  category: "audit";
+  event_id: string;
+  timestamp: string;
+  action: string;
+  outcome: AuditEventOutcome;
+  actor: {
+    id: string | null;
+    name: string | null;
+    type: "system" | "user" | "anonymous" | "service_account";
+  };
+  source_ip: string | null;
+  resource: {
+    type: string;
+    id: string | null;
+    name: string | null;
+  };
+  correlation_id: string;
+  details: Record<string, unknown> | null;
+}
+
+/**
+ * Derive the schema `outcome` from the action name, mirroring the backend's
+ * `AuditAction::outcome` classification (`audit_export.rs`): failure- and
+ * denied-flavored actions encode the result in their name (`*_FAILED`,
+ * `*_DENIED`, `*_REJECTED`), everything else is a success.
+ */
+export function auditActionOutcome(action: string): AuditEventOutcome {
+  if (action.endsWith("_FAILED")) return "failure";
+  if (action.endsWith("_DENIED") || action.endsWith("_REJECTED")) {
+    return "denied";
+  }
+  return "success";
+}
+
+/**
+ * Project an admin-API audit row into the backend's audit-event v1 record.
+ *
+ * Best-effort mapping (the admin API carries no actor-type column):
+ * `user_id` present → `user`; a failed login with no principal → `anonymous`;
+ * anything else without a user → `system`. Non-object `details` (never
+ * produced by the backend, which stores JSONB objects or null) are dropped to
+ * keep every line schema-valid.
+ */
+export function auditItemToSiemRecord(item: AuditLogItem): AuditEventV1Record {
+  return {
+    schema_version: AUDIT_EVENT_SCHEMA_VERSION,
+    category: "audit",
+    event_id: item.id,
+    timestamp: item.created_at,
+    action: item.action,
+    outcome: auditActionOutcome(item.action),
+    actor: {
+      id: item.user_id ?? null,
+      name: item.actor_username ?? null,
+      type: item.user_id
+        ? "user"
+        : item.action === "LOGIN_FAILED"
+          ? "anonymous"
+          : "system",
+    },
+    source_ip: item.ip_address ?? null,
+    resource: {
+      type: item.resource_type,
+      id: item.resource_id ?? null,
+      name: null,
+    },
+    correlation_id: item.correlation_id,
+    details:
+      item.details != null &&
+      typeof item.details === "object" &&
+      !Array.isArray(item.details)
+        ? (item.details as Record<string, unknown>)
+        : null,
+  };
+}
+
+/**
+ * Serialize items as NDJSON in the backend's audit-event v1 schema: one
+ * record per line, LF-terminated, so a filelog collector can tail the file
+ * exactly like it tails backend stdout (#2413).
+ */
+export function auditItemsToNdjson(items: AuditLogItem[]): string {
+  return items.map((item) => JSON.stringify(auditItemToSiemRecord(item))).join("\n") + "\n";
 }
 
 export const auditApi = {
