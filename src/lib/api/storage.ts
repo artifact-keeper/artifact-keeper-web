@@ -19,12 +19,15 @@ import { unwrap } from '@/lib/sdk-utils';
  * trust boundary (`assertData` + `narrowEnum` for the free-form `dedup_scope`).
  *
  * `runGc` deliberately STAYS on `apiFetch`: the per-repository GC endpoint
- * (`POST /repositories/{key}/storage-gc`) is still absent from the SDK. The
- * only garbage-collection operation the generated client exposes is the
- * instance-wide `runStorageGc` (`POST /admin/storage-gc`), which is a different,
- * admin-only, whole-instance surface — it is NOT the per-repo dry-run the panel
- * needs for its "reclaimable now" estimate. Once the backend spec grows a
- * per-repo GC operation this can collapse to the generated call too.
+ * (`POST /repositories/{key}/storage-gc`) now exists in the backend
+ * (artifact-keeper web#708 — the panel's reclaim estimate used to 404 against
+ * a route that was never implemented), but the pinned `@artifact-keeper/sdk`
+ * release predates it. The only garbage-collection operation the generated
+ * client exposes is the instance-wide `runStorageGc` (`POST /admin/storage-gc`),
+ * which is a different, admin-only, whole-instance surface — it is NOT the
+ * per-repo dry-run the panel needs for its "reclaimable now" estimate. Once an
+ * SDK release ships the per-repo GC operation this can collapse to the
+ * generated call too.
  */
 
 const DEDUP_SCOPES = new Set<DedupScope>(['per_repo', 'instance']);
@@ -78,13 +81,16 @@ export const storageApi = {
    *
    * `dryRun` (default true) asks the backend to report what *would* be
    * reclaimed without deleting anything; the panel uses the returned
-   * `bytes_freed` as the admin-only "reclaimable now" estimate. This endpoint
-   * is admin-gated on the backend, so callers should only offer it to admins.
+   * `bytes_freed` as the admin-only "reclaimable now" estimate. The backend
+   * scopes every GC sweep to this repository while keeping the orphan
+   * predicate instance-wide, so bytes still shared with another repository
+   * are never reported as reclaimable. The endpoint is admin-gated on the
+   * backend, so callers should only offer it to admins.
    *
    * Still on `apiFetch`: the per-repo `/storage-gc` operation is not in the
-   * SDK (see the module note above), so the zod-free `apiFetch` trust boundary
-   * is retained here — this is the one operation that remains genuinely absent
-   * from the generated client.
+   * pinned SDK release (see the module note above), so the zod-free
+   * `apiFetch` trust boundary is retained here — this is the one operation
+   * that remains genuinely absent from the generated client.
    */
   runGc: async (repoKey: string, dryRun = true): Promise<StorageGcResult> => {
     return apiFetch<StorageGcResult>(
