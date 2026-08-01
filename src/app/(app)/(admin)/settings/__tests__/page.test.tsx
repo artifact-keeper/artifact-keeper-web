@@ -48,6 +48,8 @@ vi.mock("lucide-react", () => {
     Lock: icon,
     Info: icon,
     Mail: icon,
+    Rss: icon,
+    ExternalLink: icon,
     Loader2: icon,
   };
 });
@@ -503,6 +505,17 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     expect(screen.getByText("Email")).toBeDefined();
+  });
+
+  it("renders the npm Upstream tab and its read-only feed card (#702)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("npm Upstream")).toBeDefined();
+    expect(screen.getByText("npm Upstream Change-Feed")).toBeDefined();
+    expect(screen.getByText("NPM_UPSTREAM_FEED_ENABLED")).toBeDefined();
+    expect(screen.getByText("NPM_UPSTREAM_FEED_URL")).toBeDefined();
   });
 
   it("renders SMTP Configuration heading", () => {
