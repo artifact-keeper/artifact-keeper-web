@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequestArrow, Plus, Trash2, Pencil, FlaskConical, AlertCircle, RotateCcw, Loader2, ArrowRight } from "lucide-react";
@@ -90,6 +92,7 @@ function toRequest(f: FormState): CreatePromotionRuleRequest {
 }
 
 export default function PromotionRulesPage() {
+  useDocumentTitle("Promotion Rules");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

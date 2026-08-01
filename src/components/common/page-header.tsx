@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 interface PageHeaderProps {
   title: string;
@@ -14,6 +17,8 @@ export function PageHeader({
   actions,
   className,
 }: PageHeaderProps) {
+  useDocumentTitle(title);
+
   return (
     <div
       className={cn(

@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -46,6 +48,7 @@ const changePasswordSchema = z
 type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
 
 export default function ChangePasswordPage() {
+  useDocumentTitle("Change Password");
   const router = useRouter();
   const { changePassword, logout, setupRequired } = useAuth();
   const [isLoading, setIsLoading] = useState(false);

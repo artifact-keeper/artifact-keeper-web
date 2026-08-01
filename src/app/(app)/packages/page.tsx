@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { Suspense, useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -388,6 +390,7 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 // ---- Main Packages Page ----
 
 export default function PackagesPage() {
+  useDocumentTitle("Packages");
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-[50vh]"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
       <PackagesContent />

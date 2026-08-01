@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -49,6 +51,7 @@ const emptyForm: CreateSigningKeyRequest = {
 };
 
 export default function SigningPage() {
+  useDocumentTitle("Signing Keys");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

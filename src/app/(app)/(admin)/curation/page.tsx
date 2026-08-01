@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -49,6 +51,7 @@ import { ListTruncationNotice } from "@/components/common/list-truncation-notice
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
 export default function CurationPage() {
+  useDocumentTitle("Package Curation");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

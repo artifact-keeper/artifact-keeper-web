@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, PlayCircle, EyeOff, Eye, AlertCircle, RotateCcw, Loader2, ListChecks } from "lucide-react";
@@ -37,6 +39,7 @@ function severityVariant(sev: string): "destructive" | "secondary" | "outline" {
 }
 
 export default function QualityChecksPage() {
+  useDocumentTitle("Quality Checks");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

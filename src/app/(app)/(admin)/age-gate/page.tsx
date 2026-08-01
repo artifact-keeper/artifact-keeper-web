@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
@@ -93,6 +95,7 @@ function describeTransition(from: string, to: AgeGateStatus): string {
 }
 
 export default function AgeGatePage() {
+  useDocumentTitle("Age Gate Review Queue");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

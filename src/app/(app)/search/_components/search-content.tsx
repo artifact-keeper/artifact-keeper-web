@@ -47,6 +47,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { buildMavenSearchQuery } from "@/lib/maven";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 // ---- Types ----
 
@@ -144,6 +145,7 @@ const FORMAT_OPTIONS = [
 // ---- Main Content ----
 
 export function SearchContent() {
+  useDocumentTitle("Search");
   const searchParams = useSearchParams();
   const router = useRouter();
 
