@@ -62,6 +62,16 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+// Mock the format-handlers hook (resolves WASM plugin layout names, #592).
+const mockUseFormatHandlers = vi.fn(
+  (): { data: { format_key: string; display_name: string }[] | undefined } => ({
+    data: undefined,
+  })
+);
+vi.mock("@/hooks/use-format-handlers", () => ({
+  useFormatHandlers: () => mockUseFormatHandlers(),
+}));
+
 // Mock the scan-config API (apiFetch-based client for the security endpoint).
 const mockGetScanConfig = vi.fn();
 const mockUpdateScanConfig = vi.fn();
@@ -1769,5 +1779,49 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("Failed to save scanning settings");
     });
+  });
+});
+
+describe("RepoSettingsTab - WASM plugin layout display (#592)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("shows the plugin layout name and annotation for a plugin-backed repo", () => {
+    mockUseFormatHandlers.mockReturnValue({
+      data: [{ format_key: "unity", display_name: "Unity" }],
+    });
+    const pluginRepo: Repository = {
+      ...baseRepo,
+      format: "generic",
+      format_key: "unity",
+    };
+
+    render(<RepoSettingsTab repository={pluginRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("UNITY")).toBeTruthy();
+    expect(
+      screen.getByText(/custom layout provided by a wasm plugin/i)
+    ).toBeTruthy();
+  });
+
+  it("still shows GENERIC without annotation for a plain generic repo", () => {
+    const plainGeneric: Repository = {
+      ...baseRepo,
+      format: "generic",
+      format_key: null,
+    };
+
+    render(<RepoSettingsTab repository={plainGeneric} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("GENERIC")).toBeTruthy();
+    expect(
+      screen.queryByText(/custom layout provided by a wasm plugin/i)
+    ).toBeNull();
   });
 });

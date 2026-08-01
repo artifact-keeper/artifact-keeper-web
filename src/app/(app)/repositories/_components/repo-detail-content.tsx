@@ -33,6 +33,8 @@ import { artifactsApi } from "@/lib/api/artifacts";
 import { securityApi } from "@/lib/api/security";
 import { quarantineApi } from "@/lib/api/quarantine";
 import { mutationErrorToast } from "@/lib/error-utils";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import {
   isActivelyQuarantined,
   isQuarantineRejected,
@@ -191,6 +193,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     queryFn: () => repositoriesApi.get(repoKey),
     enabled: !!repoKey,
   });
+
+  // Installed format handlers — resolves the custom layout name for repos
+  // backed by a WASM plugin (#592), which report `format: "generic"`.
+  const { data: formatHandlers } = useFormatHandlers();
 
   const repoFormat = repository?.format;
   // Derive effective view mode: explicit user choice wins; otherwise default
@@ -725,8 +731,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-xs">
-                {repository.format.toUpperCase()}
+                {repoFormatLabel(repository, formatHandlers).toUpperCase()}
               </Badge>
+              {isPluginBackedRepo(repository) && (
+                <Badge variant="outline" className="text-xs font-normal">
+                  WASM plugin
+                </Badge>
+              )}
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${REPO_TYPE_COLORS[repository.repo_type] ?? ""}`}
               >
@@ -767,8 +778,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="text-xs">
-              {repository.format.toUpperCase()}
+              {repoFormatLabel(repository, formatHandlers).toUpperCase()}
             </Badge>
+            {isPluginBackedRepo(repository) && (
+              <Badge variant="outline" className="text-xs font-normal">
+                WASM plugin
+              </Badge>
+            )}
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${REPO_TYPE_COLORS[repository.repo_type] ?? ""}`}
             >

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RepoDialogs } from './repo-dialogs';
+import type { FormatHandler } from '@/lib/api/format-handlers';
 
 // jsdom doesn't provide ResizeObserver
 beforeAll(() => {
@@ -1903,6 +1904,102 @@ describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
         npm_allowed_scopes: ['@acme'],
         npm_allow_unscoped: true,
       })
+    );
+  });
+});
+
+describe('RepoDialogs - WASM plugin layouts (#591)', () => {
+  const UNITY_HANDLER: FormatHandler = {
+    id: 'h-unity',
+    format_key: 'unity',
+    display_name: 'Unity',
+    description: null,
+    extensions: ['.unitypackage'],
+    handler_type: 'Wasm',
+    is_enabled: true,
+    priority: 5,
+    plugin_id: 'p1',
+  };
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('offers installed WASM plugin layouts as labeled custom format options', () => {
+    render(<RepoDialogs {...defaultProps} pluginFormats={[UNITY_HANDLER]} />);
+
+    const dialog = screen.getByRole('dialog');
+    const formatSelect = within(dialog).getAllByTestId('mock-select')[0] as HTMLSelectElement;
+    const option = Array.from(formatSelect.options).find((o) => o.value === 'unity');
+
+    expect(option).toBeDefined();
+    expect(option?.textContent).toBe('Custom (plugin: Unity)');
+  });
+
+  it('omits the custom plugin options when no plugins are installed', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    const formatSelect = within(dialog).getAllByTestId('mock-select')[0] as HTMLSelectElement;
+    const labels = Array.from(formatSelect.options).map((o) => o.textContent ?? '');
+
+    expect(labels.some((l) => l.startsWith('Custom (plugin:'))).toBe(false);
+  });
+
+  it('submits a selected plugin layout as format "generic" plus format_key', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        onCreateSubmit={onCreateSubmit}
+        pluginFormats={[UNITY_HANDLER]}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'unity-local');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'Unity Local');
+
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'unity' },
+    });
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'unity-local',
+        format: 'generic',
+        format_key: 'unity',
+      })
+    );
+  });
+
+  it('submits built-in formats without a format_key', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        onCreateSubmit={onCreateSubmit}
+        pluginFormats={[UNITY_HANDLER]}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'npm-local');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'NPM Local');
+
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
+      target: { value: 'npm' },
+    });
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'npm', format_key: undefined })
     );
   });
 });

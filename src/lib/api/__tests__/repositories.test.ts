@@ -944,3 +944,52 @@ describe("repositoriesApi.updateAgePolicy", () => {
     ).rejects.toThrow("age policy boom");
   });
 });
+
+describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("adapts format_key from the SDK response for plugin-backed repos", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: {
+        items: [sdkRepo({ format: "generic", format_key: "unity" })],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.list();
+    expect(result.items[0].format).toBe("generic");
+    expect(result.items[0].format_key).toBe("unity");
+  });
+
+  it("defaults format_key to null when the backend omits it", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: {
+        items: [sdkRepo()],
+        pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 },
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.list();
+    expect(result.items[0].format_key).toBeNull();
+  });
+
+  it("forwards format_key in the create body for plugin layouts", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ format: "generic", format_key: "unity" }),
+      error: undefined,
+    });
+
+    await repositoriesApi.create({
+      key: "unity-local",
+      name: "Unity Local",
+      format: "generic",
+      format_key: "unity",
+      repo_type: "local",
+    });
+
+    const call = mockCreateRepository.mock.calls[0]?.[0] as { body: Record<string, unknown> };
+    expect(call.body).toMatchObject({ format: "generic", format_key: "unity" });
+  });
+});

@@ -12,6 +12,8 @@ import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRepositories } from "@/hooks/use-repositories";
+import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
+import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { Button } from "@/components/ui/button";
@@ -85,6 +87,11 @@ export function RepositoriesContent() {
     format: formatFilter === "__all__" ? undefined : formatFilter,
     repo_type: typeFilter === "__all__" ? undefined : typeFilter,
   });
+
+  // Installed format handlers — drives the create dialog's custom WASM
+  // plugin layouts (#591) and the plugin layout labels in the list (#592).
+  const { data: formatHandlers } = useFormatHandlers();
+  const pluginFormats = useMemo(() => wasmPluginFormats(formatHandlers), [formatHandlers]);
 
   // --- mutations ---
 
@@ -371,6 +378,7 @@ export function RepositoriesContent() {
                 onEdit={isAdmin ? handleEdit : undefined}
                 onDelete={isAdmin ? handleDelete : undefined}
                 artifactMatchCount={searchQuery ? artifactMatchMap.get(repo.key) : undefined}
+                formatLabel={repoFormatLabel(repo, formatHandlers)}
               />
             ))}
           </div>
@@ -504,6 +512,7 @@ export function RepositoriesContent() {
         onDeleteConfirm={(key) => deleteMutation.mutate(key)}
         deletePending={deleteMutation.isPending}
         availableRepos={items}
+        pluginFormats={pluginFormats}
       />
     </div>
   );

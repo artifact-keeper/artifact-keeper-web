@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
+import type { FormatHandler } from "@/lib/api/format-handlers";
 import {
   FORMAT_OPTIONS,
   TYPE_OPTIONS,
@@ -103,6 +104,12 @@ interface RepoDialogsProps {
   deletePending: boolean;
   // Available repos for virtual repo member selection
   availableRepos?: Repository[];
+  /**
+   * Enabled WASM plugin format handlers offered as custom layouts in the
+   * create dialog's format selector (#591). Empty/omitted when no plugins
+   * are installed — the plugin options are simply absent then.
+   */
+  pluginFormats?: FormatHandler[];
 }
 
 export function RepoDialogs({
@@ -124,6 +131,7 @@ export function RepoDialogs({
   onDeleteConfirm,
   deletePending,
   availableRepos = [],
+  pluginFormats = [],
 }: RepoDialogsProps) {
   // Create form state
   const [createForm, setCreateForm] = useState<CreateRepositoryRequest>({
@@ -313,8 +321,16 @@ export function RepoDialogs({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              // #591: a selected WASM plugin layout is submitted as
+              // `format: "generic"` plus the plugin's `format_key` — the
+              // backend binds plugin-backed repos that way (migration 065).
+              const selectedPlugin = pluginFormats.find(
+                (h) => h.format_key === createForm.format,
+              );
               const submitData: CreateRepositoryRequest = {
                 ...createForm,
+                format: selectedPlugin ? "generic" : createForm.format,
+                format_key: selectedPlugin?.format_key,
                 quota_bytes: quotaToBytes(createQuotaValue, createQuotaUnit) ?? undefined,
                 upstream_url: createForm.repo_type === "remote" ? createForm.upstream_url : undefined,
                 member_repos: createForm.repo_type === "virtual" ? buildMemberRepos() : undefined,
@@ -409,6 +425,13 @@ export function RepoDialogs({
                     {SORTED_FORMAT_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
+                      </SelectItem>
+                    ))}
+                    {/* #591: custom layouts from installed WASM plugins,
+                        labeled as plugin-provided; absent when none. */}
+                    {pluginFormats.map((h) => (
+                      <SelectItem key={h.format_key} value={h.format_key}>
+                        {`Custom (plugin: ${h.display_name})`}
                       </SelectItem>
                     ))}
                   </SelectContent>

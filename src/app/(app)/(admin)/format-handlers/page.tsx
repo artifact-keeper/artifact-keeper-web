@@ -12,6 +12,7 @@ import {
   type FormatHandler,
   type FormatTestResult,
 } from "@/lib/api/format-handlers";
+import { FORMAT_HANDLERS_QUERY_KEY } from "@/hooks/use-format-handlers";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -31,7 +32,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-const QUERY_KEY = ["format-handlers"];
+const QUERY_KEY = FORMAT_HANDLERS_QUERY_KEY;
 
 export default function FormatHandlersPage() {
   useDocumentTitle("Format Handlers");
