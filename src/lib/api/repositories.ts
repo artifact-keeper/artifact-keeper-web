@@ -188,6 +188,10 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     npm_allowed_scopes: sdk.npm_allowed_scopes ?? undefined,
     npm_allowed_name_patterns: sdk.npm_allowed_name_patterns ?? undefined,
     npm_allow_unscoped: sdk.npm_allow_unscoped ?? undefined,
+    // Package age policy (#265). Not on the SDK-generated type yet, so
+    // access via `as any` — the backend returns the fields when set.
+    quarantine_enabled: (sdk as Record<string, unknown>).quarantine_enabled as boolean | undefined,
+    quarantine_duration_minutes: (sdk as Record<string, unknown>).quarantine_duration_minutes as number | undefined,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };

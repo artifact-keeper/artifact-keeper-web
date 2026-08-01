@@ -93,6 +93,13 @@ export interface Repository {
   npm_allowed_scopes?: string[];
   npm_allowed_name_patterns?: string[];
   npm_allow_unscoped?: boolean;
+  /**
+   * Package age policy (quarantine-on-release, #265).
+   * When enabled, artifacts pulled through a remote repository are held in
+   * quarantine for `quarantine_duration_minutes` after their upstream release.
+   */
+  quarantine_enabled?: boolean;
+  quarantine_duration_minutes?: number;
   created_at: string;
   updated_at: string;
 }

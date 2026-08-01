@@ -94,6 +94,15 @@ export function ageToMinutes(value: string, unit: AgeUnit): number {
   return Math.round(num * factor);
 }
 
+/** Convert minutes back to a display value and unit. Prefers days when evenly divisible. */
+export function minutesToAge(minutes: number | undefined | null): { value: string; unit: AgeUnit } {
+  if (!minutes || minutes <= 0) return { value: "3", unit: "days" };
+  if (minutes % MINUTES_PER_DAY === 0) {
+    return { value: String(minutes / MINUTES_PER_DAY), unit: "days" };
+  }
+  return { value: String(Math.round(minutes / MINUTES_PER_HOUR)), unit: "hours" };
+}
+
 // Backend constraints from `validate_cache_ttl` in repositories.rs: 1s..=30d.
 // The constants live here (not on the SDK) so the UI can show a clear inline
 // validation error before submitting; the backend would otherwise reject with
@@ -485,26 +494,38 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
-  // These seed from local defaults rather than persisted config, so Save stays
-  // disabled until the operator makes an explicit change. That prevents a
-  // pristine form from writing the defaults over an existing policy on save.
-  // (review fix #464)
-  const [ageEnabled, setAgeEnabledState] = useState(false);
-  const [ageValue, setAgeValueState] = useState("3");
-  const [ageUnit, setAgeUnitState] = useState<AgeUnit>("days");
-  const [ageDirty, setAgeDirty] = useState(false);
+  // Seeded from the persisted `quarantine_enabled` / `quarantine_duration_minutes`
+  // on the repository object so the form reflects the true server state after
+  // mount and after a save-then-refetch cycle (review fix #464, regression #665).
+  // The override pattern mirrors the general settings so `ageDirty` stays
+  // false until the operator makes an explicit change.
+  const ageDefaults = useMemo(
+    () => ({
+      enabled: repository.quarantine_enabled ?? false,
+      ...minutesToAge(repository.quarantine_duration_minutes),
+    }),
+    [repository.quarantine_enabled, repository.quarantine_duration_minutes],
+  );
+
+  const [ageOverrides, setAgeOverrides] = useState<{
+    enabled?: boolean;
+    value?: string;
+    unit?: AgeUnit;
+  }>({});
+
+  const ageEnabled = ageOverrides.enabled ?? ageDefaults.enabled;
+  const ageValue = ageOverrides.value ?? ageDefaults.value;
+  const ageUnit = ageOverrides.unit ?? ageDefaults.unit;
+  const ageDirty = "enabled" in ageOverrides || "value" in ageOverrides || "unit" in ageOverrides;
 
   const setAgeEnabled = (v: boolean) => {
-    setAgeEnabledState(v);
-    setAgeDirty(true);
+    setAgeOverrides((o) => ({ ...o, enabled: v }));
   };
   const setAgeValue = (v: string) => {
-    setAgeValueState(v);
-    setAgeDirty(true);
+    setAgeOverrides((o) => ({ ...o, value: v }));
   };
   const setAgeUnit = (v: AgeUnit) => {
-    setAgeUnitState(v);
-    setAgeDirty(true);
+    setAgeOverrides((o) => ({ ...o, unit: v }));
   };
 
   const ageMinutes = ageToMinutes(ageValue, ageUnit);
@@ -518,7 +539,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
-      setAgeDirty(false);
+      setAgeOverrides({});
       toast.success(
         ageEnabled
           ? "Package age policy enabled"

@@ -894,6 +894,26 @@ describe("repositoriesApi adaptation of 1.6.0 config (#602)", () => {
     expect(repo.debian).toBeUndefined();
     expect(repo.npm_allowed_scopes).toBeUndefined();
   });
+
+  it("passes through quarantine_enabled and quarantine_duration_minutes from the response", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({
+        quarantine_enabled: true,
+        quarantine_duration_minutes: 10080,
+      }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.quarantine_enabled).toBe(true);
+    expect(repo.quarantine_duration_minutes).toBe(10080);
+  });
+
+  it("leaves quarantine fields undefined when the backend omits them", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.quarantine_enabled).toBeUndefined();
+    expect(repo.quarantine_duration_minutes).toBeUndefined();
+  });
 });
 
 describe("repositoriesApi.updateAgePolicy", () => {
