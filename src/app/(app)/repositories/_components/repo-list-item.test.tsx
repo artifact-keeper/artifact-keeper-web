@@ -98,3 +98,43 @@ describe("RepoListItem", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("RepoListItem - WASM plugin layout label (#592)", () => {
+  const pluginRepo: Repository = {
+    ...repo,
+    id: "2",
+    key: "unity-local",
+    name: "Unity Local",
+    format: "generic",
+    format_key: "unity",
+    repo_type: "local",
+  };
+
+  it("renders the plugin layout label instead of bare GENERIC", () => {
+    render(
+      <RepoListItem
+        repo={pluginRepo}
+        isSelected={false}
+        onSelect={vi.fn()}
+        formatLabel="Unity"
+      />
+    );
+
+    expect(screen.getByText("Unity")).toBeInTheDocument();
+    expect(screen.queryByText("generic")).not.toBeInTheDocument();
+  });
+
+  it("still renders GENERIC for a plain generic repo without a layout label", () => {
+    const plainGeneric: Repository = {
+      ...repo,
+      id: "3",
+      key: "files",
+      name: "Files",
+      format: "generic",
+      format_key: null,
+    };
+    render(<RepoListItem repo={plainGeneric} isSelected={false} onSelect={vi.fn()} />);
+
+    expect(screen.getByText("generic")).toBeInTheDocument();
+  });
+});

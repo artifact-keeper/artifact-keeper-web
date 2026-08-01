@@ -18,9 +18,15 @@ interface RepoListItemProps {
   onEdit?: (repo: Repository) => void;
   onDelete?: (repo: Repository) => void;
   artifactMatchCount?: number;
+  /**
+   * Resolved format label (#592). For repos backed by a WASM plugin layout
+   * (`format: "generic"` + `format_key`) the parent passes the plugin layout
+   * name so the row does not show a bare "GENERIC"; defaults to `repo.format`.
+   */
+  formatLabel?: string;
 }
 
-export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount }: RepoListItemProps) {
+export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel }: RepoListItemProps) {
   // #672: the row's primary action is a real <button> that is a SIBLING of the
   // actions dropdown trigger — never an ancestor — so no interactive element
   // nests inside another and the row's accessible name stays clean (it no
@@ -49,7 +55,7 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
             </p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[11px] font-medium uppercase text-muted-foreground">
-                {repo.format}
+                {formatLabel ?? repo.format}
               </span>
               <span className="text-muted-foreground">·</span>
               <span className={cn("text-[11px] font-medium", REPO_TYPE_COLORS[repo.repo_type] ? "" : "text-muted-foreground")}>

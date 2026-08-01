@@ -160,6 +160,12 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
         `This likely means the backend added a format the SDK hasn't picked up yet.`,
     ),
     repo_type: narrowEnum(sdk.repo_type, REPO_TYPES, 'local'),
+    // `format_key` (backend migration 065) links a Generic-format repository
+    // to the WASM plugin format handler providing its custom layout. The
+    // generated SDK `RepositoryResponse` type does not declare it yet, so it
+    // is read defensively; backends that omit it yield `null`.
+    format_key:
+      (sdk as RepositoryResponse & { format_key?: string | null }).format_key ?? null,
     is_public: sdk.is_public,
     // `versioning_enabled` (artifact-keeper#2367) is now carried on the
     // generated SDK type; `?? false` stays defensive against a backend that
@@ -232,6 +238,10 @@ export const repositoriesApi = {
       name: input.name,
       description: input.description,
       format: input.format,
+      // #591: WASM plugin layouts are created as `format: "generic"` plus the
+      // plugin's `format_key` (backend migration 065). Undefined for built-in
+      // formats and dropped by JSON serialization.
+      format_key: input.format_key,
       repo_type: input.repo_type,
       is_public: input.is_public,
       quota_bytes: input.quota_bytes,

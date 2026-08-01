@@ -58,6 +58,13 @@ export interface Repository {
   name: string;
   description?: string;
   format: RepositoryFormat;
+  /**
+   * Custom layout key of the WASM plugin format handler backing this
+   * repository (backend migration 065, `repositories.format_key`). Set only
+   * for plugin-backed repos, which report `format: "generic"`; `null` /
+   * absent for built-in formats.
+   */
+  format_key?: string | null;
   repo_type: RepositoryType;
   is_public: boolean;
   /**
@@ -169,6 +176,12 @@ export interface CreateRepositoryRequest {
   name: string;
   description?: string;
   format: RepositoryFormat;
+  /**
+   * WASM plugin layout to back this repository with (backend migration 065).
+   * When set, `format` must be `"generic"`; the backend binds the repo to the
+   * plugin format handler with this key. Omit for built-in formats.
+   */
+  format_key?: string;
   repo_type: RepositoryType;
   is_public?: boolean;
   /** Opt a Generic/Mlmodel repository into first-class versioning (#571). */

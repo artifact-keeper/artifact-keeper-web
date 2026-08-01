@@ -19,6 +19,8 @@ import {
 } from "@/lib/api/scan-config";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import type {
   Repository,
   DebianRepoConfig,
@@ -165,6 +167,10 @@ interface RepoSettingsTabProps {
 
 export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const queryClient = useQueryClient();
+
+  // Installed format handlers — resolves the custom layout name when the
+  // repo is backed by a WASM plugin (#592).
+  const { data: formatHandlers } = useFormatHandlers();
 
   // -- General settings form state (override-based, like the edit dialog) --
   const defaults = useMemo(
@@ -1319,10 +1325,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         </h3>
         <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-muted-foreground">Format</dt>
-          <dd>
+          <dd className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
-              {repository.format.toUpperCase()}
+              {repoFormatLabel(repository, formatHandlers).toUpperCase()}
             </Badge>
+            {isPluginBackedRepo(repository) && (
+              <span className="text-xs text-muted-foreground">
+                Custom layout provided by a WASM plugin (generic family)
+              </span>
+            )}
           </dd>
           <dt className="text-muted-foreground">Type</dt>
           <dd className="capitalize">{repository.repo_type}</dd>
