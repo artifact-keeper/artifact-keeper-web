@@ -94,6 +94,21 @@ export const WEBHOOK_EVENTS: { value: WebhookEvent; label: string; description: 
     label: "User Deleted",
     description: "Triggered when a user account is removed",
   },
+  {
+    value: "age_gate_queued",
+    label: "Age Gate Queued",
+    description: "Triggered when a too-new upstream release enters the age gate review queue",
+  },
+  {
+    value: "age_gate_approved",
+    label: "Age Gate Approved",
+    description: "Triggered when an age-gated release is approved for download",
+  },
+  {
+    value: "age_gate_rejected",
+    label: "Age Gate Rejected",
+    description: "Triggered when an age-gated release is rejected",
+  },
 ];
 
 // ---------------------------------------------------------------------------

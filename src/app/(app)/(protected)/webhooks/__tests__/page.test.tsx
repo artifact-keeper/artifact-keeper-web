@@ -587,5 +587,86 @@ describe("WebhooksPage", () => {
     const started = screen.getByText("build started");
     expect(started.className).toContain("blue");
   });
+
+  it("colors age gate events like their outcomes", async () => {
+    setupQueryMock({
+      data: {
+        items: [
+          {
+            id: "w1",
+            name: "Gate Hook",
+            url: "https://ex.com",
+            events: [
+              "age_gate_queued",
+              "age_gate_approved",
+              "age_gate_rejected",
+            ],
+            is_enabled: true,
+            created_at: "2026-01-01",
+          },
+        ],
+        total: 1,
+      },
+    });
+    await renderPage();
+    expect(screen.getByText("age gate approved").className).toContain(
+      "emerald"
+    );
+    expect(screen.getByText("age gate rejected").className).toContain("red");
+    // Queued is neither a success nor a failure: neutral default styling.
+    expect(screen.getByText("age gate queued").className).toContain(
+      "secondary"
+    );
+  });
+
+  it("lists age gate events in the create dialog and submits them", async () => {
+    const { webhooksApi } = await import("@/lib/api/webhooks");
+    await renderPage();
+    await act(async () => {
+      fireEvent.click(screen.getAllByText("Create Webhook")[0]);
+    });
+    // The age gate group is offered alongside the other event groups.
+    expect(screen.getByText("Age Gate Queued")).toBeInTheDocument();
+    expect(screen.getByText("Age Gate Approved")).toBeInTheDocument();
+    expect(screen.getByText("Age Gate Rejected")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("e.g., Slack Notifications"), {
+        target: { value: "Age Gate Hook" },
+      });
+      fireEvent.change(
+        screen.getByPlaceholderText("https://example.com/webhook"),
+        { target: { value: "https://test.com/hook" } }
+      );
+    });
+
+    // Toggle the two decision events on.
+    const approved = screen
+      .getByText("Age Gate Approved")
+      .closest("label")!
+      .querySelector("input")!;
+    const rejected = screen
+      .getByText("Age Gate Rejected")
+      .closest("label")!
+      .querySelector("input")!;
+    await act(async () => {
+      fireEvent.click(approved);
+      fireEvent.click(rejected);
+    });
+
+    const form = screen.getByTestId("dialog-content").querySelector("form")!;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(webhooksApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: expect.arrayContaining([
+          "age_gate_approved",
+          "age_gate_rejected",
+        ]),
+      })
+    );
+  });
 });
 

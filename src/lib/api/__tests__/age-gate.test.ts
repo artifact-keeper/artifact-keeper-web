@@ -19,6 +19,7 @@ const m = {
   approveReview: vi.fn(),
   rejectReview: vi.fn(),
   getRepoAgeGate: vi.fn(),
+  updateRepoAgeGate: vi.fn(),
 };
 vi.mock("@artifact-keeper/sdk", () => ({
   listReviews: (...a: unknown[]) => m.listReviews(...a),
@@ -26,6 +27,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   approveReview: (...a: unknown[]) => m.approveReview(...a),
   rejectReview: (...a: unknown[]) => m.rejectReview(...a),
   getRepoAgeGate: (...a: unknown[]) => m.getRepoAgeGate(...a),
+  updateRepoAgeGate: (...a: unknown[]) => m.updateRepoAgeGate(...a),
 }));
 
 import { ApiError } from "../fetch";
@@ -351,5 +353,33 @@ describe("ageGateApi", () => {
     m.getRepoAgeGate.mockResolvedValue({ data: undefined, error: { status: 404 } });
     const out = await ageGateApi.getRepoConfigs(["no-policy-repo"]);
     expect(out).toEqual({});
+  });
+
+  it("getRepoConfig fetches one repository's policy and adapts it to camelCase", async () => {
+    m.getRepoAgeGate.mockResolvedValue({
+      data: { repository_key: "npm-remote", enabled: true, min_age_days: 14 },
+      error: undefined,
+    });
+    const out = await ageGateApi.getRepoConfig("npm-remote");
+    expect(m.getRepoAgeGate).toHaveBeenCalledWith({ path: { key: "npm-remote" } });
+    expect(out).toEqual({ repositoryKey: "npm-remote", enabled: true, minAgeDays: 14 });
+  });
+
+  it("getRepoConfig throws the SDK error instead of swallowing it", async () => {
+    m.getRepoAgeGate.mockResolvedValue({ data: undefined, error: { status: 500 } });
+    await expect(ageGateApi.getRepoConfig("npm-remote")).rejects.toEqual({ status: 500 });
+  });
+
+  it("updateRepoConfig PUTs the snake_case body and adapts the echoed config", async () => {
+    m.updateRepoAgeGate.mockResolvedValue({
+      data: { repository_key: "npm-remote", enabled: false, min_age_days: 0 },
+      error: undefined,
+    });
+    const out = await ageGateApi.updateRepoConfig("npm-remote", { enabled: false, minAgeDays: 0 });
+    expect(m.updateRepoAgeGate).toHaveBeenCalledWith({
+      path: { key: "npm-remote" },
+      body: { enabled: false, min_age_days: 0 },
+    });
+    expect(out).toEqual({ repositoryKey: "npm-remote", enabled: false, minAgeDays: 0 });
   });
 });

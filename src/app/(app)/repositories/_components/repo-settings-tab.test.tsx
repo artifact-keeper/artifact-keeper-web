@@ -84,6 +84,18 @@ vi.mock("@/lib/api/scan-config", () => ({
   SEVERITY_THRESHOLDS: ["critical", "high", "medium", "low"],
 }));
 
+// Mock the age-gate API (#701 per-repo settings panel).
+const mockGetAgeGateConfig = vi.fn();
+const mockUpdateAgeGateConfig = vi.fn();
+vi.mock("@/lib/api/age-gate", () => ({
+  __esModule: true,
+  ageGateApi: {
+    getRepoConfig: (...args: unknown[]) => mockGetAgeGateConfig(...args),
+    updateRepoConfig: (...args: unknown[]) =>
+      mockUpdateAgeGateConfig(...args),
+  },
+}));
+
 // Mock lifecycle API
 const mockListPolicies = vi.fn();
 const mockDeletePolicy = vi.fn();
@@ -273,6 +285,14 @@ const defaultScanConfig = {
   proxy_scan_action: "fail_open" as const,
 };
 mockGetScanConfig.mockResolvedValue(defaultScanConfig);
+
+// Default age-gate config (#701): enabled with a 7-day minimum. Individual
+// tests override with mockResolvedValue/mockResolvedValueOnce.
+mockGetAgeGateConfig.mockResolvedValue({
+  repositoryKey: "npm-remote",
+  enabled: true,
+  minAgeDays: 7,
+});
 
 function createWrapper() {
   const client = new QueryClient({
@@ -1823,5 +1843,190 @@ describe("RepoSettingsTab - WASM plugin layout display (#592)", () => {
     expect(
       screen.queryByText(/custom layout provided by a wasm plugin/i)
     ).toBeNull();
+  });
+});
+
+describe("RepoSettingsTab - Age Gate (#701)", () => {
+  const remoteRepo: Repository = {
+    ...baseRepo,
+    key: "npm-remote",
+    repo_type: "remote" as const,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    // Remote repos also run the cache-TTL query; give it a quiet default.
+    mockGetCacheTtl.mockResolvedValue({ cache_ttl_seconds: 86400 });
+    mockGetAgeGateConfig.mockResolvedValue({
+      repositoryKey: "npm-remote",
+      enabled: true,
+      minAgeDays: 7,
+    });
+  });
+
+  it("hides the section for non-admin users and does not run the GET", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByRole("heading", { name: "Age Gate" })).toBeNull();
+    expect(mockGetAgeGateConfig).not.toHaveBeenCalled();
+  });
+
+  it("hides the section for local repositories even for admins", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByRole("heading", { name: "Age Gate" })).toBeNull();
+    expect(mockGetAgeGateConfig).not.toHaveBeenCalled();
+  });
+
+  it("renders the section for remote repos and loads the config via GET", async () => {
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable age gate")).toBeTruthy();
+    });
+    expect(mockGetAgeGateConfig).toHaveBeenCalledWith("npm-remote");
+    // The loaded config seeds the controls: gate on, 7-day minimum.
+    expect(
+      screen.getByLabelText("Enable age gate").getAttribute("aria-checked")
+    ).toBe("true");
+    expect(screen.getByLabelText("Minimum age (days)")).toHaveProperty(
+      "value",
+      "7"
+    );
+  });
+
+  it("keeps Save disabled until an edit is made", async () => {
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable age gate")).toBeTruthy();
+    });
+    const saveBtn = screen.getByRole("button", {
+      name: /save age gate settings/i,
+    });
+    expect(saveBtn).toHaveProperty("disabled", true);
+  });
+
+  it("rejects out-of-range and non-integer day values inline", async () => {
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Minimum age (days)")).toBeTruthy();
+    });
+    const daysInput = screen.getByLabelText("Minimum age (days)");
+
+    await user.clear(daysInput);
+    await user.type(daysInput, "5000");
+    expect(
+      screen.getByText(/Must be a whole number between 0 and 3,650/)
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /save age gate settings/i })
+    ).toHaveProperty("disabled", true);
+
+    await user.clear(daysInput);
+    await user.type(daysInput, "2.5");
+    expect(
+      screen.getByText(/Must be a whole number between 0 and 3,650/)
+    ).toBeTruthy();
+
+    // Back in range: error clears and Save becomes available.
+    await user.clear(daysInput);
+    await user.type(daysInput, "30");
+    expect(
+      screen.queryByText(/Must be a whole number between 0 and 3,650/)
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /save age gate settings/i })
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("saves the edited config and toasts success", async () => {
+    mockUpdateAgeGateConfig.mockResolvedValue({
+      repositoryKey: "npm-remote",
+      enabled: true,
+      minAgeDays: 30,
+    });
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Minimum age (days)")).toBeTruthy();
+    });
+    const daysInput = screen.getByLabelText("Minimum age (days)");
+    await user.clear(daysInput);
+    await user.type(daysInput, "30");
+
+    await user.click(
+      screen.getByRole("button", { name: /save age gate settings/i })
+    );
+
+    await waitFor(() => {
+      expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+        enabled: true,
+        minAgeDays: 30,
+      });
+    });
+    expect(toast.success).toHaveBeenCalledWith("Age gate enabled");
+  });
+
+  it("saves a disabled gate while keeping the loaded minimum age", async () => {
+    mockUpdateAgeGateConfig.mockResolvedValue({
+      repositoryKey: "npm-remote",
+      enabled: false,
+      minAgeDays: 7,
+    });
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable age gate")).toBeTruthy();
+    });
+    await user.click(screen.getByLabelText("Enable age gate"));
+    await user.click(
+      screen.getByRole("button", { name: /save age gate settings/i })
+    );
+
+    await waitFor(() => {
+      expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+        enabled: false,
+        minAgeDays: 7,
+      });
+    });
+    expect(toast.success).toHaveBeenCalledWith("Age gate settings saved");
+  });
+
+  it("toasts an error when the save fails", async () => {
+    mockUpdateAgeGateConfig.mockRejectedValue(new Error("403 Forbidden"));
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable age gate")).toBeTruthy();
+    });
+    await user.click(screen.getByLabelText("Enable age gate"));
+    await user.click(
+      screen.getByRole("button", { name: /save age gate settings/i })
+    );
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to save age gate settings"
+      );
+    });
   });
 });

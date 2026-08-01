@@ -222,6 +222,13 @@ describe("AgeGatePage", () => {
     expect(screen.getByText(/5d old \(min 14d\)/)).toBeInTheDocument();
   });
 
+  it("links each repository badge to that repo's settings tab (#701)", () => {
+    reviewsData = { data: { items: [REVIEW], total: 1 }, isLoading: false };
+    render(<AgeGatePage />);
+    const link = screen.getByRole("link", { name: "npm-remote" });
+    expect(link).toHaveAttribute("href", "/repositories/npm-remote?tab=settings");
+  });
+
   it("adds a status to the server-side filter when its checkbox is ticked", async () => {
     const user = userEvent.setup();
     render(<AgeGatePage />);
