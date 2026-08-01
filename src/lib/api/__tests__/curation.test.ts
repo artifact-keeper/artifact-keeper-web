@@ -22,7 +22,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   reEvaluate: (...a: unknown[]) => m.reEvaluate(...a),
 }));
 
-import curationApi from "../curation";
+import { curationApi } from "../curation";
 
 const PKG = {
   id: "p1",

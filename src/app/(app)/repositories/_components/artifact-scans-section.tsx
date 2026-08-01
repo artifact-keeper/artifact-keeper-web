@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert, AlertTriangle, Clock } from "lucide-react";
 
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
 import type { ScanResult } from "@/types/security";
 
 import { Badge } from "@/components/ui/badge";

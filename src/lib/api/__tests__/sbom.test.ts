@@ -151,7 +151,7 @@ describe("sbomApi", () => {
   it("generate returns SBOM response", async () => {
     mockGenerateSbom.mockResolvedValue({ data: SDK_SBOM, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.generate({ artifact_id: "a1" });
+    const out = await mod.sbomApi.generate({ artifact_id: "a1" });
     expect(out.id).toBe("sbom1");
     expect(out.licenses).toEqual(["MIT", "Apache-2.0"]);
   });
@@ -159,13 +159,13 @@ describe("sbomApi", () => {
   it("generate throws on error", async () => {
     mockGenerateSbom.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.generate({ artifact_id: "a1" })).rejects.toBe("fail");
+    await expect(mod.sbomApi.generate({ artifact_id: "a1" })).rejects.toBe("fail");
   });
 
   it("list returns SBOMs", async () => {
     mockListSboms.mockResolvedValue({ data: [SDK_SBOM], error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.list();
+    const out = await mod.sbomApi.list();
     expect(out[0].id).toBe("sbom1");
   });
 
@@ -182,7 +182,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.list();
+    const out = await mod.sbomApi.list();
     expect(out[0].spec_version).toBeNull();
     expect(out[0].generator).toBeNull();
     expect(out[0].generator_version).toBeNull();
@@ -191,13 +191,13 @@ describe("sbomApi", () => {
   it("list throws on error", async () => {
     mockListSboms.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.list()).rejects.toBe("fail");
+    await expect(mod.sbomApi.list()).rejects.toBe("fail");
   });
 
   it("get returns SBOM content", async () => {
     mockGetSbom.mockResolvedValue({ data: SDK_SBOM_CONTENT, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.get("sbom1");
+    const out = await mod.sbomApi.get("sbom1");
     expect(out.id).toBe("sbom1");
     expect(out.content).toEqual({ sbom: "data" });
   });
@@ -205,7 +205,7 @@ describe("sbomApi", () => {
   it("get throws on error", async () => {
     mockGetSbom.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.get("sbom1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.get("sbom1")).rejects.toBe("fail");
   });
 
   it("getByArtifact returns SBOM content", async () => {
@@ -214,7 +214,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.getByArtifact("a1");
+    const out = await mod.sbomApi.getByArtifact("a1");
     expect(out.id).toBe("sbom1");
   });
 
@@ -224,7 +224,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    await mod.default.getByArtifact("a1");
+    await mod.sbomApi.getByArtifact("a1");
     expect(mockGetSbomByArtifact).toHaveBeenCalledWith({
       path: { artifact_id: "a1" },
     });
@@ -233,7 +233,7 @@ describe("sbomApi", () => {
   it("getByArtifact throws on error", async () => {
     mockGetSbomByArtifact.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.getByArtifact("a1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.getByArtifact("a1")).rejects.toBe("fail");
   });
 
   it("getComponents returns components", async () => {
@@ -242,7 +242,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.getComponents("sbom1");
+    const out = await mod.sbomApi.getComponents("sbom1");
     expect(out[0].name).toBe("lib-a");
     expect(out[0].cpe).toBeNull();
   });
@@ -250,13 +250,13 @@ describe("sbomApi", () => {
   it("getComponents throws on error", async () => {
     mockGetSbomComponents.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.getComponents("sbom1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.getComponents("sbom1")).rejects.toBe("fail");
   });
 
   it("convert returns converted SBOM", async () => {
     mockConvertSbom.mockResolvedValue({ data: SDK_SBOM, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.convert("sbom1", { target_format: "spdx" });
+    const out = await mod.sbomApi.convert("sbom1", { target_format: "spdx" });
     expect(out.id).toBe("sbom1");
   });
 
@@ -264,40 +264,40 @@ describe("sbomApi", () => {
     mockConvertSbom.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
     await expect(
-      mod.default.convert("sbom1", { target_format: "spdx" }),
+      mod.sbomApi.convert("sbom1", { target_format: "spdx" }),
     ).rejects.toBe("fail");
   });
 
   it("delete calls SDK", async () => {
     mockDeleteSbom.mockResolvedValue({ error: undefined });
     const mod = await import("../sbom");
-    await mod.default.delete("sbom1");
+    await mod.sbomApi.delete("sbom1");
     expect(mockDeleteSbom).toHaveBeenCalled();
   });
 
   it("delete throws on error", async () => {
     mockDeleteSbom.mockResolvedValue({ error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.delete("sbom1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.delete("sbom1")).rejects.toBe("fail");
   });
 
   it("getCveHistory returns entries", async () => {
     mockGetCveHistory.mockResolvedValue({ data: [SDK_CVE], error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.getCveHistory("a1");
+    const out = await mod.sbomApi.getCveHistory("a1");
     expect(out[0].cve_id).toBe("CVE-2024-001");
   });
 
   it("getCveHistory throws on error", async () => {
     mockGetCveHistory.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.getCveHistory("a1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.getCveHistory("a1")).rejects.toBe("fail");
   });
 
   it("updateCveStatus returns updated entry", async () => {
     mockUpdateCveStatus.mockResolvedValue({ data: SDK_CVE, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.updateCveStatus("cve1", { status: "fixed" });
+    const out = await mod.sbomApi.updateCveStatus("cve1", { status: "fixed" });
     expect(out.cve_id).toBe("CVE-2024-001");
   });
 
@@ -305,14 +305,14 @@ describe("sbomApi", () => {
     mockUpdateCveStatus.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
     await expect(
-      mod.default.updateCveStatus("cve1", { status: "fixed" }),
+      mod.sbomApi.updateCveStatus("cve1", { status: "fixed" }),
     ).rejects.toBe("fail");
   });
 
   it("getCveTrends returns trends", async () => {
     mockGetCveTrends.mockResolvedValue({ data: SDK_TRENDS, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.getCveTrends();
+    const out = await mod.sbomApi.getCveTrends();
     expect(out.total_cves).toBe(10);
     expect(out.timeline[0].cve_id).toBe("CVE-2024-001");
   });
@@ -320,7 +320,7 @@ describe("sbomApi", () => {
   it("getCveTrends throws on error", async () => {
     mockGetCveTrends.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.getCveTrends()).rejects.toBe("fail");
+    await expect(mod.sbomApi.getCveTrends()).rejects.toBe("fail");
   });
 
   it("listPolicies returns policies", async () => {
@@ -329,7 +329,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.listPolicies();
+    const out = await mod.sbomApi.listPolicies();
     expect(out[0].id).toBe("lp1");
   });
 
@@ -339,20 +339,20 @@ describe("sbomApi", () => {
       error: "fail",
     });
     const mod = await import("../sbom");
-    await expect(mod.default.listPolicies()).rejects.toBe("fail");
+    await expect(mod.sbomApi.listPolicies()).rejects.toBe("fail");
   });
 
   it("getPolicy returns policy", async () => {
     mockGetLicensePolicy.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../sbom");
-    const out = await mod.default.getPolicy("lp1");
+    const out = await mod.sbomApi.getPolicy("lp1");
     expect(out.id).toBe("lp1");
   });
 
   it("getPolicy throws on error", async () => {
     mockGetLicensePolicy.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.getPolicy("lp1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.getPolicy("lp1")).rejects.toBe("fail");
   });
 
   it("upsertPolicy returns policy", async () => {
@@ -361,7 +361,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.upsertPolicy({
+    const out = await mod.sbomApi.upsertPolicy({
       name: "default",
       allowed_licenses: ["MIT"],
       denied_licenses: ["GPL-3.0"],
@@ -376,7 +376,7 @@ describe("sbomApi", () => {
     });
     const mod = await import("../sbom");
     await expect(
-      mod.default.upsertPolicy({
+      mod.sbomApi.upsertPolicy({
         name: "x",
         allowed_licenses: [],
         denied_licenses: [],
@@ -387,14 +387,14 @@ describe("sbomApi", () => {
   it("deletePolicy calls SDK", async () => {
     mockDeleteLicensePolicy.mockResolvedValue({ error: undefined });
     const mod = await import("../sbom");
-    await mod.default.deletePolicy("lp1");
+    await mod.sbomApi.deletePolicy("lp1");
     expect(mockDeleteLicensePolicy).toHaveBeenCalled();
   });
 
   it("deletePolicy throws on error", async () => {
     mockDeleteLicensePolicy.mockResolvedValue({ error: "fail" });
     const mod = await import("../sbom");
-    await expect(mod.default.deletePolicy("lp1")).rejects.toBe("fail");
+    await expect(mod.sbomApi.deletePolicy("lp1")).rejects.toBe("fail");
   });
 
   it("checkCompliance synthesizes action and violation reasons (#359)", async () => {
@@ -410,7 +410,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.checkCompliance({ licenses: ["GPL-3.0"] });
+    const out = await mod.sbomApi.checkCompliance({ licenses: ["GPL-3.0"] });
     expect(out.compliant).toBe(false);
     expect(out.action).toBe("block");
     expect(out.violations).toEqual([
@@ -426,7 +426,7 @@ describe("sbomApi", () => {
       error: undefined,
     });
     const mod = await import("../sbom");
-    const out = await mod.default.checkCompliance({ licenses: ["MIT"] });
+    const out = await mod.sbomApi.checkCompliance({ licenses: ["MIT"] });
     expect(out.compliant).toBe(true);
     expect(out.action).toBe("allow");
   });
@@ -438,7 +438,7 @@ describe("sbomApi", () => {
     });
     const mod = await import("../sbom");
     await expect(
-      mod.default.checkCompliance({ licenses: ["MIT"] }),
+      mod.sbomApi.checkCompliance({ licenses: ["MIT"] }),
     ).rejects.toBe("fail");
   });
 });

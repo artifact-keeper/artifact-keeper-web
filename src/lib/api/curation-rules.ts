@@ -284,4 +284,3 @@ export const curationRulesApi = {
   },
 };
 
-export default curationRulesApi;

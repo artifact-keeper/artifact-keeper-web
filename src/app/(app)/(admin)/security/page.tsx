@@ -19,9 +19,9 @@ import {
 } from "lucide-react";
 
 import "@/lib/sdk-client";
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
-import dtApi from "@/lib/api/dependency-track";
+import { dtApi } from "@/lib/api/dependency-track";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
 import type { RepoSecurityScore } from "@/types/security";

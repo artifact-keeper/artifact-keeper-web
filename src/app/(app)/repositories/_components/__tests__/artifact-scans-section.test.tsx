@@ -15,17 +15,14 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/lib/api/security", () => ({
-  default: { listArtifactScans: vi.fn() },
   securityApi: { listArtifactScans: vi.fn() },
 }));
 
 vi.mock("@/lib/api/sbom", () => ({
-  default: { getCveHistory: vi.fn() },
   sbomApi: { getCveHistory: vi.fn() },
 }));
 
 vi.mock("@/lib/api/dependency-track", () => ({
-  default: {},
   dtApi: {},
 }));
 
@@ -277,7 +274,7 @@ describe("ArtifactScansSection (#368)", () => {
         return { data: { items: [], total: 0 }, isLoading: false, isError: false };
       },
     );
-    const security = (await import("@/lib/api/security")).default;
+    const security = (await import("@/lib/api/security")).securityApi;
     (security.listArtifactScans as ReturnType<typeof vi.fn>).mockResolvedValue({
       items: [],
       total: 0,

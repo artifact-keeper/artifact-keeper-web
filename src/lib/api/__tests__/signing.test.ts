@@ -28,7 +28,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   getRepoPublicKey: (...a: unknown[]) => m.getRepoPublicKey(...a),
 }));
 
-import signingApi from "../signing";
+import { signingApi } from "../signing";
 
 const SDK_KEY = {
   id: "k1",

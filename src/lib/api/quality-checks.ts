@@ -8,6 +8,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { CheckResponse, IssueResponse } from '@artifact-keeper/sdk';
 import { apiFetch, assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /** A quality-check result for an artifact (e.g. metadata, naming, policy). */
 export interface QualityCheck {
@@ -93,7 +94,7 @@ function adaptIssue(sdk: IssueResponse): QualityIssue {
   };
 }
 
-const qualityChecksApi = {
+export const qualityChecksApi = {
   list: async (params: ListChecksParams = {}): Promise<QualityCheck[]> => {
     // The admin quality-checks view needs a list-all (or filter-by-repo) view.
     // The artifact-scoped GET /api/v1/quality/checks 400s without `artifact_id`
@@ -115,34 +116,28 @@ const qualityChecksApi = {
   },
 
   get: async (id: string): Promise<QualityCheck> => {
-    const { data, error } = await getCheck({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(getCheck({ path: { id } }));
     return adaptCheck(assertData(data, 'qualityChecksApi.get'));
   },
 
   listIssues: async (checkId: string): Promise<QualityIssue[]> => {
-    const { data, error } = await listCheckIssues({ path: { id: checkId } });
-    if (error) throw error;
+    const data = await unwrap(listCheckIssues({ path: { id: checkId } }));
     return assertData(data, 'qualityChecksApi.listIssues').map(adaptIssue);
   },
 
   /** Queue quality checks for a repository (or a single artifact). */
   trigger: async (params: ListChecksParams = {}): Promise<{ queued: number; message: string }> => {
-    const { data, error } = await triggerChecks({ body: params });
-    if (error) throw error;
+    const data = await unwrap(triggerChecks({ body: params }));
     const res = assertData(data, 'qualityChecksApi.trigger');
     return { queued: res.artifacts_queued, message: res.message };
   },
 
   suppressIssue: async (issueId: string, reason: string): Promise<void> => {
-    const { error } = await suppressIssue({ path: { id: issueId }, body: { reason } });
-    if (error) throw error;
+    await unwrap(suppressIssue({ path: { id: issueId }, body: { reason } }));
   },
 
   unsuppressIssue: async (issueId: string): Promise<void> => {
-    const { error } = await unsuppressIssue({ path: { id: issueId } });
-    if (error) throw error;
+    await unwrap(unsuppressIssue({ path: { id: issueId } }));
   },
 };
 
-export default qualityChecksApi;

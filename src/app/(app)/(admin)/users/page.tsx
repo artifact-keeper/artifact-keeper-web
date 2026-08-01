@@ -58,6 +58,7 @@ import { AuthSourceBadge, getAuthProviderLabel } from "@/components/common/auth-
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
+import { unwrap } from "@/lib/sdk-utils";
 
 // -- helpers --
 
@@ -142,10 +143,9 @@ export default function UsersPage() {
       if (!form.auto_generate && form.password) {
         payload.password = form.password;
       }
-      const { data, error } = await sdkCreateUser({
+      const data = await unwrap(sdkCreateUser({
         body: payload as any,
-      });
-      if (error) throw error;
+      }));
       return data as any as CreateUserResponse;
     },
     onSuccess: (data) => {
@@ -166,7 +166,7 @@ export default function UsersPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data: formData }: { id: string; data: EditUserForm }) => {
-      const { data, error } = await sdkUpdateUser({
+      const data = await unwrap(sdkUpdateUser({
         path: { id },
         body: {
           email: formData.email,
@@ -174,8 +174,7 @@ export default function UsersPage() {
           is_admin: formData.is_admin,
           is_active: formData.is_active,
         },
-      });
-      if (error) throw error;
+      }));
       return data;
     },
     onSuccess: () => {
@@ -189,11 +188,10 @@ export default function UsersPage() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await sdkUpdateUser({
+      await unwrap(sdkUpdateUser({
         path: { id },
         body: { is_active },
-      });
-      if (error) throw error;
+      }));
     },
     onSuccess: (_, vars) => {
       toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
@@ -204,10 +202,9 @@ export default function UsersPage() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await sdkResetPassword({
+      const data = await unwrap(sdkResetPassword({
         path: { id },
-      });
-      if (error) throw error;
+      }));
       return data as any as { temporary_password: string };
     },
     onSuccess: (data, userId) => {
@@ -222,8 +219,7 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await sdkDeleteUser({ path: { id } });
-      if (error) throw error;
+      await unwrap(sdkDeleteUser({ path: { id } }));
     },
     onSuccess: () => {
       toast.success("User deleted successfully");

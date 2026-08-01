@@ -20,6 +20,7 @@ import { assertData, narrowEnum } from '@/lib/api/fetch';
 // Re-export types from the canonical types/ module
 export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
 import type { Build, BuildStatus, BuildDiff, BuildModule } from '@/types/builds';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListBuildsParams {
   page?: number;
@@ -125,14 +126,12 @@ function adaptBuildDiff(sdk: BuildDiffResponse): BuildDiff {
 
 export const buildsApi = {
   list: async (params: ListBuildsParams = {}): Promise<PaginatedResponse<Build>> => {
-    const { data, error } = await sdkListBuilds({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListBuilds({ query: params }));
     return adaptBuildList(assertData(data, 'buildsApi.list'));
   },
 
   get: async (buildId: string): Promise<Build> => {
-    const { data, error } = await sdkGetBuild({ path: { id: buildId } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetBuild({ path: { id: buildId } }));
     return adaptBuild(assertData(data, 'buildsApi.get'));
   },
 
@@ -158,8 +157,7 @@ export const buildsApi = {
       vcs_message: input.vcs_message,
       metadata: input.metadata ?? {},
     };
-    const { data, error } = await sdkCreateBuild({ body });
-    if (error) throw error;
+    const data = await unwrap(sdkCreateBuild({ body }));
     return adaptBuild(assertData(data, 'buildsApi.create'));
   },
 
@@ -171,18 +169,15 @@ export const buildsApi = {
       status: input.status,
       finished_at: input.finished_at,
     };
-    const { data, error } = await sdkUpdateBuild({ path: { id: buildId }, body });
-    if (error) throw error;
+    const data = await unwrap(sdkUpdateBuild({ path: { id: buildId }, body }));
     return adaptBuild(assertData(data, 'buildsApi.updateStatus'));
   },
 
   diff: async (buildIdA: string, buildIdB: string): Promise<BuildDiff> => {
-    const { data, error } = await getBuildDiff({
+    const data = await unwrap(getBuildDiff({
       query: { build_a: buildIdA, build_b: buildIdB },
-    });
-    if (error) throw error;
+    }));
     return adaptBuildDiff(assertData(data, 'buildsApi.diff'));
   },
 };
 
-export default buildsApi;

@@ -42,6 +42,7 @@ import type {
   PaginatedResponse,
   Artifact,
 } from '@/types';
+import { unwrap } from '@/lib/sdk-utils';
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
 
@@ -237,10 +238,9 @@ export const promotionApi = {
     per_page?: number;
     format?: string;
   }): Promise<PaginatedResponse<Repository>> => {
-    const { data, error } = await sdkListRepositories({
+    const data = await unwrap(sdkListRepositories({
       query: { ...params, type: 'staging' },
-    });
-    if (error) throw error;
+    }));
     return adaptRepositoryList(
       assertData(data, 'promotionApi.listStagingRepos'),
     );
@@ -257,11 +257,10 @@ export const promotionApi = {
       path_prefix?: string;
     },
   ): Promise<PaginatedResponse<Artifact>> => {
-    const { data, error } = await sdkListArtifacts({
+    const data = await unwrap(sdkListArtifacts({
       path: { key: repoKey },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptArtifactList(
       assertData(data, 'promotionApi.listStagingArtifacts'),
     );
@@ -273,10 +272,9 @@ export const promotionApi = {
   listReleaseRepos: async (params?: {
     format?: string;
   }): Promise<PaginatedResponse<Repository>> => {
-    const { data, error } = await sdkListRepositories({
+    const data = await unwrap(sdkListRepositories({
       query: { ...params, type: 'local', per_page: 100 },
-    });
-    if (error) throw error;
+    }));
     return adaptRepositoryList(
       assertData(data, 'promotionApi.listReleaseRepos'),
     );
@@ -290,11 +288,10 @@ export const promotionApi = {
     artifactId: string,
     request: PromoteArtifactRequest,
   ): Promise<PromotionResponse> => {
-    const { data, error } = await sdkPromoteArtifact({
+    const data = await unwrap(sdkPromoteArtifact({
       path: { key: repoKey, artifact_id: artifactId },
       body: adaptPromoteRequest(request),
-    });
-    if (error) throw error;
+    }));
     return adaptPromotionResponse(
       assertData(data, 'promotionApi.promoteArtifact'),
     );
@@ -307,11 +304,10 @@ export const promotionApi = {
     repoKey: string,
     request: BulkPromoteRequest,
   ): Promise<BulkPromotionResponse> => {
-    const { data, error } = await sdkPromoteArtifactsBulk({
+    const data = await unwrap(sdkPromoteArtifactsBulk({
       path: { key: repoKey },
       body: adaptBulkPromoteRequest(request),
-    });
-    if (error) throw error;
+    }));
     return adaptBulkPromotionResponse(
       assertData(data, 'promotionApi.promoteBulk'),
     );
@@ -329,11 +325,10 @@ export const promotionApi = {
       status?: string;
     },
   ): Promise<PromotionHistoryResponse> => {
-    const { data, error } = await sdkPromotionHistory({
+    const data = await unwrap(sdkPromotionHistory({
       path: { key: repoKey },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptPromotionHistory(
       assertData(data, 'promotionApi.getPromotionHistory'),
     );

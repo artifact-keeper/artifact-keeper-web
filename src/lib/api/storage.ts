@@ -7,6 +7,7 @@ import type {
   RepositoryStorageUsage,
   StorageGcResult,
 } from '@/types/storage';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * Deduplicated storage endpoints (backend epic artifact-keeper#2056).
@@ -66,10 +67,9 @@ export const storageApi = {
    * callers must treat those fields as optional.
    */
   getUsage: async (repoKey: string): Promise<RepositoryStorageUsage> => {
-    const { data, error } = await getRepositoryStorage({
+    const data = await unwrap(getRepositoryStorage({
       path: { key: repoKey },
-    });
-    if (error) throw error;
+    }));
     return adaptUsage(assertData(data, 'storageApi.getUsage'));
   },
 
@@ -97,4 +97,3 @@ export const storageApi = {
   },
 };
 
-export default storageApi;

@@ -51,6 +51,7 @@ import type {
   UpdateSamlConfigRequest,
 } from '@/types/sso';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 type SsoProviderType = 'oidc' | 'ldap' | 'saml';
 const SSO_PROVIDER_TYPES = new Set<SsoProviderType>(['oidc', 'ldap', 'saml']);
@@ -189,32 +190,28 @@ export const ssoApi = {
   // --- Providers (public) ---
 
   listProviders: async (): Promise<SsoProvider[]> => {
-    const { data, error } = await sdkListProviders();
-    if (error) throw error;
+    const data = await unwrap(sdkListProviders());
     return assertData(data, 'ssoApi.listProviders').map(adaptSsoProvider);
   },
 
   // --- OIDC ---
 
   listOidc: async (): Promise<OidcConfig[]> => {
-    const { data, error } = await sdkListOidc();
-    if (error) throw error;
+    const data = await unwrap(sdkListOidc());
     return assertData(data, 'ssoApi.listOidc').map(adaptOidcConfig);
   },
 
   getOidc: async (id: string): Promise<OidcConfig> => {
-    const { data, error } = await sdkGetOidc({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetOidc({ path: { id } }));
     return adaptOidcConfig(assertData(data, 'ssoApi.getOidc'));
   },
 
   createOidc: async (
     reqData: CreateOidcConfigRequest,
   ): Promise<OidcConfig> => {
-    const { data, error } = await sdkCreateOidc({
+    const data = await unwrap(sdkCreateOidc({
       body: reqData satisfies SdkCreateOidcConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptOidcConfig(assertData(data, 'ssoApi.createOidc'));
   },
 
@@ -222,56 +219,49 @@ export const ssoApi = {
     id: string,
     reqData: UpdateOidcConfigRequest,
   ): Promise<OidcConfig> => {
-    const { data, error } = await sdkUpdateOidc({
+    const data = await unwrap(sdkUpdateOidc({
       path: { id },
       body: reqData satisfies SdkUpdateOidcConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptOidcConfig(assertData(data, 'ssoApi.updateOidc'));
   },
 
   deleteOidc: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteOidc({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteOidc({ path: { id } }));
   },
 
   enableOidc: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleOidc({
+    await unwrap(sdkToggleOidc({
       path: { id },
       body: { enabled: true },
-    });
-    if (error) throw error;
+    }));
   },
 
   disableOidc: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleOidc({
+    await unwrap(sdkToggleOidc({
       path: { id },
       body: { enabled: false },
-    });
-    if (error) throw error;
+    }));
   },
 
   // --- LDAP ---
 
   listLdap: async (): Promise<LdapConfig[]> => {
-    const { data, error } = await sdkListLdap();
-    if (error) throw error;
+    const data = await unwrap(sdkListLdap());
     return assertData(data, 'ssoApi.listLdap').map(adaptLdapConfig);
   },
 
   getLdap: async (id: string): Promise<LdapConfig> => {
-    const { data, error } = await sdkGetLdap({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetLdap({ path: { id } }));
     return adaptLdapConfig(assertData(data, 'ssoApi.getLdap'));
   },
 
   createLdap: async (
     reqData: CreateLdapConfigRequest,
   ): Promise<LdapConfig> => {
-    const { data, error } = await sdkCreateLdap({
+    const data = await unwrap(sdkCreateLdap({
       body: reqData satisfies SdkCreateLdapConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptLdapConfig(assertData(data, 'ssoApi.createLdap'));
   },
 
@@ -279,33 +269,29 @@ export const ssoApi = {
     id: string,
     reqData: UpdateLdapConfigRequest,
   ): Promise<LdapConfig> => {
-    const { data, error } = await sdkUpdateLdap({
+    const data = await unwrap(sdkUpdateLdap({
       path: { id },
       body: reqData satisfies SdkUpdateLdapConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptLdapConfig(assertData(data, 'ssoApi.updateLdap'));
   },
 
   deleteLdap: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteLdap({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteLdap({ path: { id } }));
   },
 
   enableLdap: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleLdap({
+    await unwrap(sdkToggleLdap({
       path: { id },
       body: { enabled: true },
-    });
-    if (error) throw error;
+    }));
   },
 
   disableLdap: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleLdap({
+    await unwrap(sdkToggleLdap({
       path: { id },
       body: { enabled: false },
-    });
-    if (error) throw error;
+    }));
   },
 
   ldapLogin: async (
@@ -313,11 +299,10 @@ export const ssoApi = {
     username: string,
     password: string,
   ): Promise<{ access_token: string; refresh_token: string }> => {
-    const { data, error } = await sdkLdapLogin({
+    const data = await unwrap(sdkLdapLogin({
       path: { id: providerId },
       body: { username, password },
-    });
-    if (error) throw error;
+    }));
     // SDK types ldapLogin's 200 response as `unknown` — runtime narrow
     // and forward the token pair fields explicitly.
     const body = assertData(data, 'ssoApi.ldapLogin');
@@ -337,32 +322,28 @@ export const ssoApi = {
   },
 
   testLdap: async (id: string): Promise<LdapTestResult> => {
-    const { data, error } = await sdkTestLdap({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkTestLdap({ path: { id } }));
     return adaptLdapTestResult(assertData(data, 'ssoApi.testLdap'));
   },
 
   // --- SAML ---
 
   listSaml: async (): Promise<SamlConfig[]> => {
-    const { data, error } = await sdkListSaml();
-    if (error) throw error;
+    const data = await unwrap(sdkListSaml());
     return assertData(data, 'ssoApi.listSaml').map(adaptSamlConfig);
   },
 
   getSaml: async (id: string): Promise<SamlConfig> => {
-    const { data, error } = await sdkGetSaml({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetSaml({ path: { id } }));
     return adaptSamlConfig(assertData(data, 'ssoApi.getSaml'));
   },
 
   createSaml: async (
     reqData: CreateSamlConfigRequest,
   ): Promise<SamlConfig> => {
-    const { data, error } = await sdkCreateSaml({
+    const data = await unwrap(sdkCreateSaml({
       body: reqData satisfies SdkCreateSamlConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptSamlConfig(assertData(data, 'ssoApi.createSaml'));
   },
 
@@ -370,33 +351,29 @@ export const ssoApi = {
     id: string,
     reqData: UpdateSamlConfigRequest,
   ): Promise<SamlConfig> => {
-    const { data, error } = await sdkUpdateSaml({
+    const data = await unwrap(sdkUpdateSaml({
       path: { id },
       body: reqData satisfies SdkUpdateSamlConfigRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptSamlConfig(assertData(data, 'ssoApi.updateSaml'));
   },
 
   deleteSaml: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteSaml({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteSaml({ path: { id } }));
   },
 
   enableSaml: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleSaml({
+    await unwrap(sdkToggleSaml({
       path: { id },
       body: { enabled: true },
-    });
-    if (error) throw error;
+    }));
   },
 
   disableSaml: async (id: string): Promise<void> => {
-    const { error } = await sdkToggleSaml({
+    await unwrap(sdkToggleSaml({
       path: { id },
       body: { enabled: false },
-    });
-    if (error) throw error;
+    }));
   },
 
   // --- Exchange Code ---
@@ -404,10 +381,8 @@ export const ssoApi = {
   exchangeCode: async (
     code: string,
   ): Promise<{ access_token: string; refresh_token: string }> => {
-    const { data, error } = await sdkExchangeCode({ body: { code } });
-    if (error) throw error;
+    const data = await unwrap(sdkExchangeCode({ body: { code } }));
     return adaptTokenPair(assertData(data, 'ssoApi.exchangeCode'));
   },
 };
 
-export default ssoApi;

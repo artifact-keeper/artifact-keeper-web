@@ -61,7 +61,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
 }));
 
 vi.mock("@/lib/api/security", () => ({
-  default: {
+  securityApi: {
     getDashboard: mockGetDashboard,
     getAllScores: mockGetAllScores,
     triggerScan: mockTriggerScan,
@@ -69,7 +69,7 @@ vi.mock("@/lib/api/security", () => ({
 }));
 
 vi.mock("@/lib/api/dependency-track", () => ({
-  default: {
+  dtApi: {
     getStatus: mockGetStatus,
     listProjects: mockListProjects,
     getPortfolioMetrics: mockGetPortfolioMetrics,

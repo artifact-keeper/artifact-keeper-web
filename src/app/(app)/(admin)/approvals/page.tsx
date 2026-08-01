@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
-import approvalsApi from "@/lib/api/approvals";
+import { approvalsApi } from "@/lib/api/approvals";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { ApprovalRequest } from "@/types/promotion";
 import { APPROVAL_STATUS_COLORS } from "@/types/promotion";

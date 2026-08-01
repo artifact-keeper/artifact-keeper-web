@@ -81,7 +81,7 @@ vi.mock("@/lib/api/curation-rules", async () => {
   >("@/lib/api/curation-rules");
   return {
     ...actual,
-    default: {
+    curationRulesApi: {
       list: (...a: unknown[]) => api.list(...a),
       get: (...a: unknown[]) => api.get(...a),
       create: (...a: unknown[]) => api.create(...a),

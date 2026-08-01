@@ -49,6 +49,7 @@ import type {
   UpdateAnalysisRequest,
 } from '@/types/dependency-track';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // Adapters: SDK types use `?: T | null` (optional+nullable) for fields that
 // the local types declare as required-but-nullable (`: T | null`). The
@@ -263,44 +264,39 @@ function adaptUpdateAnalysisRequest(
   };
 }
 
-const dtApi = {
+export const dtApi = {
   getStatus: async (): Promise<DtStatus> => {
-    const { data, error } = await sdkDtStatus();
-    if (error) throw error;
+    const data = await unwrap(sdkDtStatus());
     return adaptStatus(assertData(data, 'dtApi.getStatus'));
   },
 
   listProjects: async (): Promise<DtProject[]> => {
-    const { data, error } = await sdkListProjects();
-    if (error) throw error;
+    const data = await unwrap(sdkListProjects());
     return assertData(data, 'dtApi.listProjects').map(adaptProject);
   },
 
   getProjectFindings: async (projectUuid: string): Promise<DtFinding[]> => {
-    const { data, error } = await sdkGetProjectFindings({
+    const data = await unwrap(sdkGetProjectFindings({
       path: { project_uuid: projectUuid },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'dtApi.getProjectFindings').map(adaptFinding);
   },
 
   getProjectComponents: async (
     projectUuid: string,
   ): Promise<DtComponentFull[]> => {
-    const { data, error } = await sdkGetProjectComponents({
+    const data = await unwrap(sdkGetProjectComponents({
       path: { project_uuid: projectUuid },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'dtApi.getProjectComponents').map(
       adaptComponentFull,
     );
   },
 
   getProjectMetrics: async (projectUuid: string): Promise<DtProjectMetrics> => {
-    const { data, error } = await sdkGetProjectMetrics({
+    const data = await unwrap(sdkGetProjectMetrics({
       path: { project_uuid: projectUuid },
-    });
-    if (error) throw error;
+    }));
     return adaptProjectMetrics(assertData(data, 'dtApi.getProjectMetrics'));
   },
 
@@ -308,29 +304,26 @@ const dtApi = {
     projectUuid: string,
     days?: number,
   ): Promise<DtProjectMetrics[]> => {
-    const { data, error } = await sdkGetProjectMetricsHistory({
+    const data = await unwrap(sdkGetProjectMetricsHistory({
       path: { project_uuid: projectUuid },
       query: days === undefined ? undefined : { days },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'dtApi.getProjectMetricsHistory').map(
       adaptProjectMetrics,
     );
   },
 
   getPortfolioMetrics: async (): Promise<DtPortfolioMetrics> => {
-    const { data, error } = await sdkGetPortfolioMetrics();
-    if (error) throw error;
+    const data = await unwrap(sdkGetPortfolioMetrics());
     return adaptPortfolioMetrics(assertData(data, 'dtApi.getPortfolioMetrics'));
   },
 
   getProjectViolations: async (
     projectUuid: string,
   ): Promise<DtPolicyViolation[]> => {
-    const { data, error } = await sdkGetProjectViolations({
+    const data = await unwrap(sdkGetProjectViolations({
       path: { project_uuid: projectUuid },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'dtApi.getProjectViolations').map(
       adaptPolicyViolation,
     );
@@ -339,16 +332,14 @@ const dtApi = {
   updateAnalysis: async (
     req: UpdateAnalysisRequest,
   ): Promise<DtAnalysisResponse> => {
-    const { data, error } = await sdkUpdateAnalysis({
+    const data = await unwrap(sdkUpdateAnalysis({
       body: adaptUpdateAnalysisRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptAnalysisResponse(assertData(data, 'dtApi.updateAnalysis'));
   },
 
   listPolicies: async (): Promise<DtPolicyFull[]> => {
-    const { data, error } = await sdkListDependencyTrackPolicies();
-    if (error) throw error;
+    const data = await unwrap(sdkListDependencyTrackPolicies());
     return assertData(data, 'dtApi.listPolicies').map(adaptPolicyFull);
   },
 
@@ -372,4 +363,3 @@ const dtApi = {
   },
 };
 
-export default dtApi;

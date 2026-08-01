@@ -32,7 +32,7 @@ const mockCreatePolicy = vi.fn();
 const mockUpdatePolicy = vi.fn();
 const mockDeletePolicy = vi.fn();
 vi.mock("@/lib/api/security", () => ({
-  default: {
+  securityApi: {
     listPolicies: (...a: unknown[]) => mockListPolicies(...a),
     createPolicy: (...a: unknown[]) => mockCreatePolicy(...a),
     updatePolicy: (...a: unknown[]) => mockUpdatePolicy(...a),

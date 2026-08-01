@@ -109,7 +109,7 @@ vi.mock("@/lib/api/age-gate", () => {
   ReopenUnsupportedError,
   isReopenSupported: () => capability.reopenSupported,
   subscribeReopenSupport: () => () => {},
-  default: {
+  ageGateApi: {
     listReviews: (...a: unknown[]) => api.listReviews(...a),
     getReview: (...a: unknown[]) => api.getReview(...a),
     approveReview: (...a: unknown[]) => api.approveReview(...a),

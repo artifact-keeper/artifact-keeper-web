@@ -17,6 +17,7 @@ import type {
   RepositorySigningConfig,
 } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /** A signing key (public view — never carries private material). */
 export interface SigningKey {
@@ -109,53 +110,45 @@ function adaptUpdatedConfig(sdk: RepositorySigningConfig): SigningConfig {
   };
 }
 
-const signingApi = {
+export const signingApi = {
   // --- instance / repo-scoped keys ---
   listKeys: async (): Promise<SigningKey[]> => {
-    const { data, error } = await listKeys();
-    if (error) throw error;
+    const data = await unwrap(listKeys());
     return assertData(data, 'signingApi.listKeys').keys.map(adaptKey);
   },
 
   getKey: async (keyId: string): Promise<SigningKey> => {
-    const { data, error } = await getKey({ path: { key_id: keyId } });
-    if (error) throw error;
+    const data = await unwrap(getKey({ path: { key_id: keyId } }));
     return adaptKey(assertData(data, 'signingApi.getKey'));
   },
 
   createKey: async (req: CreateSigningKeyRequest): Promise<SigningKey> => {
-    const { data, error } = await createKey({ body: req });
-    if (error) throw error;
+    const data = await unwrap(createKey({ body: req }));
     return adaptKey(assertData(data, 'signingApi.createKey'));
   },
 
   deleteKey: async (keyId: string): Promise<void> => {
-    const { error } = await deleteKey({ path: { key_id: keyId } });
-    if (error) throw error;
+    await unwrap(deleteKey({ path: { key_id: keyId } }));
   },
 
   revokeKey: async (keyId: string): Promise<void> => {
-    const { error } = await revokeKey({ path: { key_id: keyId } });
-    if (error) throw error;
+    await unwrap(revokeKey({ path: { key_id: keyId } }));
   },
 
   /** Generate a fresh key that supersedes the old one; returns the new key. */
   rotateKey: async (keyId: string): Promise<SigningKey> => {
-    const { data, error } = await rotateKey({ path: { key_id: keyId } });
-    if (error) throw error;
+    const data = await unwrap(rotateKey({ path: { key_id: keyId } }));
     return adaptKey(assertData(data, 'signingApi.rotateKey'));
   },
 
   getPublicKeyPem: async (keyId: string): Promise<string> => {
-    const { data, error } = await getPublicKey({ path: { key_id: keyId } });
-    if (error) throw error;
+    const data = await unwrap(getPublicKey({ path: { key_id: keyId } }));
     return assertData(data, 'signingApi.getPublicKeyPem');
   },
 
   // --- per-repository signing config ---
   getRepoConfig: async (repoId: string): Promise<SigningConfig> => {
-    const { data, error } = await getRepoSigningConfig({ path: { repo_id: repoId } });
-    if (error) throw error;
+    const data = await unwrap(getRepoSigningConfig({ path: { repo_id: repoId } }));
     return adaptConfig(assertData(data, 'signingApi.getRepoConfig'));
   },
 
@@ -163,19 +156,16 @@ const signingApi = {
     repoId: string,
     req: UpdateSigningConfigRequest,
   ): Promise<SigningConfig> => {
-    const { data, error } = await updateRepoSigningConfig({
+    const data = await unwrap(updateRepoSigningConfig({
       path: { repo_id: repoId },
       body: req,
-    });
-    if (error) throw error;
+    }));
     return adaptUpdatedConfig(assertData(data, 'signingApi.updateRepoConfig'));
   },
 
   getRepoPublicKeyPem: async (repoId: string): Promise<string> => {
-    const { data, error } = await getRepoPublicKey({ path: { repo_id: repoId } });
-    if (error) throw error;
+    const data = await unwrap(getRepoPublicKey({ path: { repo_id: repoId } }));
     return assertData(data, 'signingApi.getRepoPublicKeyPem');
   },
 };
 
-export default signingApi;

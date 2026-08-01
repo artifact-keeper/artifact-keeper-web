@@ -1,29 +1,28 @@
-export { default as authApi } from './auth';
-export { default as repositoriesApi } from './repositories';
-export { default as artifactsApi } from './artifacts';
-export { default as adminApi } from './admin';
-export { default as groupsApi } from './groups';
-export { default as migrationApi } from './migration';
-export { default as permissionsApi } from './permissions';
-export { default as packagesApi } from './packages';
-export { default as buildsApi } from './builds';
-export { default as searchApi } from './search';
-export { default as treeApi } from './tree';
-export { default as profileApi } from './profile';
-export { default as webhooksApi } from './webhooks';
-export { default as securityApi } from './security';
-export { default as sbomApi } from './sbom';
-export { default as peersApi } from './replication';
-export { default as analyticsApi } from './analytics';
-export { default as lifecycleApi } from './lifecycle';
-export { default as telemetryApi } from './telemetry';
-export { default as monitoringApi } from './monitoring';
-export { default as qualityGatesApi } from './quality-gates';
-export { default as pypiTracksApi } from './pypi-tracks';
+export { repositoriesApi } from './repositories';
+export { artifactsApi } from './artifacts';
+export { adminApi } from './admin';
+export { groupsApi } from './groups';
+export { migrationApi } from './migration';
+export { permissionsApi } from './permissions';
+export { packagesApi } from './packages';
+export { buildsApi } from './builds';
+export { searchApi } from './search';
+export { treeApi } from './tree';
+export { profileApi } from './profile';
+export { webhooksApi } from './webhooks';
+export { securityApi } from './security';
+export { sbomApi } from './sbom';
+export { peersApi } from './replication';
+export { analyticsApi } from './analytics';
+export { lifecycleApi } from './lifecycle';
+export { telemetryApi } from './telemetry';
+export { monitoringApi } from './monitoring';
+export { qualityGatesApi } from './quality-gates';
+export { pypiTracksApi } from './pypi-tracks';
 export type { PypiTrack } from './pypi-tracks';
-export { default as curationApi } from './curation';
+export { curationApi } from './curation';
 export type { CurationPackage, ListCurationParams } from './curation';
-export { default as curationRulesApi } from './curation-rules';
+export { curationRulesApi } from './curation-rules';
 export type {
   CurationRule,
   CreateRuleRequest,
@@ -34,20 +33,19 @@ export type {
   PublisherTrustConfig,
   PopularityConfig,
 } from './curation-rules';
-export { default as signingApi } from './signing';
+export { signingApi } from './signing';
 export type { SigningKey, SigningConfig, CreateSigningKeyRequest } from './signing';
-export { default as syncPoliciesApi } from './sync-policies';
+export { syncPoliciesApi } from './sync-policies';
 export type { SyncPolicy, CreateSyncPolicyRequest } from './sync-policies';
-export { default as promotionRulesApi } from './promotion-rules';
+export { promotionRulesApi } from './promotion-rules';
 export type { PromotionRule, CreatePromotionRuleRequest } from './promotion-rules';
-export { default as formatHandlersApi } from './format-handlers';
+export { formatHandlersApi } from './format-handlers';
 export type { FormatHandler } from './format-handlers';
-export { default as qualityChecksApi } from './quality-checks';
+export { qualityChecksApi } from './quality-checks';
 export type { QualityCheck, QualityIssue } from './quality-checks';
-export { default as repoLabelsApi } from './repo-labels';
+export { repoLabelsApi } from './repo-labels';
 export type { RepoLabel } from './repo-labels';
 
-export type { LoginCredentials } from './auth';
 export type { ListRepositoriesParams } from './repositories';
 export type { ListArtifactsParams } from './artifacts';
 export type { Group, GroupDetail, CreateGroupRequest, GroupMember, ListGroupsParams } from './groups';

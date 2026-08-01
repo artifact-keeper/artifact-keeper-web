@@ -14,7 +14,7 @@ import {
   Camera,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import analyticsApi from "@/lib/api/analytics";
+import { analyticsApi } from "@/lib/api/analytics";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";

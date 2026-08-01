@@ -7,6 +7,7 @@ import {
   deleteInstance as sdkDeleteInstance,
 } from '@artifact-keeper/sdk';
 import { isValidInstanceUrl } from "@/lib/utils";
+import { unwrap } from "@/lib/sdk-utils";
 
 export interface InstanceConfig {
   id: string;
@@ -102,8 +103,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
   const addInstance = useCallback(
     async (config: { name: string; url: string; apiKey: string }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await sdkCreateInstance({ body: { name: config.name, url: config.url, api_key: config.apiKey } as any });
-      if (error) throw error;
+      const data = await unwrap(sdkCreateInstance({ body: { name: config.name, url: config.url, api_key: config.apiKey } as any }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = data as any;
 

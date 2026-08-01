@@ -49,6 +49,7 @@ import type {
   UpsertScanConfigRequest,
 } from '@/types/security';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ScanListResponse {
   items: ScanResult[];
@@ -244,18 +245,16 @@ function adaptUpsertConfigRequest(
   };
 }
 
-const securityApi = {
+export const securityApi = {
   // Dashboard
   getDashboard: async (): Promise<DashboardSummary> => {
-    const { data, error } = await sdkGetDashboard();
-    if (error) throw error;
+    const data = await unwrap(sdkGetDashboard());
     return adaptDashboard(assertData(data, 'securityApi.getDashboard'));
   },
 
   // Scores
   getAllScores: async (): Promise<RepoSecurityScore[]> => {
-    const { data, error } = await sdkGetAllScores();
-    if (error) throw error;
+    const data = await unwrap(sdkGetAllScores());
     return assertData(data, 'securityApi.getAllScores').map(adaptScore);
   },
 
@@ -263,24 +262,21 @@ const securityApi = {
   triggerScan: async (
     req: TriggerScanRequest,
   ): Promise<TriggerScanResponse> => {
-    const { data, error } = await sdkTriggerScan({
+    const data = await unwrap(sdkTriggerScan({
       body: adaptTriggerRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptTriggerScanResponse(
       assertData(data, 'securityApi.triggerScan'),
     );
   },
 
   listScans: async (params?: ListScansParams): Promise<ScanListResponse> => {
-    const { data, error } = await sdkListScans({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListScans({ query: params }));
     return adaptScanList(assertData(data, 'securityApi.listScans'));
   },
 
   getScan: async (id: string): Promise<ScanResult> => {
-    const { data, error } = await sdkGetScan({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetScan({ path: { id } }));
     return adaptScan(assertData(data, 'securityApi.getScan'));
   },
 
@@ -288,11 +284,10 @@ const securityApi = {
     scanId: string,
     params?: ListFindingsParams,
   ): Promise<FindingListResponse> => {
-    const { data, error } = await sdkListFindings({
+    const data = await unwrap(sdkListFindings({
       path: { id: scanId },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptFindingList(assertData(data, 'securityApi.listFindings'));
   },
 
@@ -301,19 +296,17 @@ const securityApi = {
     findingId: string,
     reason: string,
   ): Promise<ScanFinding> => {
-    const { data, error } = await sdkAcknowledgeFinding({
+    const data = await unwrap(sdkAcknowledgeFinding({
       path: { id: findingId },
       body: { reason },
-    });
-    if (error) throw error;
+    }));
     return adaptFinding(assertData(data, 'securityApi.acknowledgeFinding'));
   },
 
   revokeAcknowledgment: async (findingId: string): Promise<ScanFinding> => {
-    const { data, error } = await sdkRevokeAcknowledgment({
+    const data = await unwrap(sdkRevokeAcknowledgment({
       path: { id: findingId },
-    });
-    if (error) throw error;
+    }));
     return adaptFinding(
       assertData(data, 'securityApi.revokeAcknowledgment'),
     );
@@ -321,22 +314,19 @@ const securityApi = {
 
   // Policy CRUD
   listPolicies: async (): Promise<ScanPolicy[]> => {
-    const { data, error } = await sdkListPolicies();
-    if (error) throw error;
+    const data = await unwrap(sdkListPolicies());
     return assertData(data, 'securityApi.listPolicies').map(adaptPolicy);
   },
 
   createPolicy: async (req: CreatePolicyRequest): Promise<ScanPolicy> => {
-    const { data, error } = await sdkCreatePolicy({
+    const data = await unwrap(sdkCreatePolicy({
       body: adaptCreatePolicyRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptPolicy(assertData(data, 'securityApi.createPolicy'));
   },
 
   getPolicy: async (id: string): Promise<ScanPolicy> => {
-    const { data, error } = await sdkGetPolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetPolicy({ path: { id } }));
     return adaptPolicy(assertData(data, 'securityApi.getPolicy'));
   },
 
@@ -344,25 +334,22 @@ const securityApi = {
     id: string,
     req: UpdatePolicyRequest,
   ): Promise<ScanPolicy> => {
-    const { data, error } = await sdkUpdatePolicy({
+    const data = await unwrap(sdkUpdatePolicy({
       path: { id },
       body: adaptUpdatePolicyRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptPolicy(assertData(data, 'securityApi.updatePolicy'));
   },
 
   deletePolicy: async (id: string): Promise<void> => {
-    const { error } = await sdkDeletePolicy({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeletePolicy({ path: { id } }));
   },
 
   // Repo-scoped security
   getRepoSecurity: async (repoKey: string): Promise<RepoSecurityInfo> => {
-    const { data, error } = await sdkGetRepoSecurity({
+    const data = await unwrap(sdkGetRepoSecurity({
       path: { key: repoKey },
-    });
-    if (error) throw error;
+    }));
     return adaptRepoSecurity(
       assertData(data, 'securityApi.getRepoSecurity'),
     );
@@ -372,11 +359,10 @@ const securityApi = {
     repoKey: string,
     req: UpsertScanConfigRequest,
   ): Promise<ScanConfig> => {
-    const { data, error } = await sdkUpdateRepoSecurity({
+    const data = await unwrap(sdkUpdateRepoSecurity({
       path: { key: repoKey },
       body: adaptUpsertConfigRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptScanConfig(
       assertData(data, 'securityApi.updateRepoSecurity'),
     );
@@ -386,11 +372,10 @@ const securityApi = {
     repoKey: string,
     params?: ListScansParams,
   ): Promise<ScanListResponse> => {
-    const { data, error } = await sdkListRepoScans({
+    const data = await unwrap(sdkListRepoScans({
       path: { key: repoKey },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptScanList(assertData(data, 'securityApi.listRepoScans'));
   },
 
@@ -398,15 +383,13 @@ const securityApi = {
     artifactId: string,
     params?: ListScansParams,
   ): Promise<ScanListResponse> => {
-    const { data, error } = await sdkListArtifactScans({
+    const data = await unwrap(sdkListArtifactScans({
       path: { artifact_id: artifactId },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptScanList(
       assertData(data, 'securityApi.listArtifactScans'),
     );
   },
 };
 
-export default securityApi;

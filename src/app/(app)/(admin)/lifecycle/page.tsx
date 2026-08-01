@@ -17,7 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import lifecycleApi from "@/lib/api/lifecycle";
+import { lifecycleApi } from "@/lib/api/lifecycle";
 import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";

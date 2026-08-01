@@ -17,7 +17,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import qualityGatesApi from "@/lib/api/quality-gates";
+import { qualityGatesApi } from "@/lib/api/quality-gates";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   QualityGate,

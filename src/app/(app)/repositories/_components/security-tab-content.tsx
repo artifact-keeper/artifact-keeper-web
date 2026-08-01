@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import sbomApi from "@/lib/api/sbom";
-import dtApi from "@/lib/api/dependency-track";
+import { sbomApi } from "@/lib/api/sbom";
+import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
 import { ArtifactScansSection } from "./artifact-scans-section";

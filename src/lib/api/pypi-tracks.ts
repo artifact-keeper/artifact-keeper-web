@@ -6,6 +6,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { PypiTrackResponse, PypiTracksListResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * A PEP 708 `tracks` declaration on a PyPI virtual repository.
@@ -35,29 +36,25 @@ function adaptPypiTracksList(sdk: PypiTracksListResponse): PypiTrack[] {
   return sdk.items.map(adaptPypiTrack);
 }
 
-const pypiTracksApi = {
+export const pypiTracksApi = {
   /** List every `tracks` declaration on a repository. */
   list: async (key: string): Promise<PypiTrack[]> => {
-    const { data, error } = await listPypiTracks({ path: { key } });
-    if (error) throw error;
+    const data = await unwrap(listPypiTracks({ path: { key } }));
     return adaptPypiTracksList(assertData(data, 'pypiTracksApi.list'));
   },
 
   /** Declare (upsert) that `project` tracks `tracksUrl`. */
   upsert: async (key: string, project: string, tracksUrl: string): Promise<PypiTrack> => {
-    const { data, error } = await putPypiTrack({
+    const data = await unwrap(putPypiTrack({
       path: { key, project },
       body: { tracks_url: tracksUrl },
-    });
-    if (error) throw error;
+    }));
     return adaptPypiTrack(assertData(data, 'pypiTracksApi.upsert'));
   },
 
   /** Remove a `tracks` declaration, restoring default isolation for `project`. */
   remove: async (key: string, project: string): Promise<void> => {
-    const { error } = await deletePypiTrack({ path: { key, project } });
-    if (error) throw error;
+    await unwrap(deletePypiTrack({ path: { key, project } }));
   },
 };
 
-export default pypiTracksApi;

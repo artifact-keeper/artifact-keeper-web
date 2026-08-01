@@ -51,7 +51,7 @@ vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSucce
 
 const api = { list: vi.fn(), setEnabled: vi.fn(), test: vi.fn() };
 vi.mock("@/lib/api/format-handlers", () => ({
-  default: {
+  formatHandlersApi: {
     list: (...a: unknown[]) => api.list(...a),
     setEnabled: (...a: unknown[]) => api.setEnabled(...a),
     test: (...a: unknown[]) => api.test(...a),

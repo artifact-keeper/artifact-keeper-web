@@ -32,7 +32,7 @@ vi.mock("@tanstack/react-query", () => ({
 const mockGetUsage = vi.fn();
 const mockRunGc = vi.fn();
 vi.mock("@/lib/api/storage", () => ({
-  default: {
+  storageApi: {
     getUsage: (...a: unknown[]) => mockGetUsage(...a),
     runGc: (...a: unknown[]) => mockRunGc(...a),
   },

@@ -8,6 +8,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { AgeGateReviewResponse, AgeGateConfigResponse } from '@artifact-keeper/sdk';
 import { ApiError, apiFetch, assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /** Every state a review can be in. */
 export const AGE_GATE_STATUSES = ['pending', 'approved', 'rejected'] as const;
@@ -210,36 +211,32 @@ function adaptConfig(sdk: AgeGateConfigResponse): AgeGateRepoConfig {
   };
 }
 
-const ageGateApi = {
+export const ageGateApi = {
   /** List package versions in the age gate review queue. */
   listReviews: async (params: ListAgeGateReviewsParams = {}): Promise<AgeGateReview[]> => {
-    const { data, error } = await listReviews({
+    const data = await unwrap(listReviews({
       query: {
         status: params.statuses?.length ? params.statuses.join(',') : undefined,
         repository_key: params.repositoryKey,
         page: params.page,
         per_page: params.perPage,
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'ageGateApi.listReviews').items.map(adaptReview);
   },
 
   getReview: async (id: string): Promise<AgeGateReview> => {
-    const { data, error } = await getReview({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(getReview({ path: { id } }));
     return adaptReview(assertData(data, 'ageGateApi.getReview'));
   },
 
   approveReview: async (id: string, reason?: string): Promise<AgeGateReview> => {
-    const { data, error } = await approveReview({ path: { id }, body: { reason: reason ?? null } });
-    if (error) throw error;
+    const data = await unwrap(approveReview({ path: { id }, body: { reason: reason ?? null } }));
     return adaptReview(assertData(data, 'ageGateApi.approveReview'));
   },
 
   rejectReview: async (id: string, reason?: string): Promise<AgeGateReview> => {
-    const { data, error } = await rejectReview({ path: { id }, body: { reason: reason ?? null } });
-    if (error) throw error;
+    const data = await unwrap(rejectReview({ path: { id }, body: { reason: reason ?? null } }));
     return adaptReview(assertData(data, 'ageGateApi.rejectReview'));
   },
 
@@ -341,4 +338,3 @@ const ageGateApi = {
   },
 };
 
-export default ageGateApi;

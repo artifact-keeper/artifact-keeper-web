@@ -20,7 +20,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   evaluateRule: (...a: unknown[]) => m.evaluateRule(...a),
 }));
 
-import promotionRulesApi from "../promotion-rules";
+import { promotionRulesApi } from "../promotion-rules";
 
 const SDK = {
   id: "r1",

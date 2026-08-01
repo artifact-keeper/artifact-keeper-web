@@ -156,7 +156,7 @@ describe("securityApi", () => {
   it("getDashboard returns summary", async () => {
     mockGetDashboard.mockResolvedValue({ data: SDK_DASHBOARD, error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.getDashboard();
+    const out = await mod.securityApi.getDashboard();
     expect(out.total_scans).toBe(100);
     expect(out.repos_with_scanning).toBe(5);
   });
@@ -164,13 +164,13 @@ describe("securityApi", () => {
   it("getDashboard throws on error", async () => {
     mockGetDashboard.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.getDashboard()).rejects.toBe("fail");
+    await expect(mod.securityApi.getDashboard()).rejects.toBe("fail");
   });
 
   it("getAllScores returns scores", async () => {
     mockGetAllScores.mockResolvedValue({ data: [SDK_SCORE], error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.getAllScores();
+    const out = await mod.securityApi.getAllScores();
     expect(out[0].score).toBe(90);
     expect(out[0].grade).toBe("A");
     // total_findings synthesized from severity counts
@@ -183,20 +183,20 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.getAllScores();
+    const out = await mod.securityApi.getAllScores();
     expect(out[0].last_scan_at).toBeNull();
   });
 
   it("getAllScores throws on error", async () => {
     mockGetAllScores.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.getAllScores()).rejects.toBe("fail");
+    await expect(mod.securityApi.getAllScores()).rejects.toBe("fail");
   });
 
   it("triggerScan returns response", async () => {
     mockTriggerScan.mockResolvedValue({ data: SDK_TRIGGER, error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.triggerScan({ repository_id: "r1" });
+    const out = await mod.securityApi.triggerScan({ repository_id: "r1" });
     expect(out.message).toBe("queued");
     expect(out.artifacts_queued).toBe(3);
   });
@@ -204,7 +204,7 @@ describe("securityApi", () => {
   it("triggerScan throws on error", async () => {
     mockTriggerScan.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.triggerScan({})).rejects.toBe("fail");
+    await expect(mod.securityApi.triggerScan({})).rejects.toBe("fail");
   });
 
   it("listScans returns scan list", async () => {
@@ -213,7 +213,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.listScans();
+    const out = await mod.securityApi.listScans();
     expect(out.total).toBe(1);
     expect(out.items[0].id).toBe("s1");
   });
@@ -237,7 +237,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const [s] = (await mod.default.listScans()).items;
+    const [s] = (await mod.securityApi.listScans()).items;
     expect(s.artifact_name).toBeNull();
     expect(s.artifact_version).toBeNull();
     expect(s.scanner_version).toBeNull();
@@ -249,20 +249,20 @@ describe("securityApi", () => {
   it("listScans throws on error", async () => {
     mockListScans.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.listScans()).rejects.toBe("fail");
+    await expect(mod.securityApi.listScans()).rejects.toBe("fail");
   });
 
   it("getScan returns scan", async () => {
     mockGetScan.mockResolvedValue({ data: SDK_SCAN, error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.getScan("s1");
+    const out = await mod.securityApi.getScan("s1");
     expect(out.id).toBe("s1");
   });
 
   it("getScan throws on error", async () => {
     mockGetScan.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.getScan("s1")).rejects.toBe("fail");
+    await expect(mod.securityApi.getScan("s1")).rejects.toBe("fail");
   });
 
   it("listFindings returns findings", async () => {
@@ -271,7 +271,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.listFindings("s1");
+    const out = await mod.securityApi.listFindings("s1");
     expect(out.total).toBe(1);
     expect(out.items[0].severity).toBe("high");
   });
@@ -279,7 +279,7 @@ describe("securityApi", () => {
   it("listFindings throws on error", async () => {
     mockListFindings.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.listFindings("s1")).rejects.toBe("fail");
+    await expect(mod.securityApi.listFindings("s1")).rejects.toBe("fail");
   });
 
   it("acknowledgeFinding returns finding and forwards body", async () => {
@@ -288,7 +288,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.acknowledgeFinding("f1", "false positive");
+    const out = await mod.securityApi.acknowledgeFinding("f1", "false positive");
     expect(out.is_acknowledged).toBe(true);
     expect(mockAcknowledgeFinding).toHaveBeenCalledWith({
       path: { id: "f1" },
@@ -300,7 +300,7 @@ describe("securityApi", () => {
     mockAcknowledgeFinding.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
     await expect(
-      mod.default.acknowledgeFinding("f1", "reason"),
+      mod.securityApi.acknowledgeFinding("f1", "reason"),
     ).rejects.toBe("fail");
   });
 
@@ -310,7 +310,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.revokeAcknowledgment("f1");
+    const out = await mod.securityApi.revokeAcknowledgment("f1");
     expect(out.id).toBe("f1");
   });
 
@@ -320,26 +320,26 @@ describe("securityApi", () => {
       error: "fail",
     });
     const mod = await import("../security");
-    await expect(mod.default.revokeAcknowledgment("f1")).rejects.toBe("fail");
+    await expect(mod.securityApi.revokeAcknowledgment("f1")).rejects.toBe("fail");
   });
 
   it("listPolicies returns policies", async () => {
     mockListPolicies.mockResolvedValue({ data: [SDK_POLICY], error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.listPolicies();
+    const out = await mod.securityApi.listPolicies();
     expect(out[0].id).toBe("p1");
   });
 
   it("listPolicies throws on error", async () => {
     mockListPolicies.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.listPolicies()).rejects.toBe("fail");
+    await expect(mod.securityApi.listPolicies()).rejects.toBe("fail");
   });
 
   it("createPolicy returns policy and forwards body", async () => {
     mockCreatePolicy.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../security");
-    await mod.default.createPolicy({
+    await mod.securityApi.createPolicy({
       name: "default",
       max_severity: "high",
       block_unscanned: true,
@@ -361,7 +361,7 @@ describe("securityApi", () => {
     mockCreatePolicy.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
     await expect(
-      mod.default.createPolicy({
+      mod.securityApi.createPolicy({
         name: "x",
         max_severity: "high",
         block_unscanned: false,
@@ -373,20 +373,20 @@ describe("securityApi", () => {
   it("getPolicy returns policy", async () => {
     mockGetPolicy.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../security");
-    const out = await mod.default.getPolicy("p1");
+    const out = await mod.securityApi.getPolicy("p1");
     expect(out.id).toBe("p1");
   });
 
   it("getPolicy throws on error", async () => {
     mockGetPolicy.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.getPolicy("p1")).rejects.toBe("fail");
+    await expect(mod.securityApi.getPolicy("p1")).rejects.toBe("fail");
   });
 
   it("updatePolicy returns policy and forwards body", async () => {
     mockUpdatePolicy.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../security");
-    await mod.default.updatePolicy("p1", {
+    await mod.securityApi.updatePolicy("p1", {
       name: "updated",
       max_severity: "critical",
       block_unscanned: true,
@@ -409,7 +409,7 @@ describe("securityApi", () => {
     mockUpdatePolicy.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
     await expect(
-      mod.default.updatePolicy("p1", {
+      mod.securityApi.updatePolicy("p1", {
         name: "x",
         max_severity: "high",
         block_unscanned: false,
@@ -422,14 +422,14 @@ describe("securityApi", () => {
   it("deletePolicy calls SDK", async () => {
     mockDeletePolicy.mockResolvedValue({ error: undefined });
     const mod = await import("../security");
-    await mod.default.deletePolicy("p1");
+    await mod.securityApi.deletePolicy("p1");
     expect(mockDeletePolicy).toHaveBeenCalled();
   });
 
   it("deletePolicy throws on error", async () => {
     mockDeletePolicy.mockResolvedValue({ error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.deletePolicy("p1")).rejects.toBe("fail");
+    await expect(mod.securityApi.deletePolicy("p1")).rejects.toBe("fail");
   });
 
   it("getRepoSecurity returns info with config and score", async () => {
@@ -438,7 +438,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.getRepoSecurity("repo-key");
+    const out = await mod.securityApi.getRepoSecurity("repo-key");
     expect(out.config?.id).toBe("cfg1");
     expect(out.score?.id).toBe("sc1");
   });
@@ -449,7 +449,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.getRepoSecurity("repo-key");
+    const out = await mod.securityApi.getRepoSecurity("repo-key");
     expect(out.config).toBeNull();
     expect(out.score).toBeNull();
   });
@@ -457,7 +457,7 @@ describe("securityApi", () => {
   it("getRepoSecurity throws on error", async () => {
     mockGetRepoSecurity.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.getRepoSecurity("repo-key")).rejects.toBe("fail");
+    await expect(mod.securityApi.getRepoSecurity("repo-key")).rejects.toBe("fail");
   });
 
   it("updateRepoSecurity returns config", async () => {
@@ -466,7 +466,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.updateRepoSecurity("repo-key", {
+    const out = await mod.securityApi.updateRepoSecurity("repo-key", {
       scan_enabled: true,
       scan_on_upload: true,
       scan_on_proxy: false,
@@ -483,7 +483,7 @@ describe("securityApi", () => {
     });
     const mod = await import("../security");
     await expect(
-      mod.default.updateRepoSecurity("repo-key", {
+      mod.securityApi.updateRepoSecurity("repo-key", {
         scan_enabled: false,
         scan_on_upload: false,
         scan_on_proxy: false,
@@ -499,14 +499,14 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.listRepoScans("repo-key");
+    const out = await mod.securityApi.listRepoScans("repo-key");
     expect(out.total).toBe(1);
   });
 
   it("listRepoScans throws on error", async () => {
     mockListRepoScans.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");
-    await expect(mod.default.listRepoScans("repo-key")).rejects.toBe("fail");
+    await expect(mod.securityApi.listRepoScans("repo-key")).rejects.toBe("fail");
   });
 
   it("listArtifactScans returns scans", async () => {
@@ -515,7 +515,7 @@ describe("securityApi", () => {
       error: undefined,
     });
     const mod = await import("../security");
-    const out = await mod.default.listArtifactScans("a1");
+    const out = await mod.securityApi.listArtifactScans("a1");
     expect(out.total).toBe(1);
   });
 
@@ -525,6 +525,6 @@ describe("securityApi", () => {
       error: "fail",
     });
     const mod = await import("../security");
-    await expect(mod.default.listArtifactScans("a1")).rejects.toBe("fail");
+    await expect(mod.securityApi.listArtifactScans("a1")).rejects.toBe("fail");
   });
 });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, Link2, ShieldCheck } from "lucide-react";
 
-import pypiTracksApi, { type PypiTrack } from "@/lib/api/pypi-tracks";
+import { pypiTracksApi, type PypiTrack } from "@/lib/api/pypi-tracks";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { Repository } from "@/types";
 import { toast } from "sonner";

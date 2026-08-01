@@ -63,7 +63,7 @@ vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSucce
 
 const api = { list: vi.fn(), listIssues: vi.fn(), trigger: vi.fn(), suppressIssue: vi.fn(), unsuppressIssue: vi.fn() };
 vi.mock("@/lib/api/quality-checks", () => ({
-  default: {
+  qualityChecksApi: {
     list: (...a: unknown[]) => api.list(...a),
     listIssues: (...a: unknown[]) => api.listIssues(...a),
     trigger: (...a: unknown[]) => api.trigger(...a),

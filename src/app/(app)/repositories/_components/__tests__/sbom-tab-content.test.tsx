@@ -19,7 +19,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/lib/api/sbom", () => ({
-  default: {
+  sbomApi: {
     list: vi.fn(),
     get: vi.fn(),
     getComponents: vi.fn(),

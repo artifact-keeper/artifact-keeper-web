@@ -11,6 +11,7 @@ import { assertData } from '@/lib/api/fetch';
 // Re-export types from the canonical types/ module
 export type { Package, PackageVersion } from '@/types/packages';
 import type { Package, PackageVersion } from '@/types/packages';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListPackagesParams {
   page?: number;
@@ -47,23 +48,19 @@ function adaptPackageList(sdk: PackageListResponse): PaginatedResponse<Package> 
 
 export const packagesApi = {
   list: async (params: ListPackagesParams = {}): Promise<PaginatedResponse<Package>> => {
-    const { data, error } = await listPackages({ query: params });
-    if (error) throw error;
+    const data = await unwrap(listPackages({ query: params }));
     return adaptPackageList(assertData(data, 'packages.list'));
   },
 
   get: async (packageId: string): Promise<Package> => {
-    const { data, error } = await getPackage({ path: { id: packageId } });
-    if (error) throw error;
+    const data = await unwrap(getPackage({ path: { id: packageId } }));
     return adaptPackage(assertData(data, 'packages.get'));
   },
 
   getVersions: async (packageId: string): Promise<PackageVersion[]> => {
-    const { data, error } = await getPackageVersions({ path: { id: packageId } });
-    if (error) throw error;
+    const data = await unwrap(getPackageVersions({ path: { id: packageId } }));
     const response: PackageVersionsResponse = assertData(data, 'packages.getVersions');
     return response.versions;
   },
 };
 
-export default packagesApi;

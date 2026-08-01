@@ -21,7 +21,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
-import sbomApi from "@/lib/api/sbom";
+import { sbomApi } from "@/lib/api/sbom";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
 import type { CveTrends } from "@/types/sbom";

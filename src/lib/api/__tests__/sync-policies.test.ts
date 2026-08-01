@@ -20,7 +20,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   togglePolicy: (...a: unknown[]) => m.togglePolicy(...a),
 }));
 
-import syncPoliciesApi from "../sync-policies";
+import { syncPoliciesApi } from "../sync-policies";
 
 const SDK = {
   id: "sp1",

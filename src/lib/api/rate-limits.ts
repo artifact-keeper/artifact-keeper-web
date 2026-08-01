@@ -201,4 +201,3 @@ export const rateLimitsApi = {
   },
 };
 
-export default rateLimitsApi;

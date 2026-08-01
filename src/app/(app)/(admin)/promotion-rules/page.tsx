@@ -7,7 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequestArrow, Plus, Trash2, Pencil, FlaskConical, AlertCircle, RotateCcw, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
-import promotionRulesApi, {
+import {
+  promotionRulesApi,
   type PromotionRule,
   type CreatePromotionRuleRequest,
 } from "@/lib/api/promotion-rules";

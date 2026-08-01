@@ -86,7 +86,7 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
-vi.mock("@/lib/api/lifecycle", () => ({ default: lifecycleApi }));
+vi.mock("@/lib/api/lifecycle", () => ({ lifecycleApi: lifecycleApi }));
 
 vi.mock("@/lib/api/repositories", () => ({ repositoriesApi }));
 

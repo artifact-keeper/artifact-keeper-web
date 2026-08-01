@@ -38,7 +38,7 @@ vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSucce
 
 const api = { list: vi.fn(), add: vi.fn(), remove: vi.fn() };
 vi.mock("@/lib/api/repo-labels", () => ({
-  default: { list: (...a: unknown[]) => api.list(...a), add: (...a: unknown[]) => api.add(...a), remove: (...a: unknown[]) => api.remove(...a) },
+  repoLabelsApi: { list: (...a: unknown[]) => api.list(...a), add: (...a: unknown[]) => api.add(...a), remove: (...a: unknown[]) => api.remove(...a) },
 }));
 
 import { RepoLabelsPanel } from "./repo-labels-panel";

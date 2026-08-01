@@ -9,6 +9,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type { Artifact, PaginatedResponse } from '@/types';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface SearchResult {
   id: string;
@@ -162,35 +163,31 @@ function adaptAdvancedSearch(sdk: AdvancedSearchResponse): AdvancedSearchResult 
 
 export const searchApi = {
   quickSearch: async (params: QuickSearchParams): Promise<SearchResult[]> => {
-    const { data, error } = await quickSearch({
+    const data = await unwrap(quickSearch({
       query: {
         q: params.query,
         limit: params.limit,
         types: params.types?.join(','),
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'searchApi.quickSearch').results.map(adaptSearchResult);
   },
 
   advancedSearch: async (
     params: AdvancedSearchParams
   ): Promise<AdvancedSearchResult> => {
-    const { data, error } = await advancedSearch({ query: params });
-    if (error) throw error;
+    const data = await unwrap(advancedSearch({ query: params }));
     return adaptAdvancedSearch(assertData(data, 'searchApi.advancedSearch'));
   },
 
   checksumSearch: async (params: ChecksumSearchParams): Promise<Artifact[]> => {
-    const { data, error } = await checksumSearch({
+    const data = await unwrap(checksumSearch({
       query: {
         checksum: params.checksum,
         algorithm: params.algorithm || 'sha256',
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'searchApi.checksumSearch').artifacts.map(adaptChecksumArtifact);
   },
 };
 
-export default searchApi;

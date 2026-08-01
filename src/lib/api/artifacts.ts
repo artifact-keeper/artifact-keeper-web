@@ -16,6 +16,7 @@ import type {
   PaginatedResponse,
 } from '@/types';
 import { apiFetch, assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListArtifactsParams {
   page?: number;
@@ -132,8 +133,7 @@ export const artifactsApi = {
       return { items: grouped.items, pagination: grouped.pagination };
     }
     const query = { ...rest, q: params.q || search || undefined };
-    const { data, error } = await listArtifacts({ path: { key: repoKey }, query });
-    if (error) throw error;
+    const data = await unwrap(listArtifacts({ path: { key: repoKey }, query }));
     return adaptArtifactList(assertData(data, 'artifactsApi.list'));
   },
 
@@ -185,8 +185,7 @@ export const artifactsApi = {
   },
 
   delete: async (repoKey: string, artifactPath: string): Promise<void> => {
-    const { error } = await deleteArtifact({ path: { key: repoKey, path: artifactPath } });
-    if (error) throw error;
+    await unwrap(deleteArtifact({ path: { key: repoKey, path: artifactPath } }));
   },
 
   /**
@@ -245,13 +244,12 @@ export const artifactsApi = {
     // compares it against request.uri().path() by byte equality. It must be the
     // absolute path the subsequent download request will carry, which is the
     // same value getDownloadUrl produces.
-    const { data, error } = await createDownloadTicket({
+    const data = await unwrap(createDownloadTicket({
       body: {
         purpose: 'download',
         resource_path: `/api/v1/repositories/${repoKey}/download/${artifactPath}`,
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'artifactsApi.createDownloadTicket').ticket;
   },
 
@@ -306,4 +304,3 @@ export const artifactsApi = {
   },
 };
 
-export default artifactsApi;

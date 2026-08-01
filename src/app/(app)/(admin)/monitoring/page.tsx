@@ -16,7 +16,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import monitoringApi from "@/lib/api/monitoring";
+import { monitoringApi } from "@/lib/api/monitoring";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { AlertState } from "@/types/monitoring";
 import { PageHeader } from "@/components/common/page-header";

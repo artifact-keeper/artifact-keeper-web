@@ -51,6 +51,7 @@ import type {
   CheckLicenseComplianceRequest,
 } from '@/types/sbom';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 const POLICY_ACTIONS = new Set<PolicyAction>(['allow', 'warn', 'block']);
 const CVE_STATUSES = new Set<CveStatus>([
@@ -264,25 +265,22 @@ export function narrowPolicyAction(value: string): PolicyAction {
   );
 }
 
-const sbomApi = {
+export const sbomApi = {
   // SBOM operations
   generate: async (req: GenerateSbomRequest): Promise<SbomResponse> => {
-    const { data, error } = await sdkGenerateSbom({
+    const data = await unwrap(sdkGenerateSbom({
       body: adaptGenerateRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptSbom(assertData(data, 'sbomApi.generate'));
   },
 
   list: async (params?: ListSbomsParams): Promise<SbomResponse[]> => {
-    const { data, error } = await sdkListSboms({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListSboms({ query: params }));
     return assertData(data, 'sbomApi.list').map(adaptSbom);
   },
 
   get: async (id: string): Promise<SbomContentResponse> => {
-    const { data, error } = await sdkGetSbom({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetSbom({ path: { id } }));
     return adaptSbomContent(assertData(data, 'sbomApi.get'));
   },
 
@@ -293,16 +291,14 @@ const sbomApi = {
     // parameter was bypassed via `as never` and sent over the wire as
     // an unsupported query — silently ignored by the backend. No app
     // consumer was passing format, so dropped (no-op behavior change).
-    const { data, error } = await sdkGetSbomByArtifact({
+    const data = await unwrap(sdkGetSbomByArtifact({
       path: { artifact_id: artifactId },
-    });
-    if (error) throw error;
+    }));
     return adaptSbomContent(assertData(data, 'sbomApi.getByArtifact'));
   },
 
   getComponents: async (sbomId: string): Promise<SbomComponent[]> => {
-    const { data, error } = await sdkGetSbomComponents({ path: { id: sbomId } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetSbomComponents({ path: { id: sbomId } }));
     return assertData(data, 'sbomApi.getComponents').map(adaptComponent);
   },
 
@@ -310,27 +306,24 @@ const sbomApi = {
     sbomId: string,
     req: ConvertSbomRequest,
   ): Promise<SbomResponse> => {
-    const { data, error } = await sdkConvertSbom({
+    const data = await unwrap(sdkConvertSbom({
       path: { id: sbomId },
       body: adaptConvertRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptSbom(assertData(data, 'sbomApi.convert'));
   },
 
   delete: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteSbom({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteSbom({ path: { id } }));
   },
 
   // CVE history operations
   getCveHistory: async (artifactId: string): Promise<CveHistoryEntry[]> => {
-    const { data, error } = await sdkGetCveHistory({
+    const data = await unwrap(sdkGetCveHistory({
       // 1.2.1 renamed the path param artifact_id -> id (accepts an artifact
       // UUID or a CVE id); the route is /api/v1/sbom/cve/history/{id}.
       path: { id: artifactId },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'sbomApi.getCveHistory').map(adaptCveHistory);
   },
 
@@ -338,59 +331,51 @@ const sbomApi = {
     cveId: string,
     req: UpdateCveStatusRequest,
   ): Promise<CveHistoryEntry> => {
-    const { data, error } = await sdkUpdateCveStatus({
+    const data = await unwrap(sdkUpdateCveStatus({
       path: { id: cveId },
       body: adaptUpdateCveStatusRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptCveHistory(assertData(data, 'sbomApi.updateCveStatus'));
   },
 
   getCveTrends: async (params?: GetCveTrendsParams): Promise<CveTrends> => {
-    const { data, error } = await sdkGetCveTrends({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetCveTrends({ query: params }));
     return adaptCveTrends(assertData(data, 'sbomApi.getCveTrends'));
   },
 
   // License policy operations
   listPolicies: async (): Promise<LicensePolicy[]> => {
-    const { data, error } = await sdkListLicensePolicies();
-    if (error) throw error;
+    const data = await unwrap(sdkListLicensePolicies());
     return assertData(data, 'sbomApi.listPolicies').map(adaptLicensePolicy);
   },
 
   getPolicy: async (id: string): Promise<LicensePolicy> => {
-    const { data, error } = await sdkGetLicensePolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetLicensePolicy({ path: { id } }));
     return adaptLicensePolicy(assertData(data, 'sbomApi.getPolicy'));
   },
 
   upsertPolicy: async (
     req: UpsertLicensePolicyRequest,
   ): Promise<LicensePolicy> => {
-    const { data, error } = await sdkUpsertLicensePolicy({
+    const data = await unwrap(sdkUpsertLicensePolicy({
       body: adaptUpsertPolicyRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptLicensePolicy(assertData(data, 'sbomApi.upsertPolicy'));
   },
 
   deletePolicy: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteLicensePolicy({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteLicensePolicy({ path: { id } }));
   },
 
   checkCompliance: async (
     req: CheckLicenseComplianceRequest,
   ): Promise<LicenseCheckResult> => {
-    const { data, error } = await sdkCheckLicenseCompliance({
+    const data = await unwrap(sdkCheckLicenseCompliance({
       body: adaptCheckRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptLicenseCheckResult(
       assertData(data, 'sbomApi.checkCompliance'),
     );
   },
 };
 
-export default sbomApi;
