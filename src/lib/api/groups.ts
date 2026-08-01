@@ -20,6 +20,7 @@ import { assertData } from '@/lib/api/fetch';
 // Re-export types from the canonical types/ module
 export type { Group, GroupDetail, GroupMember, CreateGroupRequest } from '@/types/groups';
 import type { Group, GroupDetail, CreateGroupRequest } from '@/types/groups';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListGroupsParams {
   page?: number;
@@ -73,26 +74,22 @@ function adaptGroupList(sdk: GroupListResponse): PaginatedResponse<Group> {
 
 export const groupsApi = {
   list: async (params: ListGroupsParams = {}): Promise<PaginatedResponse<Group>> => {
-    const { data, error } = await listGroups({ query: params });
-    if (error) throw error;
+    const data = await unwrap(listGroups({ query: params }));
     return adaptGroupList(assertData(data, 'groupsApi.list'));
   },
 
   get: async (groupId: string): Promise<Group> => {
-    const { data, error } = await getGroup({ path: { id: groupId } });
-    if (error) throw error;
+    const data = await unwrap(getGroup({ path: { id: groupId } }));
     return adaptGroup(assertData(data, 'groupsApi.get'));
   },
 
   getDetail: async (groupId: string): Promise<GroupDetail> => {
-    const { data, error } = await getGroup({ path: { id: groupId } });
-    if (error) throw error;
+    const data = await unwrap(getGroup({ path: { id: groupId } }));
     return adaptGroupDetail(assertData(data, 'groupsApi.getDetail'));
   },
 
   create: async (input: CreateGroupRequest): Promise<Group> => {
-    const { data, error } = await createGroup({ body: input });
-    if (error) throw error;
+    const data = await unwrap(createGroup({ body: input }));
     return adaptGroup(assertData(data, 'groupsApi.create'));
   },
 
@@ -108,34 +105,29 @@ export const groupsApi = {
     };
     // SDK marks `name` required for PUT, but the backend treats omission as
     // "leave unchanged" — we want that semantic for description-only edits.
-    const { data, error } = await updateGroup({
+    const data = await unwrap(updateGroup({
       path: { id: groupId },
       body: body as CreateGroupRequest,
-    });
-    if (error) throw error;
+    }));
     return adaptGroup(assertData(data, 'groupsApi.update'));
   },
 
   delete: async (groupId: string): Promise<void> => {
-    const { error } = await deleteGroup({ path: { id: groupId } });
-    if (error) throw error;
+    await unwrap(deleteGroup({ path: { id: groupId } }));
   },
 
   addMembers: async (groupId: string, userIds: string[]): Promise<void> => {
-    const { error } = await addMembers({
+    await unwrap(addMembers({
       path: { id: groupId },
       body: { user_ids: userIds },
-    });
-    if (error) throw error;
+    }));
   },
 
   removeMembers: async (groupId: string, userIds: string[]): Promise<void> => {
-    const { error } = await removeMembers({
+    await unwrap(removeMembers({
       path: { id: groupId },
       body: { user_ids: userIds },
-    });
-    if (error) throw error;
+    }));
   },
 };
 
-export default groupsApi;

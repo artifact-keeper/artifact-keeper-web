@@ -16,6 +16,7 @@ import type {
 import type { AdminStats, User, HealthResponse } from '@/types';
 import type { ApiKey } from '@/lib/api/profile';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // SystemStats has a strict superset of AdminStats fields; pass through directly.
 function adaptStats(sdk: SystemStats): AdminStats {
@@ -99,14 +100,14 @@ function adaptApiKey(sdk: ApiTokenResponse): ApiKey {
 
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
-    const { data, error } = await getSystemStats();
-    if (error) throw error;
+    const data = await unwrap(getSystemStats());
     return adaptStats(assertData(data, 'adminApi.getStats'));
   },
 
-  listUsers: async (): Promise<User[]> => {
-    const { data, error } = await listUsers();
-    if (error) throw error;
+  listUsers: async (params: { page?: number; perPage?: number } = {}): Promise<User[]> => {
+    const data = await unwrap(listUsers({
+      query: { page: params.page, per_page: params.perPage },
+    }));
     return assertData(data, 'adminApi.listUsers').items.map(adaptUser);
   },
 
@@ -126,17 +127,14 @@ export const adminApi = {
   },
 
   listUserTokens: async (userId: string): Promise<ApiKey[]> => {
-    const { data, error } = await sdkListUserTokens({ path: { id: userId } });
-    if (error) throw error;
+    const data = await unwrap(sdkListUserTokens({ path: { id: userId } }));
     return (data?.items ?? []).map(adaptApiKey);
   },
 
   revokeUserToken: async (userId: string, tokenId: string): Promise<void> => {
-    const { error } = await sdkRevokeUserApiToken({
+    await unwrap(sdkRevokeUserApiToken({
       path: { id: userId, token_id: tokenId },
-    });
-    if (error) throw error;
+    }));
   },
 };
 
-export default adminApi;

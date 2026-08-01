@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,8 +14,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import curationApi, { type CurationPackage } from "@/lib/api/curation";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { curationApi, type CurationPackage } from "@/lib/api/curation";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -37,10 +39,19 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import { CurationRulesManager } from "./_components/curation-rules-manager";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
 export default function CurationPage() {
+  useDocumentTitle("Package Curation");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -50,11 +61,10 @@ export default function CurationPage() {
   const [bulkAction, setBulkAction] = useState<null | "approve" | "block">(null);
   const [reason, setReason] = useState("");
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-all", "staging"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!user?.is_admin,
-  });
+  const { data: repos } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin },
+  );
   const stagingRepos = useMemo(
     () => (repos?.items ?? []).filter((r) => r.repo_type === "staging"),
     [repos?.items],
@@ -148,11 +158,19 @@ export default function CurationPage() {
         <div>
           <h1 className="text-xl font-semibold">Package Curation</h1>
           <p className="text-sm text-muted-foreground">
-            Review and approve or block packages staged from upstream repositories.
+            Review packages staged from upstream repositories and author the
+            rules that gate them.
           </p>
         </div>
       </div>
 
+      <Tabs defaultValue="queue" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="queue">Review Queue</TabsTrigger>
+          <TabsTrigger value="rules">Rules</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="queue" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Select value={repoId} onValueChange={(v) => { setRepoId(v); setSelected(new Set()); }}>
           <SelectTrigger className="w-64" aria-label="Staging repository">
@@ -203,6 +221,11 @@ export default function CurationPage() {
           </div>
         )}
       </div>
+
+      <ListTruncationNotice
+        shown={repos?.items.length ?? 0}
+        total={repos?.pagination?.total ?? 0}
+      />
 
       {!repoId && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
@@ -327,6 +350,12 @@ export default function CurationPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+
+        <TabsContent value="rules">
+          <CurationRulesManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

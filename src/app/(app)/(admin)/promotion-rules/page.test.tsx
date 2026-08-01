@@ -30,7 +30,7 @@ let reposData: unknown = { items: [] };
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: { queryKey: unknown[]; queryFn: () => unknown; enabled?: boolean }) => {
     const key = (opts.queryKey as string[])[0];
-    if (key === "repositories-all") return { data: reposData };
+    if (key === "repositories") return { data: reposData };
     if (opts.enabled !== false) {
       try {
         opts.queryFn();
@@ -54,7 +54,7 @@ vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSucce
 
 const api = { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), evaluate: vi.fn() };
 vi.mock("@/lib/api/promotion-rules", () => ({
-  default: {
+  promotionRulesApi: {
     list: (...a: unknown[]) => api.list(...a),
     create: (...a: unknown[]) => api.create(...a),
     update: (...a: unknown[]) => api.update(...a),

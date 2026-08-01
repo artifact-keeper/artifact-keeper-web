@@ -46,15 +46,40 @@ re-enable `Strict-Transport-Security` and `upgrade-insecure-requests`. All other
 security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
 Permissions-Policy, and the rest of the CSP) are always emitted regardless.
 
-**Important:** Next.js bakes response headers into the build output, so
-`AK_ENFORCE_HTTPS` is read at **build time**, not container runtime. For the
-Docker image, pass it as a build arg:
+The flag is evaluated **at container runtime** — the headers are emitted by the
+middleware (`src/middleware.ts`), which reads the env var on every request, so
+no rebuild is needed. Set it on the running container:
 
 ```bash
-docker build --build-arg AK_ENFORCE_HTTPS=true -t artifact-keeper-web:tls .
+docker run -e AK_ENFORCE_HTTPS=true ... artifact-keeper-web
 ```
 
-Leave it unset to build the default plain-HTTP-safe image.
+or in the compose `environment:` block. The effective mode is logged once at
+server startup (`[security] AK_ENFORCE_HTTPS ...`) so you can confirm the
+container picked it up.
+
+For custom image builds, `--build-arg AK_ENFORCE_HTTPS=true` still works — it
+only sets the image's **default** value, which a runtime `-e` flag overrides.
+
+### CSRF protection
+
+The UI authenticates with httpOnly session cookies (`credentials: "include"`),
+so it relies on a CSRF contract with the backend:
+
+- **Frontend (implemented here):** every API request — SDK calls, `apiFetch`,
+  and the remaining raw `fetch` mutations — carries the custom header
+  `X-Requested-With: XMLHttpRequest` (see `CSRF_HEADER_NAME` in
+  `src/lib/sdk-client.ts`). Cross-site HTML forms cannot set custom headers,
+  so this header forces a CORS preflight a forged request cannot satisfy.
+- **Backend (contract):** the backend MUST
+  1. issue the session cookie with `SameSite=Lax` or `SameSite=Strict`, and
+  2. reject cookie-authenticated mutating requests (POST/PUT/PATCH/DELETE)
+     that lack the `X-Requested-With` header. Native package-manager clients
+     are unaffected — they authenticate with Basic/Bearer credentials, not
+     cookies, so the header requirement applies only to cookie auth.
+
+The backend enforcement half is tracked as a follow-up issue in the
+`artifact-keeper` repository (see issue #673 here for the full audit finding).
 
 ## Project Structure
 

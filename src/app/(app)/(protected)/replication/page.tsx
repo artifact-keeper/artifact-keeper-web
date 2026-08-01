@@ -15,7 +15,7 @@ import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- helpers --
 
@@ -99,10 +100,7 @@ export default function ReplicationPage() {
   const totalCacheSize = peers.reduce((a, p) => a + p.cache_size_bytes, 0);
 
   // Subscriptions tab queries
-  const { data: reposData } = useQuery({
-    queryKey: ["repositories-list"],
-    queryFn: () => repositoriesApi.list({ per_page: 200 }),
-  });
+  const { data: reposData } = useRepositories({ per_page: 200 });
   const repositories = reposData?.items ?? [];
 
   const { data: assignedRepos = [] } = useQuery({
@@ -484,6 +482,11 @@ export default function ReplicationPage() {
               })}
             </div>
           )}
+          <ListTruncationNotice
+            className="mt-4"
+            shown={peers.length}
+            total={data?.total ?? 0}
+          />
         </TabsContent>
 
         {/* -- Subscriptions Tab -- */}
@@ -525,6 +528,10 @@ export default function ReplicationPage() {
               emptyMessage="No repositories found."
             />
           )}
+          <ListTruncationNotice
+            shown={repositories.length}
+            total={reposData?.pagination?.total ?? 0}
+          />
         </TabsContent>
 
         {/* -- Topology Tab -- */}

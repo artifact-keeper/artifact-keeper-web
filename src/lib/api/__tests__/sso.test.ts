@@ -98,6 +98,8 @@ const SDK_LDAP: SdkLdapConfigResponse = {
   group_filter: "(member={dn})",
   admin_group_dn: "cn=admins,ou=groups,dc=example,dc=com",
   use_starttls: true,
+  has_ca_certificate: false,
+  insecure_skip_verify: false,
   is_enabled: true,
   priority: 10,
   created_at: "2026-04-01T00:00:00Z",

@@ -55,13 +55,32 @@ vi.mock("@/hooks/use-admin-settings", () => ({
   useAdminSettings: () => mockUseAdminSettings(),
 }));
 
+// Mock auth-provider (used to repo-admin gate the Scanning & enforcement
+// section, #2954/#3003). Defaults to an admin user; tests override as needed.
+const mockUseAuth = vi.fn(() => ({ user: { is_admin: true } }));
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+// Mock the scan-config API (apiFetch-based client for the security endpoint).
+const mockGetScanConfig = vi.fn();
+const mockUpdateScanConfig = vi.fn();
+vi.mock("@/lib/api/scan-config", () => ({
+  __esModule: true,
+  scanConfigApi: {
+    get: (...args: unknown[]) => mockGetScanConfig(...args),
+    update: (...args: unknown[]) => mockUpdateScanConfig(...args),
+  },
+  SEVERITY_THRESHOLDS: ["critical", "high", "medium", "low"],
+}));
+
 // Mock lifecycle API
 const mockListPolicies = vi.fn();
 const mockDeletePolicy = vi.fn();
 const mockExecutePolicy = vi.fn();
 const mockPreviewPolicy = vi.fn();
 vi.mock("@/lib/api/lifecycle", () => ({
-  default: {
+  lifecycleApi: {
     list: (...args: unknown[]) => mockListPolicies(...args),
     delete: (...args: unknown[]) => mockDeletePolicy(...args),
     execute: (...args: unknown[]) => mockExecutePolicy(...args),
@@ -232,6 +251,18 @@ mockUseAdminSettings.mockReturnValue({
     },
   },
 });
+
+// Default scan-config: an unconfigured repository (everything off, fail-open).
+// Individual tests override with mockResolvedValueOnce.
+const defaultScanConfig = {
+  scan_enabled: false,
+  scan_on_upload: false,
+  scan_on_proxy: false,
+  block_on_policy_violation: false,
+  severity_threshold: "high",
+  proxy_scan_action: "fail_open" as const,
+};
+mockGetScanConfig.mockResolvedValue(defaultScanConfig);
 
 function createWrapper() {
   const client = new QueryClient({
@@ -1538,5 +1569,205 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
       { wrapper: createWrapper() }
     );
     expect(screen.queryByText("npm Scope Policy")).toBeNull();
+  });
+});
+
+describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: false,
+      scan_on_upload: false,
+      scan_on_proxy: false,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+  });
+
+  it("hides the section entirely for non-admin users and issues no GET", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByText("Scanning & enforcement")).toBeNull();
+    expect(mockGetScanConfig).not.toHaveBeenCalled();
+  });
+
+  it("renders the section for admins and loads the config via GET", async () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText("Scanning & enforcement")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable scanning")).toBeTruthy();
+    });
+    expect(mockGetScanConfig).toHaveBeenCalledWith("maven-releases");
+  });
+
+  it("disables the dependent controls until scanning is enabled", async () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable scanning")).toBeTruthy();
+    });
+    // Master toggle is off in the default config, so the rest are disabled.
+    expect(screen.getByLabelText("Scan on upload")).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(screen.getByLabelText("Scan on proxy download")).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(screen.getByLabelText("Block on policy violation")).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      screen.getByLabelText("Fail closed on proxy downloads")
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("reflects a fail_closed config and enabled toggles from the backend", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "critical",
+      proxy_scan_action: "fail_closed",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Enable scanning").getAttribute("aria-checked")
+      ).toBe("true");
+    });
+    const failClosed = screen.getByLabelText("Fail closed on proxy downloads");
+    expect(failClosed.getAttribute("aria-checked")).toBe("true");
+    expect(failClosed).toHaveProperty("disabled", false);
+    // Security-first caption is shown when fail-closed is active.
+    expect(screen.getByText(/Security first/)).toBeTruthy();
+  });
+
+  it("shows the availability-first caption when fail-open is active", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable scanning")).toBeTruthy();
+    });
+    expect(screen.getByText(/Availability first/)).toBeTruthy();
+  });
+
+  it("keeps Save disabled until an edit is made", async () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable scanning")).toBeTruthy();
+    });
+    const saveBtn = screen.getByRole("button", {
+      name: /save scanning settings/i,
+    });
+    expect(saveBtn).toHaveProperty("disabled", true);
+  });
+
+  it("PUTs the full config with proxy_scan_action=fail_closed on save", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_closed",
+    });
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Fail closed on proxy downloads")
+      ).toHaveProperty("disabled", false);
+    });
+
+    // Flip to fail-closed and turn on active blocking.
+    await user.click(screen.getByLabelText("Fail closed on proxy downloads"));
+    await user.click(screen.getByLabelText("Block on policy violation"));
+
+    const saveBtn = screen.getByRole("button", {
+      name: /save scanning settings/i,
+    });
+    expect(saveBtn).toHaveProperty("disabled", false);
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateScanConfig).toHaveBeenCalledWith(
+        "maven-releases",
+        expect.objectContaining({
+          scan_enabled: true,
+          scan_on_proxy: true,
+          block_on_policy_violation: true,
+          proxy_scan_action: "fail_closed",
+        })
+      );
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      "Scanning & enforcement settings saved"
+    );
+  });
+
+  it("toasts an error when the save fails", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: false,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+    mockUpdateScanConfig.mockRejectedValue(new Error("403 Forbidden"));
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Enable scanning").getAttribute("aria-checked")
+      ).toBe("true");
+    });
+    // Toggle block-on-violation to make the form dirty.
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(
+      screen.getByRole("button", { name: /save scanning settings/i })
+    );
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Failed to save scanning settings");
+    });
   });
 });

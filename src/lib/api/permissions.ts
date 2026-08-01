@@ -14,6 +14,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
 export type PermissionTargetType = 'repository' | 'group' | 'artifact';
@@ -128,20 +129,17 @@ function toSdkRequest(req: CreatePermissionRequest): SdkCreatePermissionRequest 
 
 export const permissionsApi = {
   list: async (params: ListPermissionsParams = {}): Promise<PaginatedResponse<Permission>> => {
-    const { data, error } = await listPermissions({ query: params });
-    if (error) throw error;
+    const data = await unwrap(listPermissions({ query: params }));
     return adaptPermissionList(assertData(data, 'permissionsApi.list'));
   },
 
   get: async (permissionId: string): Promise<Permission> => {
-    const { data, error } = await getPermission({ path: { id: permissionId } });
-    if (error) throw error;
+    const data = await unwrap(getPermission({ path: { id: permissionId } }));
     return adaptPermission(assertData(data, 'permissionsApi.get'));
   },
 
   create: async (input: CreatePermissionRequest): Promise<Permission> => {
-    const { data, error } = await createPermission({ body: toSdkRequest(input) });
-    if (error) throw error;
+    const data = await unwrap(createPermission({ body: toSdkRequest(input) }));
     return adaptPermission(assertData(data, 'permissionsApi.create'));
   },
 
@@ -149,18 +147,15 @@ export const permissionsApi = {
     permissionId: string,
     input: CreatePermissionRequest
   ): Promise<Permission> => {
-    const { data, error } = await updatePermission({
+    const data = await unwrap(updatePermission({
       path: { id: permissionId },
       body: toSdkRequest(input),
-    });
-    if (error) throw error;
+    }));
     return adaptPermission(assertData(data, 'permissionsApi.update'));
   },
 
   delete: async (permissionId: string): Promise<void> => {
-    const { error } = await deletePermission({ path: { id: permissionId } });
-    if (error) throw error;
+    await unwrap(deletePermission({ path: { id: permissionId } }));
   },
 };
 
-export default permissionsApi;

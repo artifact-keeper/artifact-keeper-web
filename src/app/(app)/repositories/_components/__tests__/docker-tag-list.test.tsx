@@ -53,6 +53,9 @@ function art(overrides: Partial<Artifact> & Pick<Artifact, "path" | "id">): Arti
     content_type: "application/vnd.oci.image.manifest.v1+json",
     download_count: 0,
     created_at: "2026-04-10T12:00:00Z",
+    // The tag list is built from the repository artifacts listing, which
+    // serializes `quarantine_status` on every row (artifact-keeper#2966).
+    quarantine_status: "not_quarantined",
     ...overrides,
   };
 }
@@ -172,13 +175,23 @@ describe("DockerTagList", () => {
   it("renders a QuarantineBadge for quarantined manifests", () => {
     const qTag = {
       ...TAG_14,
-      is_quarantined: true,
-      quarantine_reason: "vulnerability",
+      // The shipped listing shape: the verdict, and the expiry for a timed
+      // hold — never `is_blocked`, never the reason (artifact-keeper#2966).
+      quarantine_status: "quarantined",
       quarantine_until: "2099-01-01T00:00:00Z",
     };
     render(<DockerTagList artifacts={[qTag]} />);
     expect(screen.getByTestId("quarantine-badge")).toBeInTheDocument();
     expect(screen.queryByText("OK")).not.toBeInTheDocument();
+  });
+
+  it("does not claim OK when the response carried no quarantine verdict", () => {
+    // Absent is not clear: a manifest whose quarantine state was never loaded
+    // (older backend) must not be reported as clean (#650).
+    const unknown = { ...TAG_14, quarantine_status: undefined };
+    render(<DockerTagList artifacts={[unknown]} />);
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quarantine-badge")).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

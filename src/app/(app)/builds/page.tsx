@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -455,6 +457,7 @@ function BuildDiffDialog({
 // ---- Main Builds Page ----
 
 export default function BuildsPage() {
+  useDocumentTitle("Builds");
   // Filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BuildStatus | "">("");

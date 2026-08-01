@@ -6,8 +6,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Bell,
+  Check,
   Download,
+  Loader2,
   Trash2,
+  X,
   Search,
   FileIcon,
   FileArchive,
@@ -27,9 +30,16 @@ import {
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import { artifactsApi } from "@/lib/api/artifacts";
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
+import { quarantineApi } from "@/lib/api/quarantine";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { isActivelyQuarantined } from "@/lib/quarantine";
+import {
+  isActivelyQuarantined,
+  isQuarantineRejected,
+  quarantineKnowledge,
+  quarantineDownloadBlockedReason,
+  type QuarantineFields,
+} from "@/lib/quarantine";
 import {
   ANALYZABLE_DISABLED_REASON,
   isArtifactAnalyzable,
@@ -62,6 +72,7 @@ import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
+import { resolveInitialRepoTab } from "@/lib/repo-tabs";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -94,6 +105,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -122,6 +134,13 @@ interface RepoDetailContentProps {
   standalone?: boolean;
 }
 
+/**
+ * The two admin decisions available on a held artifact. The backend only
+ * allows `quarantined -> released|rejected`, so there is nothing to offer on
+ * an artifact that has already been rejected.
+ */
+type QuarantineAction = "release" | "reject";
+
 export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -147,6 +166,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+
+  // Which quarantine decision the admin is confirming, and the optional reason
+  // recorded with a rejection (#650).
+  const [quarantineAction, setQuarantineAction] = useState<QuarantineAction | null>(null);
+  const [quarantineReason, setQuarantineReason] = useState("");
+  const closeQuarantineDialog = useCallback(() => {
+    setQuarantineAction(null);
+    setQuarantineReason("");
+  }, []);
 
   // Polite live region for destructive-action outcomes (delete / cache
   // invalidate). Toasts alone are not reliably announced by screen readers,
@@ -227,6 +255,37 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     enabled: !!repoKey,
   });
 
+  // --- quarantine state for the artifact in the detail dialog ---
+  //
+  // Every current artifact payload (listing, by-id, by-path) carries the
+  // verdict as `quarantine_status` (artifact-keeper#2966), but never the
+  // *reason* — that is disclosed only by the authenticated,
+  // repo-visibility-checked GET /api/v1/quarantine/{id} (#2912). So the
+  // status endpoint is queried exactly when the dialog has something to gain
+  // from it: the artifact is held (the reason is worth showing) or the
+  // payload carried no verdict at all (older backend — absent means "the
+  // server did not look", not "not held"; reading it as the latter is what
+  // left the quarantine banner unreachable, #650). A clear artifact costs no
+  // extra request.
+  const selectedArtifactId = selectedArtifact?.id;
+  const selectedKnowledge = quarantineKnowledge(selectedArtifact);
+  const { data: fetchedQuarantine } = useQuery({
+    queryKey: ["quarantine-status", selectedArtifactId],
+    queryFn: async () =>
+      selectedArtifactId ? await quarantineApi.getStatus(selectedArtifactId) : null,
+    enabled: detailOpen && !!selectedArtifactId && selectedKnowledge !== "clear",
+  });
+  // Prefer the fetched status once it lands: it carries the reason and a
+  // freshly computed verdict, while the listing row only has the verdict.
+  const quarantine: QuarantineFields | null = !selectedArtifact
+    ? null
+    : (fetchedQuarantine ?? selectedArtifact);
+  const quarantineBlocked = isActivelyQuarantined(quarantine);
+  // A rejection is terminal: the backend only accepts
+  // `quarantined -> released|rejected`, so offering either on an already
+  // rejected artifact would only ever produce a 409.
+  const quarantineActionable = quarantineBlocked && !isQuarantineRejected(quarantine);
+
   const { data: repoSecurity, isLoading: securityLoading } = useQuery({
     queryKey: ["repository-security", repoKey],
     queryFn: () => securityApi.getRepoSecurity(repoKey),
@@ -293,6 +352,54 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onError: mutationErrorToast("Failed to invalidate cache"),
   });
 
+  // Release or reject a held artifact (#650). Both endpoints are admin-only on
+  // the backend; the buttons are gated on `user?.is_admin` as well so an
+  // operator is never offered an action that can only come back 403.
+  const quarantineMutation = useMutation({
+    mutationFn: ({
+      artifactId,
+      action,
+      reason,
+    }: {
+      artifactId: string;
+      action: QuarantineAction;
+      reason: string;
+    }) =>
+      action === "release"
+        ? quarantineApi.release(artifactId)
+        : quarantineApi.reject(artifactId, reason || undefined),
+    onSuccess: (_result, { artifactId, action }) => {
+      // The listing row for this artifact now carries a stale verdict, as does
+      // any cached status lookup for it.
+      queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["quarantine-status", artifactId] });
+      // Apply the same transition the backend just wrote to the copy the open
+      // dialog holds: both transitions clear `quarantine_until`, a release
+      // moves the status to "released", a rejection to "rejected". The status
+      // lookup above was invalidated and refetches the reason on its own.
+      // Without this the dialog would keep describing the old hold until it
+      // was closed and reopened, and the refetched listing would silently
+      // disagree with it.
+      setSelectedArtifact((prev) =>
+        prev && prev.id === artifactId
+          ? {
+              ...prev,
+              quarantine_status: action === "release" ? "released" : "rejected",
+              quarantine_until: null,
+            }
+          : prev,
+      );
+      closeQuarantineDialog();
+      const message =
+        action === "release"
+          ? "Artifact released from quarantine; downloads are allowed again."
+          : "Artifact rejected; downloads stay blocked.";
+      toast.success(message);
+      setActionAnnounce(message);
+    },
+    onError: mutationErrorToast("Quarantine action failed"),
+  });
+
   const scanRepoMutation = useMutation({
     mutationFn: () =>
       securityApi.triggerScan({ repository_id: repository?.id }),
@@ -316,6 +423,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // --- handlers ---
   const handleDownload = useCallback(
     async (artifact: Artifact) => {
+      // The download gate refuses held artifacts with a 409 (or a 403 for a
+      // rejection). Say so here rather than letting the click turn into a
+      // failed download with no explanation (#650). The controls that call
+      // this are disabled for a held artifact; this covers the paths that
+      // reach it another way.
+      if (isActivelyQuarantined(artifact)) {
+        const blockedReason = quarantineDownloadBlockedReason(artifact);
+        toast.error(blockedReason);
+        setActionAnnounce(blockedReason);
+        return;
+      }
       const url = artifactsApi.getDownloadUrl(repoKey, artifact.path);
       try {
         const ticket = await artifactsApi.createDownloadTicket(repoKey, artifact.path);
@@ -393,10 +511,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             {a.name}
           </button>
           {isActivelyQuarantined(a) && (
-            <QuarantineBadge
-              reason={a.quarantine_reason}
-              quarantineUntil={a.quarantine_until}
-            />
+            // The listing carries no reason (#2966); the badge tooltip falls
+            // back to the hold expiry.
+            <QuarantineBadge quarantineUntil={a.quarantine_until} />
           )}
         </div>
       ),
@@ -479,15 +596,29 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => handleDownload(a)}
-              >
-                <Download className="size-3.5" />
-              </Button>
+              {/* Wrapped: a disabled button emits no pointer events, so the
+                  tooltip explaining why would never open. */}
+              <span>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={isActivelyQuarantined(a)}
+                  aria-label={
+                    isActivelyQuarantined(a)
+                      ? `Download ${a.name} (blocked)`
+                      : `Download ${a.name}`
+                  }
+                  onClick={() => handleDownload(a)}
+                >
+                  <Download className="size-3.5" />
+                </Button>
+              </span>
             </TooltipTrigger>
-            <TooltipContent>Download</TooltipContent>
+            <TooltipContent>
+              {isActivelyQuarantined(a)
+                ? quarantineDownloadBlockedReason(a)
+                : "Download"}
+            </TooltipContent>
           </Tooltip>
           {user?.is_admin && (
             <Tooltip>
@@ -680,8 +811,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         isAdmin={!!user?.is_admin}
       />
 
-      {/* Tabs */}
-      <Tabs defaultValue="artifacts">
+      {/* Tabs. The default primary tab is format-driven (#2793): package-oriented
+          formats (Maven/npm/PyPI/…) open on Packages, where their catalog lives;
+          RAW/Generic and container formats keep Artifacts. An explicit `?tab=`
+          wins, and any `?view=` artifact deep-link pins Artifacts. `repository`
+          is loaded before this renders (guards above), so the format is known
+          when the uncontrolled Tabs mounts. */}
+      <Tabs
+        defaultValue={resolveInitialRepoTab(
+          searchParams.get("tab"),
+          searchParams.get("view"),
+          repoFormat,
+        )}
+      >
         <TabsList variant="line">
           <TabsTrigger value="artifacts">
             <FileArchive className="size-3.5 mr-1" />
@@ -1014,10 +1156,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               {selectedArtifact?.name ?? "Artifact Details"}
             </DialogTitle>
           </DialogHeader>
-          {selectedArtifact && isActivelyQuarantined(selectedArtifact) && (
+          {quarantineBlocked && (
             <QuarantineBanner
-              reason={selectedArtifact.quarantine_reason}
-              quarantineUntil={selectedArtifact.quarantine_until}
+              reason={quarantine?.quarantine_reason}
+              quarantineUntil={quarantine?.quarantine_until}
+              status={quarantine?.quarantine_status}
             />
           )}
           {selectedArtifact && (
@@ -1066,16 +1209,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Downloads"
                     value={selectedArtifact.download_count.toLocaleString()}
                   />
-                  {isActivelyQuarantined(selectedArtifact) && (
+                  {quarantineBlocked && (
                     <>
                       <DetailRow
                         label="Quarantine"
-                        value={selectedArtifact.quarantine_reason || "Active"}
+                        value={
+                          // The reason is redacted for callers who cannot
+                          // access the repository, so fall back to the status
+                          // rather than rendering a blank row.
+                          quarantine?.quarantine_reason ||
+                          (isQuarantineRejected(quarantine)
+                            ? "Rejected in review"
+                            : "Active")
+                        }
                       />
-                      {selectedArtifact.quarantine_until && (
+                      {quarantine?.quarantine_until && (
                         <DetailRow
                           label="Quarantine Until"
-                          value={new Date(selectedArtifact.quarantine_until).toLocaleString()}
+                          value={new Date(quarantine.quarantine_until).toLocaleString()}
                         />
                       )}
                     </>
@@ -1189,6 +1340,26 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     {scanArtifactMutation.isPending ? "Scanning..." : "Scan"}
                   </Button>
                 )}
+                {user?.is_admin && quarantineActionable && (
+                  <>
+                    <Button
+                      variant="outline"
+                      disabled={quarantineMutation.isPending}
+                      onClick={() => setQuarantineAction("release")}
+                    >
+                      <Check className="size-4 text-emerald-600" />
+                      Release
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={quarantineMutation.isPending}
+                      onClick={() => setQuarantineAction("reject")}
+                    >
+                      <X className="size-4 text-destructive" />
+                      Reject
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="destructive"
                   onClick={() => {
@@ -1243,12 +1414,81 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </AlertDialogContent>
                   </AlertDialog>
                 )}
-                <Button onClick={() => selectedArtifact && handleDownload(selectedArtifact)}>
+                {/* A held artifact's bytes are refused by the download gate,
+                    so the control says so instead of handing the user a 409.
+                    The banner above carries the explanation. */}
+                <Button
+                  disabled={quarantineBlocked}
+                  title={
+                    quarantineBlocked
+                      ? quarantineDownloadBlockedReason(quarantine)
+                      : undefined
+                  }
+                  onClick={() => selectedArtifact && handleDownload(selectedArtifact)}
+                >
                   <Download className="size-4" />
-                  Download
+                  {quarantineBlocked ? "Download blocked" : "Download"}
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Quarantine decision confirmation (#650) ---
+          Structured like the age gate review queue's approve/reject
+          confirmation so the two admin review surfaces behave the same way.
+          Release takes no reason: the backend clears `quarantine_reason` when
+          it lifts a hold, so an input there would be discarded. */}
+      <Dialog
+        open={quarantineAction !== null}
+        onOpenChange={(open) => {
+          if (!open) closeQuarantineDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {quarantineAction === "reject" ? "Reject" : "Release"}{" "}
+              {selectedArtifact?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {quarantineAction === "reject"
+                ? "Rejecting is permanent: the artifact stays blocked and cannot be released afterwards. The reason is stored on the artifact and recorded in the audit log."
+                : "Releasing lifts the hold and allows downloads again. The recorded quarantine reason is cleared."}
+            </DialogDescription>
+          </DialogHeader>
+          {quarantineAction === "reject" && (
+            <div className="py-2">
+              <Input
+                placeholder="Reason (optional)"
+                value={quarantineReason}
+                onChange={(e) => setQuarantineReason(e.target.value)}
+                aria-label="Rejection reason"
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeQuarantineDialog}>
+              Cancel
+            </Button>
+            <Button
+              variant={quarantineAction === "reject" ? "destructive" : "default"}
+              disabled={quarantineMutation.isPending}
+              onClick={() => {
+                if (!selectedArtifact || !quarantineAction) return;
+                quarantineMutation.mutate({
+                  artifactId: selectedArtifact.id,
+                  action: quarantineAction,
+                  reason: quarantineReason.trim(),
+                });
+              }}
+            >
+              {quarantineMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Confirm
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

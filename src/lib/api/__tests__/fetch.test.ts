@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
+  CSRF_HEADER_NAME: "X-Requested-With",
+  CSRF_HEADER_VALUE: "XMLHttpRequest",
 }));
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-import { apiFetch, assertData } from "../fetch";
+import { ApiError, apiFetch, assertData } from "../fetch";
 
 function mockResponse(options: {
   ok?: boolean;
@@ -146,6 +148,30 @@ describe("apiFetch", () => {
     await expect(apiFetch("/api/v1/protected")).rejects.toThrow(
       "API error 401: Unauthorized"
     );
+  });
+
+  it("throws an ApiError carrying the status and raw body", async () => {
+    mockFetch.mockResolvedValue(
+      mockResponse({ ok: false, status: 404, text: '{"code":"NOT_FOUND","message":"gone"}' })
+    );
+
+    const err = await apiFetch("/api/v1/missing").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
+    expect((err as ApiError).body).toBe('{"code":"NOT_FOUND","message":"gone"}');
+  });
+
+  it("keeps the thrown value an Error with the original message format", async () => {
+    mockFetch.mockResolvedValue(
+      mockResponse({ ok: false, status: 404, text: "Not Found" })
+    );
+
+    // versions.ts (and possibly others) regex-match this exact message, so the
+    // format is part of the contract, not an implementation detail.
+    const err = await apiFetch("/api/v1/missing").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe("API error 404: Not Found");
+    expect(/^API error 404\b/.test((err as Error).message)).toBe(true);
   });
 
   // ---- Credentials and headers ----

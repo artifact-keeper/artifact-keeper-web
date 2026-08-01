@@ -61,7 +61,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
 }));
 
 vi.mock("@/lib/api/security", () => ({
-  default: {
+  securityApi: {
     getDashboard: mockGetDashboard,
     getAllScores: mockGetAllScores,
     triggerScan: mockTriggerScan,
@@ -69,7 +69,7 @@ vi.mock("@/lib/api/security", () => ({
 }));
 
 vi.mock("@/lib/api/dependency-track", () => ({
-  default: {
+  dtApi: {
     getStatus: mockGetStatus,
     listProjects: mockListProjects,
     getPortfolioMetrics: mockGetPortfolioMetrics,
@@ -305,8 +305,10 @@ function setupQueries(overrides: {
     if (key === "dt" && (subKey === "portfolio-violations" || String(opts.queryKey?.[1]).startsWith("portfolio-violations"))) {
       return { data: overrides.dtViolations ?? undefined, isLoading: false };
     }
-    if (key === "repositories-for-scan") {
-      return { data: overrides.repos ?? undefined };
+    if (key === "repositories") {
+      // useRepositories returns the paginated response; fixtures keep the
+      // shorthand raw-array shape, so wrap it here (#669).
+      return { data: overrides.repos ? { items: overrides.repos } : undefined };
     }
     if (key === "artifacts-for-scan") {
       return { data: overrides.artifacts ?? undefined, isLoading: false };
@@ -512,9 +514,9 @@ describe("SecurityDashboardPage", () => {
 
       render(<SecurityDashboardPage />);
 
-      // Verify the repositories-for-scan query was called
+      // Verify the repositories query was called
       const repoCall = mockUseQuery.mock.calls.find(
-        (call: any[]) => call[0]?.queryKey?.[0] === "repositories-for-scan"
+        (call: any[]) => call[0]?.queryKey?.[0] === "repositories"
       );
       expect(repoCall).toBeDefined();
       // The query should NOT have enabled: false (since the gate was removed)

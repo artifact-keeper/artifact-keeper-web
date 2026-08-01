@@ -284,6 +284,186 @@ describe("sdk-client", () => {
   });
 
   // -------------------------------------------------------------------------
+  // CSRF defense-in-depth header
+  // -------------------------------------------------------------------------
+
+  describe("CSRF header (X-Requested-With)", () => {
+    it("is added to GET requests by the request interceptor", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+      const { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } = await import(
+        "../sdk-client"
+      );
+      const interceptor = requestInterceptors[0];
+      const request = new Request("http://localhost:3000/api/v1/repos");
+      const result = interceptor(request);
+      expect(result.headers.get(CSRF_HEADER_NAME)).toBe(CSRF_HEADER_VALUE);
+    });
+
+    it("is added to mutating requests by the request interceptor", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+      const { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } = await import(
+        "../sdk-client"
+      );
+      const interceptor = requestInterceptors[0];
+      for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+        const request = new Request("http://localhost:3000/api/v1/repos", {
+          method,
+        });
+        const result = interceptor(request);
+        expect(result.headers.get(CSRF_HEADER_NAME)).toBe(CSRF_HEADER_VALUE);
+      }
+    });
+
+    it("exports the header name and value constants", async () => {
+      setupBrowserEnv();
+      const mod = await import("../sdk-client");
+      expect(mod.CSRF_HEADER_NAME).toBe("X-Requested-With");
+      expect(mod.CSRF_HEADER_VALUE).toBe("XMLHttpRequest");
+    });
+
+    it("preserves existing headers when adding the CSRF header", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+      await import("../sdk-client");
+      const interceptor = requestInterceptors[0];
+      const request = new Request("http://localhost:3000/api/v1/repos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const result = interceptor(request);
+      expect(result.headers.get("Content-Type")).toBe("application/json");
+      expect(result.headers.get("X-Requested-With")).toBe("XMLHttpRequest");
+    });
+
+    it("survives the remote-instance pathname rewrite", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      await import("../sdk-client");
+      const interceptor = requestInterceptors[0];
+      const request = new Request("http://localhost:3000/api/v1/repos", {
+        method: "DELETE",
+      });
+      const result = interceptor(request);
+      expect(new URL(result.url).pathname).toBe(
+        "/api/v1/instances/remote-1/proxy/api/v1/repos"
+      );
+      expect(result.headers.get("X-Requested-With")).toBe("XMLHttpRequest");
+    });
+
+    it("is sent on the token refresh request", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await import("../sdk-client");
+      const interceptor = responseInterceptors[0];
+
+      const response = new Response("Unauthorized", { status: 401 });
+      const request = new Request("http://localhost:3000/api/v1/repos");
+
+      await interceptor(response, request);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/v1/auth/refresh",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "X-Requested-With": "XMLHttpRequest",
+          }),
+        })
+      );
+    });
+
+    it("is preserved on the retried request after a 401 refresh", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await import("../sdk-client");
+      const requestInterceptor = requestInterceptors[0];
+      const responseInterceptor = responseInterceptors[0];
+
+      // Mirror the real flow: the request passed to the response interceptor
+      // has already been through the request interceptor.
+      const original = requestInterceptor(
+        new Request("http://localhost:3000/api/v1/repos", { method: "DELETE" })
+      );
+      const response = new Response("Unauthorized", { status: 401 });
+
+      await responseInterceptor(response, original);
+
+      // Second fetch call is the retry of the original request
+      const retriedRequest = mockFetch.mock.calls[1][0] as Request;
+      expect(retriedRequest.headers.get("X-Requested-With")).toBe(
+        "XMLHttpRequest"
+      );
+      expect(retriedRequest.method).toBe("DELETE");
+    });
+
+    it("is preserved on queued retries that waited for an in-flight refresh", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+
+      let resolveRefresh!: (value: Response) => void;
+      const refreshPromise = new Promise<Response>((resolve) => {
+        resolveRefresh = resolve;
+      });
+
+      const mockFetch = vi.fn();
+      mockFetch.mockImplementationOnce(() => refreshPromise);
+      mockFetch.mockResolvedValueOnce(
+        new Response('{"ok":true}', { status: 200 })
+      );
+      mockFetch.mockResolvedValueOnce(
+        new Response('{"ok":true}', { status: 200 })
+      );
+      vi.stubGlobal("fetch", mockFetch);
+
+      await import("../sdk-client");
+      const requestInterceptor = requestInterceptors[0];
+      const responseInterceptor = responseInterceptors[0];
+
+      const request1 = requestInterceptor(
+        new Request("http://localhost:3000/api/v1/repos", { method: "POST" })
+      );
+      const request2 = requestInterceptor(
+        new Request("http://localhost:3000/api/v1/artifacts", {
+          method: "DELETE",
+        })
+      );
+
+      const result1Promise = responseInterceptor(
+        new Response("Unauthorized", { status: 401 }),
+        request1
+      );
+      const result2Promise = responseInterceptor(
+        new Response("Unauthorized", { status: 401 }),
+        request2
+      );
+
+      resolveRefresh(new Response("{}", { status: 200 }));
+      await Promise.all([result1Promise, result2Promise]);
+
+      // Calls: refresh, retry of request1, queued retry of request2
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      const retry1 = mockFetch.mock.calls[1][0] as Request;
+      const retry2 = mockFetch.mock.calls[2][0] as Request;
+      expect(retry1.headers.get("X-Requested-With")).toBe("XMLHttpRequest");
+      expect(retry2.headers.get("X-Requested-With")).toBe("XMLHttpRequest");
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Response interceptor: 403 SETUP_REQUIRED
   // -------------------------------------------------------------------------
 

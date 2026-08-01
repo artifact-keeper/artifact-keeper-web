@@ -14,7 +14,7 @@ import type {
   CreatePermissionRequest,
 } from "@/lib/api/permissions";
 import { groupsApi } from "@/lib/api/groups";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { adminApi } from "@/lib/api/admin";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -51,6 +51,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- constants --
 
@@ -114,11 +115,10 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
-  const { data: repositoriesData } = useQuery({
-    queryKey: ["admin-repositories"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!currentUser?.is_admin,
-  });
+  const { data: repositoriesData } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!currentUser?.is_admin },
+  );
 
   const permissions = permissionsData?.items ?? [];
   const users = usersData ?? [];
@@ -515,6 +515,10 @@ export default function PermissionsPage() {
           rowKey={(p) => p.id}
         />
       )}
+      <ListTruncationNotice
+        shown={permissions.length}
+        total={permissionsData?.pagination?.total ?? 0}
+      />
 
       {/* Create Permission Dialog */}
       <Dialog

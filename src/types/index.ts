@@ -236,9 +236,20 @@ export interface Artifact {
   checksum_sha256: string;
   content_type: string;
   download_count: number;
-  is_quarantined?: boolean;
+  /**
+   * Quarantine state, serialized on every artifact payload from a current
+   * backend (artifact-keeper#2966): the repository artifacts listing, the
+   * by-id and the by-path responses all carry `quarantine_status`
+   * ("quarantined", "rejected", a scan-lifecycle state, or
+   * "not_quarantined"), with `quarantine_until` present only for timed
+   * holds. Optional here only so an older backend that serializes neither
+   * degrades to "unknown" instead of crashing. The listing never carries
+   * `is_blocked` or the reason — the reason is disclosed only by
+   * `GET /api/v1/quarantine/{id}`. Read these through `@/lib/quarantine`
+   * rather than testing them directly (#650, #697).
+   */
+  quarantine_status?: string | null;
   quarantine_until?: string | null;
-  quarantine_reason?: string | null;
   created_at: string;
   metadata?: Record<string, unknown>;
   /**

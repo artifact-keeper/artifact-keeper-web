@@ -14,12 +14,13 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import telemetryApi from "@/lib/api/telemetry";
+import { telemetryApi } from "@/lib/api/telemetry";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { CrashReport, TelemetrySettings } from "@/types/telemetry";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -424,6 +425,11 @@ export default function TelemetryPage() {
               </TableBody>
             </Table>
           )}
+          <ListTruncationNotice
+            className="px-6 pb-4"
+            shown={crashItems.length}
+            total={crashes?.total ?? 0}
+          />
         </CardContent>
       </Card>
 

@@ -26,6 +26,7 @@ import type {
   SetupStatusResponse2 as SetupStatusResponse,
 } from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
+import { unwrap } from "@/lib/sdk-utils";
 
 interface AuthContextType {
   user: User | null;
@@ -75,8 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const { data, error } = await sdkGetCurrentUser();
-      if (error) throw error;
+      const data = await unwrap(sdkGetCurrentUser());
       const userData = data as unknown as User;
       setUser(userData);
       setPasswordExpiresAt(userData.password_expires_at ?? null);
@@ -91,8 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
       const body: LoginRequest = { username, password };
-      const { data, error } = await sdkLogin({ body });
-      if (error) throw error;
+      const data = await unwrap(sdkLogin({ body }));
       const loginData = data as unknown as SdkLoginResponse;
 
       if (loginData.totp_required && loginData.totp_token) {
@@ -122,8 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (code: string) => {
       if (!totpToken) throw new Error("No TOTP token");
       const body: TotpVerifyRequest = { totp_token: totpToken, code };
-      const { data, error } = await sdkVerifyTotp({ body });
-      if (error) throw error;
+      const data = await unwrap(sdkVerifyTotp({ body }));
       const tokenData = data as unknown as SdkLoginResponse;
       storeTokens(tokenData as unknown as LoginResponse);
       setTotpRequired(false);
@@ -164,8 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user) throw new Error("Not authenticated");
 
       const body: ChangePasswordRequest = { current_password: currentPassword, new_password: newPassword };
-      const { error } = await sdkChangePassword({ path: { id: user.id }, body });
-      if (error) throw error;
+      await unwrap(sdkChangePassword({ path: { id: user.id }, body }));
 
       setMustChangePassword(false);
       setPasswordExpiresAt(null);

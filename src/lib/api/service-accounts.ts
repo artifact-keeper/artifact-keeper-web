@@ -151,4 +151,3 @@ export const serviceAccountsApi = {
   },
 };
 
-export default serviceAccountsApi;

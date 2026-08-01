@@ -11,6 +11,8 @@ import type {
 
 vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
+  CSRF_HEADER_NAME: "X-Requested-With",
+  CSRF_HEADER_VALUE: "XMLHttpRequest",
 }));
 
 const mockListRepositories = vi.fn();
@@ -44,6 +46,8 @@ const SDK_REPO: SdkRepositoryResponse = {
   promotion_only: false,
   versioning_enabled: false,
   has_trusted_gpg_key: false,
+  curation_default_action: "allow",
+  curation_enabled: false,
   created_at: "2026-04-01T00:00:00Z",
   updated_at: "2026-05-01T00:00:00Z",
 };
@@ -64,6 +68,7 @@ const SDK_ARTIFACT: SdkArtifactResponse = {
   content_type: "application/java-archive",
   download_count: 0,
   analyzable: true,
+  quarantine_status: "clean",
   created_at: "2026-04-01T00:00:00Z",
   metadata: null,
 };

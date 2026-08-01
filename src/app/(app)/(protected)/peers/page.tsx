@@ -52,6 +52,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- helpers --
 
@@ -412,6 +413,7 @@ export default function PeersPage() {
           emptyMessage="No peers found."
         />
       )}
+      <ListTruncationNotice shown={peers.length} total={data?.total ?? 0} />
 
       {/* -- Register Peer Dialog -- */}
       <Dialog

@@ -198,7 +198,7 @@ describe("SearchContent", () => {
     useQueryCallIndex = 0;
 
     useQueryResponses = {
-      "repositories-list": {
+      "repositories": {
         data: {
           items: [
             { id: "1", key: "npm-local", name: "NPM Local" },

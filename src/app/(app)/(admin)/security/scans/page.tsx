@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -8,13 +7,11 @@ import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import "@/lib/sdk-client";
-import {
-  listRepositories,
-  listScanConfigs,
-} from "@artifact-keeper/sdk";
-import securityApi from "@/lib/api/security";
+import { listScanConfigs } from "@artifact-keeper/sdk";
+import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
+import { useRepositories } from "@/hooks/use-repositories";
 import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
 
@@ -39,6 +36,8 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { unwrap } from "@/lib/sdk-utils";
 
 // -- status & severity color maps --
 
@@ -129,23 +128,16 @@ export default function SecurityScansPage() {
       }),
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-for-scan"],
-    queryFn: async () => {
-      const { data, error } = await listRepositories({
-        query: { per_page: 100 },
-      });
-      if (error) throw error;
-      return (data as any)?.items ?? data ?? [];
-    },
-    enabled: triggerOpen,
-  });
+  const { data: reposPage } = useRepositories(
+    { per_page: 100 },
+    { enabled: triggerOpen },
+  );
+  const repos = reposPage?.items;
 
   const { data: scanConfigs } = useQuery({
     queryKey: ["security", "scan-configs"],
     queryFn: async () => {
-      const { data, error } = await listScanConfigs();
-      if (error) throw error;
+      const data = await unwrap(listScanConfigs());
       return new Set(
         ((data as Array<{ repository_id: string }>) ?? []).map(
           (c) => c.repository_id
@@ -157,9 +149,7 @@ export default function SecurityScansPage() {
 
   // Find the repo key from repo id for the artifact list API call
   const selectedRepoKey = selectedRepoId
-    ? ((repos as Array<{ id: string; key: string }>) ?? []).find(
-        (r) => r.id === selectedRepoId
-      )?.key
+    ? (repos ?? []).find((r) => r.id === selectedRepoId)?.key
     : undefined;
 
   const { data: artifactsList, isLoading: artifactsLoading } = useQuery({
@@ -456,14 +446,7 @@ export default function SecurityScansPage() {
                   <SelectValue placeholder="Select a repository..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {(
-                    (repos as Array<{
-                      id: string;
-                      name: string;
-                      key: string;
-                      format: string;
-                    }>) ?? []
-                  ).map((r) => {
+                  {(repos ?? []).map((r) => {
                     const enabled = scanConfigs?.has(r.id) ?? true;
                     return (
                       <SelectItem
@@ -511,6 +494,10 @@ export default function SecurityScansPage() {
                       )}
                   </SelectContent>
                 </Select>
+                <ListTruncationNotice
+                  shown={artifactsList?.items.length ?? 0}
+                  total={artifactsList?.pagination?.total ?? 0}
+                />
               </div>
             )}
           </div>

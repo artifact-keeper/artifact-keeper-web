@@ -16,6 +16,7 @@ import type {
   PaginatedResponse,
 } from '@/types';
 import { apiFetch, assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListArtifactsParams {
   page?: number;
@@ -34,8 +35,10 @@ export interface ListArtifactsParams {
 }
 
 // Local Artifact extends ArtifactResponse with quarantine fields the SDK
-// doesn't model yet — leave those undefined and let callers fetch detail
-// endpoints if they need quarantine state.
+// doesn't model yet. Every artifact surface (listing, by-id, by-path)
+// serializes `quarantine_status` — and `quarantine_until` for timed holds —
+// since artifact-keeper#2966; the reason is never on the listing and is
+// disclosed only by GET /api/v1/quarantine/{id}.
 function adaptArtifact(sdk: ArtifactResponse): Artifact {
   // The backend ships new optional fields (cache_cached_at, cache_expires_at)
   // via artifact-keeper#1541, but the generated SDK type doesn't carry them
@@ -48,6 +51,8 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     cache_cached_at?: string | null;
     cache_expires_at?: string | null;
     analyzable?: boolean;
+    quarantine_status?: string | null;
+    quarantine_until?: string | null;
   };
   return {
     id: sdk.id,
@@ -63,6 +68,13 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     metadata: sdk.metadata ?? undefined,
     cache_cached_at: sdkAny.cache_cached_at ?? undefined,
     cache_expires_at: sdkAny.cache_expires_at ?? undefined,
+    // Copied through verbatim, including absence. `??` is deliberately not
+    // used: coercing a missing status to a state here is exactly the collapse
+    // that made the quarantine banner unreachable (#650). Absent stays absent
+    // and `@/lib/quarantine` reads it as "the server did not look" (older
+    // backend), never as "clear".
+    quarantine_status: sdkAny.quarantine_status,
+    quarantine_until: sdkAny.quarantine_until,
     // Default to `true` when the backend omits the field (older responses /
     // not-yet-regenerated SDK): only an explicit `false` disables SBOM/scan
     // for an artifact (artifact-keeper#2292). Matches the backend's safe
@@ -119,8 +131,7 @@ export const artifactsApi = {
       return { items: grouped.items, pagination: grouped.pagination };
     }
     const query = { ...rest, q: params.q || search || undefined };
-    const { data, error } = await listArtifacts({ path: { key: repoKey }, query });
-    if (error) throw error;
+    const data = await unwrap(listArtifacts({ path: { key: repoKey }, query }));
     return adaptArtifactList(assertData(data, 'artifactsApi.list'));
   },
 
@@ -172,8 +183,7 @@ export const artifactsApi = {
   },
 
   delete: async (repoKey: string, artifactPath: string): Promise<void> => {
-    const { error } = await deleteArtifact({ path: { key: repoKey, path: artifactPath } });
-    if (error) throw error;
+    await unwrap(deleteArtifact({ path: { key: repoKey, path: artifactPath } }));
   },
 
   /**
@@ -232,13 +242,12 @@ export const artifactsApi = {
     // compares it against request.uri().path() by byte equality. It must be the
     // absolute path the subsequent download request will carry, which is the
     // same value getDownloadUrl produces.
-    const { data, error } = await createDownloadTicket({
+    const data = await unwrap(createDownloadTicket({
       body: {
         purpose: 'download',
         resource_path: `/api/v1/repositories/${repoKey}/download/${artifactPath}`,
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'artifactsApi.createDownloadTicket').ticket;
   },
 
@@ -293,4 +302,3 @@ export const artifactsApi = {
   },
 };
 
-export default artifactsApi;

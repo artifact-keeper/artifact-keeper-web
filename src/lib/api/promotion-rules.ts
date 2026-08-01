@@ -9,6 +9,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { PromotionRuleResponse, BulkEvaluationResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * A promotion rule: gating criteria deciding whether artifacts may be promoted
@@ -90,42 +91,35 @@ function adaptEvaluation(sdk: BulkEvaluationResponse): RuleEvaluation {
   };
 }
 
-const promotionRulesApi = {
+export const promotionRulesApi = {
   list: async (): Promise<PromotionRule[]> => {
-    const { data, error } = await listRules();
-    if (error) throw error;
+    const data = await unwrap(listRules());
     return assertData(data, 'promotionRulesApi.list').items.map(adapt);
   },
 
   get: async (id: string): Promise<PromotionRule> => {
-    const { data, error } = await getRule({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(getRule({ path: { id } }));
     return adapt(assertData(data, 'promotionRulesApi.get'));
   },
 
   create: async (req: CreatePromotionRuleRequest): Promise<PromotionRule> => {
-    const { data, error } = await createRule({ body: req });
-    if (error) throw error;
+    const data = await unwrap(createRule({ body: req }));
     return adapt(assertData(data, 'promotionRulesApi.create'));
   },
 
   update: async (id: string, req: UpdatePromotionRuleRequest): Promise<PromotionRule> => {
-    const { data, error } = await updateRule({ path: { id }, body: req });
-    if (error) throw error;
+    const data = await unwrap(updateRule({ path: { id }, body: req }));
     return adapt(assertData(data, 'promotionRulesApi.update'));
   },
 
   remove: async (id: string): Promise<void> => {
-    const { error } = await deleteRule({ path: { id } });
-    if (error) throw error;
+    await unwrap(deleteRule({ path: { id } }));
   },
 
   /** Dry-run a rule against the source repo's artifacts; returns pass/fail counts. */
   evaluate: async (id: string): Promise<RuleEvaluation> => {
-    const { data, error } = await evaluateRule({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(evaluateRule({ path: { id } }));
     return adaptEvaluation(assertData(data, 'promotionRulesApi.evaluate'));
   },
 };
 
-export default promotionRulesApi;

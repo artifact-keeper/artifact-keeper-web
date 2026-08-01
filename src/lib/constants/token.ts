@@ -1,7 +1,7 @@
 export const SCOPES = [
-  { value: "read", label: "Read" },
-  { value: "write", label: "Write" },
-  { value: "delete", label: "Delete" },
+  { value: "read:artifacts", label: "Read" },
+  { value: "write:artifacts", label: "Write" },
+  { value: "delete:artifacts", label: "Delete" },
   { value: "admin", label: "Admin" },
 ] as const;
 

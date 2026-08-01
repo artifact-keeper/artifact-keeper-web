@@ -9,6 +9,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { SyncPolicyResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * A replication sync policy: declarative rule deciding which artifacts get
@@ -74,42 +75,35 @@ function adapt(sdk: SyncPolicyResponse): SyncPolicy {
   };
 }
 
-const syncPoliciesApi = {
+export const syncPoliciesApi = {
   list: async (): Promise<SyncPolicy[]> => {
-    const { data, error } = await listSyncPolicies();
-    if (error) throw error;
+    const data = await unwrap(listSyncPolicies());
     return assertData(data, 'syncPoliciesApi.list').items.map(adapt);
   },
 
   get: async (id: string): Promise<SyncPolicy> => {
-    const { data, error } = await getSyncPolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(getSyncPolicy({ path: { id } }));
     return adapt(assertData(data, 'syncPoliciesApi.get'));
   },
 
   create: async (req: CreateSyncPolicyRequest): Promise<SyncPolicy> => {
-    const { data, error } = await createSyncPolicy({ body: req });
-    if (error) throw error;
+    const data = await unwrap(createSyncPolicy({ body: req }));
     return adapt(assertData(data, 'syncPoliciesApi.create'));
   },
 
   update: async (id: string, req: UpdateSyncPolicyRequest): Promise<SyncPolicy> => {
-    const { data, error } = await updateSyncPolicy({ path: { id }, body: req });
-    if (error) throw error;
+    const data = await unwrap(updateSyncPolicy({ path: { id }, body: req }));
     return adapt(assertData(data, 'syncPoliciesApi.update'));
   },
 
   remove: async (id: string): Promise<void> => {
-    const { error } = await deleteSyncPolicy({ path: { id } });
-    if (error) throw error;
+    await unwrap(deleteSyncPolicy({ path: { id } }));
   },
 
   /** Set a policy's enabled state; returns the updated policy. */
   toggle: async (id: string, enabled: boolean): Promise<SyncPolicy> => {
-    const { data, error } = await togglePolicy({ path: { id }, body: { enabled } });
-    if (error) throw error;
+    const data = await unwrap(togglePolicy({ path: { id }, body: { enabled } }));
     return adapt(assertData(data, 'syncPoliciesApi.toggle'));
   },
 };
 
-export default syncPoliciesApi;

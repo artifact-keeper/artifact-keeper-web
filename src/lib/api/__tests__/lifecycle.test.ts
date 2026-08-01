@@ -91,13 +91,13 @@ describe("lifecycleApi", () => {
   it("list returns policies", async () => {
     mockList.mockResolvedValue({ data: [SDK_POLICY], error: undefined });
     const mod = await import("../lifecycle");
-    expect(await mod.default.list()).toEqual([EXPECTED_POLICY]);
+    expect(await mod.lifecycleApi.list()).toEqual([EXPECTED_POLICY]);
   });
 
   it("list throws on error", async () => {
     mockList.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.list()).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.list()).rejects.toBe("fail");
   });
 
   it("list normalizes optional+nullable fields to null (#359)", async () => {
@@ -113,7 +113,7 @@ describe("lifecycleApi", () => {
     };
     mockList.mockResolvedValue({ data: [partial], error: undefined });
     const mod = await import("../lifecycle");
-    const [out] = await mod.default.list();
+    const [out] = await mod.lifecycleApi.list();
     expect(out.repository_id).toBeNull();
     expect(out.description).toBeNull();
     expect(out.last_run_at).toBeNull();
@@ -123,20 +123,20 @@ describe("lifecycleApi", () => {
   it("get returns a single policy", async () => {
     mockGet.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../lifecycle");
-    expect(await mod.default.get("p1")).toEqual(EXPECTED_POLICY);
+    expect(await mod.lifecycleApi.get("p1")).toEqual(EXPECTED_POLICY);
   });
 
   it("get throws on error", async () => {
     mockGet.mockResolvedValue({ data: undefined, error: "not found" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.get("p1")).rejects.toBe("not found");
+    await expect(mod.lifecycleApi.get("p1")).rejects.toBe("not found");
   });
 
   it("create returns new policy", async () => {
     mockCreate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../lifecycle");
     expect(
-      await mod.default.create({
+      await mod.lifecycleApi.create({
         name: "cleanup",
         policy_type: "max_age_days",
         config: { days: 30 },
@@ -153,7 +153,7 @@ describe("lifecycleApi", () => {
     // in adaptCreateRequest is what makes this test load-bearing.
     mockCreate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../lifecycle");
-    await mod.default.create({
+    await mod.lifecycleApi.create({
       name: "cleanup",
       policy_type: "max_age_days",
       config: { days: 30 },
@@ -179,7 +179,7 @@ describe("lifecycleApi", () => {
     mockCreate.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
     await expect(
-      mod.default.create({
+      mod.lifecycleApi.create({
         name: "x",
         policy_type: "max_age_days",
         config: {},
@@ -191,14 +191,14 @@ describe("lifecycleApi", () => {
     mockUpdate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
     const mod = await import("../lifecycle");
     expect(
-      await mod.default.update("p1", { name: "updated" })
+      await mod.lifecycleApi.update("p1", { name: "updated" })
     ).toEqual(EXPECTED_POLICY);
   });
 
   it("update throws on error", async () => {
     mockUpdate.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.update("p1", {})).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.update("p1", {})).rejects.toBe("fail");
   });
 
   it("get throws Empty response body when SDK returns success with no data (#359)", async () => {
@@ -207,7 +207,7 @@ describe("lifecycleApi", () => {
     // observable instead of propagating undefined into rendering code.
     mockGet.mockResolvedValue({ data: undefined, error: undefined });
     const mod = await import("../lifecycle");
-    await expect(mod.default.get("p1")).rejects.toThrow(/Empty response body/);
+    await expect(mod.lifecycleApi.get("p1")).rejects.toThrow(/Empty response body/);
   });
 
   it("execute returns result with non-empty errors array (#359)", async () => {
@@ -216,33 +216,33 @@ describe("lifecycleApi", () => {
       error: undefined,
     });
     const mod = await import("../lifecycle");
-    const out = await mod.default.execute("p1");
+    const out = await mod.lifecycleApi.execute("p1");
     expect(out.errors).toEqual(["disk full", "permission denied"]);
   });
 
   it("delete calls SDK", async () => {
     mockDelete.mockResolvedValue({ error: undefined });
     const mod = await import("../lifecycle");
-    await mod.default.delete("p1");
+    await mod.lifecycleApi.delete("p1");
     expect(mockDelete).toHaveBeenCalled();
   });
 
   it("delete throws on error", async () => {
     mockDelete.mockResolvedValue({ error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.delete("p1")).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.delete("p1")).rejects.toBe("fail");
   });
 
   it("execute returns result", async () => {
     mockExecute.mockResolvedValue({ data: SDK_EXECUTION_RESULT, error: undefined });
     const mod = await import("../lifecycle");
-    expect(await mod.default.execute("p1")).toEqual(EXPECTED_EXECUTION_RESULT);
+    expect(await mod.lifecycleApi.execute("p1")).toEqual(EXPECTED_EXECUTION_RESULT);
   });
 
   it("execute throws on error", async () => {
     mockExecute.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.execute("p1")).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.execute("p1")).rejects.toBe("fail");
   });
 
   it("preview returns result", async () => {
@@ -251,7 +251,7 @@ describe("lifecycleApi", () => {
       error: undefined,
     });
     const mod = await import("../lifecycle");
-    expect(await mod.default.preview("p1")).toEqual({
+    expect(await mod.lifecycleApi.preview("p1")).toEqual({
       ...EXPECTED_EXECUTION_RESULT,
       dry_run: true,
     });
@@ -260,7 +260,7 @@ describe("lifecycleApi", () => {
   it("preview throws on error", async () => {
     mockPreview.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.preview("p1")).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.preview("p1")).rejects.toBe("fail");
   });
 
   it("executeAll returns array of results", async () => {
@@ -269,12 +269,12 @@ describe("lifecycleApi", () => {
       error: undefined,
     });
     const mod = await import("../lifecycle");
-    expect(await mod.default.executeAll()).toEqual([EXPECTED_EXECUTION_RESULT]);
+    expect(await mod.lifecycleApi.executeAll()).toEqual([EXPECTED_EXECUTION_RESULT]);
   });
 
   it("executeAll throws on error", async () => {
     mockExecuteAll.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../lifecycle");
-    await expect(mod.default.executeAll()).rejects.toBe("fail");
+    await expect(mod.lifecycleApi.executeAll()).rejects.toBe("fail");
   });
 });

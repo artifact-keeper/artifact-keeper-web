@@ -10,7 +10,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   deleteRepoLabel: (...a: unknown[]) => m.deleteRepoLabel(...a),
 }));
 
-import repoLabelsApi from "../repo-labels";
+import { repoLabelsApi } from "../repo-labels";
 
 const LABEL = { id: "l1", key: "team", value: "platform", repository_id: "r1", created_at: "x" };
 

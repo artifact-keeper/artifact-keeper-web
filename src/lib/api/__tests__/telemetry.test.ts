@@ -58,7 +58,7 @@ describe("telemetryApi", () => {
   it("getSettings returns settings", async () => {
     mockGetSettings.mockResolvedValue({ data: SDK_SETTINGS, error: undefined });
     const mod = await import("../telemetry");
-    expect(await mod.default.getSettings()).toEqual({
+    expect(await mod.telemetryApi.getSettings()).toEqual({
       enabled: true,
       review_before_send: true,
       scrub_level: "default",
@@ -69,20 +69,20 @@ describe("telemetryApi", () => {
   it("getSettings throws Empty response body when SDK returns no data (#359)", async () => {
     mockGetSettings.mockResolvedValue({ data: undefined, error: undefined });
     const mod = await import("../telemetry");
-    await expect(mod.default.getSettings()).rejects.toThrow(/Empty response body/);
+    await expect(mod.telemetryApi.getSettings()).rejects.toThrow(/Empty response body/);
   });
 
   it("getSettings throws on error", async () => {
     mockGetSettings.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../telemetry");
-    await expect(mod.default.getSettings()).rejects.toBe("fail");
+    await expect(mod.telemetryApi.getSettings()).rejects.toBe("fail");
   });
 
   it("updateSettings returns updated settings", async () => {
     mockUpdateSettings.mockResolvedValue({ data: SDK_SETTINGS, error: undefined });
     const mod = await import("../telemetry");
     expect(
-      await mod.default.updateSettings({
+      await mod.telemetryApi.updateSettings({
         enabled: true,
         review_before_send: true,
         scrub_level: "default",
@@ -100,7 +100,7 @@ describe("telemetryApi", () => {
     mockUpdateSettings.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../telemetry");
     await expect(
-      mod.default.updateSettings({
+      mod.telemetryApi.updateSettings({
         enabled: false,
         review_before_send: false,
         scrub_level: "default",
@@ -115,7 +115,7 @@ describe("telemetryApi", () => {
       error: undefined,
     });
     const mod = await import("../telemetry");
-    const out = await mod.default.listCrashes();
+    const out = await mod.telemetryApi.listCrashes();
     expect(out.total).toBe(1);
     expect(out.items[0].id).toBe("c1");
     expect(out.items[0].error_type).toBe("TypeError");
@@ -139,7 +139,7 @@ describe("telemetryApi", () => {
       error: undefined,
     });
     const mod = await import("../telemetry");
-    const out = await mod.default.listCrashes();
+    const out = await mod.telemetryApi.listCrashes();
     const c = out.items[0];
     expect(c.stack_trace).toBeNull();
     expect(c.os_info).toBeNull();
@@ -151,26 +151,26 @@ describe("telemetryApi", () => {
   it("listCrashes throws on error", async () => {
     mockListCrashes.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../telemetry");
-    await expect(mod.default.listCrashes()).rejects.toBe("fail");
+    await expect(mod.telemetryApi.listCrashes()).rejects.toBe("fail");
   });
 
   it("listPending returns pending crashes", async () => {
     mockListPending.mockResolvedValue({ data: [SDK_CRASH], error: undefined });
     const mod = await import("../telemetry");
-    const out = await mod.default.listPending();
+    const out = await mod.telemetryApi.listPending();
     expect(out[0].id).toBe("c1");
   });
 
   it("listPending throws on error", async () => {
     mockListPending.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../telemetry");
-    await expect(mod.default.listPending()).rejects.toBe("fail");
+    await expect(mod.telemetryApi.listPending()).rejects.toBe("fail");
   });
 
   it("getCrash returns a single crash", async () => {
     mockGetCrash.mockResolvedValue({ data: SDK_CRASH, error: undefined });
     const mod = await import("../telemetry");
-    const out = await mod.default.getCrash("c1");
+    const out = await mod.telemetryApi.getCrash("c1");
     expect(out.id).toBe("c1");
     expect(out.error_message).toBe("oops");
   });
@@ -178,7 +178,7 @@ describe("telemetryApi", () => {
   it("getCrash throws on error", async () => {
     mockGetCrash.mockResolvedValue({ data: undefined, error: "not found" });
     const mod = await import("../telemetry");
-    await expect(mod.default.getCrash("c1")).rejects.toBe("not found");
+    await expect(mod.telemetryApi.getCrash("c1")).rejects.toBe("not found");
   });
 
   it("submitCrashes returns response", async () => {
@@ -187,7 +187,7 @@ describe("telemetryApi", () => {
       error: undefined,
     });
     const mod = await import("../telemetry");
-    expect(await mod.default.submitCrashes(["c1", "c2"])).toEqual({
+    expect(await mod.telemetryApi.submitCrashes(["c1", "c2"])).toEqual({
       marked_submitted: 2,
     });
     expect(mockSubmitCrashes).toHaveBeenCalledWith({
@@ -198,19 +198,19 @@ describe("telemetryApi", () => {
   it("submitCrashes throws on error", async () => {
     mockSubmitCrashes.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../telemetry");
-    await expect(mod.default.submitCrashes(["c1"])).rejects.toBe("fail");
+    await expect(mod.telemetryApi.submitCrashes(["c1"])).rejects.toBe("fail");
   });
 
   it("deleteCrash calls SDK", async () => {
     mockDeleteCrash.mockResolvedValue({ error: undefined });
     const mod = await import("../telemetry");
-    await mod.default.deleteCrash("c1");
+    await mod.telemetryApi.deleteCrash("c1");
     expect(mockDeleteCrash).toHaveBeenCalled();
   });
 
   it("deleteCrash throws on error", async () => {
     mockDeleteCrash.mockResolvedValue({ error: "fail" });
     const mod = await import("../telemetry");
-    await expect(mod.default.deleteCrash("c1")).rejects.toBe("fail");
+    await expect(mod.telemetryApi.deleteCrash("c1")).rejects.toBe("fail");
   });
 });

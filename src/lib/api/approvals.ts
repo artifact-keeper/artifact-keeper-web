@@ -1,7 +1,7 @@
 import { apiFetch } from '@/lib/api/fetch';
 import type { ApprovalRequest, ApprovalListResponse } from '@/types/promotion';
 
-const approvalsApi = {
+export const approvalsApi = {
   /**
    * List pending approval requests
    */
@@ -64,4 +64,3 @@ const approvalsApi = {
   },
 };
 
-export default approvalsApi;

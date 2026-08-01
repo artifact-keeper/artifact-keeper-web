@@ -6,6 +6,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { LabelResponse, LabelsListResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /** A key/value label on a repository. */
 export interface RepoLabel {
@@ -19,27 +20,23 @@ function adapt(sdk: LabelResponse): RepoLabel {
   return { id: sdk.id, key: sdk.key, value: sdk.value, created_at: sdk.created_at };
 }
 
-const repoLabelsApi = {
+export const repoLabelsApi = {
   list: async (repoKey: string): Promise<RepoLabel[]> => {
-    const { data, error } = await listRepoLabels({ path: { key: repoKey } });
-    if (error) throw error;
+    const data = await unwrap(listRepoLabels({ path: { key: repoKey } }));
     return (assertData(data, 'repoLabelsApi.list') as LabelsListResponse).items.map(adapt);
   },
 
   /** Add or update a single label (`label_key` = the label's key). */
   add: async (repoKey: string, labelKey: string, value: string): Promise<RepoLabel> => {
-    const { data, error } = await addRepoLabel({
+    const data = await unwrap(addRepoLabel({
       path: { key: repoKey, label_key: labelKey },
       body: { value },
-    });
-    if (error) throw error;
+    }));
     return adapt(assertData(data, 'repoLabelsApi.add'));
   },
 
   remove: async (repoKey: string, labelKey: string): Promise<void> => {
-    const { error } = await deleteRepoLabel({ path: { key: repoKey, label_key: labelKey } });
-    if (error) throw error;
+    await unwrap(deleteRepoLabel({ path: { key: repoKey, label_key: labelKey } }));
   },
 };
 
-export default repoLabelsApi;

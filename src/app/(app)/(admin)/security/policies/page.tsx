@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   ScanPolicy,
   CreatePolicyRequest,
   UpdatePolicyRequest,
 } from "@/types/security";
+import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +83,17 @@ const DEFAULT_FORM: PolicyFormState = {
   repository_id: "",
 };
 
+// Radix Select can't hold an empty-string value, so a global (unscoped) policy
+// is represented by this sentinel in the picker and mapped back to "" on change.
+const GLOBAL_VALUE = "__global__";
+
+// Most repos are created with name == key; only show the "(key)" suffix when it
+// adds information, so the common case reads "anti-abuse-builds", not
+// "anti-abuse-builds (anti-abuse-builds)".
+function repoLabel(repo: { name: string; key: string }): string {
+  return repo.name === repo.key ? repo.key : `${repo.name} (${repo.key})`;
+}
+
 // -- shared form fields (extracted to avoid react-hooks/static-components) --
 
 function PolicyFormFields({
@@ -88,11 +101,15 @@ function PolicyFormFields({
   setForm,
   showEnabled,
   showRepoId,
+  repos,
+  reposLoading,
 }: {
   form: PolicyFormState;
   setForm: React.Dispatch<React.SetStateAction<PolicyFormState>>;
   showEnabled?: boolean;
   showRepoId?: boolean;
+  repos?: Repository[];
+  reposLoading?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -171,20 +188,32 @@ function PolicyFormFields({
       )}
       {showRepoId && (
         <div className="space-y-2">
-          <Label htmlFor="policy-repo-id">
-            Repository ID (optional)
-          </Label>
-          <Input
-            id="policy-repo-id"
-            placeholder="Leave blank for a global policy"
-            value={form.repository_id}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, repository_id: e.target.value }))
+          <Label htmlFor="policy-repo-id">Repository (optional)</Label>
+          <Select
+            value={form.repository_id || GLOBAL_VALUE}
+            onValueChange={(v) =>
+              setForm((f) => ({
+                ...f,
+                repository_id: v === GLOBAL_VALUE ? "" : v,
+              }))
             }
-          />
+            disabled={reposLoading}
+          >
+            <SelectTrigger id="policy-repo-id" className="w-full">
+              <SelectValue placeholder={reposLoading ? "Loading..." : "Select a repository"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={GLOBAL_VALUE}>Global (all repositories)</SelectItem>
+              {(repos ?? []).map((repo) => (
+                <SelectItem key={repo.id} value={repo.id}>
+                  {repoLabel(repo)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-xs text-muted-foreground">
-            Scope this policy to a specific repository, or leave blank for
-            global enforcement.
+            Scope this policy to a specific repository, or choose Global for
+            all repositories.
           </p>
         </div>
       )}
@@ -215,6 +244,16 @@ export default function SecurityPoliciesPage() {
     queryKey: ["security", "policies"],
     queryFn: securityApi.listPolicies,
   });
+
+  // Repositories for the scope picker and to resolve a policy's repository_id
+  // (a UUID) to a human name+key in the list. Same call the release-target
+  // picker uses.
+  const { data: repoList, isLoading: reposLoading } = useRepositories({ per_page: 200 });
+  const repoById = useMemo(() => {
+    const map = new Map<string, Repository>();
+    for (const repo of repoList?.items ?? []) map.set(repo.id, repo);
+    return map;
+  }, [repoList]);
 
   // -- mutations --
   const createMutation = useMutation({
@@ -285,7 +324,9 @@ export default function SecurityPoliciesPage() {
       cell: (r) =>
         r.repository_id ? (
           <Badge variant="secondary" className="text-xs font-normal">
-            Repo: {r.repository_id.slice(0, 8)}...
+            {repoById.get(r.repository_id)
+              ? repoLabel(repoById.get(r.repository_id)!)
+              : `Repo: ${r.repository_id.slice(0, 8)}...`}
           </Badge>
         ) : (
           <Badge
@@ -461,6 +502,8 @@ export default function SecurityPoliciesPage() {
               form={createForm}
               setForm={setCreateForm}
               showRepoId
+              repos={repoList?.items ?? []}
+              reposLoading={reposLoading}
             />
             <DialogFooter>
               <Button

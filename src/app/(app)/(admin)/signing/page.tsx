@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,7 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import signingApi, { type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
+import { signingApi, type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
 import { mutationErrorToast, toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -49,6 +51,7 @@ const emptyForm: CreateSigningKeyRequest = {
 };
 
 export default function SigningPage() {
+  useDocumentTitle("Signing Keys");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

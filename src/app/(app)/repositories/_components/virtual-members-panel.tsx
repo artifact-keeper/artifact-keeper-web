@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 
+import { useRepositories } from "@/hooks/use-repositories";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { Repository, VirtualRepoMember } from "@/types";
@@ -22,6 +23,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import {
   Tooltip,
   TooltipTrigger,
@@ -46,11 +48,10 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
   });
 
   // Fetch all repositories to find eligible members
-  const { data: allReposData, isLoading: reposLoading } = useQuery({
-    queryKey: ["repositories-all"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: addDialogOpen,
-  });
+  const { data: allReposData, isLoading: reposLoading } = useRepositories(
+    { per_page: 1000 },
+    { enabled: addDialogOpen },
+  );
 
   const members = useMemo(() => membersData?.members ?? [], [membersData?.members]);
   const sortedMembers = useMemo(
@@ -281,6 +282,11 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                 ))}
               </div>
             )}
+            <ListTruncationNotice
+              className="mt-3"
+              shown={allReposData?.items.length ?? 0}
+              total={allReposData?.pagination?.total ?? 0}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>

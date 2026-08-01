@@ -8,7 +8,7 @@ import type {
   HealthDashboard,
 } from '@/types/quality-gates';
 
-const qualityGatesApi = {
+export const qualityGatesApi = {
   // Quality gate CRUD
   listGates: async (): Promise<QualityGate[]> => {
     return apiFetch<QualityGate[]>('/api/v1/quality/gates');
@@ -52,4 +52,3 @@ const qualityGatesApi = {
   },
 };
 
-export default qualityGatesApi;

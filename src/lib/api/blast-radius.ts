@@ -401,4 +401,3 @@ export const blastRadiusApi = {
   },
 };
 
-export default blastRadiusApi;

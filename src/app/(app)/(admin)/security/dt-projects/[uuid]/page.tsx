@@ -1,5 +1,7 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 
-import dtApi from "@/lib/api/dependency-track";
+import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   DtFinding,
@@ -328,6 +330,7 @@ function FindingTriageRow({
 }
 
 export default function DtProjectDetailPage() {
+  useDocumentTitle("Project Details");
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();

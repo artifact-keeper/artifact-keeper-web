@@ -3,6 +3,7 @@
  *
  * Configures the generated SDK's fetch-based client with:
  * - Cookie-based auth (httpOnly cookies sent via credentials: 'include')
+ * - CSRF defense-in-depth custom header (X-Requested-With) on all requests
  * - Automatic 401 token refresh with mutex to prevent race conditions
  * - Dynamic baseUrl for remote instance proxy
  * - 403 SETUP_REQUIRED redirect to login
@@ -12,6 +13,21 @@
  */
 
 import { client } from '@artifact-keeper/sdk/client';
+
+// ---------------------------------------------------------------------------
+// CSRF defense-in-depth
+// ---------------------------------------------------------------------------
+
+/**
+ * Custom header sent on every API request. Cross-site HTML forms cannot set
+ * custom headers, so a request carrying this header could only have come from
+ * our own JavaScript — the backend can require it on cookie-authenticated
+ * mutating requests as a CSRF check (the header forces a CORS preflight that
+ * cross-origin forms cannot satisfy). See the "CSRF protection" section of
+ * the README for the full contract.
+ */
+export const CSRF_HEADER_NAME = 'X-Requested-With';
+export const CSRF_HEADER_VALUE = 'XMLHttpRequest';
 
 // ---------------------------------------------------------------------------
 // Remote instance helpers
@@ -54,20 +70,28 @@ client.setConfig({
 // ---------------------------------------------------------------------------
 
 client.interceptors.request.use((request) => {
-  if (typeof window === 'undefined') return request;
-  if (!isRemoteInstance()) return request;
+  // CSRF defense-in-depth: attach the custom header to every request so the
+  // backend can require it on cookie-authenticated mutations. The header is
+  // copied onto the request before any further rewriting so retried requests
+  // (401 refresh) inherit it via request.headers.
+  const headers = new Headers(request.headers);
+  headers.set(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
+  const withCsrfHeader = new Request(request, { headers });
+
+  if (typeof window === 'undefined') return withCsrfHeader;
+  if (!isRemoteInstance()) return withCsrfHeader;
 
   const base = getActiveInstanceBaseUrl();
-  if (!base) return request;
+  if (!base) return withCsrfHeader;
 
   // For remote instances, prepend the proxy path prefix to the existing URL.
   // Only modify the pathname; never rewrite protocol or host to prevent
   // open redirect attacks via localStorage instance poisoning.
-  const url = new URL(request.url);
+  const url = new URL(withCsrfHeader.url);
   const target = new URL(base, window.location.origin);
   url.pathname = target.pathname + url.pathname;
 
-  return new Request(url.toString(), request);
+  return new Request(url.toString(), withCsrfHeader);
 });
 
 // ---------------------------------------------------------------------------
@@ -143,7 +167,10 @@ client.interceptors.response.use(async (response, request) => {
       `${getActiveInstanceBaseUrl()}/api/v1/auth/refresh`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+        },
         body: '{}',
         credentials: 'include',
       }

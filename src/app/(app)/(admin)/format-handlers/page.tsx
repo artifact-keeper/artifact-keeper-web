@@ -1,11 +1,14 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Blocks, Search, FlaskConical, AlertCircle, RotateCcw, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
-import formatHandlersApi, {
+import {
+  formatHandlersApi,
   type FormatHandler,
   type FormatTestResult,
 } from "@/lib/api/format-handlers";
@@ -31,6 +34,7 @@ import {
 const QUERY_KEY = ["format-handlers"];
 
 export default function FormatHandlersPage() {
+  useDocumentTitle("Format Handlers");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

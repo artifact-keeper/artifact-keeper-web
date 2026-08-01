@@ -64,6 +64,8 @@ import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { unwrap } from "@/lib/sdk-utils";
 
 // -- types --
 
@@ -141,13 +143,12 @@ export default function BackupsPage() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["backups", statusFilter],
     queryFn: async () => {
-      const { data, error } = await listBackups({
+      const data = await unwrap(listBackups({
         query: {
           per_page: 100,
           status: statusFilter !== "__all__" ? statusFilter : undefined,
         },
-      });
-      if (error) throw error;
+      }));
       return data as any as BackupsResponse;
     },
     enabled: !!user?.is_admin,
@@ -169,10 +170,9 @@ export default function BackupsPage() {
   // -- mutations --
   const createMutation = useMutation({
     mutationFn: async (type: string) => {
-      const { data, error } = await createBackup({
+      const data = await unwrap(createBackup({
         body: { type },
-      });
-      if (error) throw error;
+      }));
       return data as any as Backup;
     },
     onSuccess: () => {
@@ -186,8 +186,7 @@ export default function BackupsPage() {
 
   const executeMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await executeBackup({ path: { id } });
-      if (error) throw error;
+      await unwrap(executeBackup({ path: { id } }));
     },
     onSuccess: () => {
       toast.success("Backup started");
@@ -198,8 +197,7 @@ export default function BackupsPage() {
 
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await cancelBackup({ path: { id } });
-      if (error) throw error;
+      await unwrap(cancelBackup({ path: { id } }));
     },
     onSuccess: () => {
       toast.success("Backup cancelled");
@@ -210,11 +208,10 @@ export default function BackupsPage() {
 
   const restoreMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await restoreBackup({
+      await unwrap(restoreBackup({
         path: { id },
         body: {} as any,
-      });
-      if (error) throw error;
+      }));
     },
     onSuccess: () => {
       toast.success("Restore started");
@@ -227,8 +224,7 @@ export default function BackupsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await deleteBackup({ path: { id } });
-      if (error) throw error;
+      await unwrap(deleteBackup({ path: { id } }));
     },
     onSuccess: () => {
       toast.success("Backup deleted");
@@ -551,6 +547,7 @@ export default function BackupsPage() {
           rowKey={(b) => b.id}
         />
       )}
+      <ListTruncationNotice shown={backups.length} total={data?.total ?? 0} />
 
       {/* Create Backup Dialog */}
       <Dialog

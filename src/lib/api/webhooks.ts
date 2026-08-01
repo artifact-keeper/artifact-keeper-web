@@ -19,6 +19,7 @@ import type {
   TestWebhookResponse as SdkTestWebhookResponse,
 } from '@artifact-keeper/sdk';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface WebhookListResponse<T> {
   items: T[];
@@ -195,43 +196,36 @@ export const webhooksApi = {
   list: async (
     params: ListWebhooksParams = {},
   ): Promise<WebhookListResponse<Webhook>> => {
-    const { data, error } = await sdkListWebhooks({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListWebhooks({ query: params }));
     return adaptWebhookList(assertData(data, 'webhooksApi.list'));
   },
 
   get: async (id: string): Promise<Webhook> => {
-    const { data, error } = await sdkGetWebhook({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetWebhook({ path: { id } }));
     return adaptWebhook(assertData(data, 'webhooksApi.get'));
   },
 
   create: async (data: CreateWebhookRequest): Promise<Webhook> => {
-    const { data: result, error } = await sdkCreateWebhook({
-      body: adaptCreateRequest(data),
-    });
-    if (error) throw error;
+    const result = await unwrap(
+      sdkCreateWebhook({ body: adaptCreateRequest(data) }),
+    );
     return adaptWebhook(assertData(result, 'webhooksApi.create'));
   },
 
   delete: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteWebhook({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteWebhook({ path: { id } }));
   },
 
   enable: async (id: string): Promise<void> => {
-    const { error } = await sdkEnableWebhook({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkEnableWebhook({ path: { id } }));
   },
 
   disable: async (id: string): Promise<void> => {
-    const { error } = await sdkDisableWebhook({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDisableWebhook({ path: { id } }));
   },
 
   test: async (id: string): Promise<WebhookTestResult> => {
-    const { data, error } = await sdkTestWebhook({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkTestWebhook({ path: { id } }));
     return adaptTestResult(assertData(data, 'webhooksApi.test'));
   },
 
@@ -239,11 +233,10 @@ export const webhooksApi = {
     id: string,
     params: ListDeliveriesParams = {},
   ): Promise<WebhookListResponse<WebhookDelivery>> => {
-    const { data, error } = await sdkListDeliveries({
+    const data = await unwrap(sdkListDeliveries({
       path: { id },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return adaptDeliveryList(assertData(data, 'webhooksApi.listDeliveries'));
   },
 
@@ -251,12 +244,10 @@ export const webhooksApi = {
     webhookId: string,
     deliveryId: string,
   ): Promise<WebhookDelivery> => {
-    const { data, error } = await sdkRedeliver({
+    const data = await unwrap(sdkRedeliver({
       path: { id: webhookId, delivery_id: deliveryId },
-    });
-    if (error) throw error;
+    }));
     return adaptDelivery(assertData(data, 'webhooksApi.redeliver'));
   },
 };
 
-export default webhooksApi;

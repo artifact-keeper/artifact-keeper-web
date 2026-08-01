@@ -14,6 +14,23 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
  * Strategy mirrors artifact-download.spec.ts: seed artifacts through the API,
  * then drive the real UI.  The repository `e2e-maven-local` is created by the
  * E2E seed step.
+ *
+ * Seeding note (issue #665): backend 1.7.0 (ak#2723) serves hosted grouped
+ * listings from the package catalog — component keys are the catalog's
+ * `(packages.name = groupId:artifactId, package_versions.version)` pairs, and
+ * each page's files are resolved under the real
+ * `<groupId>/<artifactId>/<version>/` directory.  The generic
+ * `/api/v1/repositories/:key/artifacts/*path` upload derives name/version from
+ * the first two path segments (`com` / `example` for a Maven layout), so files
+ * seeded that way land in the catalog under a bogus version whose component
+ * key matches no files and is dropped — the grouped browser then renders its
+ * empty state.  Seed through the Maven-native deploy endpoint (`PUT
+ * /maven/:key/*path`, the same endpoint `mvn deploy` uses) so the catalog
+ * records real GAV coordinates.  Exception: the checksum sidecar — the native
+ * endpoint stores `.sha1` files row-less (no artifact row), so the #445 file
+ * listing would never see it; that one file still goes through the generic
+ * API, which does create an artifact row that the grouped listing picks up by
+ * path.
  */
 test.describe('Maven Grouped Browser (#443, #444, #445)', () => {
   const REPO_KEY = 'e2e-maven-local';
@@ -43,6 +60,28 @@ test.describe('Maven Grouped Browser (#443, #444, #445)', () => {
   }
 
   /**
+   * PUT one file through the Maven-native deploy endpoint (the same route
+   * `mvn deploy` uses) so the backend records the real GAV coordinates in the
+   * package catalog that the 1.7.0 grouped listing is built from (#665).
+   */
+  async function putMaven(
+    request: APIRequestContext,
+    relPath: string,
+    body: string,
+  ): Promise<void> {
+    const resp = await request.put(`/maven/${REPO_KEY}/${relPath}`, {
+      data: body,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+    // Same 409 tolerance as `put`: redeploying an existing non-SNAPSHOT
+    // coordinate conflicts, and that is fine for these read-oriented tests.
+    expect(
+      resp.ok() || resp.status() === 409,
+      `PUT /maven ${relPath} failed: ${resp.status()}`,
+    ).toBeTruthy();
+  }
+
+  /**
    * Deploy `count` distinct GAV components (one artifact + pom each) so the
    * grouped listing has more than one page at the default page size of 20.
    * Returns the list of artifactIds created.
@@ -56,8 +95,8 @@ test.describe('Maven Grouped Browser (#443, #444, #445)', () => {
       const artifactId = `lib-${i}`;
       const version = '1.0.0';
       const base = `${GROUP_PATH}/${artifactId}/${version}/${artifactId}-${version}`;
-      await put(request, `${base}.jar`, `jar-${i}`);
-      await put(request, `${base}.pom`, `<project>${i}</project>`);
+      await putMaven(request, `${base}.jar`, `jar-${i}`);
+      await putMaven(request, `${base}.pom`, `<project>${i}</project>`);
       ids.push(artifactId);
     }
     return ids;
@@ -80,9 +119,12 @@ test.describe('Maven Grouped Browser (#443, #444, #445)', () => {
       `${artifactId}-${version}.zip`,
       `${artifactId}-${version}.jar.sha1`,
     ];
-    await put(request, `${base}.pom`, '<project>zip</project>');
-    await put(request, `${base}.jar`, 'jar-bytes');
-    await put(request, `${base}.zip`, 'zip-bytes');
+    await putMaven(request, `${base}.pom`, '<project>zip</project>');
+    await putMaven(request, `${base}.jar`, 'jar-bytes');
+    await putMaven(request, `${base}.zip`, 'zip-bytes');
+    // The Maven-native endpoint stores checksum sidecars row-less (no artifact
+    // row), which would hide the file from the grouped listing #445 asserts
+    // on — seed it through the generic API instead (see the header comment).
     await put(request, `${base}.jar.sha1`, 'abc123');
     return { artifactId, files };
   }

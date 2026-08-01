@@ -43,10 +43,11 @@ import {
 } from "@/components/ui/table";
 import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { buildMavenSearchQuery } from "@/lib/maven";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
+import { useDocumentTitle } from "@/hooks/use-document-title";
 
 // ---- Types ----
 
@@ -144,6 +145,7 @@ const FORMAT_OPTIONS = [
 // ---- Main Content ----
 
 export function SearchContent() {
+  useDocumentTitle("Search");
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -191,10 +193,7 @@ export function SearchContent() {
   const [searchKey, setSearchKey] = useState(0);
 
   // Fetch repositories for select dropdown
-  const { data: reposData } = useQuery({
-    queryKey: ["repositories-list"],
-    queryFn: () => repositoriesApi.list({ per_page: 100 }),
-  });
+  const { data: reposData } = useRepositories({ per_page: 100 });
 
   const repositories = reposData?.items ?? [];
 

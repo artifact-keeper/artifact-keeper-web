@@ -22,7 +22,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   unsuppressIssue: (...a: unknown[]) => m.unsuppressIssue(...a),
 }));
 
-import qualityChecksApi from "../quality-checks";
+import { qualityChecksApi } from "../quality-checks";
 
 const CHECK = {
   id: "c1", artifact_id: "a1", repository_id: "r1", check_type: "metadata",

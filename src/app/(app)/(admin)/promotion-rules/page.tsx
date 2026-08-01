@@ -1,15 +1,18 @@
 "use client";
 
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequestArrow, Plus, Trash2, Pencil, FlaskConical, AlertCircle, RotateCcw, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
-import promotionRulesApi, {
+import {
+  promotionRulesApi,
   type PromotionRule,
   type CreatePromotionRuleRequest,
 } from "@/lib/api/promotion-rules";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -89,6 +92,7 @@ function toRequest(f: FormState): CreatePromotionRuleRequest {
 }
 
 export default function PromotionRulesPage() {
+  useDocumentTitle("Promotion Rules");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -103,11 +107,10 @@ export default function PromotionRulesPage() {
     enabled: !!user?.is_admin,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ["repositories-all"],
-    queryFn: () => repositoriesApi.list({ per_page: 1000 }),
-    enabled: !!user?.is_admin,
-  });
+  const { data: repos } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin },
+  );
   const repoKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of repos?.items ?? []) map.set(r.id, r.key);

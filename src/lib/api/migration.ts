@@ -57,6 +57,7 @@ import type {
   PaginatedResponse,
 } from '@/types';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // SDK ConnectionResponse exposes auth_type as `string`; the local AuthType is
 // a narrowed union. Default unrecognized values to 'api_token' rather than
@@ -323,43 +324,37 @@ function coercePaginated<TSdk, TLocal>(
 export const migrationApi = {
   // Source Connections
   listConnections: async (): Promise<SourceConnection[]> => {
-    const { data, error } = await sdkListConnections();
-    if (error) throw error;
+    const data = await unwrap(sdkListConnections());
     return coerceItemsArray<SdkConnectionResponse>(data).map(adaptSourceConnection);
   },
 
   createConnection: async (
     reqData: CreateConnectionRequest
   ): Promise<SourceConnection> => {
-    const { data, error } = await sdkCreateConnection({
+    const data = await unwrap(sdkCreateConnection({
       body: toSdkCreateConnectionRequest(reqData),
-    });
-    if (error) throw error;
+    }));
     return adaptSourceConnection(assertData(data, 'migrationApi.createConnection'));
   },
 
   getConnection: async (id: string): Promise<SourceConnection> => {
-    const { data, error } = await sdkGetConnection({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetConnection({ path: { id } }));
     return adaptSourceConnection(assertData(data, 'migrationApi.getConnection'));
   },
 
   deleteConnection: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteConnection({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteConnection({ path: { id } }));
   },
 
   testConnection: async (id: string): Promise<ConnectionTestResult> => {
-    const { data, error } = await sdkTestConnection({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkTestConnection({ path: { id } }));
     return adaptConnectionTestResult(assertData(data, 'migrationApi.testConnection'));
   },
 
   listSourceRepositories: async (
     connectionId: string
   ): Promise<SourceRepository[]> => {
-    const { data, error } = await sdkListSourceRepositories({ path: { id: connectionId } });
-    if (error) throw error;
+    const data = await unwrap(sdkListSourceRepositories({ path: { id: connectionId } }));
     return coerceItemsArray<SdkSourceRepository>(data).map(adaptSourceRepository);
   },
 
@@ -372,8 +367,7 @@ export const migrationApi = {
     // SDK declares `query: { status, page, per_page }` with `string | null`
     // for status, but the local caller signature uses plain `string` — which
     // is structurally assignable, so no cast is needed.
-    const { data, error } = await sdkListMigrations({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListMigrations({ query: params }));
     // SDK declares Array<MigrationJobResponse>; some deployments wrap in
     // { items, pagination } — accept both. Bare arrays get synthesized pagination.
     const raw = assertData(data, 'migrationApi.listMigrations');
@@ -383,45 +377,38 @@ export const migrationApi = {
   createMigration: async (
     reqData: CreateMigrationRequest
   ): Promise<MigrationJob> => {
-    const { data, error } = await sdkCreateMigration({
+    const data = await unwrap(sdkCreateMigration({
       body: toSdkCreateMigrationRequest(reqData),
-    });
-    if (error) throw error;
+    }));
     return adaptMigrationJob(assertData(data, 'migrationApi.createMigration'));
   },
 
   getMigration: async (id: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkGetMigration({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetMigration({ path: { id } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.getMigration'));
   },
 
   deleteMigration: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteMigration({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteMigration({ path: { id } }));
   },
 
   startMigration: async (id: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkStartMigration({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkStartMigration({ path: { id } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.startMigration'));
   },
 
   pauseMigration: async (id: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkPauseMigration({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkPauseMigration({ path: { id } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.pauseMigration'));
   },
 
   resumeMigration: async (id: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkResumeMigration({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkResumeMigration({ path: { id } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.resumeMigration'));
   },
 
   cancelMigration: async (id: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkCancelMigration({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkCancelMigration({ path: { id } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.cancelMigration'));
   },
 
@@ -434,11 +421,10 @@ export const migrationApi = {
       per_page?: number;
     }
   ): Promise<PaginatedResponse<MigrationItem>> => {
-    const { data, error } = await sdkListMigrationItems({
+    const data = await unwrap(sdkListMigrationItems({
       path: { id: jobId },
       query: params,
-    });
-    if (error) throw error;
+    }));
     // Same dual-shape handling as listMigrations.
     const raw = assertData(data, 'migrationApi.listMigrationItems');
     return coercePaginated<SdkMigrationItemResponse, MigrationItem>(raw, adaptMigrationItem);
@@ -448,11 +434,10 @@ export const migrationApi = {
     jobId: string,
     format: 'json' | 'html' = 'json'
   ): Promise<MigrationReport | string> => {
-    const { data, error } = await sdkGetMigrationReport({
+    const data = await unwrap(sdkGetMigrationReport({
       path: { id: jobId },
       query: { format },
-    });
-    if (error) throw error;
+    }));
     // For HTML the backend returns a raw string body which the SDK still
     // surfaces via `data`; pass it through. For JSON, structure it.
     const raw = assertData(data, 'migrationApi.getMigrationReport');
@@ -464,14 +449,12 @@ export const migrationApi = {
 
   // Assessment
   runAssessment: async (jobId: string): Promise<MigrationJob> => {
-    const { data, error } = await sdkRunAssessment({ path: { id: jobId } });
-    if (error) throw error;
+    const data = await unwrap(sdkRunAssessment({ path: { id: jobId } }));
     return adaptMigrationJob(assertData(data, 'migrationApi.runAssessment'));
   },
 
   getAssessment: async (jobId: string): Promise<AssessmentResult> => {
-    const { data, error } = await sdkGetAssessment({ path: { id: jobId } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetAssessment({ path: { id: jobId } }));
     return adaptAssessmentResult(assertData(data, 'migrationApi.getAssessment'));
   },
 
@@ -484,8 +467,7 @@ export const migrationApi = {
       purpose: 'stream',
       resource_path: `/api/v1/migrations/${jobId}/stream`,
     };
-    const { data, error } = await sdkCreateDownloadTicket({ body });
-    if (error) throw error;
+    const data = await unwrap(sdkCreateDownloadTicket({ body }));
     return assertData(data as TicketResponse | undefined, 'migrationApi.createStreamTicket').ticket;
   },
 
@@ -502,4 +484,3 @@ export const migrationApi = {
   },
 };
 
-export default migrationApi;

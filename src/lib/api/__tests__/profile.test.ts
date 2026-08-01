@@ -245,11 +245,11 @@ describe("profileApi", () => {
     const result = await profileApi.createApiKey({
       name: "CI Key",
       expires_in_days: 90,
-      scopes: ["read"],
+      scopes: ["read:artifacts"],
     });
 
     expect(mockCreateApiToken).toHaveBeenCalledWith({
-      body: { name: "CI Key", expires_in_days: 90, scopes: ["read"] },
+      body: { name: "CI Key", expires_in_days: 90, scopes: ["read:artifacts"] },
     });
     expect(result).toEqual(mockResponse);
   });
@@ -413,7 +413,7 @@ describe("profileApi", () => {
     const result = await profileApi.createAccessToken({
       name: "Scoped Token",
       expires_in_days: 90,
-      scopes: ["read", "write"],
+      scopes: ["read:artifacts", "write:artifacts"],
       repo_selector: {
         match_formats: ["docker", "npm"],
         match_pattern: "prod-*",
@@ -425,7 +425,7 @@ describe("profileApi", () => {
       body: {
         name: "Scoped Token",
         expires_in_days: 90,
-        scopes: ["read", "write"],
+        scopes: ["read:artifacts", "write:artifacts"],
         repo_selector: {
           match_formats: ["docker", "npm"],
           match_pattern: "prod-*",

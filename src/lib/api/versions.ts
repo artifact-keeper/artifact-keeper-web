@@ -152,4 +152,3 @@ export const versionsApi = {
   },
 };
 
-export default versionsApi;

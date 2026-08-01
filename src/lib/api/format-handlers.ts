@@ -8,6 +8,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { FormatHandlerResponse, TestFormatResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /** A package-format handler (built-in `Core` or a `Wasm` plugin). */
 export interface FormatHandler {
@@ -53,35 +54,30 @@ function adaptTest(sdk: TestFormatResponse): FormatTestResult {
   return { valid: sdk.valid, parse_error: sdk.parse_error ?? null };
 }
 
-const formatHandlersApi = {
+export const formatHandlersApi = {
   list: async (): Promise<FormatHandler[]> => {
-    const { data, error } = await listFormatHandlers();
-    if (error) throw error;
+    const data = await unwrap(listFormatHandlers());
     return assertData(data, 'formatHandlersApi.list').map(adapt);
   },
 
   get: async (key: string): Promise<FormatHandler> => {
-    const { data, error } = await getFormatHandler({ path: { format_key: key } });
-    if (error) throw error;
+    const data = await unwrap(getFormatHandler({ path: { format_key: key } }));
     return adapt(assertData(data, 'formatHandlersApi.get'));
   },
 
   setEnabled: async (key: string, enabled: boolean): Promise<FormatHandler> => {
     const fn = enabled ? enableFormatHandler : disableFormatHandler;
-    const { data, error } = await fn({ path: { format_key: key } });
-    if (error) throw error;
+    const data = await unwrap(fn({ path: { format_key: key } }));
     return adapt(assertData(data, 'formatHandlersApi.setEnabled'));
   },
 
   /** Dry-run the handler against sample content; returns validity + parse error. */
   test: async (key: string, input: TestFormatInput): Promise<FormatTestResult> => {
-    const { data, error } = await testFormatHandler({
+    const data = await unwrap(testFormatHandler({
       path: { format_key: key },
       body: { path: input.path, content: input.content, base64: input.base64 ?? false },
-    });
-    if (error) throw error;
+    }));
     return adaptTest(assertData(data, 'formatHandlersApi.test'));
   },
 };
 
-export default formatHandlersApi;

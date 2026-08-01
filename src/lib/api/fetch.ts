@@ -1,4 +1,4 @@
-import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import { getActiveInstanceBaseUrl, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from '@/lib/sdk-client';
 
 /**
  * Throw if a successful SDK response had no body when the caller expects one.
@@ -36,6 +36,30 @@ export function narrowEnum<T extends string>(
 }
 
 /**
+ * A non-2xx response from `apiFetch`, carrying the status and raw body so
+ * callers can branch on them without parsing the message.
+ *
+ * The message is byte-identical to the plain `Error` this replaced
+ * (`API error <status>: <body>`) because callers already match on it, e.g.
+ * `versions.ts` normalizes a 404 to an empty list via a regex over
+ * `err.message`. Existing consumers keep working unchanged; new code should
+ * read `.status` and `.body` instead.
+ */
+export class ApiError extends Error {
+  /** HTTP status code of the failing response. */
+  readonly status: number;
+  /** Raw response body text. Empty string when the body could not be read. */
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`API error ${status}: ${body}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/**
  * Shared fetch wrapper for API modules that don't use the generated SDK.
  * Adds base URL resolution, JSON headers, credentials, and error handling.
  */
@@ -44,7 +68,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const { headers: callerHeaders, ...rest } = init ?? {};
 
   // Build headers with defaults first so caller values take precedence.
-  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+  });
   const incoming = new Headers(callerHeaders);
   incoming.forEach((value, key) => {
     headers.set(key, value);
@@ -57,7 +84,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`API error ${response.status}: ${body}`);
+    throw new ApiError(response.status, body);
   }
   if (response.status === 204) return undefined as T;
 

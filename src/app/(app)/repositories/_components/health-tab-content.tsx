@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { HeartPulse, ShieldCheck, Scale, Sparkles, FileText } from "lucide-react";
-import qualityGatesApi from "@/lib/api/quality-gates";
+import { qualityGatesApi } from "@/lib/api/quality-gates";
 import type { Artifact } from "@/types";
 import { HealthBadge } from "@/components/health-badge";
 
