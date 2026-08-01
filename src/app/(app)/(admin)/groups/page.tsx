@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -83,6 +83,7 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [form, setForm] = useState<GroupForm>(EMPTY_FORM);
   const [memberSearch, setMemberSearch] = useState("");
+  const [addUserSearch, setAddUserSearch] = useState("");
   const [addUserId, setAddUserId] = useState<string>("");
 
   // -- queries --
@@ -101,12 +102,22 @@ export default function GroupsPage() {
     enabled: membersOpen && !!selectedGroup?.id,
   });
 
-  // all users for the add member dropdown
-  const { data: allUsers } = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => adminApi.listUsers(),
+  // Users for the add member dropdown, filtered server-side so any user in
+  // the instance is reachable even beyond the first page (#564). The backend
+  // clamps per_page to 100, so a truncation notice covers the remainder.
+  const deferredAddUserSearch = useDeferredValue(addUserSearch);
+  const { data: pickerUsersData } = useQuery({
+    queryKey: ["admin-users", "picker", deferredAddUserSearch],
+    queryFn: () =>
+      adminApi.listUsersPage({
+        search: deferredAddUserSearch || undefined,
+        perPage: 100,
+      }),
     enabled: membersOpen && !!currentUser?.is_admin,
   });
+
+  const allUsers = pickerUsersData?.items ?? [];
+  const pickerTotal = pickerUsersData?.total ?? 0;
 
   // -- mutations --
   const createMutation = useMutation({
@@ -188,6 +199,7 @@ export default function GroupsPage() {
   const handleManageMembers = useCallback((g: Group) => {
     setSelectedGroup(g);
     setMemberSearch("");
+    setAddUserSearch("");
     setAddUserId("");
     setMembersOpen(true);
   }, []);
@@ -199,9 +211,7 @@ export default function GroupsPage() {
   const members: GroupMember[] = groupDetail?.members ?? [];
 
   const memberIds = new Set(members.map((m) => m.user_id));
-  const availableUsers = (allUsers ?? []).filter(
-    (u: User) => !memberIds.has(u.id)
-  );
+  const availableUsers = allUsers.filter((u: User) => !memberIds.has(u.id));
 
   const filteredMembers = memberSearch
     ? members.filter(
@@ -497,6 +507,7 @@ export default function GroupsPage() {
           if (!o) {
             setSelectedGroup(null);
             setMemberSearch("");
+            setAddUserSearch("");
             setAddUserId("");
           }
         }}
@@ -517,6 +528,20 @@ export default function GroupsPage() {
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-2">
               <Label>Add Member</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  aria-label="Search users to add"
+                  placeholder="Search users..."
+                  className="pl-8"
+                  value={addUserSearch}
+                  disabled={selectedIsExternal}
+                  onChange={(e) => {
+                    setAddUserSearch(e.target.value);
+                    setAddUserId("");
+                  }}
+                />
+              </div>
               <Select
                 value={addUserId}
                 onValueChange={setAddUserId}
@@ -533,11 +558,17 @@ export default function GroupsPage() {
                   ))}
                   {availableUsers.length === 0 && (
                     <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                      No users available to add
+                      {addUserSearch
+                        ? "No users match your search"
+                        : "No users available to add"}
                     </div>
                   )}
                 </SelectContent>
               </Select>
+              <ListTruncationNotice
+                shown={allUsers.length}
+                total={pickerTotal}
+              />
             </div>
             <Tooltip>
               <TooltipTrigger asChild>

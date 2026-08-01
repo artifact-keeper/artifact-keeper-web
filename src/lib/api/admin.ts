@@ -98,17 +98,43 @@ function adaptApiKey(sdk: ApiTokenResponse): ApiKey {
   };
 }
 
+export interface ListUsersParams {
+  page?: number;
+  perPage?: number;
+  /** Server-side filter on username, email, or display name (ILIKE). */
+  search?: string;
+}
+
+export interface ListUsersResult {
+  items: User[];
+  /** Total matching users across all pages, from the pagination envelope. */
+  total: number;
+}
+
 export const adminApi = {
   getStats: async (): Promise<AdminStats> => {
     const data = await unwrap(getSystemStats());
     return adaptStats(assertData(data, 'adminApi.getStats'));
   },
 
-  listUsers: async (params: { page?: number; perPage?: number } = {}): Promise<User[]> => {
+  listUsers: async (params: ListUsersParams = {}): Promise<User[]> => {
+    const result = await adminApi.listUsersPage(params);
+    return result.items;
+  },
+
+  listUsersPage: async (params: ListUsersParams = {}): Promise<ListUsersResult> => {
     const data = await unwrap(listUsers({
-      query: { page: params.page, per_page: params.perPage },
+      query: {
+        page: params.page,
+        per_page: params.perPage,
+        search: params.search?.trim() || undefined,
+      },
     }));
-    return assertData(data, 'adminApi.listUsers').items.map(adaptUser);
+    const response = assertData(data, 'adminApi.listUsersPage');
+    return {
+      items: response.items.map(adaptUser),
+      total: response.pagination.total,
+    };
   },
 
   getHealth: async (): Promise<HealthResponse> => {

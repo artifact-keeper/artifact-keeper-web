@@ -124,12 +124,19 @@ export default function UsersPage() {
     is_active: true,
   });
 
+  // server-side pagination (#564)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   // -- queries --
-  const { data: users, isLoading } = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => adminApi.listUsers(),
+  const { data: usersData, isLoading } = useQuery({
+    queryKey: ["admin-users", page, pageSize],
+    queryFn: () => adminApi.listUsersPage({ page, perPage: pageSize }),
     enabled: !!currentUser?.is_admin,
   });
+
+  const users = usersData?.items;
+  const totalUsers = usersData?.total ?? 0;
 
   // -- mutations --
   const createMutation = useMutation({
@@ -479,7 +486,7 @@ export default function UsersPage() {
         }
       />
 
-      {!isLoading && (users?.length ?? 0) === 0 ? (
+      {!isLoading && totalUsers === 0 ? (
         <EmptyState
           icon={Users}
           title="No users yet"
@@ -495,6 +502,15 @@ export default function UsersPage() {
         <DataTable
           columns={columns}
           data={users ?? []}
+          total={totalUsers}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+          pageSizeOptions={[20, 50, 100]}
           loading={isLoading}
           emptyMessage="No users found."
           rowKey={(u) => u.id}
