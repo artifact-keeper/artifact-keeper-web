@@ -17,6 +17,7 @@ import type {
 import type { User } from '@/types';
 import type { RepoSelector } from '@/lib/api/service-accounts';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface UpdateProfileRequest {
   display_name?: string;
@@ -125,8 +126,7 @@ function adaptCreateApiKey(sdk: SdkCreateApiTokenResponse): CreateApiKeyResponse
 
 export const profileApi = {
   get: async (): Promise<User> => {
-    const { data, error } = await sdkGetCurrentUser();
-    if (error) throw error;
+    const data = await unwrap(sdkGetCurrentUser());
     return adaptUser(assertData(data, 'profileApi.get'));
   },
 
@@ -147,11 +147,10 @@ export const profileApi = {
       current_password?: string;
       new_password?: string;
     };
-    const { data, error } = await sdkUpdateUser({
+    const data = await unwrap(sdkUpdateUser({
       path: { id: meData.id },
       body,
-    });
-    if (error) throw error;
+    }));
     return adaptUser(assertData(data, 'profileApi.update'));
   },
 
@@ -160,8 +159,7 @@ export const profileApi = {
     const { data: me, error: meError } = await sdkGetCurrentUser();
     if (meError) throw meError;
     const meData = assertData(me, 'profileApi.listApiKeys.me');
-    const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
-    if (error) throw error;
+    const data = await unwrap(sdkListUserTokens({ path: { id: meData.id } }));
     // The SDK contract is { items: ApiTokenResponse[] } — use assertData to
     // surface a missing wrapper (empty body, network proxy strip, etc.) and
     // tolerate a wrapper with no `items` field as an empty list.
@@ -182,14 +180,12 @@ export const profileApi = {
     };
     // SDK type marks `scopes` required, but the backend treats omission as
     // "no scopes" — we want that signal preserved when the caller didn't pass it.
-    const { data, error } = await sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest });
-    if (error) throw error;
+    const data = await unwrap(sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest }));
     return adaptCreateApiKey(assertData(data, 'profileApi.createApiKey'));
   },
 
   deleteApiKey: async (keyId: string): Promise<void> => {
-    const { error } = await sdkRevokeApiToken({ path: { token_id: keyId } });
-    if (error) throw error;
+    await unwrap(sdkRevokeApiToken({ path: { token_id: keyId } }));
   },
 
   // Access Tokens
@@ -197,8 +193,7 @@ export const profileApi = {
     const { data: me, error: meError } = await sdkGetCurrentUser();
     if (meError) throw meError;
     const meData = assertData(me, 'profileApi.listAccessTokens.me');
-    const { data, error } = await sdkListUserTokens({ path: { id: meData.id } });
-    if (error) throw error;
+    const data = await unwrap(sdkListUserTokens({ path: { id: meData.id } }));
     const wrapper = assertData(data, 'profileApi.listAccessTokens');
     return (wrapper.items ?? []).map(adaptAccessToken);
   },
@@ -214,16 +209,13 @@ export const profileApi = {
       ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
       ...(reqData.repo_selector !== undefined ? { repo_selector: reqData.repo_selector } : {}),
     } satisfies Partial<SdkCreateApiTokenRequest> & { repo_selector?: unknown };
-    const { data, error } = await sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest });
-    if (error) throw error;
+    const data = await unwrap(sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest }));
     const result = assertData(data, 'profileApi.createAccessToken');
     return { id: result.id, token: result.token, name: result.name };
   },
 
   deleteAccessToken: async (tokenId: string): Promise<void> => {
-    const { error } = await sdkRevokeApiToken({ path: { token_id: tokenId } });
-    if (error) throw error;
+    await unwrap(sdkRevokeApiToken({ path: { token_id: tokenId } }));
   },
 };
 
-export default profileApi;

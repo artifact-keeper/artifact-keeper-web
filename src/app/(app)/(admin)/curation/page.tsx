@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import curationApi, { type CurationPackage } from "@/lib/api/curation";
+import { curationApi, type CurationPackage } from "@/lib/api/curation";
 import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";

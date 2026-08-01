@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import sbomApi from "@/lib/api/sbom";
+import { sbomApi } from "@/lib/api/sbom";
 import { mutationErrorToast } from "@/lib/error-utils";
 import {
   ANALYZABLE_DISABLED_REASON,

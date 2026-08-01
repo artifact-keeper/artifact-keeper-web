@@ -9,8 +9,9 @@ import { repositoriesApi } from "@/lib/api/repositories";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { useAuth } from "@/providers/auth-provider";
-import lifecycleApi from "@/lib/api/lifecycle";
-import scanConfigApi, {
+import { lifecycleApi } from "@/lib/api/lifecycle";
+import {
+  scanConfigApi,
   SEVERITY_THRESHOLDS,
   type RepoScanConfig,
   type ProxyScanAction,

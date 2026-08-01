@@ -17,6 +17,7 @@ import type {
   SuppressRequest,
 } from '@/types/monitoring';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // Local types declare optional fields as required-but-nullable
 // (`previous_status: string | null`) while the SDK declares them as
@@ -53,31 +54,26 @@ function adaptSuppressRequest(req: SuppressRequest): SdkSuppressRequest {
   };
 }
 
-const monitoringApi = {
+export const monitoringApi = {
   getHealthLog: async (
     params?: HealthLogQuery
   ): Promise<ServiceHealthEntry[]> => {
-    const { data, error } = await sdkGetHealthLog({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetHealthLog({ query: params }));
     return assertData(data, 'monitoringApi.getHealthLog').map(adaptServiceHealthEntry);
   },
 
   getAlerts: async (): Promise<AlertState[]> => {
-    const { data, error } = await sdkGetAlertStates();
-    if (error) throw error;
+    const data = await unwrap(sdkGetAlertStates());
     return assertData(data, 'monitoringApi.getAlerts').map(adaptAlertState);
   },
 
   suppressAlert: async (req: SuppressRequest): Promise<void> => {
-    const { error } = await sdkSuppressAlert({ body: adaptSuppressRequest(req) });
-    if (error) throw error;
+    await unwrap(sdkSuppressAlert({ body: adaptSuppressRequest(req) }));
   },
 
   triggerCheck: async (): Promise<ServiceHealthEntry[]> => {
-    const { data, error } = await sdkRunHealthCheck();
-    if (error) throw error;
+    const data = await unwrap(sdkRunHealthCheck());
     return assertData(data, 'monitoringApi.triggerCheck').map(adaptServiceHealthEntry);
   },
 };
 
-export default monitoringApi;

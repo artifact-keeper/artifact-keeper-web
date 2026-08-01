@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, Tag } from "lucide-react";
 
-import repoLabelsApi, { type RepoLabel } from "@/lib/api/repo-labels";
+import { repoLabelsApi, type RepoLabel } from "@/lib/api/repo-labels";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { Repository } from "@/types";
 import { toast } from "sonner";

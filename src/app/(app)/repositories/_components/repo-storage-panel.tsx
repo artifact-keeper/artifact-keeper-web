@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Database, HardDrive, Layers, RefreshCcw, Info } from "lucide-react";
 
-import storageApi from "@/lib/api/storage";
+import { storageApi } from "@/lib/api/storage";
 import { formatBytes } from "@/lib/utils";
 import { formatRelativeTimestamp } from "@/lib/cache-time";
 import type { Repository } from "@/types";

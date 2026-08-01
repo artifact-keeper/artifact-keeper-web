@@ -132,7 +132,7 @@ const quarantineApiMock = {
   quarantine: vi.fn(),
 };
 vi.mock("@/lib/api/quarantine", () => ({
-  default: {
+  quarantineApi: {
     getStatus: (...a: unknown[]) => quarantineApiMock.getStatus(...a),
     release: (...a: unknown[]) => quarantineApiMock.release(...a),
     reject: (...a: unknown[]) => quarantineApiMock.reject(...a),
@@ -155,7 +155,7 @@ vi.mock("@/lib/api/artifacts", () => ({
   },
 }));
 vi.mock("@/lib/api/security", () => ({
-  default: { getRepoSecurity: vi.fn(), triggerScan: vi.fn(), updateRepoSecurity: vi.fn() },
+  securityApi: { getRepoSecurity: vi.fn(), triggerScan: vi.fn(), updateRepoSecurity: vi.fn() },
 }));
 
 // Heavy / out-of-scope children stubbed out.

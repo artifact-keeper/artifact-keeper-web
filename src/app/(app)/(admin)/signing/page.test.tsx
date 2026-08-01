@@ -54,7 +54,7 @@ vi.mock("sonner", () => ({
 
 const api = { listKeys: vi.fn(), createKey: vi.fn(), rotateKey: vi.fn(), revokeKey: vi.fn(), deleteKey: vi.fn() };
 vi.mock("@/lib/api/signing", () => ({
-  default: {
+  signingApi: {
     listKeys: (...a: unknown[]) => api.listKeys(...a),
     createKey: (...a: unknown[]) => api.createKey(...a),
     rotateKey: (...a: unknown[]) => api.rotateKey(...a),

@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import curationRulesApi, {
+import {
+  curationRulesApi,
   type CurationRule,
   type CreateRuleRequest,
   type RuleType,

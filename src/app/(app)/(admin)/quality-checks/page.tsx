@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, PlayCircle, EyeOff, Eye, AlertCircle, RotateCcw, Loader2, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 
-import qualityChecksApi, {
+import {
+  qualityChecksApi,
   type QualityCheck,
   type QualityIssue,
 } from "@/lib/api/quality-checks";

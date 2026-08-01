@@ -69,7 +69,7 @@ describe("monitoringApi", () => {
       error: undefined,
     });
     const mod = await import("../monitoring");
-    expect(await mod.default.getHealthLog()).toEqual([EXPECTED_HEALTH_ENTRY]);
+    expect(await mod.monitoringApi.getHealthLog()).toEqual([EXPECTED_HEALTH_ENTRY]);
   });
 
   it("getHealthLog normalizes optional+nullable fields to null (#359)", async () => {
@@ -85,7 +85,7 @@ describe("monitoringApi", () => {
       error: undefined,
     });
     const mod = await import("../monitoring");
-    const [out] = await mod.default.getHealthLog();
+    const [out] = await mod.monitoringApi.getHealthLog();
     expect(out.previous_status).toBeNull();
     expect(out.message).toBeNull();
     expect(out.response_time_ms).toBeNull();
@@ -94,7 +94,7 @@ describe("monitoringApi", () => {
   it("getHealthLog throws on error", async () => {
     mockGetHealthLog.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../monitoring");
-    await expect(mod.default.getHealthLog()).rejects.toBe("fail");
+    await expect(mod.monitoringApi.getHealthLog()).rejects.toBe("fail");
   });
 
   it("getAlerts returns alert states", async () => {
@@ -103,7 +103,7 @@ describe("monitoringApi", () => {
       error: undefined,
     });
     const mod = await import("../monitoring");
-    expect(await mod.default.getAlerts()).toEqual([EXPECTED_ALERT_STATE]);
+    expect(await mod.monitoringApi.getAlerts()).toEqual([EXPECTED_ALERT_STATE]);
   });
 
   it("getAlerts normalizes optional+nullable fields to null (#359)", async () => {
@@ -118,7 +118,7 @@ describe("monitoringApi", () => {
       error: undefined,
     });
     const mod = await import("../monitoring");
-    const [out] = await mod.default.getAlerts();
+    const [out] = await mod.monitoringApi.getAlerts();
     expect(out.last_alert_sent_at).toBeNull();
     expect(out.suppressed_until).toBeNull();
   });
@@ -126,13 +126,13 @@ describe("monitoringApi", () => {
   it("getAlerts throws on error", async () => {
     mockGetAlertStates.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../monitoring");
-    await expect(mod.default.getAlerts()).rejects.toBe("fail");
+    await expect(mod.monitoringApi.getAlerts()).rejects.toBe("fail");
   });
 
   it("suppressAlert calls SDK with adapted body", async () => {
     mockSuppressAlert.mockResolvedValue({ error: undefined });
     const mod = await import("../monitoring");
-    await mod.default.suppressAlert({
+    await mod.monitoringApi.suppressAlert({
       service_name: "db",
       until: "2026-05-02T00:00:00Z",
     });
@@ -145,7 +145,7 @@ describe("monitoringApi", () => {
     mockSuppressAlert.mockResolvedValue({ error: "fail" });
     const mod = await import("../monitoring");
     await expect(
-      mod.default.suppressAlert({ service_name: "db", until: "x" })
+      mod.monitoringApi.suppressAlert({ service_name: "db", until: "x" })
     ).rejects.toBe("fail");
   });
 
@@ -155,18 +155,18 @@ describe("monitoringApi", () => {
       error: undefined,
     });
     const mod = await import("../monitoring");
-    expect(await mod.default.triggerCheck()).toEqual([EXPECTED_HEALTH_ENTRY]);
+    expect(await mod.monitoringApi.triggerCheck()).toEqual([EXPECTED_HEALTH_ENTRY]);
   });
 
   it("triggerCheck throws on error", async () => {
     mockRunHealthCheck.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../monitoring");
-    await expect(mod.default.triggerCheck()).rejects.toBe("fail");
+    await expect(mod.monitoringApi.triggerCheck()).rejects.toBe("fail");
   });
 
   it("getHealthLog throws Empty response body when SDK returns no data (#359)", async () => {
     mockGetHealthLog.mockResolvedValue({ data: undefined, error: undefined });
     const mod = await import("../monitoring");
-    await expect(mod.default.getHealthLog()).rejects.toThrow(/Empty response body/);
+    await expect(mod.monitoringApi.getHealthLog()).rejects.toThrow(/Empty response body/);
   });
 });

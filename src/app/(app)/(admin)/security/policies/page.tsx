@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
 import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {

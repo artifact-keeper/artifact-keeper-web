@@ -5,7 +5,7 @@ vi.mock("../fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
-import quarantineApi from "../quarantine";
+import { quarantineApi } from "../quarantine";
 
 const ARTIFACT_ID = "0f2f1c2e-1111-4222-8333-444455556666";
 

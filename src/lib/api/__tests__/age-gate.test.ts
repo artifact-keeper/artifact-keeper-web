@@ -29,7 +29,8 @@ vi.mock("@artifact-keeper/sdk", () => ({
 }));
 
 import { ApiError } from "../fetch";
-import ageGateApi, {
+import {
+  ageGateApi,
   AgeGatePartialTransitionError,
   ReopenUnsupportedError,
   isReopenSupported,

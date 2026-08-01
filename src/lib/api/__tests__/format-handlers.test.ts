@@ -18,7 +18,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   testFormatHandler: (...a: unknown[]) => m.testFormatHandler(...a),
 }));
 
-import formatHandlersApi from "../format-handlers";
+import { formatHandlersApi } from "../format-handlers";
 
 const SDK = {
   id: "h1",

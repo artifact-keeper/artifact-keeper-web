@@ -107,7 +107,7 @@ vi.mock("@/lib/api/artifacts", () => ({
     createDownloadTicket: vi.fn(),
   },
 }));
-vi.mock("@/lib/api/security", () => ({ default: { getRepoSecurity: vi.fn() } }));
+vi.mock("@/lib/api/security", () => ({ securityApi: { getRepoSecurity: vi.fn() } }));
 
 // Heavy / out-of-scope children stubbed to nothing meaningful. (vi.mock
 // factories are hoisted, so each stub is inlined rather than sharing a helper.)

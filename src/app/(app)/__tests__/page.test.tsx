@@ -38,7 +38,7 @@ vi.mock("@/lib/api/repositories", () => ({
   repositoriesApi: { list: vi.fn() },
 }));
 vi.mock("@/lib/api/sbom", () => ({
-  default: { getCveTrends: vi.fn() },
+  sbomApi: { getCveTrends: vi.fn() },
 }));
 
 // Utils

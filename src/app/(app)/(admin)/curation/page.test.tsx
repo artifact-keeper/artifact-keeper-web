@@ -65,7 +65,7 @@ const api = {
   reEvaluate: vi.fn(),
 };
 vi.mock("@/lib/api/curation", () => ({
-  default: {
+  curationApi: {
     listPackages: (...a: unknown[]) => api.listPackages(...a),
     approve: (...a: unknown[]) => api.approve(...a),
     block: (...a: unknown[]) => api.block(...a),

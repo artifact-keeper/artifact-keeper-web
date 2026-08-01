@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Workflow, Plus, Trash2, Pencil, AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import syncPoliciesApi, {
+import {
+  syncPoliciesApi,
   filterToArtifactFilter,
   type SyncPolicy,
   type CreateSyncPolicyRequest,

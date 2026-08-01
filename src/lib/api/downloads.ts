@@ -323,4 +323,3 @@ export const downloadsApi = {
   },
 };
 
-export default downloadsApi;

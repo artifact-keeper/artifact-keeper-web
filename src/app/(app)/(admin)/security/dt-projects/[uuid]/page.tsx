@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 
-import dtApi from "@/lib/api/dependency-track";
+import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   DtFinding,

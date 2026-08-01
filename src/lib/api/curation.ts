@@ -10,6 +10,7 @@ import {
 } from '@artifact-keeper/sdk';
 import type { CurationPackageResponse } from '@artifact-keeper/sdk';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * A package awaiting curation review in a staging repository. Curation gates
@@ -62,59 +63,51 @@ function adaptPackage(sdk: CurationPackageResponse): CurationPackage {
   };
 }
 
-const curationApi = {
+export const curationApi = {
   /** List packages in a staging repo's curation queue. */
   listPackages: async (
     stagingRepoId: string,
     params: ListCurationParams = {},
   ): Promise<CurationPackage[]> => {
-    const { data, error } = await listCurationPackages({
+    const data = await unwrap(listCurationPackages({
       query: { staging_repo_id: stagingRepoId, ...params },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'curationApi.listPackages').map(adaptPackage);
   },
 
   getPackage: async (id: string): Promise<CurationPackage> => {
-    const { data, error } = await getCurationPackage({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(getCurationPackage({ path: { id } }));
     return adaptPackage(assertData(data, 'curationApi.getPackage'));
   },
 
   approve: async (id: string): Promise<CurationPackage> => {
-    const { data, error } = await approvePackage({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(approvePackage({ path: { id } }));
     return adaptPackage(assertData(data, 'curationApi.approve'));
   },
 
   block: async (id: string): Promise<CurationPackage> => {
-    const { data, error } = await blockPackage({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(blockPackage({ path: { id } }));
     return adaptPackage(assertData(data, 'curationApi.block'));
   },
 
   /** Approve many packages at once; returns the number affected. */
   bulkApprove: async (ids: string[], reason: string): Promise<number> => {
-    const { data, error } = await bulkApprove({ body: { ids, reason } });
-    if (error) throw error;
+    const data = await unwrap(bulkApprove({ body: { ids, reason } }));
     return assertData(data, 'curationApi.bulkApprove');
   },
 
   /** Block many packages at once; returns the number affected. */
   bulkBlock: async (ids: string[], reason: string): Promise<number> => {
-    const { data, error } = await bulkBlock({ body: { ids, reason } });
-    if (error) throw error;
+    const data = await unwrap(bulkBlock({ body: { ids, reason } }));
     return assertData(data, 'curationApi.bulkBlock');
   },
 
   /** Re-run curation rules over a staging repo; returns the number re-evaluated. */
   reEvaluate: async (stagingRepoId: string, defaultAction: string): Promise<number> => {
-    const { data, error } = await reEvaluate({
+    const data = await unwrap(reEvaluate({
       body: { staging_repo_id: stagingRepoId, default_action: defaultAction },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'curationApi.reEvaluate');
   },
 };
 
-export default curationApi;

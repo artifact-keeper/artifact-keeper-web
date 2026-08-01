@@ -23,6 +23,7 @@ import type {
   ListPoliciesQuery,
 } from '@/types/lifecycle';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // SDK ⇄ local shape adapters. The SDK types declare optional+nullable
 // (`?: string | null`) for fields the local types declare as
@@ -91,24 +92,21 @@ function adaptUpdateRequest(req: UpdateLifecyclePolicyRequest): SdkUpdateLifecyc
   };
 }
 
-const lifecycleApi = {
+export const lifecycleApi = {
   list: async (params?: ListPoliciesQuery): Promise<LifecyclePolicy[]> => {
-    const { data, error } = await sdkListLifecyclePolicies({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListLifecyclePolicies({ query: params }));
     return assertData(data, 'lifecycleApi.list').map(adaptLifecyclePolicy);
   },
 
   get: async (id: string): Promise<LifecyclePolicy> => {
-    const { data, error } = await sdkGetLifecyclePolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetLifecyclePolicy({ path: { id } }));
     return adaptLifecyclePolicy(assertData(data, 'lifecycleApi.get'));
   },
 
   create: async (req: CreateLifecyclePolicyRequest): Promise<LifecyclePolicy> => {
-    const { data, error } = await sdkCreateLifecyclePolicy({
+    const data = await unwrap(sdkCreateLifecyclePolicy({
       body: adaptCreateRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptLifecyclePolicy(assertData(data, 'lifecycleApi.create'));
   },
 
@@ -116,36 +114,30 @@ const lifecycleApi = {
     id: string,
     req: UpdateLifecyclePolicyRequest
   ): Promise<LifecyclePolicy> => {
-    const { data, error } = await sdkUpdateLifecyclePolicy({
+    const data = await unwrap(sdkUpdateLifecyclePolicy({
       path: { id },
       body: adaptUpdateRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptLifecyclePolicy(assertData(data, 'lifecycleApi.update'));
   },
 
   delete: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteLifecyclePolicy({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteLifecyclePolicy({ path: { id } }));
   },
 
   execute: async (id: string): Promise<PolicyExecutionResult> => {
-    const { data, error } = await sdkExecutePolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkExecutePolicy({ path: { id } }));
     return adaptPolicyExecutionResult(assertData(data, 'lifecycleApi.execute'));
   },
 
   preview: async (id: string): Promise<PolicyExecutionResult> => {
-    const { data, error } = await sdkPreviewPolicy({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkPreviewPolicy({ path: { id } }));
     return adaptPolicyExecutionResult(assertData(data, 'lifecycleApi.preview'));
   },
 
   executeAll: async (): Promise<PolicyExecutionResult[]> => {
-    const { data, error } = await sdkExecuteAllPolicies();
-    if (error) throw error;
+    const data = await unwrap(sdkExecuteAllPolicies());
     return assertData(data, 'lifecycleApi.executeAll').map(adaptPolicyExecutionResult);
   },
 };
 
-export default lifecycleApi;

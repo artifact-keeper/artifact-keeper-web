@@ -74,6 +74,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
+import { unwrap } from "@/lib/sdk-utils";
 
 // -- types --
 
@@ -158,12 +159,11 @@ export default function PluginsPage() {
       statusFilter === "__all__" ? undefined : statusFilter,
     ],
     queryFn: async () => {
-      const { data, error } = await listPlugins({
+      const data = await unwrap(listPlugins({
         query: {
           status: statusFilter !== "__all__" ? statusFilter : undefined,
         },
-      });
-      if (error) throw error;
+      }));
       return data as any as PluginsResponse;
     },
   });
@@ -175,10 +175,9 @@ export default function PluginsPage() {
   } = useQuery({
     queryKey: ["plugin-config", configPlugin?.id],
     queryFn: async () => {
-      const { data, error } = await getPluginConfig({
+      const data = await unwrap(getPluginConfig({
         path: { id: configPlugin!.id },
-      });
-      if (error) throw error;
+      }));
       return (data as any).items as PluginConfig[];
     },
     // Config is admin-only (#2512). Non-admins never trigger the request; the
@@ -194,8 +193,7 @@ export default function PluginsPage() {
   // -- mutations --
   const enableMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await enablePlugin({ path: { id } });
-      if (error) throw error;
+      await unwrap(enablePlugin({ path: { id } }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -206,8 +204,7 @@ export default function PluginsPage() {
 
   const disableMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await disablePlugin({ path: { id } });
-      if (error) throw error;
+      await unwrap(disablePlugin({ path: { id } }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -218,8 +215,7 @@ export default function PluginsPage() {
 
   const uninstallMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await uninstallPlugin({ path: { id } });
-      if (error) throw error;
+      await unwrap(uninstallPlugin({ path: { id } }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
@@ -239,11 +235,10 @@ export default function PluginsPage() {
       id: string;
       config: Record<string, string>;
     }) => {
-      const { error } = await updatePluginConfig({
+      await unwrap(updatePluginConfig({
         path: { id },
         body: { config } as any,
-      });
-      if (error) throw error;
+      }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugin-config"] });
@@ -261,10 +256,9 @@ export default function PluginsPage() {
 
   const installGitMutation = useMutation({
     mutationFn: async ({ url, ref }: { url: string; ref?: string }) => {
-      const { data, error } = await installFromGit({
+      const data = await unwrap(installFromGit({
         body: { url, ref: ref || null },
-      });
-      if (error) throw error;
+      }));
       return data as any;
     },
     onSuccess: (data) => {
@@ -282,10 +276,9 @@ export default function PluginsPage() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const { data, error } = await installFromZip({
+      const data = await unwrap(installFromZip({
         body: formData,
-      } as any);
-      if (error) throw error;
+      } as any));
       return data as any;
     },
     onSuccess: (data) => {

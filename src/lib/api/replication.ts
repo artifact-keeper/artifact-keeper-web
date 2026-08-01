@@ -21,6 +21,7 @@ import type {
   AssignRepoRequest as SdkAssignRepoRequest,
 } from '@artifact-keeper/sdk';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 export type PeerStatus = 'online' | 'offline' | 'syncing' | 'degraded';
 
@@ -174,8 +175,7 @@ function adaptAssignRequest(req: AssignRepoRequest): SdkAssignRepoRequest {
 export const peersApi = {
   /** Get this instance's identity */
   getIdentity: async (): Promise<PeerIdentity> => {
-    const { data, error } = await sdkGetIdentity();
-    if (error) throw error;
+    const data = await unwrap(sdkGetIdentity());
     return adaptIdentity(assertData(data, 'peersApi.getIdentity'));
   },
 
@@ -186,31 +186,27 @@ export const peersApi = {
     page?: number;
     per_page?: number;
   }): Promise<{ items: PeerInstance[]; total: number }> => {
-    const { data, error } = await sdkListPeers({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListPeers({ query: params }));
     return adaptPeerInstanceList(assertData(data, 'peersApi.list'));
   },
 
   /** Get a single peer */
   get: async (id: string): Promise<PeerInstance> => {
-    const { data, error } = await sdkGetPeer({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetPeer({ path: { id } }));
     return adaptPeerInstance(assertData(data, 'peersApi.get'));
   },
 
   /** Register a new peer */
   register: async (req: RegisterPeerRequest): Promise<PeerInstance> => {
-    const { data, error } = await sdkRegisterPeer({
+    const data = await unwrap(sdkRegisterPeer({
       body: adaptRegisterRequest(req),
-    });
-    if (error) throw error;
+    }));
     return adaptPeerInstance(assertData(data, 'peersApi.register'));
   },
 
   /** Unregister a peer */
   unregister: async (id: string): Promise<void> => {
-    const { error } = await sdkUnregisterPeer({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkUnregisterPeer({ path: { id } }));
   },
 
   /** Send heartbeat */
@@ -218,23 +214,20 @@ export const peersApi = {
     id: string,
     req: { cache_used_bytes: number; status?: string },
   ): Promise<void> => {
-    const { error } = await sdkHeartbeat({
+    await unwrap(sdkHeartbeat({
       path: { id },
       body: { cache_used_bytes: req.cache_used_bytes, status: req.status },
-    });
-    if (error) throw error;
+    }));
   },
 
   /** Trigger sync for a peer */
   triggerSync: async (id: string): Promise<void> => {
-    const { error } = await sdkTriggerSync({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkTriggerSync({ path: { id } }));
   },
 
   /** Get repositories assigned to a peer */
   getRepositories: async (id: string): Promise<string[]> => {
-    const { data, error } = await sdkGetAssignedRepos({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetAssignedRepos({ path: { id } }));
     return assertData(data, 'peersApi.getRepositories');
   },
 
@@ -243,19 +236,17 @@ export const peersApi = {
     peerId: string,
     req: AssignRepoRequest,
   ): Promise<void> => {
-    const { error } = await sdkAssignRepo({
+    await unwrap(sdkAssignRepo({
       path: { id: peerId },
       body: adaptAssignRequest(req),
-    });
-    if (error) throw error;
+    }));
   },
 
   /** Unassign a repository from a peer */
   unassignRepository: async (peerId: string, repoId: string): Promise<void> => {
-    const { error } = await sdkUnassignRepo({
+    await unwrap(sdkUnassignRepo({
       path: { id: peerId, repo_id: repoId },
-    });
-    if (error) throw error;
+    }));
   },
 
   /** Get peer connections */
@@ -263,13 +254,11 @@ export const peersApi = {
     id: string,
     params?: { status?: string },
   ): Promise<PeerConnection[]> => {
-    const { data, error } = await sdkListPeerConnections({
+    const data = await unwrap(sdkListPeerConnections({
       path: { id },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'peersApi.getConnections').map(adaptPeerConnection);
   },
 };
 
-export default peersApi;

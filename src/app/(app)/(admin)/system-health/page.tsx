@@ -10,7 +10,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import qualityGatesApi from "@/lib/api/quality-gates";
+import { qualityGatesApi } from "@/lib/api/quality-gates";
 import type { RepoHealth } from "@/types/quality-gates";
 
 import { PageHeader } from "@/components/common/page-header";

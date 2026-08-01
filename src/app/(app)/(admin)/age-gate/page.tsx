@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import ageGateApi, {
+import {
+  ageGateApi,
   AGE_GATE_STATUSES,
   AgeGatePartialTransitionError,
   isReopenSupported,

@@ -167,7 +167,7 @@ describe("dtApi", () => {
   it("getStatus returns status", async () => {
     mockDtStatus.mockResolvedValue({ data: SDK_STATUS, error: undefined });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getStatus();
+    const out = await mod.dtApi.getStatus();
     expect(out.enabled).toBe(true);
     expect(out.url).toBe("https://dt.example.com");
   });
@@ -178,14 +178,14 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getStatus();
+    const out = await mod.dtApi.getStatus();
     expect(out.url).toBeNull();
   });
 
   it("getStatus throws on error", async () => {
     mockDtStatus.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getStatus()).rejects.toBe("fail");
+    await expect(mod.dtApi.getStatus()).rejects.toBe("fail");
   });
 
   it("listProjects returns projects", async () => {
@@ -194,7 +194,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.listProjects();
+    const out = await mod.dtApi.listProjects();
     expect(out[0].uuid).toBe("p1");
     expect(out[0].name).toBe("main");
   });
@@ -202,7 +202,7 @@ describe("dtApi", () => {
   it("listProjects throws on error", async () => {
     mockListProjects.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
-    await expect(mod.default.listProjects()).rejects.toBe("fail");
+    await expect(mod.dtApi.listProjects()).rejects.toBe("fail");
   });
 
   it("getProjectFindings returns findings with nested adapters", async () => {
@@ -211,7 +211,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectFindings("p1");
+    const out = await mod.dtApi.getProjectFindings("p1");
     expect(out[0].component.uuid).toBe("c1");
     expect(out[0].vulnerability.cwe?.cweId).toBe(79);
     expect(out[0].analysis?.state).toBe("EXPLOITABLE");
@@ -223,7 +223,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectFindings("p1");
+    const out = await mod.dtApi.getProjectFindings("p1");
     expect(out[0].analysis).toBeNull();
     expect(out[0].attribution).toBeNull();
   });
@@ -234,7 +234,7 @@ describe("dtApi", () => {
       error: "fail",
     });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getProjectFindings("p1")).rejects.toBe("fail");
+    await expect(mod.dtApi.getProjectFindings("p1")).rejects.toBe("fail");
   });
 
   it("getProjectComponents returns components with resolved license", async () => {
@@ -243,7 +243,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectComponents("p1");
+    const out = await mod.dtApi.getProjectComponents("p1");
     expect(out[0].uuid).toBe("c1");
     expect(out[0].resolvedLicense?.name).toBe("MIT");
   });
@@ -254,7 +254,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectComponents("p1");
+    const out = await mod.dtApi.getProjectComponents("p1");
     expect(out[0].resolvedLicense).toBeNull();
   });
 
@@ -264,7 +264,7 @@ describe("dtApi", () => {
       error: "fail",
     });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getProjectComponents("p1")).rejects.toBe("fail");
+    await expect(mod.dtApi.getProjectComponents("p1")).rejects.toBe("fail");
   });
 
   it("getProjectMetrics returns metrics", async () => {
@@ -273,7 +273,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectMetrics("p1");
+    const out = await mod.dtApi.getProjectMetrics("p1");
     expect(out.critical).toBe(1);
     expect(out.high).toBe(4);
   });
@@ -287,7 +287,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectMetrics("p1");
+    const out = await mod.dtApi.getProjectMetrics("p1");
     expect(out.critical).toBe(0);
     expect(out.findingsTotal).toBe(0);
     expect(out.policyViolationsTotal).toBe(0);
@@ -299,7 +299,7 @@ describe("dtApi", () => {
   it("getProjectMetrics throws on error", async () => {
     mockGetProjectMetrics.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getProjectMetrics("p1")).rejects.toBe("fail");
+    await expect(mod.dtApi.getProjectMetrics("p1")).rejects.toBe("fail");
   });
 
   it("getProjectMetricsHistory returns history", async () => {
@@ -308,7 +308,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectMetricsHistory("p1", 30);
+    const out = await mod.dtApi.getProjectMetricsHistory("p1", 30);
     expect(out[0].critical).toBe(1);
     expect(mockGetProjectMetricsHistory).toHaveBeenCalledWith({
       path: { project_uuid: "p1" },
@@ -322,7 +322,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    await mod.default.getProjectMetricsHistory("p1");
+    await mod.dtApi.getProjectMetricsHistory("p1");
     expect(mockGetProjectMetricsHistory).toHaveBeenCalledWith({
       path: { project_uuid: "p1" },
       query: undefined,
@@ -335,7 +335,7 @@ describe("dtApi", () => {
       error: "fail",
     });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getProjectMetricsHistory("p1")).rejects.toBe(
+    await expect(mod.dtApi.getProjectMetricsHistory("p1")).rejects.toBe(
       "fail",
     );
   });
@@ -346,7 +346,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getPortfolioMetrics();
+    const out = await mod.dtApi.getPortfolioMetrics();
     expect(out.projects).toBe(3);
     expect(out.findingsTotal).toBe(27);
   });
@@ -357,7 +357,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getPortfolioMetrics();
+    const out = await mod.dtApi.getPortfolioMetrics();
     expect(out.projects).toBe(0);
     expect(out.findingsTotal).toBe(0);
   });
@@ -368,7 +368,7 @@ describe("dtApi", () => {
       error: "fail",
     });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getPortfolioMetrics()).rejects.toBe("fail");
+    await expect(mod.dtApi.getPortfolioMetrics()).rejects.toBe("fail");
   });
 
   it("getProjectViolations returns violations", async () => {
@@ -377,7 +377,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.getProjectViolations("p1");
+    const out = await mod.dtApi.getProjectViolations("p1");
     expect(out[0].uuid).toBe("v1");
     expect(out[0].policyCondition.policy.name).toBe("deny gpl");
   });
@@ -388,7 +388,7 @@ describe("dtApi", () => {
       error: "fail",
     });
     const mod = await import("../dependency-track");
-    await expect(mod.default.getProjectViolations("p1")).rejects.toBe("fail");
+    await expect(mod.dtApi.getProjectViolations("p1")).rejects.toBe("fail");
   });
 
   it("updateAnalysis returns response", async () => {
@@ -397,7 +397,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.updateAnalysis({
+    const out = await mod.dtApi.updateAnalysis({
       project_uuid: "p1",
       component_uuid: "c1",
       vulnerability_uuid: "v1",
@@ -414,7 +414,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    await mod.default.updateAnalysis({
+    await mod.dtApi.updateAnalysis({
       project_uuid: "p1",
       component_uuid: "c1",
       vulnerability_uuid: "v1",
@@ -440,7 +440,7 @@ describe("dtApi", () => {
     mockUpdateAnalysis.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
     await expect(
-      mod.default.updateAnalysis({
+      mod.dtApi.updateAnalysis({
         project_uuid: "p1",
         component_uuid: "c1",
         vulnerability_uuid: "v1",
@@ -455,7 +455,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const out = await mod.default.listPolicies();
+    const out = await mod.dtApi.listPolicies();
     expect(out[0].uuid).toBe("pol1");
     expect(out[0].policyConditions[0].subject).toBe("license");
     expect(out[0].projects[0].uuid).toBe("p1");
@@ -464,7 +464,7 @@ describe("dtApi", () => {
   it("listPolicies throws on error", async () => {
     mockListPolicies.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
-    await expect(mod.default.listPolicies()).rejects.toBe("fail");
+    await expect(mod.dtApi.listPolicies()).rejects.toBe("fail");
   });
 
   it("getAllViolations aggregates violations across projects", async () => {
@@ -473,7 +473,7 @@ describe("dtApi", () => {
       error: undefined,
     });
     const mod = await import("../dependency-track");
-    const result = await mod.default.getAllViolations([
+    const result = await mod.dtApi.getAllViolations([
       { uuid: "p1" },
       { uuid: "p2" },
     ]);
@@ -485,7 +485,7 @@ describe("dtApi", () => {
       .mockResolvedValueOnce({ data: [SDK_VIOLATION], error: undefined })
       .mockResolvedValueOnce({ data: undefined, error: "fail" });
     const mod = await import("../dependency-track");
-    const result = await mod.default.getAllViolations([
+    const result = await mod.dtApi.getAllViolations([
       { uuid: "p1" },
       { uuid: "p2" },
     ]);

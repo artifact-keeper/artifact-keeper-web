@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import "@/lib/sdk-client";
 import { listScanConfigs } from "@artifact-keeper/sdk";
-import securityApi from "@/lib/api/security";
+import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
@@ -37,6 +37,7 @@ import {
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { unwrap } from "@/lib/sdk-utils";
 
 // -- status & severity color maps --
 
@@ -136,8 +137,7 @@ export default function SecurityScansPage() {
   const { data: scanConfigs } = useQuery({
     queryKey: ["security", "scan-configs"],
     queryFn: async () => {
-      const { data, error } = await listScanConfigs();
-      if (error) throw error;
+      const data = await unwrap(listScanConfigs());
       return new Set(
         ((data as Array<{ repository_id: string }>) ?? []).map(
           (c) => c.repository_id

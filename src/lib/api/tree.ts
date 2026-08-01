@@ -12,6 +12,7 @@ import type {
   TreeNodeMetadata,
   FolderDedupUsage,
 } from '@/types/tree';
+import { unwrap } from '@/lib/sdk-utils';
 
 /**
  * Trust-boundary schema for the per-folder deduplicated storage breakdown
@@ -121,14 +122,13 @@ function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
 
 export const treeApi = {
   getChildren: async (params: GetChildrenParams = {}): Promise<TreeNode[]> => {
-    const { data, error } = await getTree({
+    const data = await unwrap(getTree({
       query: {
         repository_key: params.repository_key,
         path: params.path,
         include_metadata: params.include_metadata,
       },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'treeApi.getChildren').nodes.map(adaptTreeNode);
   },
 
@@ -161,4 +161,3 @@ export const treeApi = {
   },
 };
 
-export default treeApi;

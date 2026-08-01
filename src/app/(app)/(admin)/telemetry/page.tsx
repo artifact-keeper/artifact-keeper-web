@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import telemetryApi from "@/lib/api/telemetry";
+import { telemetryApi } from "@/lib/api/telemetry";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { CrashReport, TelemetrySettings } from "@/types/telemetry";
 import { PageHeader } from "@/components/common/page-header";

@@ -30,8 +30,8 @@ import {
 
 import { repositoriesApi } from "@/lib/api/repositories";
 import { artifactsApi } from "@/lib/api/artifacts";
-import securityApi from "@/lib/api/security";
-import quarantineApi from "@/lib/api/quarantine";
+import { securityApi } from "@/lib/api/security";
+import { quarantineApi } from "@/lib/api/quarantine";
 import { mutationErrorToast } from "@/lib/error-utils";
 import {
   isActivelyQuarantined,

@@ -98,14 +98,14 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getStorageTrend();
+    const out = await mod.analyticsApi.getStorageTrend();
     expect(out).toEqual([SDK_STORAGE]);
   });
 
   it("getStorageTrend throws on error", async () => {
     mockGetStorageTrend.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../analytics");
-    await expect(mod.default.getStorageTrend()).rejects.toBe("fail");
+    await expect(mod.analyticsApi.getStorageTrend()).rejects.toBe("fail");
   });
 
   it("getStorageBreakdown returns data", async () => {
@@ -114,7 +114,7 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getStorageBreakdown();
+    const out = await mod.analyticsApi.getStorageBreakdown();
     expect(out[0].repository_id).toBe("repo-a");
     expect(out[0].last_upload_at).toBe("2026-04-30T00:00:00Z");
   });
@@ -125,14 +125,14 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getStorageBreakdown();
+    const out = await mod.analyticsApi.getStorageBreakdown();
     expect(out[0].last_upload_at).toBeNull();
   });
 
   it("getStorageBreakdown throws on error", async () => {
     mockGetStorageBreakdown.mockResolvedValue({ data: undefined, error: "err" });
     const mod = await import("../analytics");
-    await expect(mod.default.getStorageBreakdown()).rejects.toBe("err");
+    await expect(mod.analyticsApi.getStorageBreakdown()).rejects.toBe("err");
   });
 
   it("getGrowthSummary returns data", async () => {
@@ -141,20 +141,20 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getGrowthSummary();
+    const out = await mod.analyticsApi.getGrowthSummary();
     expect(out.storage_growth_bytes).toBe(100_000);
   });
 
   it("getGrowthSummary throws Empty response body when SDK returns no data (#359)", async () => {
     mockGetGrowthSummary.mockResolvedValue({ data: undefined, error: undefined });
     const mod = await import("../analytics");
-    await expect(mod.default.getGrowthSummary()).rejects.toThrow(/Empty response body/);
+    await expect(mod.analyticsApi.getGrowthSummary()).rejects.toThrow(/Empty response body/);
   });
 
   it("getGrowthSummary throws on error", async () => {
     mockGetGrowthSummary.mockResolvedValue({ data: undefined, error: "err" });
     const mod = await import("../analytics");
-    await expect(mod.default.getGrowthSummary()).rejects.toBe("err");
+    await expect(mod.analyticsApi.getGrowthSummary()).rejects.toBe("err");
   });
 
   it("getStaleArtifacts returns data", async () => {
@@ -163,7 +163,7 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getStaleArtifacts();
+    const out = await mod.analyticsApi.getStaleArtifacts();
     expect(out[0].artifact_id).toBe("art-1");
     expect(out[0].last_downloaded_at).toBe("2025-06-01T00:00:00Z");
   });
@@ -174,14 +174,14 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getStaleArtifacts();
+    const out = await mod.analyticsApi.getStaleArtifacts();
     expect(out[0].last_downloaded_at).toBeNull();
   });
 
   it("getStaleArtifacts throws on error", async () => {
     mockGetStaleArtifacts.mockResolvedValue({ data: undefined, error: "err" });
     const mod = await import("../analytics");
-    await expect(mod.default.getStaleArtifacts()).rejects.toBe("err");
+    await expect(mod.analyticsApi.getStaleArtifacts()).rejects.toBe("err");
   });
 
   it("getDownloadTrends returns data", async () => {
@@ -190,14 +190,14 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getDownloadTrends();
+    const out = await mod.analyticsApi.getDownloadTrends();
     expect(out).toEqual([SDK_DOWNLOAD_TREND]);
   });
 
   it("getDownloadTrends throws on error", async () => {
     mockGetDownloadTrends.mockResolvedValue({ data: undefined, error: "err" });
     const mod = await import("../analytics");
-    await expect(mod.default.getDownloadTrends()).rejects.toBe("err");
+    await expect(mod.analyticsApi.getDownloadTrends()).rejects.toBe("err");
   });
 
   it("getRepositoryTrend passes repositoryId and params", async () => {
@@ -206,7 +206,7 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getRepositoryTrend("repo-a");
+    const out = await mod.analyticsApi.getRepositoryTrend("repo-a");
     expect(out[0].repository_id).toBe("repo-a");
     expect(mockGetRepositoryTrend).toHaveBeenCalledWith(
       expect.objectContaining({ path: { id: "repo-a" } }),
@@ -219,7 +219,7 @@ describe("analyticsApi", () => {
       error: undefined,
     });
     const mod = await import("../analytics");
-    const out = await mod.default.getRepositoryTrend("repo-a");
+    const out = await mod.analyticsApi.getRepositoryTrend("repo-a");
     expect(out[0].repository_name).toBeNull();
     expect(out[0].repository_key).toBeNull();
   });
@@ -227,19 +227,19 @@ describe("analyticsApi", () => {
   it("getRepositoryTrend throws on error", async () => {
     mockGetRepositoryTrend.mockResolvedValue({ data: undefined, error: "err" });
     const mod = await import("../analytics");
-    await expect(mod.default.getRepositoryTrend("repo-a")).rejects.toBe("err");
+    await expect(mod.analyticsApi.getRepositoryTrend("repo-a")).rejects.toBe("err");
   });
 
   it("captureSnapshot calls SDK", async () => {
     mockCaptureSnapshot.mockResolvedValue({ error: undefined });
     const mod = await import("../analytics");
-    await mod.default.captureSnapshot();
+    await mod.analyticsApi.captureSnapshot();
     expect(mockCaptureSnapshot).toHaveBeenCalled();
   });
 
   it("captureSnapshot throws on error", async () => {
     mockCaptureSnapshot.mockResolvedValue({ error: "fail" });
     const mod = await import("../analytics");
-    await expect(mod.default.captureSnapshot()).rejects.toBe("fail");
+    await expect(mod.analyticsApi.captureSnapshot()).rejects.toBe("fail");
   });
 });

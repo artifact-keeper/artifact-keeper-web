@@ -67,10 +67,6 @@ const mockGetScanConfig = vi.fn();
 const mockUpdateScanConfig = vi.fn();
 vi.mock("@/lib/api/scan-config", () => ({
   __esModule: true,
-  default: {
-    get: (...args: unknown[]) => mockGetScanConfig(...args),
-    update: (...args: unknown[]) => mockUpdateScanConfig(...args),
-  },
   scanConfigApi: {
     get: (...args: unknown[]) => mockGetScanConfig(...args),
     update: (...args: unknown[]) => mockUpdateScanConfig(...args),
@@ -84,7 +80,7 @@ const mockDeletePolicy = vi.fn();
 const mockExecutePolicy = vi.fn();
 const mockPreviewPolicy = vi.fn();
 vi.mock("@/lib/api/lifecycle", () => ({
-  default: {
+  lifecycleApi: {
     list: (...args: unknown[]) => mockListPolicies(...args),
     delete: (...args: unknown[]) => mockDeletePolicy(...args),
     execute: (...args: unknown[]) => mockExecutePolicy(...args),

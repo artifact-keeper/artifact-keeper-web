@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import signingApi, { type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
+import { signingApi, type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
 import { mutationErrorToast, toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 

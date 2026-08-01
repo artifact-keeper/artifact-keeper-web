@@ -9,7 +9,7 @@ import {
   Search,
 } from "lucide-react";
 
-import dtApi from "@/lib/api/dependency-track";
+import { dtApi } from "@/lib/api/dependency-track";
 import type { DtProject, DtProjectMetrics } from "@/types/dependency-track";
 import { riskScoreColor } from "@/lib/dt-utils";
 

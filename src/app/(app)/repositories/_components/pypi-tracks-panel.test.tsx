@@ -53,7 +53,7 @@ const mockList = vi.fn();
 const mockUpsert = vi.fn();
 const mockRemove = vi.fn();
 vi.mock("@/lib/api/pypi-tracks", () => ({
-  default: {
+  pypiTracksApi: {
     list: (...a: unknown[]) => mockList(...a),
     upsert: (...a: unknown[]) => mockUpsert(...a),
     remove: (...a: unknown[]) => mockRemove(...a),

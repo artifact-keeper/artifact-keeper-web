@@ -27,6 +27,7 @@ import type {
   StaleQuery,
 } from '@/types/analytics';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // SDK ⇄ local shape adapters. The SDK declares optional+nullable
 // (`?: string | null`) for several fields the local types declare as
@@ -107,18 +108,16 @@ function adaptDownloadTrend(sdk: SdkDownloadTrend): DownloadTrend {
   };
 }
 
-const analyticsApi = {
+export const analyticsApi = {
   getStorageTrend: async (
     params?: DateRangeQuery,
   ): Promise<StorageSnapshot[]> => {
-    const { data, error } = await sdkGetStorageTrend({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetStorageTrend({ query: params }));
     return assertData(data, 'analyticsApi.getStorageTrend').map(adaptStorageSnapshot);
   },
 
   getStorageBreakdown: async (): Promise<RepositoryStorageBreakdown[]> => {
-    const { data, error } = await sdkGetStorageBreakdown();
-    if (error) throw error;
+    const data = await unwrap(sdkGetStorageBreakdown());
     return assertData(data, 'analyticsApi.getStorageBreakdown').map(
       adaptRepositoryStorageBreakdown,
     );
@@ -127,24 +126,21 @@ const analyticsApi = {
   getGrowthSummary: async (
     params?: DateRangeQuery,
   ): Promise<GrowthSummary> => {
-    const { data, error } = await sdkGetGrowthSummary({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetGrowthSummary({ query: params }));
     return adaptGrowthSummary(assertData(data, 'analyticsApi.getGrowthSummary'));
   },
 
   getStaleArtifacts: async (
     params?: StaleQuery,
   ): Promise<StaleArtifact[]> => {
-    const { data, error } = await sdkGetStaleArtifacts({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetStaleArtifacts({ query: params }));
     return assertData(data, 'analyticsApi.getStaleArtifacts').map(adaptStaleArtifact);
   },
 
   getDownloadTrends: async (
     params?: DateRangeQuery,
   ): Promise<DownloadTrend[]> => {
-    const { data, error } = await sdkGetDownloadTrends({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkGetDownloadTrends({ query: params }));
     return assertData(data, 'analyticsApi.getDownloadTrends').map(adaptDownloadTrend);
   },
 
@@ -152,20 +148,17 @@ const analyticsApi = {
     repositoryId: string,
     params?: DateRangeQuery,
   ): Promise<RepositorySnapshot[]> => {
-    const { data, error } = await sdkGetRepositoryTrend({
+    const data = await unwrap(sdkGetRepositoryTrend({
       path: { id: repositoryId },
       query: params,
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'analyticsApi.getRepositoryTrend').map(
       adaptRepositorySnapshot,
     );
   },
 
   captureSnapshot: async (): Promise<void> => {
-    const { error } = await sdkCaptureSnapshot();
-    if (error) throw error;
+    await unwrap(sdkCaptureSnapshot());
   },
 };
 
-export default analyticsApi;

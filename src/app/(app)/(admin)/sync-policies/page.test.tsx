@@ -54,7 +54,7 @@ vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => mockToastSucce
 
 const api = { list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), toggle: vi.fn() };
 vi.mock("@/lib/api/sync-policies", () => ({
-  default: {
+  syncPoliciesApi: {
     list: (...a: unknown[]) => api.list(...a),
     create: (...a: unknown[]) => api.create(...a),
     update: (...a: unknown[]) => api.update(...a),

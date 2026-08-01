@@ -373,4 +373,3 @@ const DEFAULT_SMTP_CONFIG: SmtpConfig = {
 
 export { DEFAULT_SMTP_CONFIG };
 
-export default settingsApi;

@@ -20,6 +20,7 @@ import type {
   SubmitResponse,
 } from '@/types/telemetry';
 import { assertData } from '@/lib/api/fetch';
+import { unwrap } from '@/lib/sdk-utils';
 
 // SDK declares optional+nullable for several CrashReport fields the local
 // type declares as required-but-nullable. Adapter normalizes undefined → null
@@ -64,18 +65,16 @@ function adaptTelemetrySettings(sdk: SdkTelemetrySettings): TelemetrySettings {
   };
 }
 
-const telemetryApi = {
+export const telemetryApi = {
   getSettings: async (): Promise<TelemetrySettings> => {
-    const { data, error } = await sdkGetTelemetrySettings();
-    if (error) throw error;
+    const data = await unwrap(sdkGetTelemetrySettings());
     return adaptTelemetrySettings(assertData(data, 'telemetryApi.getSettings'));
   },
 
   updateSettings: async (
     settings: TelemetrySettings,
   ): Promise<TelemetrySettings> => {
-    const { data, error } = await sdkUpdateTelemetrySettings({ body: settings });
-    if (error) throw error;
+    const data = await unwrap(sdkUpdateTelemetrySettings({ body: settings }));
     return adaptTelemetrySettings(
       assertData(data, 'telemetryApi.updateSettings'),
     );
@@ -85,33 +84,27 @@ const telemetryApi = {
     page?: number;
     per_page?: number;
   }): Promise<CrashListResponse> => {
-    const { data, error } = await sdkListCrashes({ query: params });
-    if (error) throw error;
+    const data = await unwrap(sdkListCrashes({ query: params }));
     return adaptCrashList(assertData(data, 'telemetryApi.listCrashes'));
   },
 
   listPending: async (): Promise<CrashReport[]> => {
-    const { data, error } = await sdkListPendingCrashes();
-    if (error) throw error;
+    const data = await unwrap(sdkListPendingCrashes());
     return assertData(data, 'telemetryApi.listPending').map(adaptCrashReport);
   },
 
   getCrash: async (id: string): Promise<CrashReport> => {
-    const { data, error } = await sdkGetCrash({ path: { id } });
-    if (error) throw error;
+    const data = await unwrap(sdkGetCrash({ path: { id } }));
     return adaptCrashReport(assertData(data, 'telemetryApi.getCrash'));
   },
 
   submitCrashes: async (ids: string[]): Promise<SubmitResponse> => {
-    const { data, error } = await sdkSubmitCrashes({ body: { ids } });
-    if (error) throw error;
+    const data = await unwrap(sdkSubmitCrashes({ body: { ids } }));
     return assertData(data, 'telemetryApi.submitCrashes');
   },
 
   deleteCrash: async (id: string): Promise<void> => {
-    const { error } = await sdkDeleteCrash({ path: { id } });
-    if (error) throw error;
+    await unwrap(sdkDeleteCrash({ path: { id } }));
   },
 };
 
-export default telemetryApi;

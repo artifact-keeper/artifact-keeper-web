@@ -48,7 +48,7 @@ function reasonBody(reason?: string): string {
   return JSON.stringify({ reason: trimmed ? trimmed : null });
 }
 
-const quarantineApi = {
+export const quarantineApi = {
   /**
    * Read one artifact's quarantine state. Needed for artifacts reached through
    * a surface that does not carry the quarantine fields (the by-path detail
@@ -91,4 +91,3 @@ const quarantineApi = {
     }),
 };
 
-export default quarantineApi;

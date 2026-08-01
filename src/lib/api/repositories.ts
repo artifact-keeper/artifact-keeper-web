@@ -31,6 +31,7 @@ import type {
   RepositoryFormat,
   RepositoryType,
 } from '@/types';
+import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListRepositoriesParams {
   page?: number;
@@ -216,14 +217,12 @@ function adaptVirtualMembersList(sdk: VirtualMembersListResponse): VirtualMember
 
 export const repositoriesApi = {
   list: async (params: ListRepositoriesParams = {}): Promise<PaginatedResponse<Repository>> => {
-    const { data, error } = await listRepositories({ query: params });
-    if (error) throw error;
+    const data = await unwrap(listRepositories({ query: params }));
     return adaptRepositoryList(assertData(data, 'repositoriesApi.list'));
   },
 
   get: async (key: string): Promise<Repository> => {
-    const { data, error } = await getRepository({ path: { key } });
-    if (error) throw error;
+    const data = await unwrap(getRepository({ path: { key } }));
     return adaptRepository(assertData(data, 'repositoriesApi.get'));
   },
 
@@ -259,8 +258,7 @@ export const repositoriesApi = {
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
     };
-    const { data, error } = await createRepository({ body });
-    if (error) throw error;
+    const data = await unwrap(createRepository({ body }));
     return adaptRepository(assertData(data, 'repositoriesApi.create'));
   },
 
@@ -293,43 +291,37 @@ export const repositoriesApi = {
       // wire so update behavior is unchanged; the cast satisfies the
       // generated-required field without sending a spurious value.
     } as SdkUpdateRepositoryRequest;
-    const { data, error } = await updateRepository({ path: { key }, body });
-    if (error) throw error;
+    const data = await unwrap(updateRepository({ path: { key }, body }));
     return adaptRepository(assertData(data, 'repositoriesApi.update'));
   },
 
   delete: async (key: string): Promise<void> => {
-    const { error } = await deleteRepository({ path: { key } });
-    if (error) throw error;
+    await unwrap(deleteRepository({ path: { key } }));
   },
 
   // Virtual repository member management
   listMembers: async (repoKey: string): Promise<VirtualMembersResponse> => {
-    const { data, error } = await listVirtualMembers({ path: { key: repoKey } });
-    if (error) throw error;
+    const data = await unwrap(listVirtualMembers({ path: { key: repoKey } }));
     return adaptVirtualMembersList(assertData(data, 'repositoriesApi.listMembers'));
   },
 
   addMember: async (repoKey: string, memberKey: string, priority?: number): Promise<VirtualRepoMember> => {
-    const { data, error } = await addVirtualMember({
+    const data = await unwrap(addVirtualMember({
       path: { key: repoKey },
       body: { member_key: memberKey, priority },
-    });
-    if (error) throw error;
+    }));
     return adaptVirtualMember(assertData(data, 'repositoriesApi.addMember'));
   },
 
   removeMember: async (repoKey: string, memberKey: string): Promise<void> => {
-    const { error } = await removeVirtualMember({ path: { key: repoKey, member_key: memberKey } });
-    if (error) throw error;
+    await unwrap(removeVirtualMember({ path: { key: repoKey, member_key: memberKey } }));
   },
 
   reorderMembers: async (repoKey: string, members: ReorderMemberInput[]): Promise<VirtualMembersResponse> => {
-    const { data, error } = await updateVirtualMembers({
+    const data = await unwrap(updateVirtualMembers({
       path: { key: repoKey },
       body: { members },
-    });
-    if (error) throw error;
+    }));
     return adaptVirtualMembersList(assertData(data, 'repositoriesApi.reorderMembers'));
   },
 
@@ -427,8 +419,7 @@ export const repositoriesApi = {
    * for other repo types.
    */
   getCacheTtl: async (repoKey: string): Promise<CacheTtlResponse> => {
-    const { data, error } = await getCacheTtl({ path: { key: repoKey } });
-    if (error) throw error;
+    const data = await unwrap(getCacheTtl({ path: { key: repoKey } }));
     return assertData(data, 'repositoriesApi.getCacheTtl');
   },
 
@@ -441,13 +432,11 @@ export const repositoriesApi = {
    * that fail at save time.
    */
   setCacheTtl: async (repoKey: string, cacheTtlSeconds: number): Promise<CacheTtlResponse> => {
-    const { data, error } = await setCacheTtl({
+    const data = await unwrap(setCacheTtl({
       path: { key: repoKey },
       body: { cache_ttl_seconds: cacheTtlSeconds },
-    });
-    if (error) throw error;
+    }));
     return assertData(data, 'repositoriesApi.setCacheTtl');
   },
 };
 
-export default repositoriesApi;

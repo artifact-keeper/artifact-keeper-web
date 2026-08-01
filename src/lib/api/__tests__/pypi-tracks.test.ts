@@ -16,7 +16,7 @@ vi.mock("@artifact-keeper/sdk", () => ({
   deletePypiTrack: (...args: unknown[]) => mockDeletePypiTrack(...args),
 }));
 
-import pypiTracksApi from "../pypi-tracks";
+import { pypiTracksApi } from "../pypi-tracks";
 
 describe("pypiTracksApi", () => {
   beforeEach(() => {
