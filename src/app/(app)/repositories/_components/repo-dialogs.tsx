@@ -41,6 +41,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { useFeatureFlags } from "@/providers/system-config-provider";
 import {
   RpmTrustedKeyField,
   DebianConfigFields,
@@ -134,16 +135,28 @@ export function RepoDialogs({
   pluginFormats = [],
 }: RepoDialogsProps) {
   // Create form state
+  // Private by default: matches the backend default and keeps new
+  // repositories from being exposed unintentionally.
   const [createForm, setCreateForm] = useState<CreateRepositoryRequest>({
     key: "",
     name: "",
     description: "",
     format: "generic",
     repo_type: "local",
-    is_public: true,
+    is_public: false,
     upstream_url: "",
     member_repos: [],
   });
+
+  // When guest access is disabled the backend silently coerces is_public to
+  // false, so offering the toggle would be misleading — show a note instead.
+  // While the config loads the provider falls back to DEFAULT_SYSTEM_CONFIG
+  // (guest access enabled), so the switch renders optimistically: briefly
+  // showing a switch that then disappears is harmless (the backend coerces
+  // anyway), whereas flashing "disabled by the operator" at operators who did
+  // not disable it would be actively wrong. This matches the provider's
+  // documented permissive-default philosophy.
+  const { guestAccessEnabled } = useFeatureFlags();
 
   // For virtual repos: selected member repo keys
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
@@ -245,7 +258,7 @@ export function RepoDialogs({
     key: editRepo?.key ?? "",
     name: editRepo?.name ?? "",
     description: editRepo?.description ?? "",
-    is_public: editRepo?.is_public ?? true,
+    is_public: editRepo?.is_public ?? false,
   }), [editRepo]);
   const [editFormOverrides, setEditFormOverrides] = useState<{
     key?: string;
@@ -263,7 +276,7 @@ export function RepoDialogs({
       description: "",
       format: "generic",
       repo_type: "local",
-      is_public: true,
+      is_public: false,
       upstream_url: "",
       member_repos: [],
     });
@@ -626,16 +639,22 @@ export function RepoDialogs({
               </div>
             )}
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="create-public"
-                checked={createForm.is_public}
-                onCheckedChange={(v) =>
-                  setCreateForm((f) => ({ ...f, is_public: v }))
-                }
-              />
-              <Label htmlFor="create-public">Public repository</Label>
-            </div>
+            {guestAccessEnabled ? (
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="create-public"
+                  checked={createForm.is_public}
+                  onCheckedChange={(v) =>
+                    setCreateForm((f) => ({ ...f, is_public: v }))
+                  }
+                />
+                <Label htmlFor="create-public">Public repository</Label>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Public repositories are disabled by the operator.
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="create-quota">Storage Quota</Label>
               <div className="flex gap-2">
@@ -761,16 +780,22 @@ export function RepoDialogs({
                 rows={2}
               />
             </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="edit-public"
-                checked={editForm.is_public}
-                onCheckedChange={(v) =>
-                  setEditFormOverrides((f) => ({ ...f, is_public: v }))
-                }
-              />
-              <Label htmlFor="edit-public">Public repository</Label>
-            </div>
+            {guestAccessEnabled ? (
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="edit-public"
+                  checked={editForm.is_public}
+                  onCheckedChange={(v) =>
+                    setEditFormOverrides((f) => ({ ...f, is_public: v }))
+                  }
+                />
+                <Label htmlFor="edit-public">Public repository</Label>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Public repositories are disabled by the operator.
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="edit-quota">Storage Quota</Label>
               <div className="flex gap-2">
