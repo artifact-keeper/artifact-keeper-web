@@ -30,6 +30,8 @@ describe("adminApi", () => {
       active_peers: 0,
       pending_sync_tasks: 0,
       total_downloads: 0,
+      proxy_artifact_count: 2,
+      proxy_storage_bytes: 2048,
     };
     mockGetSystemStats.mockResolvedValue({ data: stats, error: undefined });
     const { adminApi } = await import("../admin");
@@ -39,7 +41,26 @@ describe("adminApi", () => {
       total_artifacts: 10,
       total_storage_bytes: 1024,
       total_users: 3,
+      proxy_artifact_count: 2,
+      proxy_storage_bytes: 2048,
     });
+  });
+
+  it("getStats defaults proxy_* to 0 on older backends", async () => {
+    const stats = {
+      total_repositories: 5,
+      total_artifacts: 10,
+      total_storage_bytes: 1024,
+      total_users: 3,
+      active_peers: 0,
+      pending_sync_tasks: 0,
+      total_downloads: 0,
+    };
+    mockGetSystemStats.mockResolvedValue({ data: stats, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getStats();
+    expect(result.proxy_artifact_count).toBe(0);
+    expect(result.proxy_storage_bytes).toBe(0);
   });
 
   it("getStats throws on error", async () => {
