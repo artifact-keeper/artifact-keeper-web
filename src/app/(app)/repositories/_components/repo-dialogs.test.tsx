@@ -69,6 +69,19 @@ vi.mock('@/components/common/confirm-dialog', () => ({
     ) : null,
 }));
 
+// Feature flags come from the system-config provider. Default to guest access
+// enabled (the provider's own permissive default); gating tests override this.
+const mockFlags = vi.hoisted(() => ({ guestAccessEnabled: true }));
+vi.mock('@/providers/system-config-provider', () => ({
+  useFeatureFlags: () => mockFlags,
+}));
+
+// Root-level reset so gating tests that disable guest access don't leak state
+// into other suites (their beforeEach hooks don't know about the mock).
+beforeEach(() => {
+  mockFlags.guestAccessEnabled = true;
+});
+
 const defaultProps = {
   createOpen: true,
   onCreateOpenChange: vi.fn(),
@@ -314,15 +327,22 @@ describe('RepoDialogs - Create Dialog', () => {
     expect(screen.getByText(/no.*local or remote repositories available/i)).toBeTruthy();
   });
 
+  it('defaults the public switch to unchecked (private by default)', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const publicSwitch = screen.getByRole('switch');
+    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
+  });
+
   it('toggles public switch', async () => {
     const user = userEvent.setup();
     render(<RepoDialogs {...defaultProps} />);
 
     const publicSwitch = screen.getByRole('switch');
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('true');
+    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
 
     await user.click(publicSwitch);
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(publicSwitch.getAttribute('aria-checked')).toBe('true');
   });
 
   // Regression: form state must reset when the dialog is reopened after a
@@ -355,6 +375,84 @@ describe('RepoDialogs - Create Dialog', () => {
     const nameInput = within(reopened).getByPlaceholderText('My Repository') as HTMLInputElement;
     expect(keyInput.value).toBe('');
     expect(nameInput.value).toBe('');
+  });
+});
+
+describe('RepoDialogs - Guest access gating', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('hides the public switch and shows a note in the create dialog when guest access is disabled', () => {
+    mockFlags.guestAccessEnabled = false;
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByRole('switch')).toBeNull();
+    expect(
+      within(dialog).getByText('Public repositories are disabled by the operator.')
+    ).toBeTruthy();
+  });
+
+  it('shows the public switch in the create dialog when guest access is enabled', () => {
+    render(<RepoDialogs {...defaultProps} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('switch')).toBeTruthy();
+    expect(
+      within(dialog).queryByText('Public repositories are disabled by the operator.')
+    ).toBeNull();
+  });
+
+  it('hides the public switch and shows a note in the edit dialog when guest access is disabled', () => {
+    mockFlags.guestAccessEnabled = false;
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockEditRepo}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByRole('switch')).toBeNull();
+    expect(
+      within(dialog).getByText('Public repositories are disabled by the operator.')
+    ).toBeTruthy();
+  });
+
+  it('shows the public switch in the edit dialog when guest access is enabled', () => {
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockEditRepo}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('switch')).toBeTruthy();
+    expect(
+      within(dialog).queryByText('Public repositories are disabled by the operator.')
+    ).toBeNull();
+  });
+
+  it('submits is_public: false when the public switch is left untouched', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'private-repo');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'Private Repo');
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ is_public: false })
+    );
   });
 });
 
