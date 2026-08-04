@@ -153,6 +153,7 @@ const DEFAULT_MIG_CONFIG: MigrationConfig = {
   include_repos: [],
   exclude_repos: [],
   exclude_paths: [],
+  repo_mappings: {},
   include_users: true,
   include_groups: true,
   include_permissions: true,
@@ -265,12 +266,28 @@ export default function MigrationPage() {
   function toggleIncludeRepo(key: string, on: boolean) {
     setMigConfig((c) => {
       const current = c.include_repos ?? [];
+      // Drop any rename when a repo leaves the allowlist — a mapping for a repo
+      // that isn't being migrated is meaningless (and is filtered on submit).
+      const mappings = { ...(c.repo_mappings ?? {}) };
+      if (!on) delete mappings[key];
       return {
         ...c,
         include_repos: on
           ? [...current, key]
           : current.filter((k) => k !== key),
+        repo_mappings: mappings,
       };
+    });
+  }
+
+  // Set (or clear, when target is blank) the destination key a source repo is
+  // renamed to on migration. Only repos in the include list can be remapped.
+  function setRepoMapping(source: string, target: string) {
+    setMigConfig((c) => {
+      const mappings = { ...(c.repo_mappings ?? {}) };
+      if (target.trim()) mappings[source] = target.trim();
+      else delete mappings[source];
+      return { ...c, repo_mappings: mappings };
     });
   }
 
@@ -500,6 +517,11 @@ export default function MigrationPage() {
     toast.success("Connection ID copied");
   };
 
+  const copyPath = (label: string, path: string) => {
+    void navigator.clipboard?.writeText(path);
+    toast.success(`${label} path copied`);
+  };
+
   // Fetch the reconciliation report as HTML and trigger a file download so
   // operators can archive it. Falls back to a toast on failure.
   const downloadReportHtml = async (jobId: string) => {
@@ -643,17 +665,36 @@ export default function MigrationPage() {
     {
       id: "id",
       header: "Job",
-      cell: (j) => (
-        <button
-          className="text-sm font-medium text-primary hover:underline"
-          onClick={(e) => {
-            e.stopPropagation();
-            setDetailJob(j);
-          }}
-        >
-          {j.id.slice(0, 8)}...
-        </button>
-      ),
+      cell: (j) => {
+        // Scope the row by its target repos so jobs are distinguishable at a
+        // glance; empty include_repos means the whole connection.
+        const repos = [...(j.config.include_repos ?? [])].sort((a, b) =>
+          a.localeCompare(b),
+        );
+        const others = repos.length - 1;
+        const scope =
+          repos.length === 0
+            ? "All repositories"
+            : repos.length === 1
+              ? repos[0]
+              : `${repos[0]} and ${others} other repo${others > 1 ? "s" : ""}`;
+        return (
+          <button
+            className="flex flex-col items-start text-left"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDetailJob(j);
+            }}
+          >
+            <span className="text-sm font-medium text-primary hover:underline">
+              {scope}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {j.id.slice(0, 8)}...
+            </span>
+          </button>
+        );
+      },
     },
     {
       id: "connection",
@@ -815,21 +856,71 @@ export default function MigrationPage() {
   // -- Item columns for detail dialog --
   const itemColumns: DataTableColumn<MigrationItem>[] = [
     {
-      id: "source_path",
-      header: "Source Path",
+      id: "path",
+      header: "Path",
       accessor: (i) => i.source_path,
-      cell: (i) => (
-        <code className="text-xs">{i.source_path}</code>
-      ),
-    },
-    {
-      id: "target_path",
-      header: "Target Path",
-      cell: (i) => (
-        <code className="text-xs text-muted-foreground">
-          {i.target_path ?? "-"}
-        </code>
-      ),
+      // Source over target in one column; (S)/(T) markers explain which is which
+      // on hover. Keeps the dialog from blowing out horizontally.
+      cell: (i) => {
+        const target = i.target_path;
+        return (
+          <div className="flex flex-col gap-0.5 text-xs w-[420px]">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 min-w-0 text-left cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyPath("Source", i.source_path);
+                  }}
+                >
+                  <span className="text-muted-foreground shrink-0">(S)</span>
+                  <code className="truncate hover:underline">
+                    {i.source_path}
+                  </code>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[min(90vw,720px)]">
+                <p>Source path (click to copy)</p>
+                <p className="font-mono text-[10px] break-all opacity-80">
+                  {i.source_path}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            {target ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 min-w-0 text-left cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyPath("Target", target);
+                    }}
+                  >
+                    <span className="text-muted-foreground shrink-0">(T)</span>
+                    <code className="truncate hover:underline text-muted-foreground">
+                      {target}
+                    </code>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[min(90vw,720px)]">
+                  <p>Target path (click to copy)</p>
+                  <p className="font-mono text-[10px] break-all opacity-80">
+                    {target}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <span className="shrink-0">(T)</span>
+                <code>-</code>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "type",
@@ -1169,10 +1260,19 @@ export default function MigrationPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              // Keep only real renames: target set, differs from source, and the
+              // source is actually being migrated. Identity/orphan entries are dropped.
+              const includeSet = new Set(migConfig.include_repos ?? []);
+              const repo_mappings = Object.fromEntries(
+                Object.entries(migConfig.repo_mappings ?? {}).filter(
+                  ([src, tgt]) => tgt && tgt !== src && includeSet.has(src),
+                ),
+              );
               const config: MigrationConfig = {
                 ...migConfig,
                 exclude_repos: parseList(excludeReposText),
                 exclude_paths: parseList(excludePathsText),
+                repo_mappings,
               };
               // date_from/date_to only apply to incremental migrations; the
               // backend accepts them as RFC3339 timestamps.
@@ -1236,19 +1336,44 @@ export default function MigrationPage() {
               <Label>Include Repositories</Label>
               <p className="text-xs text-muted-foreground">
                 Leave all unchecked to migrate every repository. Select a
-                connection to load its repositories.
+                connection to load its repositories. Optionally rename a
+                repository as it migrates.
               </p>
               {migForm.source_connection_id && sourceRepos.length > 0 ? (
                 <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
-                  {sourceRepos.map((repo) => (
-                    <BoolField
-                      key={repo.key}
-                      id={`include-repo-${repo.key}`}
-                      label={`${repo.key} (${repo.package_type})`}
-                      checked={(migConfig.include_repos ?? []).includes(repo.key)}
-                      onChange={(on) => toggleIncludeRepo(repo.key, on)}
-                    />
-                  ))}
+                  {[...sourceRepos]
+                    .sort((a, b) => a.key.localeCompare(b.key))
+                    .map((repo) => {
+                      const included = (migConfig.include_repos ?? []).includes(
+                        repo.key,
+                      );
+                      return (
+                        <div key={repo.key} className="space-y-1">
+                          <BoolField
+                            id={`include-repo-${repo.key}`}
+                            label={`${repo.key} (${repo.package_type})`}
+                            checked={included}
+                            onChange={(on) => toggleIncludeRepo(repo.key, on)}
+                          />
+                          {included && (
+                            <div className="ml-6 flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                rename to
+                              </span>
+                              <Input
+                                id={`rename-repo-${repo.key}`}
+                                className="h-7 text-xs"
+                                placeholder={repo.key}
+                                value={migConfig.repo_mappings?.[repo.key] ?? ""}
+                                onChange={(e) =>
+                                  setRepoMapping(repo.key, e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground italic">
@@ -1500,6 +1625,48 @@ export default function MigrationPage() {
                 value={detailJob.progress_percent ?? 0}
                 className="h-2"
               />
+              {/* Repositories this job handles (empty = whole connection). */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  Repositories
+                </p>
+                {(detailJob.config.include_repos?.length ?? 0) === 0 ? (
+                  <p className="text-sm">All repositories on the connection</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...detailJob.config.include_repos!]
+                      .sort((a, b) => a.localeCompare(b))
+                      .map((r) => {
+                        // include_repos holds source (Nexus) keys; a mapping means
+                        // this repo is renamed on migration. Renamed → show
+                        // "source → target" with a hover; otherwise show it plain.
+                        const renamedTo = detailJob.config.repo_mappings?.[r];
+                        if (!renamedTo) {
+                          return (
+                            <code
+                              key={r}
+                              className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+                            >
+                              {r}
+                            </code>
+                          );
+                        }
+                        return (
+                          <Tooltip key={r}>
+                            <TooltipTrigger asChild>
+                              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                                {r} → {renamedTo}
+                              </code>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Renamed to {renamedTo}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
               {detailJob.error_summary && (
                 <div className="text-sm text-red-500 rounded-md border border-red-200 bg-red-50 p-3 dark:bg-red-950/20 dark:border-red-800">
                   {detailJob.error_summary}
