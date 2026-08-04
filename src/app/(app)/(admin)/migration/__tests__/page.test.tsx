@@ -1510,10 +1510,10 @@ describe("MigrationPage — feature parity (#520)", () => {
     await renderPage();
     await switchToJobsTab();
     await act(async () => fireEvent.click(screen.getByText("job-part...")));
-    // The report block renders; missing categories fall back to an em dash
+    // The report block renders; missing categories fall back to 0/0
     // instead of crashing the page.
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("0/0").length).toBeGreaterThanOrEqual(2);
   });
 
   it("renders a completed assessment job with a summary-only report (no category counts) without crashing", async () => {
@@ -1543,8 +1543,8 @@ describe("MigrationPage — feature parity (#520)", () => {
     await switchToJobsTab();
     await act(async () => fireEvent.click(screen.getByText("job-asmt...")));
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
-    // Both category tiles show the em-dash fallback; warnings/errors show 0.
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    // Both category tiles show the 0/0 fallback; warnings/errors show 0.
+    expect(screen.getAllByText("0/0").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
   });
 
@@ -1624,5 +1624,141 @@ describe("MigrationPage — feature parity (#520)", () => {
       fireEvent.click(screen.getByText("Run Assessment")),
     );
     expect(migrationApi.runAssessment).toHaveBeenCalledWith("job-asmt-0001");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Repo remapping on import + item path copy. Covers the rename UI in the
+// Create Migration dialog, the "source -> target" scope in the detail dialog,
+// and the click-to-copy source/target paths.
+// ---------------------------------------------------------------------------
+
+describe("MigrationPage — repo remapping and path copy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupMocks();
+  });
+  afterEach(() => cleanup());
+
+  async function switchToJobsTab() {
+    await act(async () => fireEvent.click(screen.getByTestId("tab-jobs")));
+  }
+
+  function openMigForm(): HTMLFormElement {
+    fireEvent.click(screen.getAllByText("Create Migration")[0]);
+    let migForm: HTMLFormElement | null = null;
+    document.querySelectorAll("form").forEach((f) => {
+      if (f.querySelector('[data-testid="select-item-conn-A"]')) {
+        migForm = f as HTMLFormElement;
+      }
+    });
+    expect(migForm).not.toBeNull();
+    return migForm!;
+  }
+
+  it("carries a repo rename through to createMigration and drops identity mappings", async () => {
+    configureQueries({
+      connections: { data: [makeConnection({ id: "conn-A", name: "AlphaConn" })] },
+      // Two repos so the include-list sort comparator runs.
+      sourceRepos: {
+        data: [
+          makeSourceRepo({ key: "libs-snapshot" }),
+          makeSourceRepo({ key: "libs-release" }),
+        ],
+      },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    const migForm = openMigForm();
+    await act(async () =>
+      fireEvent.click(screen.getByTestId("select-item-conn-A")),
+    );
+    await act(async () => {
+      fireEvent.click(document.getElementById("include-repo-libs-release")!);
+      fireEvent.click(document.getElementById("include-repo-libs-snapshot")!);
+    });
+    // Real rename: set, clear (delete branch), then set again.
+    await act(async () => {
+      fireEvent.change(document.getElementById("rename-repo-libs-release")!, {
+        target: { value: "archive-release" },
+      });
+      fireEvent.change(document.getElementById("rename-repo-libs-release")!, {
+        target: { value: "" },
+      });
+      fireEvent.change(document.getElementById("rename-repo-libs-release")!, {
+        target: { value: "archive-release" },
+      });
+    });
+    // Identity rename (target == source) is dropped by the submit filter.
+    await act(async () => {
+      fireEvent.change(document.getElementById("rename-repo-libs-snapshot")!, {
+        target: { value: "libs-snapshot" },
+      });
+    });
+    await act(async () => fireEvent.submit(migForm));
+
+    const payload = capturedMutations.createMig.mutate.mock.calls[0][0] as {
+      config: { repo_mappings: Record<string, string>; include_repos: string[] };
+    };
+    expect(payload.config.repo_mappings).toEqual({
+      "libs-release": "archive-release",
+    });
+    expect([...payload.config.include_repos].sort()).toEqual([
+      "libs-release",
+      "libs-snapshot",
+    ]);
+  });
+
+  it("shows renamed and plain repos, sorted, in the detail dialog scope", async () => {
+    const job = makeJob({
+      id: "scopejob-0001",
+      status: "completed",
+      config: { include_repos: ["z-repo", "a-repo"], repo_mappings: { "a-repo": "archive-a" } },
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      items: { data: { items: [], pagination: {} } },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("scopejob...")));
+    // Plain entry (no mapping) and renamed entry ("source -> target").
+    expect(screen.getByText("z-repo")).toBeInTheDocument();
+    expect(screen.getByText(/a-repo\s*→\s*archive-a/)).toBeInTheDocument();
+  });
+
+  it("copies source and target item paths from the detail dialog", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const job = makeJob({ id: "copyjob-0001", status: "running" });
+    const items = [
+      makeItem({ id: "i1", source_path: "src/a.jar", target_path: "dst/a.jar" }),
+    ];
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      items: { data: { items, pagination: {} } },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("copyjob-...")));
+
+    const buttons = Array.from(document.querySelectorAll("button"));
+    const sBtn = buttons.find((b) => b.textContent?.includes("(S)"));
+    const tBtn = buttons.find((b) => b.textContent?.includes("(T)"));
+    expect(sBtn).toBeDefined();
+    expect(tBtn).toBeDefined();
+
+    await act(async () => fireEvent.click(sBtn!));
+    expect(writeText).toHaveBeenCalledWith("src/a.jar");
+    expect(toast.success).toHaveBeenCalledWith("Source path copied");
+
+    await act(async () => fireEvent.click(tBtn!));
+    expect(writeText).toHaveBeenCalledWith("dst/a.jar");
+    expect(toast.success).toHaveBeenCalledWith("Target path copied");
   });
 });
