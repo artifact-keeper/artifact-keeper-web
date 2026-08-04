@@ -38,6 +38,8 @@ export interface ListRepositoriesParams {
   per_page?: number;
   format?: string;
   repo_type?: string;
+  /** Server-side name/key search filter. */
+  q?: string;
 }
 
 export interface ReorderMemberInput {
