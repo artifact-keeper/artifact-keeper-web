@@ -1969,14 +1969,14 @@ describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
     );
   });
 
-  it('shows npm scope policy only for npm virtual/remote and submits it', async () => {
+  it('shows npm scope policy only for npm remote and submits it', async () => {
     const onCreateSubmit = vi.fn();
     const user = userEvent.setup();
     render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
 
     const dialog = screen.getByRole('dialog');
-    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'npm-virt');
-    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'NPM Virtual');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'npm-proxy');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'NPM Proxy');
 
     // npm + local => hidden
     fireEvent.change(within(dialog).getAllByTestId('mock-select')[0], {
@@ -1984,9 +1984,16 @@ describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
     });
     expect(within(dialog).queryByText('npm Scope Policy')).toBeNull();
 
-    // switch to virtual => shown
+    // npm + virtual => still hidden: the policy lives on each Remote member,
+    // and the backend rejects a write against the aggregate (#745).
     fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], {
       target: { value: 'virtual' },
+    });
+    expect(within(dialog).queryByText('npm Scope Policy')).toBeNull();
+
+    // switch to remote => shown
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], {
+      target: { value: 'remote' },
     });
     expect(within(dialog).getByText('npm Scope Policy')).toBeTruthy();
 
@@ -1998,7 +2005,7 @@ describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
     expect(onCreateSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         format: 'npm',
-        repo_type: 'virtual',
+        repo_type: 'remote',
         npm_allowed_scopes: ['@acme'],
         npm_allow_unscoped: true,
       })
@@ -2099,5 +2106,91 @@ describe('RepoDialogs - WASM plugin layouts (#591)', () => {
     expect(onCreateSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ format: 'npm', format_key: undefined })
     );
+  });
+});
+
+// Regression: artifact-keeper-web#745. The npm scope policy is stored on each
+// Remote *member* of an npm virtual repo, never on the aggregate, and the
+// backend gate is presence-based — so shipping `npm_allowed_scopes: []` /
+// `npm_allow_unscoped: false` made every npm virtual create fail with
+// "npm scope policy is only configurable on remote (proxy) repositories", and
+// made every npm remote create store an active deny-unscoped policy.
+describe('RepoDialogs - npm scope policy (create)', () => {
+  const NPM_POLICY_KEYS = [
+    'npm_allowed_scopes',
+    'npm_allowed_name_patterns',
+    'npm_allow_unscoped',
+  ] as const;
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  /** Select npm + `repoType`, fill the required fields, submit; returns the payload. */
+  async function submitNpmRepo(
+    repoType: 'virtual' | 'remote',
+    fillPolicy?: (dialog: HTMLElement) => Promise<void>
+  ) {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    const dialog = screen.getByRole('dialog');
+    const selects = within(dialog).getAllByTestId('mock-select');
+    fireEvent.change(selects[0], { target: { value: 'npm' } });
+    fireEvent.change(selects[1], { target: { value: repoType } });
+
+    if (fillPolicy) await fillPolicy(dialog);
+
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'my-npm');
+    await user.type(
+      within(dialog).getByPlaceholderText('My Repository'),
+      'My npm'
+    );
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledTimes(1);
+    return onCreateSubmit.mock.calls[0][0] as Record<string, unknown>;
+  }
+
+  it('does not offer the scope-policy section for an npm virtual repo', () => {
+    render(<RepoDialogs {...defaultProps} />);
+    const dialog = screen.getByRole('dialog');
+    const selects = within(dialog).getAllByTestId('mock-select');
+    fireEvent.change(selects[0], { target: { value: 'npm' } });
+    fireEvent.change(selects[1], { target: { value: 'virtual' } });
+
+    expect(within(dialog).queryByText('npm Scope Policy')).toBeNull();
+  });
+
+  it('omits every scope-policy field when creating an npm virtual repo', async () => {
+    const submitData = await submitNpmRepo('virtual');
+    for (const key of NPM_POLICY_KEYS) {
+      expect(submitData).not.toHaveProperty(key);
+    }
+  });
+
+  it('omits every scope-policy field when an npm remote is left untouched', async () => {
+    const submitData = await submitNpmRepo('remote');
+    for (const key of NPM_POLICY_KEYS) {
+      expect(submitData).not.toHaveProperty(key);
+    }
+  });
+
+  it('sends the policy for an npm remote once a scope is entered', async () => {
+    const submitData = await submitNpmRepo('remote', async (dialog) => {
+      const user = userEvent.setup();
+      await user.type(
+        within(dialog).getByPlaceholderText('@acme, @internal'),
+        '@acme'
+      );
+    });
+
+    expect(submitData).toMatchObject({
+      npm_allowed_scopes: ['@acme'],
+      npm_allowed_name_patterns: [],
+      npm_allow_unscoped: false,
+    });
   });
 });

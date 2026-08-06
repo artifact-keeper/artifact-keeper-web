@@ -63,11 +63,17 @@ describe('1.6.0 format-specific config gating (#602)', () => {
     expect(hasDebianConfig('generic')).toBe(false);
   });
 
-  it('hasNpmScopePolicy only for npm remote/virtual', () => {
-    expect(hasNpmScopePolicy('npm', 'virtual')).toBe(true);
+  it('hasNpmScopePolicy only for npm remote', () => {
     expect(hasNpmScopePolicy('npm', 'remote')).toBe(true);
     expect(hasNpmScopePolicy('npm', 'local')).toBe(false);
     expect(hasNpmScopePolicy('npm', 'staging')).toBe(false);
-    expect(hasNpmScopePolicy('maven', 'virtual')).toBe(false);
+    expect(hasNpmScopePolicy('maven', 'remote')).toBe(false);
+  });
+
+  // The policy is stored on each Remote *member*, not on the aggregate. The
+  // backend rejects a write against a virtual repo, which made every npm
+  // virtual create fail with a 400 (artifact-keeper-web#745).
+  it('hasNpmScopePolicy excludes npm virtual repositories', () => {
+    expect(hasNpmScopePolicy('npm', 'virtual')).toBe(false);
   });
 });
