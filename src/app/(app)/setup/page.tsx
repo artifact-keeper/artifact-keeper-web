@@ -619,6 +619,35 @@ helm repo update`,
           code: `dotnet add package MyPackage --source ${repoKey}`,
         },
       ];
+    case "pub":
+      return [
+        {
+          title: "Point the Dart client at this repository",
+          description:
+            "dart and flutter read the registry location from PUB_HOSTED_URL:",
+          code: `export PUB_HOSTED_URL=${REGISTRY_URL}/pub/${repoKey}`,
+        },
+        {
+          title: "Authenticate",
+          code: `dart pub token add ${REGISTRY_URL}/pub/${repoKey}`,
+        },
+        {
+          title: "Add a dependency",
+          description: "In pubspec.yaml:",
+          code: `dependencies:
+  my_package:
+    hosted: ${REGISTRY_URL}/pub/${repoKey}
+    version: ^1.0.0`,
+        },
+        {
+          title: "Resolve dependencies",
+          code: `dart pub get   # or: flutter pub get`,
+        },
+        {
+          title: "Publish a package",
+          code: `dart pub publish`,
+        },
+      ];
     case "go":
       return [
         {

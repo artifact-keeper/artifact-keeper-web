@@ -572,3 +572,27 @@ describe("SetupPage - Generic download snippet uses /download/ path (#408)", () 
     );
   });
 });
+
+describe("SetupPage - Pub repos show Dart tooling, not the generic fallback (#747)", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("shows PUB_HOSTED_URL and dart pub commands instead of a generic curl upload", async () => {
+    // Pub has no case in getSetupSnippets, so it falls through to the
+    // generic default: a `curl -X PUT ... /api/v1/repositories/<key>/artifacts/`
+    // snippet. That path is not how a Dart client talks to a Pub registry —
+    // `dart pub` is driven by the PUB_HOSTED_URL environment variable.
+    await openRepoDialog(makeRepo({ format: "pub", key: "my-pub" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const text = dialog.textContent ?? "";
+
+    // Must point the Dart client at this repository.
+    expect(text).toContain("PUB_HOSTED_URL");
+    expect(text).toContain("/pub/my-pub");
+    // Must use the real client, not a raw upload.
+    expect(text).toContain("dart pub");
+    // Must not hand users the generic artifact-upload command.
+    expect(text).not.toMatch(/curl -X PUT/);
+  });
+});
