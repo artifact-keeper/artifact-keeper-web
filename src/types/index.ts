@@ -403,6 +403,10 @@ export interface AdminStats {
   total_artifacts: number;
   total_storage_bytes: number;
   total_users: number;
+  // Proxy-cached objects, counted separately from the totals above (they have
+  // no `artifacts` row). 0 on older backends.
+  proxy_artifact_count: number;
+  proxy_storage_bytes: number;
 }
 
 export interface ApiError {
