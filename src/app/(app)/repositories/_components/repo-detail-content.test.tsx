@@ -210,6 +210,16 @@ vi.mock("./artifact-browser-toggle", () => ({
   ArtifactBrowserToggle: () => <div data-stub="ArtifactBrowserToggle" />,
   supportsGrouping: () => false,
   supportsTree: () => false,
+  // The real Docker-family set (#418): the grouped-view gate in
+  // repo-detail-content keys off it.
+  DOCKER_FAMILY_FORMATS: new Set([
+    "docker",
+    "podman",
+    "buildx",
+    "oras",
+    "helm_oci",
+    "wasm_oci",
+  ]),
 }));
 vi.mock("@/components/common/data-table", () => ({
   // Minimal row rendering so tests can open the artifact detail dialog via
@@ -501,6 +511,26 @@ describe("RepoDetailContent Docker grouped view (#330 / ak#1336)", () => {
     // The stub received the rollup rows from the response's docker_tags array.
     expect(screen.getByTestId("stub-tag-click")).toHaveTextContent("library/node:14");
   });
+
+  // #418: every Docker-family OCI format gates into the same server-side
+  // docker_tag rollup, not just plain `docker`.
+  it.each(["podman", "buildx", "oras", "helm_oci", "wasm_oci"])(
+    "requests group_by=docker_tag for Docker-family format %s",
+    async (format) => {
+      repository.format = format;
+      await renderDockerGrouped();
+
+      const lastKey = h.artifactsQueryKeys.at(-1) as unknown[];
+      expect(lastKey).toContain("grouped:docker");
+      // The useQuery mock records the queryFn without running it; run it to
+      // observe the request the component would actually issue.
+      h.artifactsQueryFns.at(-1)?.();
+      expect(artifactsApi.listGrouped).toHaveBeenCalledWith(
+        "demo",
+        expect.objectContaining({ group_by: "docker_tag" }),
+      );
+    },
+  );
 
   it("resolves a tag click to the manifest via its deterministic v2 path", async () => {
     await renderDockerGrouped();

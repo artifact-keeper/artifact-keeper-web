@@ -67,6 +67,7 @@ import { RepoLabelsPanel } from "./repo-labels-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
+  DOCKER_FAMILY_FORMATS,
   supportsGrouping,
   supportsTree,
   type ArtifactViewMode,
@@ -220,7 +221,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const useServerGrouping =
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
-  const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
+  // The whole Docker family shares the OCI manifest+blobs layout, so the
+  // server-side docker_tag rollup applies to all of them (#418).
+  const isDockerGrouped =
+    viewMode === "grouped" &&
+    !!repoFormat &&
+    DOCKER_FAMILY_FORMATS.has(repoFormat);
   // Folder-tree view for RAW/Generic repos (#2791): the tree is grouped
   // client-side from the flat artifact list, so it needs the whole listing
   // on one page (bounded) rather than a paginated slice.
@@ -1019,7 +1025,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           */}
           <div role="status" aria-live="polite" className="sr-only">
             {viewMode === "grouped"
-              ? `Showing grouped ${repoFormat === "docker" ? "tag" : "component"} view`
+              ? `Showing grouped ${
+                  repoFormat && DOCKER_FAMILY_FORMATS.has(repoFormat)
+                    ? "tag"
+                    : "component"
+                } view`
               : viewMode === "tree"
                 ? "Showing folder tree view"
                 : "Showing flat list view"}

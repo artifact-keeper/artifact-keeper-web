@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 
 import {
   ArtifactBrowserToggle,
+  DOCKER_FAMILY_FORMATS,
   supportsGrouping,
   supportsTree,
 } from "../artifact-browser-toggle";
@@ -18,12 +19,17 @@ describe("supportsGrouping", () => {
   it.each<[RepositoryFormat, boolean]>([
     ["maven", true],
     ["gradle", true],
+    // The whole Docker family groups by tag (#418).
     ["docker", true],
+    ["podman", true],
+    ["buildx", true],
+    ["oras", true],
+    ["helm_oci", true],
+    ["wasm_oci", true],
     ["npm", false],
     ["pypi", false],
     ["helm", false],
     ["generic", false],
-    ["podman", false],
   ])("returns %s for %s repos", (format, expected) => {
     expect(supportsGrouping(format)).toBe(expected);
   });
@@ -113,6 +119,21 @@ describe("ArtifactBrowserToggle", () => {
       expect(screen.getByTestId("artifact-browser-toggle")).toBeInTheDocument();
     });
 
+    // #418: the grouped view is server-side `group_by=docker_tag`, which every
+    // Docker-family OCI registry supports — the toggle must render for each.
+    it.each([...DOCKER_FAMILY_FORMATS])(
+      "renders the toggle for Docker-family format %s",
+      (format) => {
+        render(
+          <ArtifactBrowserToggle value="flat" onChange={NOOP} format={format} />,
+        );
+        expect(
+          screen.getByTestId("artifact-browser-toggle"),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId("toggle-grouped")).toBeInTheDocument();
+      },
+    );
+
     it("renders nothing for non-groupable formats (npm)", () => {
       const { container } = render(
         <ArtifactBrowserToggle value="flat" onChange={NOOP} format="npm" />,
@@ -147,14 +168,17 @@ describe("ArtifactBrowserToggle", () => {
       ).toBeInTheDocument();
     });
 
-    it('uses "Group by tag" for docker repos', () => {
-      render(
-        <ArtifactBrowserToggle value="flat" onChange={NOOP} format="docker" />,
-      );
-      expect(
-        screen.getByRole("button", { name: /group by tag/i }),
-      ).toBeInTheDocument();
-    });
+    it.each([...DOCKER_FAMILY_FORMATS])(
+      'uses "Group by tag" for Docker-family format %s',
+      (format) => {
+        render(
+          <ArtifactBrowserToggle value="flat" onChange={NOOP} format={format} />,
+        );
+        expect(
+          screen.getByRole("button", { name: /group by tag/i }),
+        ).toBeInTheDocument();
+      },
+    );
   });
 
   describe("aria-pressed reflects selected state", () => {
