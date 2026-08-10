@@ -9,11 +9,13 @@ vi.mock("@/lib/sdk-client", () => ({
 const mockListArtifacts = vi.fn();
 const mockDeleteArtifact = vi.fn();
 const mockCreateDownloadTicket = vi.fn();
+const mockGetArtifactStats = vi.fn();
 
 vi.mock("@artifact-keeper/sdk", () => ({
   listArtifacts: (...args: unknown[]) => mockListArtifacts(...args),
   deleteArtifact: (...args: unknown[]) => mockDeleteArtifact(...args),
   createDownloadTicket: (...args: unknown[]) => mockCreateDownloadTicket(...args),
+  getArtifactStats: (...args: unknown[]) => mockGetArtifactStats(...args),
 }));
 
 describe("artifactsApi", () => {
@@ -716,6 +718,27 @@ describe("artifactsApi", () => {
     expect(mockCreateDownloadTicket).toHaveBeenCalledWith({
       body: { purpose: "download", resource_path: expectedPath },
     });
+  });
+
+  // ---- getStats (#472) ----
+
+  it("getStats returns download stats for the artifact", async () => {
+    const stats = {
+      artifact_id: "a1",
+      download_count: 7,
+      first_downloaded: "2026-07-01T00:00:00Z",
+      last_downloaded: "2026-08-01T12:30:00Z",
+    };
+    mockGetArtifactStats.mockResolvedValue({ data: stats, error: undefined });
+    const { artifactsApi } = await import("../artifacts");
+    await expect(artifactsApi.getStats("a1")).resolves.toEqual(stats);
+    expect(mockGetArtifactStats).toHaveBeenCalledWith({ path: { id: "a1" } });
+  });
+
+  it("getStats throws on error", async () => {
+    mockGetArtifactStats.mockResolvedValue({ data: undefined, error: "fail" });
+    const { artifactsApi } = await import("../artifacts");
+    await expect(artifactsApi.getStats("a1")).rejects.toBe("fail");
   });
 
   // ---- upload() via XMLHttpRequest ----

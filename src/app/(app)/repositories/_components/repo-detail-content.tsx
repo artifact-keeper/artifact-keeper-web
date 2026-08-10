@@ -47,7 +47,11 @@ import {
   ANALYZABLE_DISABLED_REASON,
   isArtifactAnalyzable,
 } from "@/lib/artifact-analyzable";
-import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
+import {
+  buildPomDependencySnippet,
+  mavenGavcFromMetadata,
+  parseMavenGav,
+} from "@/lib/maven";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
@@ -63,6 +67,7 @@ import { RepoLabelsPanel } from "./repo-labels-panel";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
+  DOCKER_FAMILY_FORMATS,
   supportsGrouping,
   supportsTree,
   type ArtifactViewMode,
@@ -216,7 +221,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const useServerGrouping =
     viewMode === "grouped" &&
     (repoFormat === "maven" || repoFormat === "gradle");
-  const isDockerGrouped = viewMode === "grouped" && repoFormat === "docker";
+  // The whole Docker family shares the OCI manifest+blobs layout, so the
+  // server-side docker_tag rollup applies to all of them (#418).
+  const isDockerGrouped =
+    viewMode === "grouped" &&
+    !!repoFormat &&
+    DOCKER_FAMILY_FORMATS.has(repoFormat);
   // Folder-tree view for RAW/Generic repos (#2791): the tree is grouped
   // client-side from the flat artifact list, so it needs the whole listing
   // on one page (bounded) rather than a paginated slice.
@@ -300,6 +310,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     ? null
     : (fetchedQuarantine ?? selectedArtifact);
   const quarantineBlocked = isActivelyQuarantined(quarantine);
+  // Download stats for the detail dialog's "Last downloaded" row (#472).
+  // Best-effort: if the stats fetch fails (older backend, transient error)
+  // the row is simply hidden — the dialog itself is unaffected.
+  const { data: artifactStats } = useQuery({
+    queryKey: ["artifact-stats", selectedArtifactId],
+    queryFn: async () =>
+      selectedArtifactId ? await artifactsApi.getStats(selectedArtifactId) : null,
+    enabled: detailOpen && !!selectedArtifactId,
+  });
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -454,11 +473,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         return;
       }
       const url = artifactsApi.getDownloadUrl(repoKey, artifact.path);
+      // Maven artifacts store a bare artifactId as `name`, so saving under it
+      // drops the version and extension (#477). The real filename is the last
+      // path segment; fall back to `name` when the path is somehow empty.
+      const filename = artifact.path.split("/").pop() || artifact.name;
       try {
         const ticket = await artifactsApi.createDownloadTicket(repoKey, artifact.path);
         const link = document.createElement("a");
         link.href = `${url}?ticket=${ticket}`;
-        link.download = artifact.name;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -466,7 +489,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         // Fallback: try without ticket (backend may allow cookie auth)
         const link = document.createElement("a");
         link.href = url;
-        link.download = artifact.name;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -511,6 +534,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   );
 
   // --- artifact columns ---
+  // Maven-family repos store many files per GAV that differ only by
+  // classifier and/or extension (`lib-1.0.jar` vs `lib-1.0-sources.jar` vs
+  // `lib-1.0.tar.gz`); the flat view could not tell them apart (#474). The
+  // coordinates come from the backend-parsed metadata when present, with the
+  // path parser as fallback (#482).
+  const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
+  const artifactGavc = (a: Artifact) =>
+    mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
@@ -578,6 +609,35 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <span className="text-xs text-muted-foreground">-</span>
         ),
     },
+    ...(isMavenFamily
+      ? [
+          {
+            id: "classifier",
+            header: "Classifier",
+            accessor: (a: Artifact) => artifactGavc(a)?.classifier ?? "",
+            cell: (a: Artifact) => {
+              const gavc = artifactGavc(a);
+              if (!gavc || (!gavc.classifier && !gavc.extension)) {
+                return <span className="text-xs text-muted-foreground">-</span>;
+              }
+              return (
+                <span className="flex items-center gap-1 text-xs">
+                  {gavc.classifier && (
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {gavc.classifier}
+                    </Badge>
+                  )}
+                  {gavc.extension && (
+                    <span className="text-muted-foreground">
+                      {gavc.extension}
+                    </span>
+                  )}
+                </span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+        ]
+      : []),
     {
       id: "size",
       header: "Size",
@@ -974,7 +1034,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           */}
           <div role="status" aria-live="polite" className="sr-only">
             {viewMode === "grouped"
-              ? `Showing grouped ${repoFormat === "docker" ? "tag" : "component"} view`
+              ? `Showing grouped ${
+                  repoFormat && DOCKER_FAMILY_FORMATS.has(repoFormat)
+                    ? "tag"
+                    : "component"
+                } view`
               : viewMode === "tree"
                 ? "Showing folder tree view"
                 : "Showing flat list view"}
@@ -1288,6 +1352,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Downloads"
                     value={selectedArtifact.download_count.toLocaleString()}
                   />
+                  {artifactStats?.last_downloaded && (
+                    <DetailRow
+                      label="Last downloaded"
+                      value={new Date(
+                        artifactStats.last_downloaded
+                      ).toLocaleString()}
+                    />
+                  )}
                   {quarantineBlocked && (
                     <>
                       <DetailRow
@@ -1351,7 +1423,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     mono
                   />
                   {(repoFormat === "maven" || repoFormat === "gradle") && (
-                    <MavenGavSection path={selectedArtifact.path} />
+                    <MavenGavSection
+                      path={selectedArtifact.path}
+                      metadata={selectedArtifact.metadata}
+                    />
                   )}
                   {selectedArtifact.metadata &&
                     Object.keys(selectedArtifact.metadata).length > 0 && (
@@ -1578,12 +1653,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 // -- detail row helper --
 
 /**
- * Maven GAV coordinates plus a copy/paste pom.xml dependency snippet, derived
- * from the artifact path. Shown in the artifact detail view for maven/gradle
- * repositories so users can identify the GAV and reuse it. (issue #442)
+ * Maven GAV coordinates plus a copy/paste pom.xml dependency snippet. Shown
+ * in the artifact detail view for maven/gradle repositories so users can
+ * identify the GAV and reuse it. (issue #442)
+ *
+ * The backend parses the coordinates (classifier included) once at upload
+ * time and stores them in `artifact.metadata`; prefer that over re-parsing
+ * the path client-side, falling back to `parseMavenGav` for backends that
+ * predate the stored form (#482).
  */
-function MavenGavSection({ path }: { path: string }) {
-  const gav = parseMavenGav(path);
+function MavenGavSection({
+  path,
+  metadata,
+}: {
+  path: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const gav = mavenGavcFromMetadata(metadata) ?? parseMavenGav(path);
   if (!gav) return null;
   const snippet = buildPomDependencySnippet(gav);
   return (
@@ -1591,6 +1677,12 @@ function MavenGavSection({ path }: { path: string }) {
       <DetailRow label="Group ID" value={gav.groupId} copy mono />
       <DetailRow label="Artifact ID" value={gav.artifactId} copy mono />
       <DetailRow label="Version" value={gav.version} copy mono />
+      {gav.classifier && (
+        <DetailRow label="Classifier" value={gav.classifier} copy mono />
+      )}
+      {gav.extension && (
+        <DetailRow label="Extension" value={gav.extension} copy mono />
+      )}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground">

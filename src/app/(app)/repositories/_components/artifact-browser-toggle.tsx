@@ -9,14 +9,29 @@ import type { RepositoryFormat } from "@/types";
 export type ArtifactViewMode = "flat" | "grouped" | "tree";
 
 /**
- * Repository formats for which a "grouped" artifact view is meaningful.
- * Maven/Gradle use server-side `group_by=maven_component` (#254).  Docker
- * uses client-side aggregation by manifest tag (#330).
+ * Docker-family OCI registry formats (#418). They all expose the same
+ * manifest+blobs shape, so the server-side `group_by=docker_tag` rollup
+ * (#330, backend ak#1336) works for each of them — the grouped toggle and
+ * the grouped-view gate both key off this set.
  */
-const GROUPABLE_FORMATS = new Set<RepositoryFormat>([
+export const DOCKER_FAMILY_FORMATS = new Set<RepositoryFormat>([
+  "docker",
+  "podman",
+  "buildx",
+  "oras",
+  "helm_oci",
+  "wasm_oci",
+]);
+
+/**
+ * Repository formats for which a "grouped" artifact view is meaningful.
+ * Maven/Gradle use server-side `group_by=maven_component` (#254).  The
+ * Docker family uses server-side `group_by=docker_tag` (#330, #418).
+ */
+const GROUPABLE_FORMATS: ReadonlySet<RepositoryFormat> = new Set([
   "maven",
   "gradle",
-  "docker",
+  ...DOCKER_FAMILY_FORMATS,
 ]);
 
 /**
@@ -67,7 +82,7 @@ export function ArtifactBrowserToggle({
   // the folder-tree alternate.
   const altMode: ArtifactViewMode = groupable ? "grouped" : "tree";
   const altLabel = groupable
-    ? format === "docker"
+    ? DOCKER_FAMILY_FORMATS.has(format)
       ? "Group by tag"
       : "Group by component"
     : "Folder tree view";

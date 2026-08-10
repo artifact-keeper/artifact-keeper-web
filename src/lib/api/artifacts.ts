@@ -3,10 +3,12 @@ import {
   listArtifacts,
   deleteArtifact,
   createDownloadTicket,
+  getArtifactStats,
 } from '@artifact-keeper/sdk';
 import type {
   ArtifactResponse,
   ArtifactListResponse,
+  ArtifactStatsResponse,
 } from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
 import type {
@@ -235,6 +237,16 @@ export const artifactsApi = {
 
   getDownloadUrl: (repoKey: string, artifactPath: string): string => {
     return `/api/v1/repositories/${repoKey}/download/${artifactPath}`;
+  },
+
+  /**
+   * Download statistics for one artifact (issue #472): download count plus
+   * first/last download timestamps. The artifact detail dialog renders the
+   * "Last downloaded" row from this; a fetch failure simply hides the row.
+   */
+  getStats: async (artifactId: string): Promise<ArtifactStatsResponse> => {
+    const data = await unwrap(getArtifactStats({ path: { id: artifactId } }));
+    return assertData(data, 'artifactsApi.getStats');
   },
 
   /**
