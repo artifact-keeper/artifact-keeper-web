@@ -127,6 +127,73 @@ describe("getInstallCommand", () => {
   });
 });
 
+// Maven package names are stored colon-joined as `groupId:artifactId`
+// (backend maven_package_name). Issue artifact-keeper#3136: the snippet
+// emitted the full name as the artifactId with a `...` placeholder groupId.
+describe("getInstallCommand with colon-joined Maven coordinates", () => {
+  it("splits groupId and artifactId in the pom.xml dependency snippet (issue reproduction)", () => {
+    expect(
+      getInstallCommand(
+        "com.example.team:team-spring-archetype",
+        "4.2.1-0-SNAPSHOT",
+        "maven"
+      )
+    ).toBe(
+      "<dependency>\n" +
+        "  <groupId>com.example.team</groupId>\n" +
+        "  <artifactId>team-spring-archetype</artifactId>\n" +
+        "  <version>4.2.1-0-SNAPSHOT</version>\n" +
+        "</dependency>"
+    );
+  });
+
+  it("splits on the colon, not on dots: dotted groupId with hyphenated artifactId", () => {
+    const result = getInstallCommand("com.acme.sub:my-artifact", "1.0", "maven");
+    expect(result).toContain("<groupId>com.acme.sub</groupId>");
+    expect(result).toContain("<artifactId>my-artifact</artifactId>");
+    expect(result).toContain("<version>1.0</version>");
+  });
+
+  it("keeps dots inside the artifactId intact", () => {
+    const result = getInstallCommand("org.foo:bar.baz", "2.0-SNAPSHOT", "maven");
+    expect(result).toContain("<groupId>org.foo</groupId>");
+    expect(result).toContain("<artifactId>bar.baz</artifactId>");
+    expect(result).toContain("<version>2.0-SNAPSHOT</version>");
+  });
+
+  it("never leaks the colon-joined name into the artifactId element", () => {
+    const result = getInstallCommand(
+      "com.example.team:team-spring-archetype",
+      "4.2.1-0-SNAPSHOT",
+      "maven"
+    );
+    expect(result).not.toContain("<groupId>...</groupId>");
+    expect(result).not.toContain("<artifactId>com.example.team:");
+  });
+
+  it("positive control: a colon-free name still renders as the artifactId with the placeholder groupId", () => {
+    expect(getInstallCommand("my-package", "1.2.3", "maven")).toBe(
+      "<dependency>\n" +
+        "  <groupId>...</groupId>\n" +
+        "  <artifactId>my-package</artifactId>\n" +
+        "  <version>1.2.3</version>\n" +
+        "</dependency>"
+    );
+  });
+
+  it("gradle snippet uses the real groupId instead of the GROUP placeholder", () => {
+    expect(
+      getInstallCommand("com.acme.sub:my-artifact", "1.0", "gradle")
+    ).toBe("implementation 'com.acme.sub:my-artifact:1.0'");
+  });
+
+  it("sbt snippet uses the real groupId instead of the GROUP placeholder", () => {
+    expect(getInstallCommand("org.foo:bar.baz", "2.0-SNAPSHOT", "sbt")).toBe(
+      'libraryDependencies += "org.foo" % "bar.baz" % "2.0-SNAPSHOT"'
+    );
+  });
+});
+
 describe("FORMAT_OPTIONS", () => {
   it("is a non-empty array of unique strings", () => {
     expect(Array.isArray(FORMAT_OPTIONS)).toBe(true);

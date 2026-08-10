@@ -6,6 +6,7 @@ import {
   isPomFile,
   findPomFile,
   parseMavenGav,
+  parseMavenPackageName,
   buildPomDependencySnippet,
 } from "../maven";
 
@@ -144,5 +145,47 @@ describe("buildPomDependencySnippet", () => {
         "</dependency>",
       ].join("\n"),
     );
+  });
+});
+
+describe("parseMavenPackageName", () => {
+  it("splits a colon-joined groupId:artifactId name", () => {
+    expect(parseMavenPackageName("com.example.team:team-spring-archetype")).toEqual({
+      groupId: "com.example.team",
+      artifactId: "team-spring-archetype",
+      version: undefined,
+    });
+  });
+
+  it("splits on colons, never on dots (dotted artifactId survives)", () => {
+    expect(parseMavenPackageName("org.foo:bar.baz")).toEqual({
+      groupId: "org.foo",
+      artifactId: "bar.baz",
+      version: undefined,
+    });
+  });
+
+  it("parses a full groupId:artifactId:version coordinate", () => {
+    expect(parseMavenPackageName("com.acme.sub:my-artifact:1.0")).toEqual({
+      groupId: "com.acme.sub",
+      artifactId: "my-artifact",
+      version: "1.0",
+    });
+    expect(parseMavenPackageName("org.foo:bar.baz:2.0-SNAPSHOT")).toEqual({
+      groupId: "org.foo",
+      artifactId: "bar.baz",
+      version: "2.0-SNAPSHOT",
+    });
+  });
+
+  it("treats a colon-free name as a bare artifactId", () => {
+    expect(parseMavenPackageName("plain-name")).toEqual({
+      artifactId: "plain-name",
+    });
+  });
+
+  it("falls back to the whole name when a colon segment is empty", () => {
+    expect(parseMavenPackageName(":oops")).toEqual({ artifactId: ":oops" });
+    expect(parseMavenPackageName("oops:")).toEqual({ artifactId: "oops:" });
   });
 });

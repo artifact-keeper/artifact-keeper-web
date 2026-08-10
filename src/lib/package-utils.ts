@@ -1,3 +1,5 @@
+import { buildPomDependencySnippet, parseMavenPackageName } from "./maven";
+
 export function getInstallCommand(
   packageName: string,
   version: string | undefined,
@@ -12,12 +14,28 @@ export function getInstallCommand(
     case "pypi":
     case "poetry":
       return `pip install ${packageName}==${v}`;
-    case "maven":
-      return `<dependency>\n  <groupId>...</groupId>\n  <artifactId>${packageName}</artifactId>\n  <version>${v}</version>\n</dependency>`;
-    case "gradle":
-      return `implementation 'GROUP:${packageName}:${v}'`;
-    case "sbt":
-      return `libraryDependencies += "GROUP" % "${packageName}" % "${v}"`;
+    case "maven": {
+      // Maven package names arrive colon-joined as `groupId:artifactId`
+      // (issue: the full string used to be emitted as the artifactId with a
+      // `...` placeholder groupId). Split on the colon delimiter; when the
+      // name carries no groupId, keep the `...` placeholder.
+      const gav = parseMavenPackageName(packageName);
+      return buildPomDependencySnippet({
+        groupId: gav.groupId ?? "...",
+        artifactId: gav.artifactId,
+        version: gav.version ?? v,
+      });
+    }
+    case "gradle": {
+      const gav = parseMavenPackageName(packageName);
+      const group = gav.groupId ?? "GROUP";
+      return `implementation '${group}:${gav.artifactId}:${gav.version ?? v}'`;
+    }
+    case "sbt": {
+      const gav = parseMavenPackageName(packageName);
+      const group = gav.groupId ?? "GROUP";
+      return `libraryDependencies += "${group}" % "${gav.artifactId}" % "${gav.version ?? v}"`;
+    }
     case "cargo":
       return `cargo add ${packageName}@${v}`;
     case "nuget":
