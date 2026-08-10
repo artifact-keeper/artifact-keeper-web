@@ -38,6 +38,20 @@ export interface ListArtifactsParams {
    *   empty) `items` array.
    */
   group_by?: 'maven_component' | 'docker_tag';
+  /**
+   * Total-count mode (backend ak#2520/#2519/#2518).
+   *
+   * The keyset-paged listings default to a *lower bound* for
+   * `pagination.total`: rows seen so far plus one when another page exists.
+   * On a `per_page=20` listing that renders as "1-20 of 21", then
+   * "21-40 of 41" on page 2 — the count grows with the page instead of
+   * describing the repository.
+   *
+   * Pass `'exact'` on any surface that shows a total or a page count; it
+   * costs one extra COUNT query per page. Leave unset when only `has_more`
+   * matters (infinite scroll, prefetch, "give me up to N rows").
+   */
+  count?: 'exact';
 }
 
 // Local Artifact extends ArtifactResponse with quarantine fields the SDK
@@ -121,6 +135,7 @@ function buildArtifactsListPath(repoKey: string, params: ListArtifactsParams): s
   const q = params.q || params.search;
   if (q) search.set('q', q);
   if (params.group_by) search.set('group_by', params.group_by);
+  if (params.count) search.set('count', params.count);
   const qs = search.toString();
   const base = `/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts`;
   return qs ? `${base}?${qs}` : base;
