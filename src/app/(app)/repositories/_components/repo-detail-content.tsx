@@ -454,11 +454,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         return;
       }
       const url = artifactsApi.getDownloadUrl(repoKey, artifact.path);
+      // Maven artifacts store a bare artifactId as `name`, so saving under it
+      // drops the version and extension (#477). The real filename is the last
+      // path segment; fall back to `name` when the path is somehow empty.
+      const filename = artifact.path.split("/").pop() || artifact.name;
       try {
         const ticket = await artifactsApi.createDownloadTicket(repoKey, artifact.path);
         const link = document.createElement("a");
         link.href = `${url}?ticket=${ticket}`;
-        link.download = artifact.name;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -466,7 +470,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         // Fallback: try without ticket (backend may allow cookie auth)
         const link = document.createElement("a");
         link.href = url;
-        link.download = artifact.name;
+        link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

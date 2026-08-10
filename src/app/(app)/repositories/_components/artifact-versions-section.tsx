@@ -80,7 +80,9 @@ export function ArtifactVersionsSection({
     try {
       const link = document.createElement("a");
       link.href = href;
-      link.download = artifact.name;
+      // `name` can be a bare artifactId with no extension (Maven, #477); the
+      // real filename is the last path segment.
+      link.download = artifact.path.split("/").pop() || artifact.name;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
