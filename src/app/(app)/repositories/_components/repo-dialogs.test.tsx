@@ -1877,6 +1877,50 @@ describe('RepoDialogs - Upstream Auth Edge Cases', () => {
   });
 });
 
+describe('RepoDialogs - member-less virtual repo (#754)', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  // The backend rejects an explicit empty member list, so creating a
+  // member-less virtual repo must omit the member_repos key entirely.
+  it('omits member_repos when a virtual repo has no members selected', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    const localRepo = {
+      ...mockEditRepo,
+      key: 'local-1',
+      name: 'Local 1',
+      format: 'generic' as const,
+      repo_type: 'local' as const,
+    };
+
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        onCreateSubmit={onCreateSubmit}
+        availableRepos={[localRepo]}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const selects = within(dialog).getAllByTestId('mock-select');
+    fireEvent.change(selects[0], { target: { value: 'generic' } });
+    fireEvent.change(selects[1], { target: { value: 'virtual' } });
+
+    // No member checkbox selected — submit with an empty member list.
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'my-virtual');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'My Virtual');
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledTimes(1);
+    const submitted = onCreateSubmit.mock.calls[0][0] as Record<string, unknown>;
+    expect(submitted.repo_type).toBe('virtual');
+    expect(submitted).not.toHaveProperty('member_repos');
+  });
+});
+
 describe('RepoDialogs - 1.6.0 format-specific config (#602)', () => {
   beforeEach(() => {
     cleanup();

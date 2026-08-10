@@ -347,8 +347,18 @@ export function RepoDialogs({
                 format_key: selectedPlugin?.format_key,
                 quota_bytes: quotaToBytes(createQuotaValue, createQuotaUnit) ?? undefined,
                 upstream_url: createForm.repo_type === "remote" ? createForm.upstream_url : undefined,
-                member_repos: createForm.repo_type === "virtual" ? buildMemberRepos() : undefined,
               };
+              // #754: the backend rejects an *explicit* empty member list, so
+              // a member-less virtual repo must omit `member_repos` entirely
+              // (the spread above carries the form's own empty array — drop
+              // the key rather than send `[]`).
+              const memberRepos =
+                createForm.repo_type === "virtual" ? buildMemberRepos() : [];
+              if (memberRepos.length > 0) {
+                submitData.member_repos = memberRepos;
+              } else {
+                delete submitData.member_repos;
+              }
               if (createForm.repo_type === "remote" && upstreamAuthType !== "none") {
                 submitData.upstream_auth_type = upstreamAuthType;
                 if (upstreamAuthType === "basic") {
