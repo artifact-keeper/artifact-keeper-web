@@ -234,6 +234,8 @@ describe("DashboardPage", () => {
           total_artifacts: 200,
           total_users: 5,
           total_storage_bytes: 1024000,
+          proxy_artifact_count: 0,
+          proxy_storage_bytes: 0,
         },
         isLoading: false,
         isFetching: false,
@@ -524,7 +526,7 @@ describe("DashboardPage", () => {
         isFetching: false,
       },
       "admin-stats": {
-        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0 },
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
         isLoading: false,
         isFetching: false,
       },
@@ -559,7 +561,7 @@ describe("DashboardPage", () => {
         isFetching: false,
       },
       "admin-stats": {
-        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0 },
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
         isLoading: false,
         isFetching: false,
       },
