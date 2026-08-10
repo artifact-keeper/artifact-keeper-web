@@ -258,7 +258,8 @@ describe("RepoDetailContent tab strip", () => {
     render(<RepoDetailContent repoKey="demo" />);
 
     const tabs = screen.getAllByRole("tab");
-    // artifacts, packages, upload, members, security, notifications, settings
+    // artifacts, packages, setup, upload, members, security, notifications,
+    // settings, labels
     expect(tabs.length).toBeGreaterThanOrEqual(7);
 
     const tabsWithoutIcon = tabs
@@ -269,6 +270,39 @@ describe("RepoDetailContent tab strip", () => {
       tabsWithoutIcon,
       `every tab should render a leading icon, but these did not: ${tabsWithoutIcon.join(", ")}`,
     ).toEqual([]);
+  });
+});
+
+describe("RepoDetailContent Setup tab (#560)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+
+  it("exposes a Setup tab that renders the per-repo setup guide", async () => {
+    render(<RepoDetailContent repoKey="demo" />);
+
+    const setupTab = screen.getByRole("tab", { name: /setup/i });
+    expect(setupTab).toBeTruthy();
+
+    await userEvent.click(setupTab);
+    expect(setupTab).toHaveAttribute("aria-selected", "true");
+
+    // A generic repo renders flat, curl-based steps that embed the repo key,
+    // proving the guide is wired to *this* repository, not the central page.
+    expect(
+      await screen.findByRole("heading", { name: /Upload an artifact/i }),
+    ).toBeTruthy();
+    const repoScopedSnippets = screen.getAllByText(
+      (_, el) =>
+        el?.tagName === "CODE" &&
+        (el.textContent ?? "").includes("repositories/demo/"),
+    );
+    expect(repoScopedSnippets.length).toBeGreaterThan(0);
   });
 });
 

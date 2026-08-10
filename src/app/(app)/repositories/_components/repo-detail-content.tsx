@@ -26,6 +26,7 @@ import {
   Link2,
   Upload,
   Tag,
+  Rocket,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -130,6 +131,7 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { FileUpload } from "@/components/common/file-upload";
+import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
 interface RepoDetailContentProps {
   repoKey: string;
@@ -854,6 +856,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <PackageIcon className="size-3.5 mr-1" />
             Packages
           </TabsTrigger>
+          <TabsTrigger value="setup">
+            <Rocket className="size-3.5 mr-1" />
+            Setup
+          </TabsTrigger>
           {isAuthenticated && (
             <TabsTrigger value="upload">
               <Upload className="size-3.5 mr-1" />
@@ -1035,6 +1041,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             repositoryKey={repoKey}
             repositoryFormat={repository.format}
           />
+        </TabsContent>
+
+        {/* --- Setup Tab (#560): same format-aware guide as the central Setup page. --- */}
+        <TabsContent value="setup" className="mt-4">
+          <div className="max-w-3xl space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Configure your tools to publish to and install from{" "}
+              <span className="font-medium text-foreground">{repository.key}</span>.
+            </p>
+            <RepoSetupGuide repo={repository} />
+          </div>
         </TabsContent>
 
         {/* --- Upload Tab --- */}
