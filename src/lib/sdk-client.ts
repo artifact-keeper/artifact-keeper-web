@@ -13,6 +13,10 @@
  */
 
 import { client } from '@artifact-keeper/sdk/client';
+import {
+  recentlyBecameVisible,
+  UNFREEZE_REFRESH_RETRY_DELAY_MS,
+} from './tab-unfreeze';
 
 // ---------------------------------------------------------------------------
 // CSRF defense-in-depth
@@ -110,6 +114,35 @@ function addRefreshSubscriber(cb: () => void) {
   refreshSubscribers.push(cb);
 }
 
+async function attemptRefresh(): Promise<boolean> {
+  try {
+    const refreshResponse = await fetch(
+      `${getActiveInstanceBaseUrl()}/api/v1/auth/refresh`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
+        },
+        body: '{}',
+        credentials: 'include',
+      }
+    );
+    return refreshResponse.ok;
+  } catch {
+    return false;
+  }
+}
+
+function retryOriginalRequest(request: Request): Promise<Response> {
+  return fetch(new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.bodyUsed ? undefined : request.body,
+    credentials: 'include',
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Response interceptor: 401 refresh + 403 SETUP_REQUIRED
 // ---------------------------------------------------------------------------
@@ -149,48 +182,28 @@ client.interceptors.response.use(async (response, request) => {
     // Another request is already refreshing -- wait for it, then retry
     return new Promise<Response>((resolve) => {
       addRefreshSubscriber(async () => {
-        const retried = await fetch(new Request(request.url, {
-          method: request.method,
-          headers: request.headers,
-          body: request.bodyUsed ? undefined : request.body,
-          credentials: 'include',
-        }));
-        resolve(retried);
+        resolve(await retryOriginalRequest(request));
       });
     });
   }
 
   isRefreshing = true;
 
-  try {
-    const refreshResponse = await fetch(
-      `${getActiveInstanceBaseUrl()}/api/v1/auth/refresh`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
-        },
-        body: '{}',
-        credentials: 'include',
-      }
+  let refreshed = await attemptRefresh();
+
+  // #558: Chromium can fire the first request(s) after a frozen tab
+  // reactivates before the cookie store reattaches, so the request -- and
+  // the refresh it triggers -- goes out without cookies and fails
+  // spuriously. When the tab only just became visible, wait a beat and try
+  // the refresh once more before concluding the session is really gone.
+  if (!refreshed && recentlyBecameVisible()) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, UNFREEZE_REFRESH_RETRY_DELAY_MS)
     );
+    refreshed = await attemptRefresh();
+  }
 
-    if (!refreshResponse.ok) {
-      throw new Error('Refresh failed');
-    }
-
-    isRefreshing = false;
-    onTokenRefreshed();
-
-    // Retry the original request -- cookies are updated by the refresh response
-    return fetch(new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.bodyUsed ? undefined : request.body,
-      credentials: 'include',
-    }));
-  } catch {
+  if (!refreshed) {
     isRefreshing = false;
     refreshSubscribers = [];
     if (!window.location.pathname.startsWith('/login')) {
@@ -198,6 +211,12 @@ client.interceptors.response.use(async (response, request) => {
     }
     return response;
   }
+
+  isRefreshing = false;
+  onTokenRefreshed();
+
+  // Retry the original request -- cookies are updated by the refresh response
+  return retryOriginalRequest(request);
 });
 
 export { client };

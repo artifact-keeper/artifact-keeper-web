@@ -65,6 +65,21 @@ function setupServerEnv() {
   vi.stubGlobal("window", undefined);
 }
 
+function setupDocument(visibilityState: "visible" | "hidden" = "visible") {
+  const listeners: Array<() => void> = [];
+  vi.stubGlobal("document", {
+    visibilityState,
+    addEventListener: (event: string, cb: () => void) => {
+      if (event === "visibilitychange") listeners.push(cb);
+    },
+  });
+  return {
+    fireVisibilityChange() {
+      for (const cb of listeners) cb();
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -80,6 +95,7 @@ describe("sdk-client", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   // -------------------------------------------------------------------------
@@ -799,6 +815,185 @@ describe("sdk-client", () => {
       vi.stubGlobal("window", undefined);
       const result = await interceptor(response, request);
       expect(result.status).toBe(401);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Tab unfreeze mitigation (#558)
+  // -------------------------------------------------------------------------
+
+  describe("tab unfreeze mitigation (#558)", () => {
+    it("retries the refresh once when the tab recently became visible, avoiding the redirect", async () => {
+      vi.useFakeTimers();
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+      const doc = setupDocument("visible");
+
+      let refreshCalls = 0;
+      const mockFetch = vi.fn((input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/auth/refresh")) {
+          refreshCalls += 1;
+          // First attempt goes out cookieless right after unfreeze and fails;
+          // the retry after the debounce succeeds.
+          return Promise.resolve(
+            new Response(refreshCalls === 1 ? "Unauthorized" : "{}", {
+              status: refreshCalls === 1 ? 401 : 200,
+            })
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const { initTabUnfreezeGuards, UNFREEZE_REFRESH_RETRY_DELAY_MS } =
+        await import("../tab-unfreeze");
+      await import("../sdk-client");
+      initTabUnfreezeGuards();
+      doc.fireVisibilityChange();
+
+      const interceptor = responseInterceptors[0];
+      const resultPromise = interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request("http://localhost:3000/api/v1/repos")
+      );
+
+      // The retry fires after the debounce; this also flushes the warm-up.
+      await vi.advanceTimersByTimeAsync(UNFREEZE_REFRESH_RETRY_DELAY_MS + 100);
+      const result = await resultPromise;
+
+      expect(refreshCalls).toBe(2);
+      expect(result.status).toBe(200);
+      expect(window.location.href).not.toBe("/login");
+    });
+
+    it("redirects immediately without a retry when the tab was not recently unfrozen", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+
+      const mockFetch = vi.fn();
+      // Refresh endpoint returns 401 (not ok)
+      mockFetch.mockResolvedValue(new Response("Unauthorized", { status: 401 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await import("../sdk-client");
+      const interceptor = responseInterceptors[0];
+
+      const result = await interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request("http://localhost:3000/api/v1/repos")
+      );
+
+      // Exactly one refresh attempt (no retry), then the redirect
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(window.location.href).toBe("/login");
+      expect(result.status).toBe(401);
+    });
+
+    it("does not retry the refresh when the visibilitychange is stale", async () => {
+      vi.useFakeTimers();
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "local";
+      const doc = setupDocument("visible");
+
+      let refreshCalls = 0;
+      const mockFetch = vi.fn((input: unknown) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/auth/refresh")) {
+          refreshCalls += 1;
+          return Promise.resolve(new Response("Unauthorized", { status: 401 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const { initTabUnfreezeGuards, UNFREEZE_WINDOW_MS } = await import(
+        "../tab-unfreeze"
+      );
+      await import("../sdk-client");
+      initTabUnfreezeGuards();
+      doc.fireVisibilityChange();
+
+      // Move past the unfreeze window before the 401 happens
+      await vi.advanceTimersByTimeAsync(UNFREEZE_WINDOW_MS + 1000);
+
+      const interceptor = responseInterceptors[0];
+      const result = await interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request("http://localhost:3000/api/v1/repos")
+      );
+
+      expect(refreshCalls).toBe(1);
+      expect(window.location.href).toBe("/login");
+      expect(result.status).toBe(401);
+    });
+
+    it("fires a disposable warm-up request to /auth/me when the tab becomes visible", async () => {
+      vi.useFakeTimers();
+      setupBrowserEnv();
+      const doc = setupDocument("visible");
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const { initTabUnfreezeGuards, UNFREEZE_WARMUP_DELAY_MS } = await import(
+        "../tab-unfreeze"
+      );
+      initTabUnfreezeGuards();
+      doc.fireVisibilityChange();
+
+      // The warm-up is debounced so it does not race the visibility event
+      expect(mockFetch).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(UNFREEZE_WARMUP_DELAY_MS);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/v1/auth/me",
+        expect.objectContaining({
+          method: "GET",
+          credentials: "include",
+        })
+      );
+    });
+
+    it("does not fire a warm-up request when the tab becomes hidden", async () => {
+      vi.useFakeTimers();
+      setupBrowserEnv();
+      const doc = setupDocument("hidden");
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const { initTabUnfreezeGuards, UNFREEZE_WARMUP_DELAY_MS } = await import(
+        "../tab-unfreeze"
+      );
+      initTabUnfreezeGuards();
+      doc.fireVisibilityChange();
+      await vi.advanceTimersByTimeAsync(UNFREEZE_WARMUP_DELAY_MS + 1000);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("swallows warm-up request failures (disposable by design)", async () => {
+      vi.useFakeTimers();
+      setupBrowserEnv();
+      const doc = setupDocument("visible");
+
+      const mockFetch = vi.fn();
+      mockFetch.mockRejectedValue(new Error("Network error"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const { initTabUnfreezeGuards, UNFREEZE_WARMUP_DELAY_MS } = await import(
+        "../tab-unfreeze"
+      );
+      initTabUnfreezeGuards();
+      doc.fireVisibilityChange();
+
+      // Must not surface an unhandled rejection
+      await vi.advanceTimersByTimeAsync(UNFREEZE_WARMUP_DELAY_MS + 1000);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
