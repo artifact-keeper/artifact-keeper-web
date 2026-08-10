@@ -2,21 +2,54 @@ queue_rules:
   - name: default
     merge_method: squash
     update_method: rebase
+    # Conditions on the pull_request_rule below gate ENTRY into the queue.
+    # These gate the merge itself, after the queue rebases and CI re-runs.
+    # Without them the final merge is gated only by branch protection, which
+    # is Build/Lint/Unit Tests and does not include E2E, so a rebase that
+    # broke E2E would still merge. See #752.
+    merge_conditions:
+      - check-success=Lint
+      - check-success=Unit Tests
+      - check-success=Build
+      - check-success=E2E
+      - check-success=dependency-review
 
 pull_request_rules:
   - name: Auto-merge Dependabot patch updates
     conditions:
       - author=dependabot[bot]
-      - "-title~=major"
+      # Gate on Dependabot's own update-type metadata rather than the PR
+      # title. Dependabot never writes "major" into its titles, so the old
+      # `-title~=major` guard matched every major bump and excluded nothing.
+      # It was inert only because the check-success conditions below could
+      # never pass. See #752.
+      #
+      # This rule is named "patch updates" but has only ever excluded major,
+      # so patch and minor both stay eligible here. Narrowing to patch-only
+      # is a policy call for the maintainer, not a drive-by change.
+      #
+      # dependabot-update-type is a list: a grouped update carries one entry
+      # per dependency. Both halves are needed, since a group containing a
+      # patch and a major would satisfy the first condition on its own.
+      - or:
+          - dependabot-update-type=version-update:semver-patch
+          - dependabot-update-type=version-update:semver-minor
+      - -dependabot-update-type=version-update:semver-major
       # Check names are case-sensitive exact matches against the job `name:`
-      # in .github/workflows/ci.yml. `E2E` is the aggregate job that rolls up
-      # every E2E suite, so shard renames do not silently disable this rule.
-      # See #752.
+      # in the workflow, or the job id where no name is set. `E2E` is the
+      # aggregate job that rolls up every E2E suite, so shard renames do not
+      # silently disable this rule.
       - check-success=Lint
       - check-success=Unit Tests
       - check-success=Build
-      - check-success=Dependency Audit
       - check-success=E2E
+      # dependency-review scans only the dependencies this PR introduces and
+      # fails on high severity. Deliberately not `Dependency Audit`: that job
+      # runs `npm audit` across the whole installed tree, so one unrelated
+      # transitive advisory would block every Dependabot PR, including the
+      # bump that would fix it. It is also not in branch protection, so
+      # requiring it would hold bots to a stricter bar than humans.
+      - check-success=dependency-review
       - "#approved-reviews-by>=1"
       # Scope auto-merge to PRs targeting main only. Maintenance branches
       # (release/1.1.x and similar) overwrite floating dev tags on push,
@@ -30,7 +63,9 @@ pull_request_rules:
   - name: Flag Dependabot major updates
     conditions:
       - author=dependabot[bot]
-      - "title~=major"
+      # Same fix as above: `title~=major` never matched, so no Dependabot
+      # major bump has ever been labelled. See #752.
+      - dependabot-update-type=version-update:semver-major
     actions:
       label:
         add:
