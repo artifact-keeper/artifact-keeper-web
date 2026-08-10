@@ -32,8 +32,8 @@ vi.mock("@/components/common/copy-button", () => ({
 }));
 
 vi.mock("@/components/common/data-table-pagination", () => ({
-  DataTablePagination: ({ total }: { total: number }) => (
-    <div data-testid="pagination" data-total={total} />
+  DataTablePagination: ({ total, itemLabel }: { total: number; itemLabel?: string }) => (
+    <div data-testid="pagination" data-total={total} data-item-label={itemLabel} />
   ),
 }));
 
@@ -179,6 +179,35 @@ describe("DockerTagList", () => {
   it("omits pagination when no total is supplied", () => {
     render(<DockerTagList tags={[TAG_14]} />);
     expect(screen.queryByTestId("pagination")).not.toBeInTheDocument();
+  });
+
+  // `pagination.total` on a `?group_by=docker_tag` response counts TAGS, the
+  // same grouped-unit semantic the Maven component list relies on (#417).
+  // Backend evidence, in
+  // artifact-keeper/backend/src/api/handlers/repositories.rs:
+  //
+  //   - `?count=exact` is answered by `count_docker_tag_rows` (:6705):
+  //     `SELECT COUNT(*) FROM oci_tags t WHERE t.repository_id = $1 ...`,
+  //     reusing the same FROM/WHERE as the page query, so one counted row
+  //     per (image, tag).
+  //   - Without it, `grouped_listing_total` (:6147) returns
+  //     `offset + docker_tags.len() + has_more` (:6479) -- again tags.
+  //
+  // Manifests, layers and index children are never counted.
+  //
+  // Scope: this pins the PROPS handed to `DataTablePagination`, not rendered
+  // copy.  `itemLabel` only reaches the screen in the control's `total === 0`
+  // branch (data-table-pagination.tsx:72); a non-empty page renders the bare
+  // "1-2 of 137" with no noun at all.  And `total` arrives as a prop here, so
+  // this does not verify what the server counts.
+  it("passes the server tag total and a 'tags' item label to the pagination control", () => {
+    // One page of 2 tags; each tag is an image index fronting several
+    // per-platform manifests plus their layers, so the raw artifact count
+    // behind this page is far larger than 2.
+    render(<DockerTagList tags={[TAG_14, TAG_LATEST]} total={137} />);
+    const pagination = screen.getByTestId("pagination");
+    expect(pagination).toHaveAttribute("data-total", "137");
+    expect(pagination).toHaveAttribute("data-item-label", "tags");
   });
 
   // -------------------------------------------------------------------------

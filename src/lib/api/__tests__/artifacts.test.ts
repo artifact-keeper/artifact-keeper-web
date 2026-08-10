@@ -515,6 +515,116 @@ describe("artifactsApi", () => {
       });
       expect(result.docker_tags).toEqual(docker_tags);
     });
+
+    // -----------------------------------------------------------------------
+    // `pagination.total` semantics on a grouped response (issue #417)
+    //
+    // The backend counts GROUPED UNITS, never the raw `artifacts` rows they
+    // group. In artifact-keeper/backend/src/api/handlers/repositories.rs:
+    //
+    //   - maven_component, hosted/virtual: `count_maven_catalog_component_keys`
+    //     (:5997) -> `SELECT COUNT(*) FROM (SELECT DISTINCT p.name, pv.version
+    //     FROM packages p JOIN package_versions pv ...) t`
+    //   - maven_component, remote/proxy: `count_maven_catalog_components`
+    //     (:6267) -> `SELECT COUNT(*) FROM packages p WHERE ...`
+    //   - docker_tag: `count_docker_tag_rows` (:6705) -> `SELECT COUNT(*) FROM
+    //     oci_tags t WHERE ...`
+    //   - no `count=exact`: `grouped_listing_total` (:6147) ->
+    //     `offset + <grouped rows returned> + has_more`
+    //
+    // So the total is a component/tag count that is independent of both the
+    // page length and the number of files per group. The wrapper must hand it
+    // to the UI verbatim: recomputing it from `components.length` or
+    // `docker_tags.length` would replace a repository-wide total with the
+    // current page size.
+    //
+    // Scope: the fixtures below are authored by these tests, so they pin the
+    // WRAPPER's passthrough, not the server's counting. If the backend began
+    // reporting raw artifact counts, these would still pass. Closing that gap
+    // needs a test in artifact-keeper against the grouped handlers (#417).
+    // -----------------------------------------------------------------------
+
+    it("passes the server component total through verbatim, independent of page length", async () => {
+      // 3 components on the page, 15 files between them, 7 components in the
+      // repository. Only 7 may reach the UI.
+      const components = ["alpha", "beta", "gamma"].map((artifactId) => ({
+        id: `${artifactId}-1`,
+        group_id: "com.example",
+        artifact_id: artifactId,
+        version: "1.0.0",
+        repository_key: "maven-releases",
+        format: "maven",
+        size_bytes: 100,
+        download_count: 0,
+        created_at: "2026-01-01T00:00:00Z",
+        artifact_files: [
+          `${artifactId}-1.0.0.jar`,
+          `${artifactId}-1.0.0.pom`,
+          `${artifactId}-1.0.0-sources.jar`,
+          `${artifactId}-1.0.0-javadoc.jar`,
+          `${artifactId}-1.0.0.jar.sha1`,
+        ],
+      }));
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 3, total: 7, total_pages: 3 },
+            components,
+          })
+        ),
+      });
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.listGrouped("maven-releases", {
+        group_by: "maven_component",
+        count: "exact",
+        page: 1,
+        per_page: 3,
+      });
+      expect(result.pagination.total).toBe(7);
+      expect(result.pagination.total_pages).toBe(3);
+      // Not the page length (3) and not the raw file count (15).
+      expect(result.components).toHaveLength(3);
+    });
+
+    it("passes the server tag total through verbatim, independent of page length", async () => {
+      const docker_tags = ["1.0.0", "latest"].map((t) => ({
+        id: `tag-${t}`,
+        repository_key: "docker-local",
+        image: "acme/app",
+        tag: t,
+        manifest_digest: "sha256:abc",
+        total_size_bytes: 6000,
+        layer_count: 12,
+        is_index: true,
+        last_pushed_at: "2026-01-01T00:00:00Z",
+        scan_status: "completed",
+      }));
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, per_page: 2, total: 137, total_pages: 69 },
+            docker_tags,
+          })
+        ),
+      });
+
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.listGrouped("docker-local", {
+        group_by: "docker_tag",
+        count: "exact",
+        page: 1,
+        per_page: 2,
+      });
+      expect(result.pagination.total).toBe(137);
+      expect(result.docker_tags).toHaveLength(2);
+    });
   });
 
   it("get fetches artifact metadata via fetch", async () => {
