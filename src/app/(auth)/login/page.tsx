@@ -113,18 +113,24 @@ function LoginContent() {
 
   // The local username/password form is consumed by either local password
   // login (the built-in admin account) or LDAP. `auth.local_login_enabled`
-  // from GET /api/v1/system/config says whether the backend will accept local
-  // credentials at all: it is true when no SSO provider is configured, and
-  // under SSO only when the operator set ALLOW_LOCAL_ADMIN_LOGIN. Rendering
-  // the form when it is false would be misleading, because the fields don't go
-  // anywhere (issue #350).
+  // from GET /api/v1/system/config is the backend's own answer to "should this
+  // form be offered": true when no SSO provider is enabled, and under SSO only
+  // when the operator set ALLOW_LOCAL_ADMIN_LOGIN without setting
+  // SSO_DISABLE_ADMIN_BREAK_GLASS. Rendering the form when it is false is
+  // misleading for the ordinary user, because their credentials are rejected
+  // (issue #350).
+  //
+  // The flag is narrower than the login endpoint's own gate, though: under SSO
+  // a verified admin keeps a break-glass password path by default (backend
+  // #443) that the flag deliberately does not advertise. So `?fallback=local`
+  // is not a vestige of the old heuristic, it is the supported way for an admin
+  // to reach a form that the server will in fact accept. Safe to expose,
+  // because the endpoint enforces the policy itself and rejects everyone else.
   //
   // LDAP is orthogonal: the form is how LDAP credentials are entered, so an
   // enabled LDAP provider shows it regardless of the flag. First-time setup
   // shows it too, so an admin can complete the initial password change with
-  // the bootstrap account. `?fallback=local` stays as an operator escape hatch
-  // for a stale or unavailable config; it is safe because the login endpoint
-  // enforces the same policy server-side and rejects the attempt.
+  // the bootstrap account.
   const forceLocalFallback = searchParams?.get("fallback")?.toLowerCase() === "local";
   const showLocalForm =
     forceLocalFallback ||
@@ -133,8 +139,13 @@ function LoginContent() {
     localLoginEnabled;
 
   // Both the provider list and the system config feed the form decision, so
-  // wait for both before rendering sign-in options.
-  const optionsLoaded = providersLoaded && !systemConfigLoading;
+  // wait for both before rendering sign-in options. `?fallback=local` short
+  // -circuits the wait: neither request is bounded by anything the page
+  // controls, and a request that hangs rather than fails would otherwise pin
+  // this to false forever and leave a permanent spinner with the escape hatch
+  // trapped behind the very condition it exists to escape.
+  const optionsLoaded =
+    forceLocalFallback || (providersLoaded && !systemConfigLoading);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),

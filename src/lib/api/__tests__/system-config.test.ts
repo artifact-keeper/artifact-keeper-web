@@ -8,6 +8,7 @@ vi.mock("@/lib/api/fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
+// Admin-tier payload: every security-posture field is present.
 const VALID = {
   max_upload_size_bytes: 10_737_418_240,
   demo_mode: false,
@@ -22,6 +23,25 @@ const VALID = {
   auth: { oidc_enabled: true, ldap_enabled: false, sso_enabled: true },
   oidc_issuer: "https://auth.example.com",
   permissions: { rules_exist: true, enforcement_enabled: true },
+};
+
+// Anonymous-tier payload, byte-for-byte what the Rust handler builds for a
+// non-admin caller: backend #1960 made `scanners` / `search_engine` /
+// `storage_backend` / `permissions` (and `plugin_signing`) admin-only
+// `Option<T>` with `skip_serializing_if = "Option::is_none"`, so they are
+// absent from the JSON entirely. The login page is always an anonymous caller,
+// so this is the shape it actually receives.
+const ANONYMOUS = {
+  max_upload_size_bytes: 10_737_418_240,
+  demo_mode: false,
+  guest_access_enabled: true,
+  auth: {
+    oidc_enabled: true,
+    ldap_enabled: false,
+    sso_enabled: true,
+    local_login_enabled: false,
+  },
+  oidc_issuer: "https://auth.example.com",
 };
 
 describe("systemConfigApi", () => {
@@ -43,6 +63,7 @@ describe("systemConfigApi", () => {
     await mod.systemConfigApi.getConfig();
     expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/system/config", {
       method: "GET",
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -101,6 +122,44 @@ describe("systemConfigApi", () => {
       auth: { ...VALID.auth, local_login_enabled: false },
     });
     expect(config.auth.local_login_enabled).toBe(false);
+  });
+
+  it("parses the anonymous payload that omits every admin-only field", async () => {
+    // Regression: requiring these four fields made the parser throw for every
+    // unauthenticated caller, which is the only kind the login page ever is.
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig(ANONYMOUS);
+    expect(config.auth.local_login_enabled).toBe(false);
+    expect(config.max_upload_size_bytes).toBe(10_737_418_240);
+  });
+
+  it("falls back to the documented defaults for omitted admin-only fields", async () => {
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig(ANONYMOUS);
+    expect(config.scanners).toEqual(mod.DEFAULT_SYSTEM_CONFIG.scanners);
+    expect(config.search_engine).toBe(mod.DEFAULT_SYSTEM_CONFIG.search_engine);
+    expect(config.storage_backend).toBe(
+      mod.DEFAULT_SYSTEM_CONFIG.storage_backend
+    );
+    expect(config.permissions).toEqual(mod.DEFAULT_SYSTEM_CONFIG.permissions);
+  });
+
+  it("does not alias the defaults object across parses", async () => {
+    // A shared reference would let one consumer's mutation leak into every
+    // later parse and into DEFAULT_SYSTEM_CONFIG itself.
+    const mod = await import("../system-config");
+    const first = mod.parseSystemConfig(ANONYMOUS);
+    const second = mod.parseSystemConfig(ANONYMOUS);
+    expect(first.scanners).not.toBe(second.scanners);
+    expect(first.scanners).not.toBe(mod.DEFAULT_SYSTEM_CONFIG.scanners);
+  });
+
+  it("bounds the request with an abort signal so a hung fetch cannot hang the login page", async () => {
+    mockApiFetch.mockResolvedValue(ANONYMOUS);
+    const mod = await import("../system-config");
+    await mod.systemConfigApi.getConfig();
+    const init = mockApiFetch.mock.calls[0][1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("defaults local_login_enabled to true when the backend omits it", async () => {

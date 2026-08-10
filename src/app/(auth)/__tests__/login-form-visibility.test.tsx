@@ -358,6 +358,53 @@ describe("LoginPage username/password form visibility", () => {
     });
   });
 
+  it("shows the form via ?fallback=local even while the system config request hangs", async () => {
+    // A hung (not failed) config request leaves isLoading true forever. The
+    // escape hatch has to work in exactly that situation, so it must sit
+    // outside the loading gate rather than behind it.
+    mockListProviders.mockResolvedValue([oidcProvider]);
+    systemConfigState.isLoading = true;
+    systemConfigState.config.auth.local_login_enabled = false;
+    mockSearchParams = new URLSearchParams("?fallback=local");
+
+    try {
+      await renderAndWaitForProviders();
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText("Enter your username")
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.getByPlaceholderText("Enter your password")
+      ).toBeInTheDocument();
+    } finally {
+      mockSearchParams = new URLSearchParams();
+    }
+  });
+
+  it("shows the form via ?fallback=local even while the SSO provider list hangs", async () => {
+    // Same reasoning for the other half of the gate: listProviders is also an
+    // unbounded request.
+    mockListProviders.mockReturnValue(new Promise<SsoProvider[]>(() => {}));
+    systemConfigState.config.auth.local_login_enabled = false;
+    mockSearchParams = new URLSearchParams("?fallback=local");
+
+    try {
+      await act(async () => {
+        render(<LoginPage />);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText("Enter your username")
+        ).toBeInTheDocument();
+      });
+    } finally {
+      mockSearchParams = new URLSearchParams();
+    }
+  });
+
   it("shows a loading indicator while the system config is still in flight", async () => {
     // The form decision depends on auth.local_login_enabled, so rendering it
     // before the config lands would flash a form that then disappears.
