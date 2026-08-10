@@ -42,6 +42,9 @@ export async function seedRepositories(request: APIRequestContext): Promise<void
     // Visibility test repos: one public, one private (default)
     { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', is_public: true },
     { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', is_public: false },
+    // Pub (Dart) repo so the Dart-specific setup-guide snippets (#748) have a
+    // real target in the repo detail Setup tab.
+    { key: 'e2e-pub-local', name: 'E2E Pub Local', format: 'pub', repo_type: 'local' },
     // Generic repo opted into first-class versioning (#571) so the
     // version-history UI has real revisions to exercise. Harmless on a
     // backend that predates the flag (the field is simply ignored).
