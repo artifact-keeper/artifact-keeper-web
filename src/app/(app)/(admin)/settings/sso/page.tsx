@@ -1588,18 +1588,18 @@ function SamlTab() {
                 <Label htmlFor="saml-map-groups-to-groups">
                   Map IdP groups to Artifact Keeper groups
                 </Label>
-                <p
-                  className="text-xs text-muted-foreground"
-                  data-testid="saml-map-groups-help"
-                >
+                <p className="text-xs text-muted-foreground">
                   Reflect the values of the assertion&apos;s groups attribute
                   into Artifact Keeper group memberships on login. Groups are
                   matched by name and auto-created for this provider; the
                   attribute read is the one configured under Groups Attribute
-                  below (attribute_mapping.groups). Membership is reconciled on
-                  every login, so removing a group at the IdP removes the
-                  membership here. Operator-managed groups are left unchanged.
-                  Off keeps the legacy role-mapping behavior.
+                  below (attribute_mapping.groups). A group this provider did
+                  not create, including any operator-managed group of the same
+                  name, is never reused: that membership is refused instead.
+                  Membership is reconciled on every login, so removing a group
+                  at the IdP removes the membership here; only groups this
+                  provider created are touched. Off keeps the legacy
+                  role-mapping behavior.
                 </p>
               </div>
               <Switch

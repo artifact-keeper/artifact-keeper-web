@@ -716,11 +716,19 @@ describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
       expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
     });
 
-    const help = screen.getByTestId("saml-map-groups-help").textContent ?? "";
-    expect(help).toMatch(/attribute_mapping\.groups/i);
+    // Resolved by its content, not a test id, so the assertions below fail if
+    // the paragraph is reworded rather than silently following a hook.
+    const help =
+      screen.getByText(/attribute_mapping\.groups/i).textContent ?? "";
     expect(help).toMatch(/auto-created/i);
     expect(help).toMatch(/reconciled on every login/i);
     expect(help).toMatch(/removing a group at the IdP/i);
+    // Backend #2759 ownership guard (sso.rs): a name collision with a group
+    // this provider did not create returns no row and membership is refused
+    // with only a tracing::warn!, so nothing surfaces in the UI. Operators
+    // have to learn that from the help text or not at all.
+    expect(help).toMatch(/never reused/i);
+    expect(help).toMatch(/refused/i);
   });
 });
 
