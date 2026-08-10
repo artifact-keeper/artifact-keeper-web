@@ -75,6 +75,16 @@ export interface SamlConfig {
    * Defensive default `false` on backends that predate the field.
    */
   use_absolute_acs_url: boolean;
+  /**
+   * When true, values from the SAML assertion's groups attribute are
+   * reflected into Artifact Keeper group memberships on login
+   * (auto-creating matching groups for this provider); operator-managed
+   * groups are left unchanged. When false, legacy role mapping is used.
+   * Backend field `saml_configs.map_groups_to_groups`
+   * (artifact-keeper#2333, implemented in #2448). Defensive default
+   * `false` on backends that predate the field.
+   */
+  map_groups_to_groups: boolean;
   is_enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -159,6 +169,7 @@ export interface CreateSamlConfigRequest {
   require_signed_assertions?: boolean;
   admin_group?: string;
   use_absolute_acs_url?: boolean;
+  map_groups_to_groups?: boolean;
 }
 
 export interface UpdateSamlConfigRequest {
@@ -174,4 +185,5 @@ export interface UpdateSamlConfigRequest {
   require_signed_assertions?: boolean;
   admin_group?: string;
   use_absolute_acs_url?: boolean;
+  map_groups_to_groups?: boolean;
 }

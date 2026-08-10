@@ -1162,6 +1162,7 @@ function SamlTab() {
   const [signRequests, setSignRequests] = useState(false);
   const [requireSignedAssertions, setRequireSignedAssertions] = useState(true);
   const [useAbsoluteAcsUrl, setUseAbsoluteAcsUrl] = useState(false);
+  const [mapGroupsToGroups, setMapGroupsToGroups] = useState(false);
   const [usernameClaim, setUsernameClaim] = useState("username");
   const [emailClaim, setEmailClaim] = useState("email");
   const [displayNameClaim, setDisplayNameClaim] = useState("displayName");
@@ -1225,6 +1226,7 @@ function SamlTab() {
     setSignRequests(false);
     setRequireSignedAssertions(true);
     setUseAbsoluteAcsUrl(false);
+    setMapGroupsToGroups(false);
     setUsernameClaim("username");
     setEmailClaim("email");
     setDisplayNameClaim("displayName");
@@ -1256,6 +1258,7 @@ function SamlTab() {
     setSignRequests(config.sign_requests);
     setRequireSignedAssertions(config.require_signed_assertions);
     setUseAbsoluteAcsUrl(config.use_absolute_acs_url);
+    setMapGroupsToGroups(config.map_groups_to_groups);
     setUsernameClaim(config.attribute_mapping?.username || "username");
     setEmailClaim(config.attribute_mapping?.email || "email");
     setDisplayNameClaim(config.attribute_mapping?.display_name || "displayName");
@@ -1292,6 +1295,7 @@ function SamlTab() {
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
         use_absolute_acs_url: useAbsoluteAcsUrl,
+        map_groups_to_groups: mapGroupsToGroups,
       };
       if (certificate) {
         data.certificate = certificate;
@@ -1311,6 +1315,7 @@ function SamlTab() {
         require_signed_assertions: requireSignedAssertions,
         admin_group: adminGroup || undefined,
         use_absolute_acs_url: useAbsoluteAcsUrl,
+        map_groups_to_groups: mapGroupsToGroups,
       });
     }
   }
@@ -1575,6 +1580,32 @@ function SamlTab() {
                 id="saml-use-absolute-acs-url"
                 checked={useAbsoluteAcsUrl}
                 onCheckedChange={setUseAbsoluteAcsUrl}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="saml-map-groups-to-groups">
+                  Map IdP groups to Artifact Keeper groups
+                </Label>
+                <p
+                  className="text-xs text-muted-foreground"
+                  data-testid="saml-map-groups-help"
+                >
+                  Reflect the values of the assertion&apos;s groups attribute
+                  into Artifact Keeper group memberships on login. Groups are
+                  matched by name and auto-created for this provider; the
+                  attribute read is the one configured under Groups Attribute
+                  below (attribute_mapping.groups). Membership is reconciled on
+                  every login, so removing a group at the IdP removes the
+                  membership here. Operator-managed groups are left unchanged.
+                  Off keeps the legacy role-mapping behavior.
+                </p>
+              </div>
+              <Switch
+                id="saml-map-groups-to-groups"
+                checked={mapGroupsToGroups}
+                onCheckedChange={setMapGroupsToGroups}
               />
             </div>
 

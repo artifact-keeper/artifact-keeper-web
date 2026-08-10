@@ -11,6 +11,8 @@ import type { OidcConfig, SamlConfig } from '@/types/sso';
  *     `username` / `email` / `groups` keys the pre-#516 UI wrote.
  *   - a SAML "Use absolute ACS URL" switch that maps to the
  *     `use_absolute_acs_url` field (backend migration 139).
+ *   - a SAML "Map IdP groups to Artifact Keeper groups" switch that maps to
+ *     the `map_groups_to_groups` field (#588 / backend #2448).
  *
  * Runs in the `interactions` project (admin storageState) against the real
  * e2e backend.
@@ -80,6 +82,7 @@ function samlStub(name: string, body: Record<string, unknown>) {
     require_signed_assertions: (body.require_signed_assertions as boolean) ?? false,
     admin_group: (body.admin_group as string) ?? null,
     use_absolute_acs_url: (body.use_absolute_acs_url as boolean) ?? false,
+    map_groups_to_groups: (body.map_groups_to_groups as boolean) ?? false,
     is_enabled: true,
     created_at: NOW,
     updated_at: NOW,
@@ -221,6 +224,63 @@ test.describe('SSO claim mapping & absolute ACS URL (#541)', () => {
     expect(mapping).toHaveProperty('username');
     expect(mapping).toHaveProperty('email');
     expect(mapping).toHaveProperty('groups');
+  });
+
+  test('SAML create payload carries map_groups_to_groups:true, toggled by keyboard (#588)', async ({
+    page,
+  }) => {
+    // Exercises the real Radix Switch (the vitest suite stubs it), so this is
+    // also the keyboard-accessibility check for the new control: focus it and
+    // press Space, no pointer involved.
+    let body: Record<string, unknown> | null = null;
+
+    await page.route(SAML_ADMIN_PATH, async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      body = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(samlStub(`${RUN_ID}-saml-groups`, body ?? {})),
+      });
+    });
+
+    await page.goto('/settings/sso');
+    await page.getByRole('tablist').getByRole('tab', { name: /saml/i }).click();
+    await page.getByRole('button', { name: /add provider/i }).first().click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByLabel(/^name$/i).fill(`${RUN_ID}-saml-groups`);
+    await dialog
+      .getByLabel(/entity id/i)
+      .first()
+      .fill('https://idp.e2e.example.com/groups/metadata');
+    await dialog.getByLabel(/sso url/i).fill('https://idp.e2e.example.com/groups/sso');
+    await dialog.getByLabel(/certificate/i).fill(DUMMY_CERT);
+
+    // Resolved by accessible name, which only works if the Label htmlFor is
+    // wired to the Switch id.
+    const groupsToggle = dialog.getByLabel(
+      /map idp groups to artifact keeper groups/i,
+    );
+    await expect(groupsToggle).toHaveAttribute('aria-checked', 'false');
+    await groupsToggle.focus();
+    await page.keyboard.press('Space');
+    await expect(groupsToggle).toHaveAttribute('aria-checked', 'true');
+
+    await dialog.getByRole('button', { name: /create provider/i }).click();
+
+    await expect.poll(() => body).not.toBeNull();
+    const payload = body as unknown as Record<string, unknown>;
+
+    expect(payload.map_groups_to_groups).toBe(true);
+    expect(payload.name).toBe(`${RUN_ID}-saml-groups`);
+    // The sibling opt-in must not be dragged along by the new toggle.
+    expect(payload.use_absolute_acs_url).toBe(false);
   });
 
   test('SAML absolute-ACS flag round-trips through create -> edit -> save (persistence)', async ({

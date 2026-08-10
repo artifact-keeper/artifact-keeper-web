@@ -225,9 +225,22 @@ const SAML_WITH_EXTRA_MAPPING = {
   sign_requests: true,
   require_signed_assertions: true,
   use_absolute_acs_url: false,
+  map_groups_to_groups: false,
   is_enabled: true,
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
+};
+
+/**
+ * A SAML provider that already has IdP group mapping switched on. Used to
+ * prove the edit dialog reflects the stored value rather than always
+ * starting from the create-time default of off (#588).
+ */
+const SAML_WITH_GROUP_MAPPING_ENABLED = {
+  ...SAML_WITH_EXTRA_MAPPING,
+  id: "saml-2",
+  name: "Group Mapped SAML IdP",
+  map_groups_to_groups: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -512,6 +525,202 @@ describe("SSO SAML use_absolute_acs_url toggle (#521)", () => {
       { use_absolute_acs_url?: boolean },
     ];
     expect(payload.use_absolute_acs_url).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SAML map_groups_to_groups opt-in (#588, backend#2448)
+//
+// Mirrors the OIDC toggle from #534. Queries go through role + accessible
+// name so the assertions also pin the Label htmlFor -> Switch id wiring that
+// gives the control its accessible name; a toggle rendered without that
+// association fails these tests rather than silently shipping unlabelled.
+// ---------------------------------------------------------------------------
+
+const SAML_MAP_GROUPS_LABEL = /Map IdP groups to Artifact Keeper groups/i;
+
+describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
+  it("defaults to off on a new provider and sends map_groups_to_groups=true once enabled", async () => {
+    // Empty SAML list so the create flow is reachable by a unique button
+    // name ("Add SAML Provider" only renders in the SAML empty state).
+    mockSsoApi.listSaml.mockResolvedValue([]);
+    mockSsoApi.createSaml.mockResolvedValue(SAML_WITH_GROUP_MAPPING_ENABLED);
+
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("No SAML providers configured.")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /Add SAML Provider/i }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Add SAML Provider" }),
+      ).toBeTruthy();
+    });
+
+    const toggle = screen.getByRole("checkbox", {
+      name: SAML_MAP_GROUPS_LABEL,
+    }) as HTMLInputElement;
+    // Default OFF on create.
+    expect(toggle.checked).toBe(false);
+
+    // Fill the fields the Create button gates on.
+    await user.type(screen.getByLabelText(/^Name$/i), "New SAML IdP");
+    await user.type(
+      screen.getByLabelText(/^Entity ID$/i),
+      "urn:example:new-idp",
+    );
+    await user.type(
+      screen.getByLabelText(/^SSO URL$/i),
+      "https://idp.example.com/sso",
+    );
+    await user.type(screen.getByLabelText(/^Certificate$/i), "cert-pem-body");
+
+    await user.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /Create Provider/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.createSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = mockSsoApi.createSaml.mock.calls[0] as [
+      { map_groups_to_groups?: boolean },
+    ];
+    expect(payload.map_groups_to_groups).toBe(true);
+  });
+
+  it("shows the stored value when editing a provider that already has it enabled", async () => {
+    // Round-trip check: the toggle must be sourced from SamlConfigResponse,
+    // not reset to the create-time default.
+    mockSsoApi.listSaml.mockResolvedValue([SAML_WITH_GROUP_MAPPING_ENABLED]);
+
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Group Mapped SAML IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit SAML provider Group Mapped SAML IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    const toggle = screen.getByRole("checkbox", {
+      name: SAML_MAP_GROUPS_LABEL,
+    }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+  });
+
+  it("echoes the stored value back on an edit that does not touch the toggle", async () => {
+    // Renaming a provider must not silently switch group mapping off.
+    mockSsoApi.listSaml.mockResolvedValue([SAML_WITH_GROUP_MAPPING_ENABLED]);
+    mockSsoApi.updateSaml.mockResolvedValue(SAML_WITH_GROUP_MAPPING_ENABLED);
+
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Group Mapped SAML IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit SAML provider Group Mapped SAML IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    const nameInput = screen.getByLabelText(/^Name$/i) as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Group Mapped SAML IdP (renamed)");
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [id, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { map_groups_to_groups?: boolean },
+    ];
+    expect(id).toBe("saml-2");
+    expect(payload.map_groups_to_groups).toBe(true);
+  });
+
+  it("sends map_groups_to_groups=true when the operator enables it on an existing provider", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit SAML provider Corporate SAML IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    const toggle = screen.getByRole("checkbox", {
+      name: SAML_MAP_GROUPS_LABEL,
+    }) as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    await user.click(toggle);
+
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => {
+      expect(mockSsoApi.updateSaml).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = mockSsoApi.updateSaml.mock.calls[0] as [
+      string,
+      { map_groups_to_groups?: boolean },
+    ];
+    expect(payload.map_groups_to_groups).toBe(true);
+  });
+
+  it("explains group matching and per-login reconciliation in the help text", async () => {
+    // Operators need to know which assertion attribute drives the mapping
+    // and that memberships are reconciled (removals at the IdP propagate).
+    const user = userEvent.setup();
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Corporate SAML IdP")).toBeTruthy();
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Edit SAML provider Corporate SAML IdP/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Edit SAML Provider")).toBeTruthy();
+    });
+
+    const help = screen.getByTestId("saml-map-groups-help").textContent ?? "";
+    expect(help).toMatch(/attribute_mapping\.groups/i);
+    expect(help).toMatch(/auto-created/i);
+    expect(help).toMatch(/reconciled on every login/i);
+    expect(help).toMatch(/removing a group at the IdP/i);
   });
 });
 

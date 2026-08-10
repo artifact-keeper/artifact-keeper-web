@@ -159,6 +159,11 @@ function adaptSamlConfig(sdk: SdkSamlConfigResponse): SamlConfig {
     use_absolute_acs_url:
       (sdk as { use_absolute_acs_url?: boolean }).use_absolute_acs_url ??
       false,
+    // Same defensive default as the OIDC flag: the SDK types
+    // `map_groups_to_groups` as required, but a backend deployed before
+    // artifact-keeper#2448 never emits it. Fall back to `false` (legacy
+    // role-mapping behavior) rather than rendering `undefined`.
+    map_groups_to_groups: sdk.map_groups_to_groups ?? false,
     is_enabled: sdk.is_enabled,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
