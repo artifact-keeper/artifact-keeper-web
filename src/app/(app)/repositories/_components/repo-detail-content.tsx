@@ -310,6 +310,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     ? null
     : (fetchedQuarantine ?? selectedArtifact);
   const quarantineBlocked = isActivelyQuarantined(quarantine);
+  // Download stats for the detail dialog's "Last downloaded" row (#472).
+  // Best-effort: if the stats fetch fails (older backend, transient error)
+  // the row is simply hidden — the dialog itself is unaffected.
+  const { data: artifactStats } = useQuery({
+    queryKey: ["artifact-stats", selectedArtifactId],
+    queryFn: async () =>
+      selectedArtifactId ? await artifactsApi.getStats(selectedArtifactId) : null,
+    enabled: detailOpen && !!selectedArtifactId,
+  });
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -1343,6 +1352,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Downloads"
                     value={selectedArtifact.download_count.toLocaleString()}
                   />
+                  {artifactStats?.last_downloaded && (
+                    <DetailRow
+                      label="Last downloaded"
+                      value={new Date(
+                        artifactStats.last_downloaded
+                      ).toLocaleString()}
+                    />
+                  )}
                   {quarantineBlocked && (
                     <>
                       <DetailRow

@@ -2,7 +2,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +27,12 @@ const h = vi.hoisted(() => ({
   // Tests that assert on the *request parameters* (not just the query key)
   // invoke it themselves.
   artifactsQueryFns: [] as Array<() => unknown>,
+  // What the artifact-stats query (#472) returns; null simulates a failed or
+  // unavailable stats fetch.
+  artifactStats: null as {
+    download_count: number;
+    last_downloaded: string | null;
+  } | null,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -95,6 +101,9 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: false,
         isFetching: false,
       };
+    }
+    if (key === "artifact-stats") {
+      return { data: h.artifactStats ?? undefined, isLoading: false, isFetching: false };
     }
     return { data: undefined, isLoading: false, isFetching: false };
   },
@@ -473,6 +482,56 @@ describe("RepoDetailContent flat view classifier column (#474)", () => {
     expect(table.getAttribute("data-columns")?.split(",")).not.toContain(
       "classifier",
     );
+  });
+});
+
+describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.artifactStats = null;
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.artifactStats = null;
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
+    row.click();
+    return await screen.findByRole("dialog", {}, { timeout: 2000 });
+  }
+
+  it("shows the last-downloaded timestamp when the stats endpoint provides one", async () => {
+    h.artifactStats = {
+      download_count: 3,
+      last_downloaded: "2026-08-01T12:30:00Z",
+    };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).getByText("Last downloaded")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        new Date("2026-08-01T12:30:00Z").toLocaleString(),
+      ),
+    ).toBeInTheDocument();
+    // The download count row from the artifact payload is kept.
+    expect(within(dialog).getByText("Downloads")).toBeInTheDocument();
+  });
+
+  it("hides the row when stats are unavailable (fetch failure / older backend)", async () => {
+    h.artifactStats = null;
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByText("Last downloaded")).toBeNull();
+    expect(within(dialog).getByText("Downloads")).toBeInTheDocument();
+  });
+
+  it("hides the row when the artifact was never downloaded", async () => {
+    h.artifactStats = { download_count: 0, last_downloaded: null };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByText("Last downloaded")).toBeNull();
   });
 });
 
