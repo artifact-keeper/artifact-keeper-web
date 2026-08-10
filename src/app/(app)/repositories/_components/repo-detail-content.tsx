@@ -262,6 +262,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         q: searchQuery || undefined,
         per_page: effectivePageSize,
         page: effectivePage,
+        // The pagination bar renders `pagination.total` verbatim ("1-20 of N",
+        // "Page 1 of M"), so it needs the real count. Without this the backend
+        // returns a per-page lower bound (offset + rows + has_more) and the bar
+        // reads "1-20 of 21", then "21-40 of 41", growing with the page.
+        count: "exact" as const,
         ...(useServerGrouping ? { group_by: "maven_component" as const } : {}),
         ...(isDockerGrouped ? { group_by: "docker_tag" as const } : {}),
       }),

@@ -385,6 +385,43 @@ describe("artifactsApi", () => {
       expect(url).toContain("q=lib");
     });
 
+    it("forwards count=exact so pagination.total is a real count, not a lower bound", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("maven-releases", {
+        page: 2,
+        per_page: 20,
+        count: "exact",
+      });
+      // Without `count=exact` the backend answers with `offset + rows +
+      // has_more`, which the pagination bar renders as "21-40 of 41" on
+      // page 2 and grows with every page (ak#2520).
+      expect(String(fetchMock.mock.calls[0][0])).toContain("count=exact");
+    });
+
+    it("omits count when not requested", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({ items: [], pagination: {} })
+        ),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.listGrouped("maven-releases", { page: 1 });
+      expect(String(fetchMock.mock.calls[0][0])).not.toContain("count=");
+    });
+
     it("falls back from `list` to `listGrouped` when group_by is set", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,

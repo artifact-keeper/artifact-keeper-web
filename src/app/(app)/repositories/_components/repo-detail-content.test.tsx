@@ -23,6 +23,10 @@ import userEvent from "@testing-library/user-event";
 const h = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
   artifactsQueryKeys: [] as unknown[][],
+  // The artifacts `queryFn`, recorded but not executed by the useQuery mock.
+  // Tests that assert on the *request parameters* (not just the query key)
+  // invoke it themselves.
+  artifactsQueryFns: [] as Array<() => unknown>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -74,13 +78,14 @@ const dockerTagFixture = {
 vi.mock("@tanstack/react-query", () => ({
   // Return canned data by the first element of the query key; never execute
   // queryFn (so the mocked API modules are never actually called).
-  useQuery: (opts: { queryKey: unknown[] }) => {
+  useQuery: (opts: { queryKey: unknown[]; queryFn?: () => unknown }) => {
     const key = Array.isArray(opts.queryKey) ? opts.queryKey[0] : undefined;
     if (key === "repository") {
       return { data: repository, isLoading: false, isFetching: false };
     }
     if (key === "artifacts") {
       h.artifactsQueryKeys.push(opts.queryKey);
+      if (opts.queryFn) h.artifactsQueryFns.push(opts.queryFn);
       return {
         data: {
           items: [artifactFixture],
@@ -400,6 +405,7 @@ describe("RepoDetailContent Docker grouped view (#330 / ak#1336)", () => {
     repository.format = "docker";
     h.searchParams = new URLSearchParams("view=grouped");
     h.artifactsQueryKeys = [];
+    h.artifactsQueryFns = [];
     vi.clearAllMocks();
   });
   afterEach(() => {
@@ -407,6 +413,7 @@ describe("RepoDetailContent Docker grouped view (#330 / ak#1336)", () => {
     repository.format = "generic";
     h.searchParams = new URLSearchParams();
     h.artifactsQueryKeys = [];
+    h.artifactsQueryFns = [];
   });
 
   async function renderDockerGrouped() {
@@ -466,5 +473,21 @@ describe("RepoDetailContent Docker grouped view (#330 / ak#1336)", () => {
     const lastKey = h.artifactsQueryKeys.at(-1) as unknown[];
     expect(lastKey[3]).toBe(1);
     expect(lastKey[4]).toBe(50);
+  });
+
+  it("asks for an exact total so the pagination bar does not grow with the page", async () => {
+    await renderDockerGrouped();
+
+    // The useQuery mock records the queryFn without running it; run it here to
+    // observe the request the component would actually issue.
+    h.artifactsQueryFns.at(-1)?.();
+
+    // The pagination bar renders `pagination.total` verbatim. Without
+    // `count=exact` the backend returns a lower bound (offset + rows +
+    // has_more), which reads as "1-20 of 21" then "21-40 of 41" (ak#2520).
+    expect(artifactsApi.listGrouped).toHaveBeenCalledWith(
+      "demo",
+      expect.objectContaining({ count: "exact" }),
+    );
   });
 });
