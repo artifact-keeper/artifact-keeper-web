@@ -76,6 +76,10 @@ export interface MigrationConfig {
   include_repos?: string[];
   exclude_repos?: string[];
   exclude_paths?: string[];
+  // Source repo key -> destination repo key rename map. Migrated artifacts land
+  // in the destination repo instead of one named after the source (backend
+  // `MigrationConfig.repo_mappings`). Sources not listed keep their name.
+  repo_mappings?: Record<string, string>;
   include_users?: boolean;
   include_groups?: boolean;
   include_permissions?: boolean;
