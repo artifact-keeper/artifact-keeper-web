@@ -97,9 +97,17 @@ export function hasDebianConfig(format: string): boolean {
 }
 
 /**
- * npm scope policy (#2424). Framed by #602 as the npm virtual-repo scope
- * policy; the backend also reads it for npm remotes, so both types qualify.
+ * npm scope policy (#2424) — npm **Remote** repositories only.
+ *
+ * #602 called this the "npm virtual-repo scope policy", which reads as though
+ * the policy lives on the virtual repository. It does not: the policy is stored
+ * on and read from each Remote *member*, and the npm virtual resolver consults
+ * the member's policy during candidate selection (backend #2327/#2424). The
+ * backend rejects a write against any other repository type — the value would
+ * have no consumer — so offering the section for `virtual` produced a create
+ * request that always failed with
+ * "npm scope policy is only configurable on remote (proxy) repositories".
  */
 export function hasNpmScopePolicy(format: string, repoType: string): boolean {
-  return format === "npm" && (repoType === "virtual" || repoType === "remote");
+  return format === "npm" && repoType === "remote";
 }

@@ -134,6 +134,33 @@ export interface NpmScopePolicyFieldsPayload {
   npm_allow_unscoped?: boolean;
 }
 
+/**
+ * Whether the operator actually configured a scope policy.
+ *
+ * The backend gate is *presence*-based: `npm_allowed_scopes: []` deserializes to
+ * `Some([])` and `npm_allow_unscoped: false` to `Some(false)`, both of which
+ * count as "supplied". Worse, a stored `allow_unscoped: false` makes the policy
+ * `is_active()`, and an active policy denies every unscoped name — so submitting
+ * an untouched form against an npm remote silently blocked bare package names
+ * (`react`, `lodash`, …). Callers creating a repository must therefore send
+ * nothing at all unless something was entered; the backend's own default (no
+ * policy stored) is the allow-all state the empty form is meant to express.
+ */
+export function hasNpmScopePolicyInput(value: NpmScopePolicyValue): boolean {
+  return (
+    parseList(value.npm_allowed_scopes).length > 0 ||
+    parseList(value.npm_allowed_name_patterns).length > 0 ||
+    value.npm_allow_unscoped
+  );
+}
+
+/**
+ * Build the full policy payload. Every key is emitted unconditionally so the
+ * edit path can *clear* a previously stored allow-list — an emptied field must
+ * reach the backend as `[]` to overwrite what is there. Create-time callers gate
+ * this behind {@link hasNpmScopePolicyInput}; the settings tab gates it behind
+ * its own "changed vs stored" check.
+ */
 export function buildNpmScopePolicyFields(
   value: NpmScopePolicyValue,
 ): NpmScopePolicyFieldsPayload {

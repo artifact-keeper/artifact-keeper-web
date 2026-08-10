@@ -9,6 +9,7 @@ import {
   buildRpmConfigFields,
   buildDebianConfigFields,
   buildNpmScopePolicyFields,
+  hasNpmScopePolicyInput,
   RpmTrustedKeyField,
   DebianConfigFields,
   NpmScopePolicyFields,
@@ -124,12 +125,41 @@ describe("buildNpmScopePolicyFields", () => {
     });
   });
 
+  // Emitting `[]` for an emptied field is what lets the settings tab *clear* a
+  // stored allow-list. Create-time callers must gate on
+  // `hasNpmScopePolicyInput` instead of relying on the builder to omit keys.
   it("emits empty arrays and false for the empty policy", () => {
     expect(buildNpmScopePolicyFields(EMPTY_NPM_SCOPE_POLICY)).toEqual({
       npm_allowed_scopes: [],
       npm_allowed_name_patterns: [],
       npm_allow_unscoped: false,
     });
+  });
+});
+
+describe("hasNpmScopePolicyInput", () => {
+  it("is false for an untouched policy", () => {
+    expect(hasNpmScopePolicyInput(EMPTY_NPM_SCOPE_POLICY)).toBe(false);
+  });
+
+  it("is false when the fields contain only blanks and separators", () => {
+    expect(
+      hasNpmScopePolicyInput({
+        npm_allowed_scopes: "  ",
+        npm_allowed_name_patterns: " , \n ",
+        npm_allow_unscoped: false,
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    ["a scope", { npm_allowed_scopes: "@acme" }],
+    ["a name pattern", { npm_allowed_name_patterns: "internal-*" }],
+    ["the unscoped toggle", { npm_allow_unscoped: true }],
+  ])("is true when the operator set %s", (_label, patch) => {
+    expect(
+      hasNpmScopePolicyInput({ ...EMPTY_NPM_SCOPE_POLICY, ...patch }),
+    ).toBe(true);
   });
 });
 

@@ -1437,13 +1437,15 @@ const debianRepo: Repository = {
   },
 };
 
-const npmVirtualRepo: Repository = {
+// The scope policy is stored on the Remote *member*, never on the virtual
+// aggregate — the backend rejects a write against any other type (#745).
+const npmRemoteRepo: Repository = {
   ...baseRepo,
   id: "repo-npm",
-  key: "npm-virt",
-  name: "NPM Virtual",
+  key: "npm-proxy",
+  name: "NPM Proxy",
   format: "npm",
-  repo_type: "virtual",
+  repo_type: "remote",
   npm_allowed_scopes: ["@acme"],
   npm_allow_unscoped: false,
 };
@@ -1566,9 +1568,9 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
   });
 
   it("prefills and saves npm scope policy", async () => {
-    mockUpdate.mockResolvedValue(npmVirtualRepo);
+    mockUpdate.mockResolvedValue(npmRemoteRepo);
     const user = userEvent.setup();
-    render(<RepoSettingsTab repository={npmVirtualRepo} />, {
+    render(<RepoSettingsTab repository={npmRemoteRepo} />, {
       wrapper: createWrapper(),
     });
 
@@ -1582,7 +1584,7 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith(
-        "npm-virt",
+        "npm-proxy",
         expect.objectContaining({
           npm_allowed_scopes: ["@acme"],
           npm_allow_unscoped: true,
@@ -1591,15 +1593,15 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
     });
   });
 
-  it("does not show the npm section for an npm local repo", () => {
-    render(
-      <RepoSettingsTab
-        repository={{ ...npmVirtualRepo, repo_type: "local" }}
-      />,
-      { wrapper: createWrapper() }
-    );
-    expect(screen.queryByText("npm Scope Policy")).toBeNull();
-  });
+  it.each(["local", "virtual", "staging"] as const)(
+    "does not show the npm section for an npm %s repo",
+    (repoType) => {
+      render(<RepoSettingsTab repository={{ ...npmRemoteRepo, repo_type: repoType }} />, {
+        wrapper: createWrapper(),
+      });
+      expect(screen.queryByText("npm Scope Policy")).toBeNull();
+    }
+  );
 });
 
 describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {

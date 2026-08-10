@@ -49,6 +49,7 @@ import {
   buildRpmConfigFields,
   buildDebianConfigFields,
   buildNpmScopePolicyFields,
+  hasNpmScopePolicyInput,
   EMPTY_RPM_CONFIG,
   EMPTY_DEBIAN_CONFIG,
   EMPTY_NPM_SCOPE_POLICY,
@@ -362,8 +363,12 @@ export function RepoDialogs({
               } else if (hasDebianConfig(createForm.format)) {
                 Object.assign(submitData, buildDebianConfigFields(debianConfig));
               } else if (
-                hasNpmScopePolicy(createForm.format, createForm.repo_type)
+                hasNpmScopePolicy(createForm.format, createForm.repo_type) &&
+                hasNpmScopePolicyInput(npmScopePolicy)
               ) {
+                // Only attach the policy when something was entered: the
+                // backend gate is presence-based, and an all-empty policy is
+                // not a no-op there (it denies every unscoped name).
                 Object.assign(
                   submitData,
                   buildNpmScopePolicyFields(npmScopePolicy),
