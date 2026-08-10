@@ -22,7 +22,18 @@ describe("buildMavenSearchQuery", () => {
         classifier: "sources",
         extension: "jar",
       }),
-    ).toBe("org.junit.jupiter junit-jupiter-api 5.11.0 sources jar");
+    ).toBe("org junit jupiter junit-jupiter-api 5.11.0 sources jar");
+  });
+
+  it("splits a dotted groupId into separate terms (#475)", () => {
+    // The backend FTS vector tokenizes the artifact path on `/`, so the
+    // groupId is stored as one lexeme per segment; the dotted form as a
+    // single term can never match.
+    expect(buildMavenSearchQuery({ groupId: "com.example.team" })).toBe(
+      "com example team",
+    );
+    // A dotless groupId is a single term, unchanged.
+    expect(buildMavenSearchQuery({ groupId: "junit" })).toBe("junit");
   });
 
   it("skips empty and whitespace-only fields", () => {
@@ -33,13 +44,13 @@ describe("buildMavenSearchQuery", () => {
         version: "   ",
         classifier: undefined,
       }),
-    ).toBe("com.example");
+    ).toBe("com example");
   });
 
   it("trims surrounding whitespace from each field", () => {
     expect(
       buildMavenSearchQuery({ groupId: "  com.example  ", artifactId: " lib " }),
-    ).toBe("com.example lib");
+    ).toBe("com example lib");
   });
 
   it("strips a leading dot from the extension", () => {

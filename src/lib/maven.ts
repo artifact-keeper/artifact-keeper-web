@@ -28,12 +28,12 @@ export interface MavenGavcQuery {
  *
  * The backend advanced-search endpoint matches a single `query` string against
  * a text vector built from each artifact's name, path, and version. Maven
- * coordinates are encoded in the path (dotted groupIds become path segments,
- * which the tokenizer splits the same way it splits the dotted form), so
- * feeding the coordinates in as space-separated terms lets the full-text
- * search prefix-match every supplied component. Empty fields are skipped, and
- * a leading dot on the extension is stripped so `.jar` and `jar` behave the
- * same.
+ * coordinates are encoded in the path, where the tokenizer splits on `/` —
+ * so a dotted groupId is stored as *separate* lexemes (`org`, `junit`,
+ * `jupiter`), and pushing the dotted form as one term never matches (#475).
+ * The groupId is therefore split on `.` into separate AND-ed terms; the
+ * remaining fields go in as-is. Empty fields are skipped, and a leading dot
+ * on the extension is stripped so `.jar` and `jar` behave the same.
  */
 export function buildMavenSearchQuery(q: MavenGavcQuery): string {
   const terms: string[] = [];
@@ -42,7 +42,9 @@ export function buildMavenSearchQuery(q: MavenGavcQuery): string {
     if (value) terms.push(value);
   };
 
-  push(q.groupId);
+  for (const segment of q.groupId?.trim().split(".") ?? []) {
+    push(segment);
+  }
   push(q.artifactId);
   push(q.version);
   push(q.classifier);
