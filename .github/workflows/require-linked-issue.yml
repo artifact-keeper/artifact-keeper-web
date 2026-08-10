@@ -18,6 +18,12 @@ concurrency:
 jobs:
   require-linked-issue:
     name: Require linked issue in PR body
+    # Bot-authored PRs (Dependabot and friends) have machine-generated bodies
+    # that never link an issue, so this check failed on every one of them and
+    # made otherwise-green PRs look red. Skipping reports a neutral status
+    # rather than a failure. The requirement is unchanged for human-authored
+    # PRs. See #752.
+    if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     steps:
       - name: Check PR body for linked issue

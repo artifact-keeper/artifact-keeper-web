@@ -474,6 +474,32 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Single aggregate status for the whole E2E fan-out. The suites above are
+  # sharded and get renamed as suites are added, so anything that wants to
+  # gate on "did E2E pass" (Mergify, branch protection) should reference this
+  # stable `E2E` check instead of enumerating shard names. See issue #752.
+  #
+  # e2e-docs-export is deliberately excluded: it only runs on main, so it is
+  # always skipped on pull requests.
+  e2e:
+    name: E2E
+    if: always()
+    needs: [e2e-interactions, e2e-roles, e2e-visual, e2e-docker-proxy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every E2E suite succeeded
+        env:
+          E2E_RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "E2E suite results: ${E2E_RESULTS}"
+          for result in ${E2E_RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "::error::Not every E2E suite succeeded (${E2E_RESULTS})"
+              exit 1
+            fi
+          done
+          echo "All E2E suites succeeded."
+
   e2e-docs-export:
     name: E2E Docs Screenshot Export
     if: github.ref == 'refs/heads/main'

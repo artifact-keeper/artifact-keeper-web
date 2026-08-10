@@ -8,9 +8,15 @@ pull_request_rules:
     conditions:
       - author=dependabot[bot]
       - "-title~=major"
-      - check-success=lint
-      - check-success=build
-      - check-success=e2e
+      # Check names are case-sensitive exact matches against the job `name:`
+      # in .github/workflows/ci.yml. `E2E` is the aggregate job that rolls up
+      # every E2E suite, so shard renames do not silently disable this rule.
+      # See #752.
+      - check-success=Lint
+      - check-success=Unit Tests
+      - check-success=Build
+      - check-success=Dependency Audit
+      - check-success=E2E
       - "#approved-reviews-by>=1"
       # Scope auto-merge to PRs targeting main only. Maintenance branches
       # (release/1.1.x and similar) overwrite floating dev tags on push,
