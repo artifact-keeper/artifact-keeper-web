@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 
 import { ciOidcApi } from "@/lib/api/ci-oidc";
-import { repositoriesApi } from "@/lib/api/repositories";
+import { useRepositories } from "@/hooks/use-repositories";
+import { QUERY_KEYS } from "@/lib/query-keys";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type {
   CiOidcProvider,
@@ -35,6 +36,7 @@ import type { Repository } from "@/types";
 
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 
 import { Button } from "@/components/ui/button";
@@ -85,7 +87,7 @@ import {
 // Provider type helpers
 // ---------------------------------------------------------------------------
 
-const PROVIDER_TYPE_LABELS: Record<CiOidcProviderType, string> = {
+const PROVIDER_TYPE_LABELS: Record<string, string> = {
   gitlab: "GitLab",
   github: "GitHub Actions",
   generic: "Generic OIDC",
@@ -97,7 +99,7 @@ const DEFAULT_ISSUER: Record<CiOidcProviderType, string> = {
   generic: "",
 };
 
-const CLAIM_PLACEHOLDER: Record<CiOidcProviderType, string> = {
+const CLAIM_PLACEHOLDER: Record<string, string> = {
   gitlab: `{\n  "namespace_path": "my-org/my-group",\n  "ref_protected": "true"\n}`,
   github: `{\n  "repository": "my-org/my-repo",\n  "ref": "refs/heads/main"\n}`,
   generic: `{\n  "sub": "system:serviceaccount:prod"\n}`,
@@ -124,7 +126,7 @@ type ProviderForm = typeof BLANK_PROVIDER_FORM;
 function providerFormFromRow(p: CiOidcProvider): ProviderForm {
   return {
     name: p.name,
-    provider_type: p.provider_type,
+    provider_type: p.provider_type as CiOidcProviderType,
     issuer_url: p.issuer_url,
     audience: p.audience,
   };
@@ -159,17 +161,21 @@ function mappingFormFromRow(m: CiOidcIdentityMapping): MappingForm {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseClaimFilters(raw: string): ClaimFilters | undefined {
+export function parseClaimFilters(raw: string): ClaimFilters | undefined {
   const t = raw.trim();
   if (!t) return {};
   try {
-    return JSON.parse(t) as ClaimFilters;
+    const parsed = JSON.parse(t);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return undefined;
+    }
+    return parsed as ClaimFilters;
   } catch {
     return undefined;
   }
 }
 
-function claimFilterSummary(filters: ClaimFilters): string {
+export function claimFilterSummary(filters: ClaimFilters): string {
   const keys = Object.keys(filters);
   if (!keys.length) return "No filters (any JWT accepted)";
   return keys
@@ -180,7 +186,7 @@ function claimFilterSummary(filters: ClaimFilters): string {
     .join(", ");
 }
 
-function repoScopeSummary(
+export function repoScopeSummary(
   allowedRepoIds: CiOidcIdentityMapping["allowed_repo_ids"],
 ): string {
   if (allowedRepoIds === null) return "All repositories";
@@ -199,21 +205,20 @@ interface MappingsPanelProps {
 
 function MappingsPanel({ provider }: MappingsPanelProps) {
   const queryClient = useQueryClient();
-  const qKey = ["ci-oidc-mappings", provider.id];
+  const qKey = [...QUERY_KEYS.CI_OIDC_MAPPINGS, provider.id];
 
   const { data: mappings, isLoading } = useQuery({
     queryKey: qKey,
     queryFn: () => ciOidcApi.listMappings(provider.id),
   });
 
-  const { data: repositoriesPage, isLoading: isLoadingRepositories } = useQuery({
-    queryKey: ["repositories", "ci-oidc-picker"],
-    queryFn: () => repositoriesApi.list({ page: 1, per_page: 500 }),
-  });
+  const { data: repositoriesPage, isLoading: isLoadingRepositories } =
+    useRepositories({ page: 1, per_page: 500 });
   const repositories = useMemo(
     () => [...(repositoriesPage?.items ?? [])].sort((a, b) => a.key.localeCompare(b.key)),
     [repositoriesPage?.items],
   );
+  const totalRepos = repositoriesPage?.pagination.total ?? 0;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CiOidcIdentityMapping | null>(
@@ -226,7 +231,7 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: qKey });
-    queryClient.invalidateQueries({ queryKey: ["ci-oidc"] });
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CI_OIDC });
   }
 
   const createMutation = useMutation({
@@ -268,7 +273,9 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      ciOidcApi.toggleMapping(provider.id, id, { enabled }),
+      enabled
+        ? ciOidcApi.enableMapping(provider.id, id)
+        : ciOidcApi.disableMapping(provider.id, id),
     onSuccess: () => invalidate(),
     onError: mutationErrorToast("Failed to toggle mapping"),
   });
@@ -335,8 +342,8 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
       return;
     }
     const priority = parseInt(form.priority, 10);
-    if (isNaN(priority)) {
-      setFiltersError("Priority must be a number.");
+    if (isNaN(priority) || priority < 1) {
+      setFiltersError("Priority must be a positive integer (>= 1).");
       return;
     }
 
@@ -345,7 +352,11 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
       priority,
       claim_filters: filters,
       allowed_repo_ids:
-        form.repo_scope_mode === "all" ? null : form.selected_repo_ids,
+        form.repo_scope_mode === "all"
+          ? editTarget
+            ? [] // Update: send empty array to clear previous restriction
+            : null // Create: null means no restriction
+          : form.selected_repo_ids,
       is_enabled: form.is_enabled,
     };
 
@@ -581,6 +592,11 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                         })}
                       </div>
 
+                      <ListTruncationNotice
+                        shown={repositories.length}
+                        total={totalRepos}
+                      />
+
                       {selectedRepositories.length > 0 && (
                         <div className="flex flex-wrap gap-1 pt-1">
                           {selectedRepositories.map((repo) => (
@@ -645,14 +661,14 @@ export default function CiOidcPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const { data: providers, isLoading } = useQuery({
-    queryKey: ["ci-oidc"],
+    queryKey: QUERY_KEYS.CI_OIDC,
     queryFn: ciOidcApi.list,
   });
 
   const createMutation = useMutation({
     mutationFn: ciOidcApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ci-oidc"] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CI_OIDC });
       toast.success("CI OIDC provider created");
       closeDialog();
     },
@@ -668,7 +684,7 @@ export default function CiOidcPage() {
       data: UpdateCiOidcProviderRequest;
     }) => ciOidcApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ci-oidc"] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CI_OIDC });
       toast.success("CI OIDC provider updated");
       closeDialog();
     },
@@ -678,17 +694,19 @@ export default function CiOidcPage() {
   const deleteMutation = useMutation({
     mutationFn: ciOidcApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ci-oidc"] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CI_OIDC });
       toast.success("CI OIDC provider deleted");
       setDeleteTarget(null);
     },
     onError: mutationErrorToast("Failed to delete CI OIDC provider"),
   });
 
-  const toggleMutation = useMutation({
+const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      ciOidcApi.toggle(id, { enabled }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ci-oidc"] }),
+      enabled
+        ? ciOidcApi.enableProvider(id)
+        : ciOidcApi.disableProvider(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CI_OIDC }),
     onError: mutationErrorToast("Failed to toggle CI OIDC provider"),
   });
 
