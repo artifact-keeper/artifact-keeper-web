@@ -24,6 +24,11 @@ export interface OidcConfig {
    */
   map_groups_to_groups: boolean;
   is_enabled: boolean;
+  // Backend migration 144 (artifact-keeper PR #TBD). When true, the OIDC
+  // provider accepts ID tokens signed with RSA keys shorter than 2048
+  // bits via a restricted RS256/384/512 PKCS#1 v1.5 fallback. Below the
+  // OWASP ASVS 4.0 baseline; default false on existing rows.
+  allow_legacy_rsa_keys: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -90,6 +95,7 @@ export interface CreateOidcConfigRequest {
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
   map_groups_to_groups?: boolean;
+  allow_legacy_rsa_keys?: boolean;
 }
 
 export interface UpdateOidcConfigRequest {
@@ -101,6 +107,7 @@ export interface UpdateOidcConfigRequest {
   attribute_mapping?: Record<string, string>;
   auto_create_users?: boolean;
   map_groups_to_groups?: boolean;
+  allow_legacy_rsa_keys?: boolean;
 }
 
 export interface CreateLdapConfigRequest {
