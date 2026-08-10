@@ -118,6 +118,37 @@ export function parseMavenGav(
 }
 
 /**
+ * Split a registry package name into Maven coordinates.
+ *
+ * The backend stores Maven packages under the colon-joined name
+ * `groupId:artifactId` (the version lives in a separate column), and a full
+ * coordinate may also carry a trailing `:version` segment. Colons are the
+ * coordinate delimiter and are not legal inside a groupId or artifactId, so
+ * the split is on colons — never on dots: a groupId contains dots
+ * (`com.acme.sub`) and an artifactId may too (`bar.baz`), so dot-based
+ * heuristics mis-split real coordinates.
+ *
+ *   com.example.team:team-spring-archetype -> { groupId: com.example.team, artifactId: team-spring-archetype }
+ *   com.acme.sub:my-artifact:1.0       -> { groupId: com.acme.sub, artifactId: my-artifact, version: 1.0 }
+ *   plain-name                         -> { artifactId: plain-name }
+ */
+export function parseMavenPackageName(name: string): {
+  groupId?: string;
+  artifactId: string;
+  version?: string;
+} {
+  const parts = name.split(":");
+  if (parts.length < 2 || !parts[0] || !parts[1]) {
+    return { artifactId: name };
+  }
+  return {
+    groupId: parts[0],
+    artifactId: parts[1],
+    version: parts.length > 2 && parts[2] ? parts[2] : undefined,
+  };
+}
+
+/**
  * Render a copy/paste-ready `<dependency>` snippet for a pom.xml. Used in the
  * artifact detail view so users can drop a Maven coordinate straight into
  * their build (issue #442).
