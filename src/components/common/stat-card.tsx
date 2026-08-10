@@ -1,7 +1,13 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
@@ -12,6 +18,8 @@ interface StatCardProps {
   color?: "default" | "blue" | "green" | "yellow" | "red" | "purple";
   onClick?: () => void;
   className?: string;
+  /** Hover tooltip content. */
+  tooltip?: ReactNode;
 }
 
 const colorMap = {
@@ -40,8 +48,9 @@ export function StatCard({
   color = "default",
   onClick,
   className,
+  tooltip,
 }: StatCardProps) {
-  return (
+  const card = (
     <Card
       className={cn(
         "transition-all duration-200",
@@ -70,5 +79,14 @@ export function StatCard({
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!tooltip) return card;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }

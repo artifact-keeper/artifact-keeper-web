@@ -169,6 +169,25 @@ function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
   );
 }
 
+// Local/remote breakdown shown on hover; the card total is local + remote.
+function StatBreakdown({
+  local,
+  remote,
+}: Readonly<{ local: string | number; remote: string | number }>) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-6">
+        <span className="opacity-70">Local</span>
+        <span className="font-medium tabular-nums">{local}</span>
+      </div>
+      <div className="flex items-center justify-between gap-6">
+        <span className="opacity-70">Remote</span>
+        <span className="font-medium tabular-nums">{remote}</span>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Severity breakdown for CVE trends
 // ---------------------------------------------------------------------------
@@ -376,8 +395,14 @@ export function DashboardContent() {
               <StatCard
                 icon={FileBox}
                 label="Artifacts"
-                value={stats.total_artifacts}
+                value={stats.total_artifacts + stats.proxy_artifact_count}
                 color="green"
+                tooltip={
+                  <StatBreakdown
+                    local={stats.total_artifacts}
+                    remote={stats.proxy_artifact_count}
+                  />
+                }
               />
               <StatCard
                 icon={Users}
@@ -388,8 +413,16 @@ export function DashboardContent() {
               <StatCard
                 icon={HardDrive}
                 label="Storage Used"
-                value={formatBytes(stats.total_storage_bytes)}
+                value={formatBytes(
+                  stats.total_storage_bytes + stats.proxy_storage_bytes
+                )}
                 color="yellow"
+                tooltip={
+                  <StatBreakdown
+                    local={formatBytes(stats.total_storage_bytes)}
+                    remote={formatBytes(stats.proxy_storage_bytes)}
+                  />
+                }
               />
             </div>
           )}

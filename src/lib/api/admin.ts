@@ -19,12 +19,20 @@ import { assertData } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
 
 // SystemStats has a strict superset of AdminStats fields; pass through directly.
+// proxy_* are newer than the installed SDK types, so read them via cast and
+// default to 0 on older backends.
 function adaptStats(sdk: SystemStats): AdminStats {
+  const s = sdk as SystemStats & {
+    proxy_artifact_count?: number;
+    proxy_storage_bytes?: number;
+  };
   return {
     total_repositories: sdk.total_repositories,
     total_artifacts: sdk.total_artifacts,
     total_storage_bytes: sdk.total_storage_bytes,
     total_users: sdk.total_users,
+    proxy_artifact_count: s.proxy_artifact_count ?? 0,
+    proxy_storage_bytes: s.proxy_storage_bytes ?? 0,
   };
 }
 

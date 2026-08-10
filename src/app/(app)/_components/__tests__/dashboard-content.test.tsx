@@ -188,7 +188,7 @@ describe("DashboardContent", () => {
     setupUseQuery({
       health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
       "admin-stats": {
-        data: { total_repositories: 10, total_artifacts: 200, total_users: 5, total_storage_bytes: 1024000 },
+        data: { total_repositories: 10, total_artifacts: 200, total_users: 5, total_storage_bytes: 1024000, proxy_artifact_count: 50, proxy_storage_bytes: 512000 },
         isLoading: false,
         isFetching: false,
       },
@@ -202,6 +202,11 @@ describe("DashboardContent", () => {
     render(<DashboardContent />);
     expect(screen.getByText("Statistics")).toBeInTheDocument();
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
+    // Cards show the combined total: local + remote (200+50, 1024000+512000).
+    expect(screen.getByTestId("stat-Artifacts")).toHaveTextContent("250");
+    expect(screen.getByTestId("stat-Storage Used")).toHaveTextContent(
+      "1536000 B"
+    );
   });
 
   it("shows personalized greeting with display_name", () => {
@@ -374,7 +379,7 @@ describe("DashboardContent", () => {
     setupUseQuery({
       health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
       "admin-stats": {
-        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0 },
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
         isLoading: false,
         isFetching: false,
       },
@@ -411,7 +416,7 @@ describe("DashboardContent", () => {
     setupUseQuery({
       health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
       "admin-stats": {
-        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0 },
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
         isLoading: false,
         isFetching: false,
       },
@@ -430,7 +435,7 @@ describe("DashboardContent", () => {
     setupUseQuery({
       health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
       "admin-stats": {
-        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0 },
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
         isLoading: false,
         isFetching: false,
       },
