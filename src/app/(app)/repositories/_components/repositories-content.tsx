@@ -56,6 +56,9 @@ export function RepositoriesContent() {
   const [formatFilter, setFormatFilter] = useState("__all__");
   const [typeFilter, setTypeFilter] = useState("__all__");
   const [searchQuery, setSearchQuery] = useState("");
+  // Defer the search value so the backend list query (`q`) and artifact search
+  // don't refetch on every keystroke.
+  const deferredSearch = useDeferredValue(searchQuery);
 
   // pagination
   const [page, setPage] = useState(1);
@@ -86,6 +89,9 @@ export function RepositoriesContent() {
     page,
     format: formatFilter === "__all__" ? undefined : formatFilter,
     repo_type: typeFilter === "__all__" ? undefined : typeFilter,
+    // Server-side name/key search so matches on other pages are found, not just
+    // the ones already loaded on the current page (#pagination-search).
+    q: deferredSearch || undefined,
   });
 
   // Installed format handlers — drives the create dialog's custom WASM
@@ -195,9 +201,6 @@ export function RepositoriesContent() {
     setDeleteOpen(true);
   }, []);
 
-  // Debounce the search query for artifact search API calls
-  const deferredSearch = useDeferredValue(searchQuery);
-
   // Search artifacts via backend when query is non-empty
   const { data: artifactSearchResults } = useQuery({
     queryKey: ["repo-artifact-search", deferredSearch],
@@ -278,7 +281,7 @@ export function RepositoriesContent() {
             placeholder="Search..."
             className="pl-8 h-8 text-sm"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
           />
         </div>
         <div className="flex gap-2">
@@ -385,7 +388,8 @@ export function RepositoriesContent() {
         )}
       </ScrollArea>
 
-      {/* Pagination */}
+      {/* Pagination — total_pages reflects the (searched) result set, so it
+          auto-hides when a filter narrows results to a single page. */}
       {totalPages > 1 && (
         <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>
