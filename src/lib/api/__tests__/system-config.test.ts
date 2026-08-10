@@ -91,5 +91,25 @@ describe("systemConfigApi", () => {
     const mod = await import("../system-config");
     expect(mod.DEFAULT_SYSTEM_CONFIG.guest_access_enabled).toBe(true);
     expect(mod.anyScannerEnabled(mod.DEFAULT_SYSTEM_CONFIG)).toBe(false);
+    expect(mod.DEFAULT_SYSTEM_CONFIG.auth.local_login_enabled).toBe(true);
+  });
+
+  it("reads auth.local_login_enabled from the response", async () => {
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig({
+      ...VALID,
+      auth: { ...VALID.auth, local_login_enabled: false },
+    });
+    expect(config.auth.local_login_enabled).toBe(false);
+  });
+
+  it("defaults local_login_enabled to true when the backend omits it", async () => {
+    // Backends older than the one that added the flag (artifact-keeper#2729)
+    // send an auth object without it. Assume local login works rather than
+    // hiding the only form those deployments have.
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig(VALID);
+    expect(VALID.auth).not.toHaveProperty("local_login_enabled");
+    expect(config.auth.local_login_enabled).toBe(true);
   });
 });

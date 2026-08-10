@@ -12,6 +12,7 @@ import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { toUserMessage, isAccountLocked } from "@/lib/error-utils";
 import { ssoApi } from "@/lib/api/sso";
+import { useSystemConfig } from "@/providers/system-config-provider";
 import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,11 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
+  const { config: systemConfig, isLoading: systemConfigLoading } =
+    useSystemConfig();
+  // Absent on backends predating the flag; the parser defaults it to true so
+  // those deployments keep a working login form.
+  const localLoginEnabled = systemConfig.auth.local_login_enabled;
   const [error, setError] = useState<string | null>(null);
   const [accountLocked, setAccountLocked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -106,25 +112,29 @@ function LoginContent() {
   );
 
   // The local username/password form is consumed by either local password
-  // login (the built-in admin account / "admin bypass") or LDAP. When the
-  // admin has configured an SSO provider that is button-driven (OIDC/SAML)
-  // and no LDAP provider exists, showing the form is misleading because the
-  // fields don't go anywhere — see issue #350. We still surface the form
-  // during first-time setup so an admin can complete the initial password
-  // change with the bootstrap admin account.
+  // login (the built-in admin account) or LDAP. `auth.local_login_enabled`
+  // from GET /api/v1/system/config says whether the backend will accept local
+  // credentials at all: it is true when no SSO provider is configured, and
+  // under SSO only when the operator set ALLOW_LOCAL_ADMIN_LOGIN. Rendering
+  // the form when it is false would be misleading, because the fields don't go
+  // anywhere (issue #350).
   //
-  // STOPGAP: this is a heuristic. The "admin bypass" toggle is a backend-side
-  // setting with no public flag in the SDK, so we infer from the SSO providers
-  // list (no LDAP + redirect providers exist => password fields have no
-  // consumer). If admin bypass is enabled, an operator can recover via
-  // `?fallback=local` to force the form open. Tracked to make precise once
-  // the backend exposes a public `local_auth_enabled` flag.
+  // LDAP is orthogonal: the form is how LDAP credentials are entered, so an
+  // enabled LDAP provider shows it regardless of the flag. First-time setup
+  // shows it too, so an admin can complete the initial password change with
+  // the bootstrap account. `?fallback=local` stays as an operator escape hatch
+  // for a stale or unavailable config; it is safe because the login endpoint
+  // enforces the same policy server-side and rejects the attempt.
   const forceLocalFallback = searchParams?.get("fallback")?.toLowerCase() === "local";
   const showLocalForm =
     forceLocalFallback ||
     setupRequired ||
     ldapProviders.length > 0 ||
-    redirectProviders.length === 0;
+    localLoginEnabled;
+
+  // Both the provider list and the system config feed the form decision, so
+  // wait for both before rendering sign-in options.
+  const optionsLoaded = providersLoaded && !systemConfigLoading;
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -336,18 +346,18 @@ function LoginContent() {
             </div>
           )}
 
-          {!providersLoaded && (
-            // While the SSO providers list is in flight we can't decide whether
-            // to render the form. A skeleton avoids the visible flicker where
-            // the form briefly renders then disappears once OIDC providers
-            // resolve.
+          {!optionsLoaded && (
+            // While the SSO providers list or the system config is in flight we
+            // can't decide whether to render the form. A skeleton avoids the
+            // visible flicker where the form briefly renders then disappears
+            // once the real sign-in options resolve.
             <div className="flex items-center justify-center py-8" aria-busy="true">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
               <span className="sr-only">Loading sign-in options</span>
             </div>
           )}
 
-          {providersLoaded && showLocalForm && (
+          {optionsLoaded && showLocalForm && (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -406,7 +416,7 @@ function LoginContent() {
             </Form>
           )}
 
-          {providersLoaded && redirectProviders.length > 0 && (
+          {optionsLoaded && redirectProviders.length > 0 && (
             <>
               {showLocalForm && (
                 <div className="relative my-4">

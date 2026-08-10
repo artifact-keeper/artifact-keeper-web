@@ -23,6 +23,14 @@ export interface AuthProvidersConfig {
   oidc_enabled: boolean;
   ldap_enabled: boolean;
   sso_enabled: boolean;
+  /**
+   * Whether the login page should offer the local username/password form
+   * (backend issue #2621). True when no SSO provider is configured; with SSO
+   * configured it is true only when the operator opted in via
+   * `ALLOW_LOCAL_ADMIN_LOGIN`. Display-only: the login endpoint enforces the
+   * same policy server-side, so this flag never grants access on its own.
+   */
+  local_login_enabled: boolean;
 }
 
 export interface PermissionsConfig {
@@ -52,6 +60,12 @@ const AuthSchema = z.object({
   oidc_enabled: z.boolean(),
   ldap_enabled: z.boolean(),
   sso_enabled: z.boolean(),
+  // Added by the backend in artifact-keeper#2729. Older backends omit it, so
+  // it is optional and defaults to true: assuming local login works costs at
+  // worst a rejected sign-in attempt (the backend enforces the policy itself),
+  // while assuming it is disabled would hide the only form those deployments
+  // have and lock the operator out.
+  local_login_enabled: z.boolean().default(true),
 });
 
 const PermissionsSchema = z.object({
@@ -100,6 +114,9 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     oidc_enabled: false,
     ldap_enabled: false,
     sso_enabled: false,
+    // Permissive for the same reason as the schema default: if the config
+    // endpoint is unreachable the login page must still render a usable form.
+    local_login_enabled: true,
   },
   permissions: {
     rules_exist: false,

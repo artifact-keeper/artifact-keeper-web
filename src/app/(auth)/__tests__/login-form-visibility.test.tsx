@@ -91,6 +91,18 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => authState,
 }));
 
+// Public runtime config. `auth.local_login_enabled` is what decides whether the
+// local credentials form renders (issue #615).
+let systemConfigState = {
+  config: { auth: { local_login_enabled: true } },
+  isLoading: false,
+  isError: false,
+};
+
+vi.mock("@/providers/system-config-provider", () => ({
+  useSystemConfig: () => systemConfigState,
+}));
+
 const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
   mockLdapLogin: vi.fn().mockResolvedValue(undefined),
@@ -160,6 +172,11 @@ describe("LoginPage username/password form visibility", () => {
       verifyTotp: mockVerifyTotp,
       clearTotpRequired: mockClearTotpRequired,
     };
+    systemConfigState = {
+      config: { auth: { local_login_enabled: true } },
+      isLoading: false,
+      isError: false,
+    };
   });
 
   afterEach(() => {
@@ -167,8 +184,9 @@ describe("LoginPage username/password form visibility", () => {
     vi.restoreAllMocks();
   });
 
-  it("hides username/password form when only OIDC is configured (regression for #350)", async () => {
+  it("hides username/password form when the backend reports local login disabled (regression for #350)", async () => {
     mockListProviders.mockResolvedValue([oidcProvider]);
+    systemConfigState.config.auth.local_login_enabled = false;
 
     await renderAndWaitForProviders();
 
@@ -189,8 +207,30 @@ describe("LoginPage username/password form visibility", () => {
     expect(screen.queryByText("Sign In")).not.toBeInTheDocument();
   });
 
-  it("hides username/password form when only SAML is configured", async () => {
+  it("shows username/password form under OIDC when the operator enabled local admin login (#615)", async () => {
+    // ALLOW_LOCAL_ADMIN_LOGIN=true alongside an OIDC provider: the break-glass
+    // admin account still needs the credentials form.
+    mockListProviders.mockResolvedValue([oidcProvider]);
+    systemConfigState.config.auth.local_login_enabled = true;
+
+    await renderAndWaitForProviders();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Enter your username")
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByPlaceholderText("Enter your password")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sign In")).toBeInTheDocument();
+    // The OIDC button renders alongside it.
+    expect(screen.getByText(/Sign in with Corp SSO/i)).toBeInTheDocument();
+  });
+
+  it("hides username/password form when only SAML is configured and local login is disabled", async () => {
     mockListProviders.mockResolvedValue([samlProvider]);
+    systemConfigState.config.auth.local_login_enabled = false;
 
     await renderAndWaitForProviders();
 
@@ -206,8 +246,11 @@ describe("LoginPage username/password form visibility", () => {
     expect(screen.queryByText("Sign In")).not.toBeInTheDocument();
   });
 
-  it("shows username/password form when LDAP is configured (even if OIDC is also)", async () => {
+  it("shows username/password form for LDAP even when local login is disabled", async () => {
+    // LDAP is independent of the local-login policy: the form is how LDAP
+    // credentials are entered, so it renders whenever an LDAP provider exists.
     mockListProviders.mockResolvedValue([oidcProvider, ldapProvider]);
+    systemConfigState.config.auth.local_login_enabled = false;
 
     await renderAndWaitForProviders();
 
@@ -239,8 +282,9 @@ describe("LoginPage username/password form visibility", () => {
     expect(screen.getByText("Sign In")).toBeInTheDocument();
   });
 
-  it("shows username/password form when first-time setup is required, even if only OIDC is configured", async () => {
+  it("shows username/password form when first-time setup is required, even if local login is disabled", async () => {
     mockListProviders.mockResolvedValue([oidcProvider]);
+    systemConfigState.config.auth.local_login_enabled = false;
     authState.setupRequired = true;
 
     await renderAndWaitForProviders();
@@ -261,8 +305,10 @@ describe("LoginPage username/password form visibility", () => {
 
   it("shows the form when ?fallback=local is in the URL (operator escape hatch)", async () => {
     mockListProviders.mockResolvedValue([oidcProvider]);
-    // Simulate operator hitting /login?fallback=local to recover when admin
-    // bypass is enabled but no LDAP provider is configured.
+    systemConfigState.config.auth.local_login_enabled = false;
+    // Simulate an operator hitting /login?fallback=local to force the form open
+    // when the reported config is stale or the config endpoint is misbehaving.
+    // Harmless: the backend rejects the sign-in if local login really is off.
     mockSearchParams = new URLSearchParams("?fallback=local");
 
     try {
@@ -301,6 +347,7 @@ describe("LoginPage username/password form visibility", () => {
     expect(screen.getByTestId("icon-Loader2")).toBeInTheDocument();
 
     // Resolve and verify form decision happens after.
+    systemConfigState.config.auth.local_login_enabled = false;
     await act(async () => {
       resolve?.([oidcProvider]);
     });
@@ -309,5 +356,19 @@ describe("LoginPage username/password form visibility", () => {
         screen.queryByPlaceholderText("Enter your username")
       ).not.toBeInTheDocument();
     });
+  });
+
+  it("shows a loading indicator while the system config is still in flight", async () => {
+    // The form decision depends on auth.local_login_enabled, so rendering it
+    // before the config lands would flash a form that then disappears.
+    mockListProviders.mockResolvedValue([]);
+    systemConfigState.isLoading = true;
+
+    await renderAndWaitForProviders();
+
+    expect(
+      screen.queryByPlaceholderText("Enter your username")
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("icon-Loader2")).toBeInTheDocument();
   });
 });
