@@ -216,9 +216,11 @@ vi.mock("@/components/common/data-table", () => ({
   // onRowClick, without pulling in the real table.
   DataTable: ({
     data,
+    columns,
     onRowClick,
   }: {
     data?: Array<{ id: string; name: string }>;
+    columns?: Array<{ id: string; cell?: (row: unknown) => React.ReactNode }>;
     onRowClick?: (row: unknown) => void;
   }) => (
     <div data-stub="DataTable">
@@ -230,6 +232,15 @@ vi.mock("@/components/common/data-table", () => ({
         >
           {row.name}
         </button>
+      ))}
+      {/* The real `name` column cell, so the column definition is covered
+          rather than stubbed away (#768). Only this column is rendered: the
+          `actions` cell mounts Radix tooltips, which need a provider that this
+          suite deliberately does not set up. */}
+      {(data ?? []).map((row) => (
+        <div key={`name-cell-${row.id}`} data-testid={`stub-name-cell-${row.id}`}>
+          {columns?.find((c) => c.id === "name")?.cell?.(row)}
+        </div>
       ))}
     </div>
   ),
@@ -335,6 +346,27 @@ describe("RepoDetailContent default primary tab (#2793)", () => {
     );
     // Active panel is the artifact browser (its stubbed row is mounted).
     expect(screen.getByTestId("stub-row-a1")).toBeInTheDocument();
+  });
+
+  it("caps and middle-elides the artifact name column (#768)", () => {
+    repository.format = "generic";
+    render(<RepoDetailContent repoKey="demo" />);
+
+    const cell = screen.getByTestId("stub-name-cell-a1");
+
+    // The width cap is the fix: uncapped, `whitespace-nowrap` cells made the
+    // column as wide as the longest filename, pushing the table past the
+    // detail panel where an `overflow-x: hidden` viewport clipped it beyond
+    // reach. Asserted as a class because jsdom does no layout.
+    const capped = cell.querySelector(".max-w-\\[360px\\]");
+    expect(capped).not.toBeNull();
+
+    // Routed through MiddleEllipsis, which exposes the untruncated name as the
+    // native tooltip so nothing is lost to the elision.
+    expect(cell.querySelector("[title]")).toHaveAttribute(
+      "title",
+      artifactFixture.name,
+    );
   });
 
   it("defaults package-oriented (Maven) repositories to the Packages tab", () => {

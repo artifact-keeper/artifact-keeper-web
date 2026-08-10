@@ -130,6 +130,7 @@ import {
 
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
+import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -516,22 +517,40 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       header: "Name",
       accessor: (a) => a.name,
       sortable: true,
+      // The name is width-capped and middle-elided (#768). Uncapped, a long
+      // filename set this column's width directly — every table cell is
+      // `whitespace-nowrap`, so nothing wrapped — and widened the table past
+      // the detail panel. The panel's ScrollArea viewport sizes its content
+      // with `display: table` and is `overflow-x: hidden`, so the extra width
+      // applied to the whole detail column (displacing right-aligned controls
+      // in the cards above) and was then clipped, unreachable. One long
+      // filename was enough to hide Downloads, Created and the row actions
+      // outright.
+      //
+      // Elided in the MIDDLE, not the end: artifact names are distinguished by
+      // their tail as often as their head (`…-tlsconsul` vs
+      // `…-tlsconsul-docker`), which end-truncation would collapse into
+      // identical-looking rows. Full name via tooltip and the detail dialog.
       cell: (a) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-w-[360px]">
           <button
-            className="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+            className="flex min-w-0 items-center gap-2 text-sm font-medium text-primary hover:underline"
             onClick={(e) => {
               e.stopPropagation();
               showDetail(a);
             }}
           >
-            <FileIcon className="size-4 text-muted-foreground" />
-            {a.name}
+            <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+            <MiddleEllipsis text={a.name} />
           </button>
           {isActivelyQuarantined(a) && (
             // The listing carries no reason (#2966); the badge tooltip falls
-            // back to the hold expiry.
-            <QuarantineBadge quarantineUntil={a.quarantine_until} />
+            // back to the hold expiry. `shrink-0` keeps the badge legible when
+            // the name beside it is being truncated.
+            <QuarantineBadge
+              quarantineUntil={a.quarantine_until}
+              className="shrink-0"
+            />
           )}
         </div>
       ),
