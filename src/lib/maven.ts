@@ -96,25 +96,108 @@ export function findPomFile(filenames: string[]): string | undefined {
 }
 
 /**
+ * Full Maven coordinates for one file: the GAV plus the optional classifier
+ * and the file extension (GAVC).
+ */
+export interface MavenGavc {
+  groupId: string;
+  artifactId: string;
+  version: string;
+  classifier?: string;
+  extension?: string;
+}
+
+/**
+ * Split a Maven filename into its classifier and extension, given the
+ * artifactId and version it was deployed under (issue #482).
+ *
+ * Maven filenames follow `<artifactId>-<version>[-<classifier>].<ext>`, so
+ * once the known `<artifactId>-<version>` prefix is stripped, whatever
+ * remains before the first dot is the classifier and everything after it is
+ * the extension. Keeping the whole tail as the extension handles the two
+ * gotchas called out in the issue:
+ *
+ * - compound extensions: `lib-1.0.tar.gz`        -> extension `tar.gz`
+ * - signature/checksum files: `lib-1.0.jar.asc`  -> extension `jar.asc`
+ *   (the `.asc`/`.sha256`/… suffix extends the extension; it is never a
+ *   classifier)
+ *
+ * Returns `undefined` when the filename does not start with the expected
+ * prefix (e.g. a timestamped snapshot filename against a `-SNAPSHOT`
+ * version, or a non-Maven file).
+ */
+export function parseMavenFilename(
+  filename: string,
+  artifactId: string,
+  version: string,
+): { classifier?: string; extension: string } | undefined {
+  const prefix = `${artifactId}-${version}`;
+  if (!filename.startsWith(prefix)) return undefined;
+  const rest = filename.slice(prefix.length);
+
+  if (rest.startsWith(".")) {
+    const extension = rest.slice(1);
+    return extension ? { extension } : undefined;
+  }
+  if (rest.startsWith("-")) {
+    const dot = rest.indexOf(".");
+    const classifier = rest.slice(1, dot === -1 ? rest.length : dot);
+    const extension = dot === -1 ? "" : rest.slice(dot + 1);
+    if (!classifier || !extension) return undefined;
+    return { classifier, extension };
+  }
+  return undefined;
+}
+
+/**
  * Parse GAV coordinates out of a Maven artifact path. Returns `undefined` when
  * the path does not look like a Maven layout (fewer than four segments). The
  * version is the second-to-last segment and the artifactId the one before it;
- * everything earlier is the dotted groupId.
+ * everything earlier is the dotted groupId. The classifier and extension are
+ * recovered from the filename via `parseMavenFilename` when it matches the
+ * `<artifactId>-<version>` prefix (#482).
  *
  *   org/junit/jupiter/junit-jupiter-api/5.11.0/junit-jupiter-api-5.11.0.jar
- *     -> { groupId: org.junit.jupiter, artifactId: junit-jupiter-api, version: 5.11.0 }
+ *     -> { groupId: org.junit.jupiter, artifactId: junit-jupiter-api, version: 5.11.0, extension: jar }
  */
-export function parseMavenGav(
-  path: string,
-): { groupId: string; artifactId: string; version: string } | undefined {
+export function parseMavenGav(path: string): MavenGavc | undefined {
   const segments = path.split("/").filter(Boolean);
   if (segments.length < 4) return undefined;
   // Last segment is the filename; the two before it are version and artifactId.
+  const filename = segments[segments.length - 1];
   const version = segments[segments.length - 2];
   const artifactId = segments[segments.length - 3];
   const groupId = segments.slice(0, segments.length - 3).join(".");
   if (!groupId || !artifactId || !version) return undefined;
-  return { groupId, artifactId, version };
+  return { groupId, artifactId, version, ...parseMavenFilename(filename, artifactId, version) };
+}
+
+/**
+ * Read the GAVC coordinates the backend parsed at upload time out of
+ * `artifact.metadata` (`groupId`/`artifactId`/`version`/`extension`/
+ * `classifier`). Preferring this over re-parsing the path in the UI is the
+ * fix called for in #482; callers should fall back to `parseMavenGav` when
+ * the backend stored nothing (older server, non-Maven upload path).
+ */
+export function mavenGavcFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): MavenGavc | undefined {
+  if (!metadata) return undefined;
+  const { groupId, artifactId, version, classifier, extension } = metadata;
+  if (
+    typeof groupId !== "string" || !groupId ||
+    typeof artifactId !== "string" || !artifactId ||
+    typeof version !== "string" || !version
+  ) {
+    return undefined;
+  }
+  return {
+    groupId,
+    artifactId,
+    version,
+    ...(typeof classifier === "string" && classifier ? { classifier } : {}),
+    ...(typeof extension === "string" && extension ? { extension } : {}),
+  };
 }
 
 /**
@@ -151,18 +234,22 @@ export function parseMavenPackageName(name: string): {
 /**
  * Render a copy/paste-ready `<dependency>` snippet for a pom.xml. Used in the
  * artifact detail view so users can drop a Maven coordinate straight into
- * their build (issue #442).
+ * their build (issue #442). The optional classifier is included when known
+ * (#482) — a classified artifact (sources, javadoc, native builds, …) cannot
+ * be depended on without it.
  */
 export function buildPomDependencySnippet(gav: {
   groupId: string;
   artifactId: string;
   version: string;
+  classifier?: string;
 }): string {
   return [
     "<dependency>",
     `  <groupId>${gav.groupId}</groupId>`,
     `  <artifactId>${gav.artifactId}</artifactId>`,
     `  <version>${gav.version}</version>`,
+    ...(gav.classifier ? [`  <classifier>${gav.classifier}</classifier>`] : []),
     "</dependency>",
   ].join("\n");
 }

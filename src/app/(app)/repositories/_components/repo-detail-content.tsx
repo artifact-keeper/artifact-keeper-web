@@ -47,7 +47,11 @@ import {
   ANALYZABLE_DISABLED_REASON,
   isArtifactAnalyzable,
 } from "@/lib/artifact-analyzable";
-import { buildPomDependencySnippet, parseMavenGav } from "@/lib/maven";
+import {
+  buildPomDependencySnippet,
+  mavenGavcFromMetadata,
+  parseMavenGav,
+} from "@/lib/maven";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
@@ -1355,7 +1359,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     mono
                   />
                   {(repoFormat === "maven" || repoFormat === "gradle") && (
-                    <MavenGavSection path={selectedArtifact.path} />
+                    <MavenGavSection
+                      path={selectedArtifact.path}
+                      metadata={selectedArtifact.metadata}
+                    />
                   )}
                   {selectedArtifact.metadata &&
                     Object.keys(selectedArtifact.metadata).length > 0 && (
@@ -1582,12 +1589,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 // -- detail row helper --
 
 /**
- * Maven GAV coordinates plus a copy/paste pom.xml dependency snippet, derived
- * from the artifact path. Shown in the artifact detail view for maven/gradle
- * repositories so users can identify the GAV and reuse it. (issue #442)
+ * Maven GAV coordinates plus a copy/paste pom.xml dependency snippet. Shown
+ * in the artifact detail view for maven/gradle repositories so users can
+ * identify the GAV and reuse it. (issue #442)
+ *
+ * The backend parses the coordinates (classifier included) once at upload
+ * time and stores them in `artifact.metadata`; prefer that over re-parsing
+ * the path client-side, falling back to `parseMavenGav` for backends that
+ * predate the stored form (#482).
  */
-function MavenGavSection({ path }: { path: string }) {
-  const gav = parseMavenGav(path);
+function MavenGavSection({
+  path,
+  metadata,
+}: {
+  path: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const gav = mavenGavcFromMetadata(metadata) ?? parseMavenGav(path);
   if (!gav) return null;
   const snippet = buildPomDependencySnippet(gav);
   return (
@@ -1595,6 +1613,12 @@ function MavenGavSection({ path }: { path: string }) {
       <DetailRow label="Group ID" value={gav.groupId} copy mono />
       <DetailRow label="Artifact ID" value={gav.artifactId} copy mono />
       <DetailRow label="Version" value={gav.version} copy mono />
+      {gav.classifier && (
+        <DetailRow label="Classifier" value={gav.classifier} copy mono />
+      )}
+      {gav.extension && (
+        <DetailRow label="Extension" value={gav.extension} copy mono />
+      )}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground">
