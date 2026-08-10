@@ -42,3 +42,10 @@ updates:
       - "ci"
     commit-message:
       prefix: "chore"
+    groups:
+      # codeql-action/init and codeql-action/analyze must move in lockstep —
+      # a version skew fails every run ("Loaded a configuration file for
+      # version X, but running version Y"). See #753.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
