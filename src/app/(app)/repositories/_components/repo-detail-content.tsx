@@ -519,6 +519,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   );
 
   // --- artifact columns ---
+  // Maven-family repos store many files per GAV that differ only by
+  // classifier and/or extension (`lib-1.0.jar` vs `lib-1.0-sources.jar` vs
+  // `lib-1.0.tar.gz`); the flat view could not tell them apart (#474). The
+  // coordinates come from the backend-parsed metadata when present, with the
+  // path parser as fallback (#482).
+  const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
+  const artifactGavc = (a: Artifact) =>
+    mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
@@ -586,6 +594,35 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <span className="text-xs text-muted-foreground">-</span>
         ),
     },
+    ...(isMavenFamily
+      ? [
+          {
+            id: "classifier",
+            header: "Classifier",
+            accessor: (a: Artifact) => artifactGavc(a)?.classifier ?? "",
+            cell: (a: Artifact) => {
+              const gavc = artifactGavc(a);
+              if (!gavc || (!gavc.classifier && !gavc.extension)) {
+                return <span className="text-xs text-muted-foreground">-</span>;
+              }
+              return (
+                <span className="flex items-center gap-1 text-xs">
+                  {gavc.classifier && (
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {gavc.classifier}
+                    </Badge>
+                  )}
+                  {gavc.extension && (
+                    <span className="text-muted-foreground">
+                      {gavc.extension}
+                    </span>
+                  )}
+                </span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+        ]
+      : []),
     {
       id: "size",
       header: "Size",

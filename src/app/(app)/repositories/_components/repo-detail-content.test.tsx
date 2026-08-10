@@ -223,7 +223,10 @@ vi.mock("@/components/common/data-table", () => ({
     columns?: Array<{ id: string; cell?: (row: unknown) => React.ReactNode }>;
     onRowClick?: (row: unknown) => void;
   }) => (
-    <div data-stub="DataTable">
+    <div
+      data-stub="DataTable"
+      data-columns={(columns ?? []).map((c) => c.id).join(",")}
+    >
       {(data ?? []).map((row) => (
         <button
           key={row.id}
@@ -428,6 +431,38 @@ describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () 
     repository.format = "maven";
     await openDetailDialog();
     expect(screen.queryByRole("tab", { name: /versions/i })).toBeNull();
+  });
+});
+
+describe("RepoDetailContent flat view classifier column (#474)", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+
+  async function renderArtifactsTab() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    return await screen.findByText("", { selector: '[data-stub="DataTable"]' });
+  }
+
+  it("adds a classifier/extension column for maven-family repos", async () => {
+    repository.format = "maven";
+    const table = await renderArtifactsTab();
+    expect(table.getAttribute("data-columns")?.split(",")).toContain(
+      "classifier",
+    );
+  });
+
+  it("omits the classifier column for non-Maven formats", async () => {
+    repository.format = "generic";
+    const table = await renderArtifactsTab();
+    expect(table.getAttribute("data-columns")?.split(",")).not.toContain(
+      "classifier",
+    );
   });
 });
 
