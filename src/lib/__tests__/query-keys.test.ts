@@ -38,10 +38,12 @@ describe("QUERY_KEYS", () => {
     BACKUPS: ["backups"],
     SECURITY: ["security"],
     PLUGINS: ["plugins"],
+    CI_OIDC: ["ci-oidc"],
+    CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
   };
 
-  it("has 14 key constants (#213, #669)", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(14);
+  it("has 16 key constants (#213, #669)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(16);
   });
 
   it.each(Object.entries(expectedKeys))(
