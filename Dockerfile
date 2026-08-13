@@ -17,6 +17,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG GIT_SHA=unknown
+# NOTE (#784): APP_VERSION does NOT reach the client bundle. next.config.ts
+# sets `env.NEXT_PUBLIC_APP_VERSION` to `pkg.version` literally, and that
+# explicit config value takes precedence over the ENV below, so the displayed
+# version always comes from package.json. Verified against the published
+# 1.8.0 image: CI passed APP_VERSION=v1.8.0 and the bundle still carried
+# "1.7.0". (GIT_SHA differs -- next.config.ts reads process.env.GIT_SHA
+# explicitly, so that build arg does take effect.)
+#
+# The ENV is kept because it is still the documented knob and a future
+# next.config.ts could honour it; but do not reach for it to correct a wrong
+# version. Bump package.json -- scripts/assert-version-matches-tag.sh gates it
+# at release time.
 ARG APP_VERSION=dev
 # Enable HSTS + the CSP `upgrade-insecure-requests` directive. The headers are
 # emitted by src/middleware.ts, which reads AK_ENFORCE_HTTPS per request at

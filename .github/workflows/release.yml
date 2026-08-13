@@ -48,6 +48,12 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Assert package.json version matches the tag
+        # The Release object names a version; package.json is what the built UI
+        # actually reports. If they disagree, stop rather than publish a Release
+        # for a build that will misreport itself (#784).
+        run: ./scripts/assert-version-matches-tag.sh "${{ steps.version.outputs.tag }}"
+
       - name: Extract changelog section
         id: changelog
         run: |

@@ -17,9 +17,30 @@ env:
   DOCKERHUB_IMAGE: artifactkeeper/web
 
 jobs:
+  version-check:
+    name: Version Matches Tag
+    # Gates the whole publish: a tag build whose package.json disagrees with
+    # the tag ships a UI that misreports its own version (#784).
+    #
+    # The job itself is unconditional and the assertion step carries the `if`,
+    # rather than the other way round. A job-level `if` that evaluates false is
+    # *skipped*, and a skipped job skips everything that `needs` it -- which
+    # would silently disable the build on every branch push.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Assert package.json version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./scripts/assert-version-matches-tag.sh "${GITHUB_REF_NAME}"
+
   build:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
+    needs: version-check
     permissions:
       contents: read
       packages: write
