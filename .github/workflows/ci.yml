@@ -404,17 +404,21 @@ jobs:
         env:
           BACKEND_TAG: dev
 
+      # Compare against the committed Linux baselines. Do NOT pass
+      # --update-snapshots here: that rewrites the baseline in place and the job
+      # can never fail on a real visual diff. Baselines are refreshed on demand
+      # via the manually dispatched `visual-baselines.yml` workflow.
       - name: Run visual regression tests
-        run: npx playwright test --project=visual --update-snapshots --reporter=list,github,html
+        run: npx playwright test --project=visual --reporter=list,github,html
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
           ADMIN_PASSWORD: TestRunner!2026secure
 
-      - name: Upload visual baseline snapshots
+      - name: Upload rendered snapshots on failure
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+        if: failure()
         with:
-          name: visual-baseline-snapshots
+          name: visual-actual-snapshots
           path: e2e/suites/visual/**/*-snapshots/
           retention-days: 30
 

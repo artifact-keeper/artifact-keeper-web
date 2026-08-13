@@ -53,3 +53,10 @@ e2e/tutorials/output/
 # Worktrees created by Claude Code agents
 .claude/worktrees/
 npm-ci.log
+
+# Visual regression: baselines are committed for the CI platform (Linux) only.
+# The suite renders on ubuntu-latest; baselines generated on other OSes locally
+# are throwaway. Ignore them so a wrong-platform image can't re-enter the repo.
+# Refresh Linux baselines via the "Update Visual Baselines" workflow.
+e2e/suites/visual/**/*-darwin.png
+e2e/suites/visual/**/*-win32.png
