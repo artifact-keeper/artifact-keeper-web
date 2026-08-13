@@ -34,3 +34,14 @@ describe("isArtifactAnalyzable (artifact-keeper#2292)", () => {
     expect(ANALYZABLE_DISABLED_REASON).toMatch(/proxy-cached remote/i);
   });
 });
+
+describe("ANALYZABLE_DISABLED_REASON", () => {
+  it("does not claim scanning is unavailable for proxy-cached artifacts", () => {
+    // #3344: proxy-cached artifacts ARE scanned at download time when
+    // scan-on-proxy is enabled. Only SBOM generation and on-demand scans
+    // are hosted-only.
+    expect(ANALYZABLE_DISABLED_REASON).not.toMatch(/SBOM and scanning are available only/);
+    expect(ANALYZABLE_DISABLED_REASON).toMatch(/scan-on-proxy/);
+    expect(ANALYZABLE_DISABLED_REASON).toMatch(/proxy-cached/i);
+  });
+});
