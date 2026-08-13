@@ -50,6 +50,15 @@ vi.mock("@/providers/auth-provider", () => ({
   }),
 }));
 
+// Local login enabled: these tests only assert the SSO button labels.
+vi.mock("@/providers/system-config-provider", () => ({
+  useSystemConfig: () => ({
+    config: { auth: { local_login_enabled: true } },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 const { mockListProviders } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
 }));

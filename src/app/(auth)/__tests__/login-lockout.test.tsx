@@ -95,6 +95,17 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => authState,
 }));
 
+// Local login defaults to enabled here: these tests exercise the credentials
+// form itself, not the flag that gates it (see login-form-visibility.test.tsx).
+let localLoginEnabled = true;
+vi.mock("@/providers/system-config-provider", () => ({
+  useSystemConfig: () => ({
+    config: { auth: { local_login_enabled: localLoginEnabled } },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 // SSO mock with mutable return value so individual tests can override it
 const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
@@ -127,6 +138,7 @@ describe("LoginPage lockout UI", () => {
     mockClearTotpRequired.mockClear();
     mockListProviders.mockResolvedValue([]);
     mockLdapLogin.mockResolvedValue(undefined);
+    localLoginEnabled = true;
     authState = {
       login: mockLogin,
       refreshUser: mockRefreshUser,
@@ -534,6 +546,7 @@ describe("LoginPage lockout UI", () => {
     mockListProviders.mockResolvedValue([
       { id: "oidc-1", name: "Okta SSO", provider_type: "oidc", login_url: "/api/v1/sso/oidc/oidc-1/login" },
     ]);
+    localLoginEnabled = false;
 
     await act(async () => {
       render(<LoginPage />);
@@ -543,9 +556,9 @@ describe("LoginPage lockout UI", () => {
       expect(screen.getByText("Sign in with Okta SSO")).toBeInTheDocument();
     });
 
-    // When only OIDC is configured (no LDAP, no setup-required), the local
-    // username/password form is hidden — see issue #350 — so there is no
-    // need for the "or continue with" divider above the provider button.
+    // With local login disabled by the backend and no LDAP provider, the
+    // username/password form is hidden (issue #350), so there is no need for
+    // the "or continue with" divider above the provider button.
     expect(screen.queryByText("or continue with")).not.toBeInTheDocument();
   });
 
