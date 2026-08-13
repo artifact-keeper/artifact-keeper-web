@@ -220,6 +220,93 @@ describe("MavenComponentList", () => {
   });
 
   // ---------------------------------------------------------------------
+  // `pagination.total` semantics (issue #417)
+  //
+  // The footer denominator is `pagination.total` from the
+  // `?group_by=maven_component` response, and that total counts COMPONENTS,
+  // not the raw `artifacts` rows they group.  Backend evidence, in
+  // artifact-keeper/backend/src/api/handlers/repositories.rs:
+  //
+  //   - `?count=exact` (what this view sends since #766) is answered by
+  //     `count_maven_catalog_component_keys` (:5997), whose SQL is
+  //     `SELECT COUNT(*) FROM (SELECT DISTINCT p.name, pv.version FROM
+  //     packages p JOIN package_versions pv ...) t` -- one counted row per
+  //     `(groupId:artifactId, version)` component.  The remote/proxy branch
+  //     uses `count_maven_catalog_components` (:6267), a COUNT over
+  //     `packages`, which since migration 113 holds one row per
+  //     `groupId:artifactId` catalog entry.
+  //   - Without `count=exact`, `grouped_listing_total` (:6147) returns
+  //     `offset + returned + has_more`, where `returned` is the number of
+  //     GROUPED rows on the page (`keys.len()` / `components.len()`).
+  //
+  // Neither path ever counts `artifacts` rows.  What these tests pin is the
+  // FRONTEND half of that contract: the denominator must be the server
+  // `total` prop, never recomputed from `components.length` (which is only
+  // the page size).  They do NOT verify the server semantic -- the total is
+  // handed in as a prop here -- so they would not go red if the backend
+  // started reporting raw artifact counts.  Pinning that needs a backend
+  // test in artifact-keeper (see #417).
+  // ---------------------------------------------------------------------
+
+  it("uses the server component total as the denominator, not the page's file count", () => {
+    // One page of 3 components holding 5 files each: 15 raw artifact rows
+    // sit behind this page.  The repository holds 7 components in total.
+    const page = ["alpha", "beta", "gamma"].map((artifactId) => ({
+      ...COMP_B,
+      id: `${artifactId}-1`,
+      artifact_id: artifactId,
+      artifact_files: [
+        `${artifactId}-1.0.0.jar`,
+        `${artifactId}-1.0.0.pom`,
+        `${artifactId}-1.0.0-sources.jar`,
+        `${artifactId}-1.0.0-javadoc.jar`,
+        `${artifactId}-1.0.0.jar.sha1`,
+      ],
+    }));
+
+    render(
+      <MavenComponentList
+        components={page}
+        total={7}
+        page={1}
+        pageSize={3}
+        onPageChange={() => {}}
+      />,
+    );
+
+    // Note the rendered string carries no noun: `DataTablePagination`
+    // (data-table-pagination.tsx:72) only prints `itemLabel` in its
+    // `total === 0` branch, so a non-empty page reads "1-3 of 7" and the
+    // user is left to infer the unit.  #417 assumed the copy said
+    // "components"; that wording was dropped when this shared control was
+    // adopted (#419 -> #466).
+    expect(screen.getByText("1-3 of 7")).toBeInTheDocument();
+    // 15 = the raw artifact rows behind the page.  Documentation more than
+    // a guard: the assertion above already fails for any denominator change
+    // that could produce 15 here.  Kept so the number a reader of #417
+    // expects to be wrong is visible in the test.
+    expect(screen.queryByText(/of 15/)).not.toBeInTheDocument();
+  });
+
+  it("derives the page count from the component total, not from components.length", () => {
+    // 7 components at 3 per page is 3 pages.  Using `components.length` as
+    // the denominator (the tempting "fix") would collapse this to 1 page and
+    // strand the user on page 1.
+    render(
+      <MavenComponentList
+        components={[COMP_A, COMP_B]}
+        total={7}
+        page={1}
+        pageSize={3}
+        onPageChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/page 1 of 3/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next page/i })).toBeEnabled();
+  });
+
+  // ---------------------------------------------------------------------
   // Clickable file rows (issues #444, #445)
   // ---------------------------------------------------------------------
 
