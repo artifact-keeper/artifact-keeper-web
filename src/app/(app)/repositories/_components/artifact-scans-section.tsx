@@ -155,7 +155,7 @@ export function ArtifactScansSection({
           <p className="text-sm text-muted-foreground">
             {analyzable
               ? "No security scans have been run against this artifact yet."
-              : "This artifact cannot be scanned."}
+              : "This artifact cannot be scanned on demand."}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {analyzable
