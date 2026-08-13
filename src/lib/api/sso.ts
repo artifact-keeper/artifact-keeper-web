@@ -159,6 +159,13 @@ function adaptSamlConfig(sdk: SdkSamlConfigResponse): SamlConfig {
     use_absolute_acs_url:
       (sdk as { use_absolute_acs_url?: boolean }).use_absolute_acs_url ??
       false,
+    // The SDK types this as a required boolean, so no cast is needed to
+    // read it (unlike the `use_absolute_acs_url` line above, whose cast is
+    // now redundant for the same reason). The `?? false` is still load
+    // bearing at runtime: a backend deployed before artifact-keeper#2448
+    // omits the key entirely, and `undefined` would drive the form's
+    // Switch. False is the legacy role-mapping behavior.
+    map_groups_to_groups: sdk.map_groups_to_groups ?? false,
     is_enabled: sdk.is_enabled,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,

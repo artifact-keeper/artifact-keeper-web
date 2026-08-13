@@ -546,6 +546,31 @@ describe("ssoApi", () => {
     expect(out[0].use_absolute_acs_url).toBe(true);
   });
 
+  it("adaptSaml propagates map_groups_to_groups when present (#588)", async () => {
+    mockListSaml.mockResolvedValue({
+      data: [{ ...SDK_SAML, map_groups_to_groups: true }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].map_groups_to_groups).toBe(true);
+  });
+
+  it("adaptSaml defaults map_groups_to_groups to false when absent (#588)", async () => {
+    // The SDK types the field as required, but a backend deployed before
+    // artifact-keeper#2448 omits it entirely. The adapter must yield a real
+    // boolean so the SAML form's Switch is never driven by `undefined`.
+    const withoutFlag: Record<string, unknown> = { ...SDK_SAML };
+    delete withoutFlag.map_groups_to_groups;
+    mockListSaml.mockResolvedValue({
+      data: [withoutFlag as unknown as SdkSamlConfigResponse],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].map_groups_to_groups).toBe(false);
+  });
+
   it("getSaml returns config", async () => {
     mockGetSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
     const { ssoApi } = await import("../sso");
