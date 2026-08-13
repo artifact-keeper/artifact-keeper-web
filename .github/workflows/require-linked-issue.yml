@@ -26,10 +26,25 @@ jobs:
           script: |
             const BOT_MARKER = '<!-- require-linked-issue-bot -->';
             const BYPASS_LABEL = 'no-issue-required';
+            // Dependabot writes its own PR bodies and never links an issue, so
+            // this check failed on every one of its PRs and made otherwise-green
+            // PRs look red (#752). Exempt it by login rather than by
+            // `user.type === 'Bot'`, which would exempt every GitHub App.
+            const EXEMPT_AUTHORS = ['dependabot[bot]'];
 
             const pr = context.payload.pull_request;
             if (!pr) {
               core.setFailed('This workflow must run on pull_request events.');
+              return;
+            }
+
+            // Returning here reports success rather than skipping the job. A
+            // job-level `if:` would report `skipped`, which Mergify's
+            // `check-success` does not match, so adding this check to
+            // .mergify.yml later would silently stall every exempt PR.
+            const author = (pr.user && pr.user.login) || '';
+            if (EXEMPT_AUTHORS.includes(author)) {
+              core.info(`Author "${author}" is exempt from the linked-issue requirement; skipping check.`);
               return;
             }
 

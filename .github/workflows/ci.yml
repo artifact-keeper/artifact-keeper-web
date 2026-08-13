@@ -474,6 +474,48 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Single aggregate status for the whole E2E fan-out. The suites above are
+  # sharded and get renamed as suites are added, so anything that wants to
+  # gate on "did E2E pass" (Mergify, branch protection) should reference this
+  # stable `E2E` check instead of enumerating shard names. See issue #752.
+  #
+  # e2e-docs-export is deliberately excluded: it only runs on main, so it is
+  # always skipped on pull requests.
+  e2e:
+    name: E2E
+    if: always()
+    needs: [e2e-interactions, e2e-roles, e2e-visual, e2e-docker-proxy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every E2E suite succeeded
+        env:
+          E2E_RESULTS: ${{ join(needs.*.result, ' ') }}
+          # Keep in step with the `needs:` list above. Asserting the count
+          # makes dropping a suite from `needs:` a hard error instead of a
+          # quietly weaker gate.
+          EXPECTED_SUITES: 4
+        run: |
+          echo "E2E suite results: ${E2E_RESULTS}"
+          # Without this the loop below would pass over an empty list, so a
+          # `needs:` list that was emptied or mistyped would report a green
+          # E2E having verified nothing. That is the #752 bug class again.
+          if [ -z "${E2E_RESULTS}" ]; then
+            echo "::error::No E2E suite results. The needs: list is empty."
+            exit 1
+          fi
+          actual=$(echo "${E2E_RESULTS}" | wc -w | tr -d ' ')
+          if [ "${actual}" -ne "${EXPECTED_SUITES}" ]; then
+            echo "::error::Expected ${EXPECTED_SUITES} E2E suite results, got ${actual} (${E2E_RESULTS}). Update EXPECTED_SUITES if a suite was added or removed on purpose."
+            exit 1
+          fi
+          for result in ${E2E_RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "::error::Not every E2E suite succeeded (${E2E_RESULTS})"
+              exit 1
+            fi
+          done
+          echo "All E2E suites succeeded."
+
   e2e-docs-export:
     name: E2E Docs Screenshot Export
     if: github.ref == 'refs/heads/main'
