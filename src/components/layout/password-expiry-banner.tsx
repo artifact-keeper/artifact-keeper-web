@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 
 const WARNING_THRESHOLD_DAYS = 7;
@@ -16,6 +17,7 @@ function daysUntil(dateString: string): number {
 
 export function PasswordExpiryBanner() {
   const { passwordExpiresAt, isAuthenticated } = useAuth();
+  const t = useTranslations("passwordExpiry");
 
   if (!isAuthenticated || !passwordExpiresAt) {
     return null;
@@ -35,10 +37,10 @@ export function PasswordExpiryBanner() {
 
   const message =
     daysRemaining === 0
-      ? "Your password expires today."
+      ? t("today")
       : daysRemaining === 1
-        ? "Your password expires tomorrow."
-        : `Your password expires in ${daysRemaining} days.`;
+        ? t("tomorrow")
+        : t("inDays", { days: daysRemaining });
 
   return (
     <div
@@ -52,7 +54,7 @@ export function PasswordExpiryBanner() {
           href="/change-password"
           className="font-semibold underline underline-offset-2"
         >
-          Change it now
+          {t("changeNow")}
         </Link>
       </span>
     </div>

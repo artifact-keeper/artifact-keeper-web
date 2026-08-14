@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { Providers } from "@/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { NONCE_HEADER } from "@/lib/security-headers";
@@ -31,12 +33,20 @@ export default async function RootLayout({
   // opts every route into dynamic rendering, which nonce-based CSP requires:
   // Next.js stamps the nonce onto framework scripts during SSR only.
   const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
+  // Resolve the active locale + messages (from the NEXT_LOCALE cookie) and
+  // expose them to client components via NextIntlClientProvider.
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers nonce={nonce}>{children}</Providers>
+        <NextIntlClientProvider messages={messages}>
+          <Providers nonce={nonce}>{children}</Providers>
+        </NextIntlClientProvider>
         <Toaster />
       </body>
     </html>

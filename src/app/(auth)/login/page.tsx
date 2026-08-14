@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -34,12 +35,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-});
-
-type LoginValues = z.infer<typeof loginSchema>;
+// Form value shape; the runtime validation schema is created inside the
+// component with translated validation messages.
+type LoginValues = {
+  username: string;
+  password: string;
+};
 
 type SelectedProvider =
   | { type: "local" }
@@ -50,29 +51,25 @@ type SelectedProvider =
 // gibberish ("Sign in with default") — see issue #351. Match case-insensitively.
 const GENERIC_PROVIDER_NAMES = new Set(["default", "primary", "main", "sso"]);
 
-// Fallback labels by protocol when the provider's name is generic/empty —
-// at least tells the user which protocol they're authenticating with.
-const GENERIC_LABEL_BY_PROTOCOL: Partial<
-  Record<SsoProvider["provider_type"], string>
-> = {
-  oidc: "Sign in with SSO (OIDC)",
-  saml: "Sign in with SSO (SAML)",
-};
-
-export function ssoButtonLabel(provider: SsoProvider): string {
-  const name = provider.name?.trim();
-  if (!name || GENERIC_PROVIDER_NAMES.has(name.toLowerCase())) {
-    return GENERIC_LABEL_BY_PROTOCOL[provider.provider_type] ?? "Sign in with SSO";
-  }
-  return `Sign in with ${name}`;
-}
-
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations("login");
   const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const { config: systemConfig, isLoading: systemConfigLoading } =
     useSystemConfig();
+
+  // Fallback labels by protocol when the provider's name is generic/empty —
+  // at least tells the user which protocol they're authenticating with.
+  const ssoLabel = (provider: SsoProvider): string => {
+    const name = provider.name?.trim();
+    if (!name || GENERIC_PROVIDER_NAMES.has(name.toLowerCase())) {
+      if (provider.provider_type === "oidc") return t("signInWithSsoOidc");
+      if (provider.provider_type === "saml") return t("signInWithSsoSaml");
+      return t("signInWithSso");
+    }
+    return t("signInWithName", { name });
+  };
   // Absent on backends predating the flag; the parser defaults it to true so
   // those deployments keep a working login form.
   const localLoginEnabled = systemConfig.auth.local_login_enabled;
@@ -148,7 +145,12 @@ function LoginContent() {
     forceLocalFallback || (providersLoaded && !systemConfigLoading);
 
   const form = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(
+      z.object({
+        username: z.string().min(1, t("usernameRequired")),
+        password: z.string().min(1, t("passwordRequired")),
+      })
+    ),
     defaultValues: {
       username: "",
       password: "",
@@ -187,7 +189,7 @@ function LoginContent() {
       if (isAccountLocked(err)) {
         setAccountLocked(true);
       } else {
-        setError(toUserMessage(err, "Login failed. Please check your credentials."));
+        setError(toUserMessage(err, t("loginFailed")));
       }
     } finally {
       setIsLoading(false);
@@ -202,7 +204,7 @@ function LoginContent() {
       await verifyTotp(totpCode);
       router.push("/");
     } catch (err) {
-      setError(toUserMessage(err, "Invalid TOTP code"));
+      setError(toUserMessage(err, t("invalidTotp")));
     } finally {
       setIsLoading(false);
     }
@@ -213,9 +215,9 @@ function LoginContent() {
       {setupRequired && (
         <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
           <Terminal className="size-4 text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="text-amber-800 dark:text-amber-200">First-Time Setup</AlertTitle>
+          <AlertTitle className="text-amber-800 dark:text-amber-200">{t("firstTimeSetup")}</AlertTitle>
           <AlertDescription>
-            <p>A random admin password was generated. Retrieve it from the server:</p>
+            <p>{t("setupPasswordGenerated")}</p>
             {/*
               The deployment default (Docker Compose) is baked in here, but an
               operator can override the retrieval instruction via the backend's
@@ -228,7 +230,9 @@ function LoginContent() {
               {setupPasswordHint ?? "docker exec artifact-keeper-backend cat /data/storage/admin.password"}
             </code>
             <p className="mt-1.5">
-              Log in with username <strong>admin</strong> and the password from the file.
+              {t.rich("setupLoginHint", {
+                username: (chunks) => <strong>{chunks}</strong>,
+              })}
             </p>
           </AlertDescription>
         </Alert>
@@ -239,8 +243,8 @@ function LoginContent() {
             <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-primary/10">
               <Shield className="size-7 text-primary" />
             </div>
-            <CardTitle className="text-xl">Two-Factor Authentication</CardTitle>
-            <CardDescription>Enter the 6-digit code from your authenticator app</CardDescription>
+            <CardTitle className="text-xl">{t("twoFactorTitle")}</CardTitle>
+            <CardDescription>{t("twoFactorDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             {error && (
@@ -261,16 +265,16 @@ function LoginContent() {
                 />
               </div>
               <p className="text-center text-xs text-muted-foreground">
-                You can also use a backup code
+                {t("backupCode")}
               </p>
               <Button type="submit" className="w-full" size="lg" disabled={isLoading || totpCode.length < 6}>
                 {isLoading ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Verifying...
+                    {t("verifying")}
                   </>
                 ) : (
-                  "Verify"
+                  t("verify")
                 )}
               </Button>
               <Button
@@ -283,7 +287,7 @@ function LoginContent() {
                   setError(null);
                 }}
               >
-                Back to login
+                {t("backToLogin")}
               </Button>
             </form>
           </CardContent>
@@ -300,17 +304,15 @@ function LoginContent() {
             />
           </div>
           <CardTitle className="text-xl">Artifact Keeper</CardTitle>
-          <CardDescription>{setupRequired ? "Complete first-time setup" : "Sign in to your account"}</CardDescription>
+          <CardDescription>{setupRequired ? t("completeFirstTimeSetup") : t("signInToAccount")}</CardDescription>
         </CardHeader>
         <CardContent>
           {accountLocked && (
             <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
               <Lock className="size-4 text-amber-600 dark:text-amber-400" />
-              <AlertTitle className="text-amber-800 dark:text-amber-200">Account Locked</AlertTitle>
+              <AlertTitle className="text-amber-800 dark:text-amber-200">{t("accountLocked")}</AlertTitle>
               <AlertDescription className="text-amber-700 dark:text-amber-300">
-                Your account has been temporarily locked due to too many failed
-                login attempts. Please wait a few minutes and try again, or
-                contact an administrator to unlock your account.
+                {t("accountLockedDescription")}
               </AlertDescription>
             </Alert>
           )}
@@ -331,7 +333,7 @@ function LoginContent() {
                 }`}
                 onClick={() => setSelectedProvider({ type: "local" })}
               >
-                Local
+                {t("local")}
               </button>
               {ldapProviders.map((provider) => (
                 <button
@@ -364,7 +366,7 @@ function LoginContent() {
             // once the real sign-in options resolve.
             <div className="flex items-center justify-center py-8" aria-busy="true">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              <span className="sr-only">Loading sign-in options</span>
+              <span className="sr-only">{t("loadingSignInOptions")}</span>
             </div>
           )}
 
@@ -376,10 +378,10 @@ function LoginContent() {
                   name="username"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Username</FormLabel>
+                      <FormLabel>{t("username")}</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Enter your username"
+                          placeholder={t("usernamePlaceholder")}
                           autoComplete="username"
                           disabled={isLoading}
                           {...field}
@@ -394,11 +396,11 @@ function LoginContent() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Password</FormLabel>
+                      <FormLabel>{t("password")}</FormLabel>
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="Enter your password"
+                          placeholder={t("passwordPlaceholder")}
                           autoComplete="current-password"
                           disabled={isLoading}
                           {...field}
@@ -417,10 +419,10 @@ function LoginContent() {
                   {isLoading ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Signing in...
+                      {t("signingIn")}
                     </>
                   ) : (
-                    "Sign In"
+                    t("signIn")
                   )}
                 </Button>
               </form>
@@ -433,7 +435,7 @@ function LoginContent() {
                 <div className="relative my-4">
                   <Separator />
                   <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-                    or continue with
+                    {t("orContinueWith")}
                   </span>
                 </div>
               )}
@@ -450,7 +452,7 @@ function LoginContent() {
                     }}
                   >
                     <LogIn className="size-4 mr-2" />
-                    {ssoButtonLabel(provider)}
+                    {ssoLabel(provider)}
                   </Button>
                 ))}
               </div>
@@ -467,7 +469,8 @@ function LoginContent() {
 // wrap the inner content so /login can be statically generated. The fallback
 // is a brief skeleton matching the eventual loading spinner inside the form.
 export default function LoginPage() {
-  useDocumentTitle("Sign In");
+  const t = useTranslations("login");
+  useDocumentTitle(t("title"));
   return (
     <Suspense
       fallback={

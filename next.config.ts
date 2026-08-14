@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
 import { execSync } from "child_process";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
 
@@ -60,4 +61,10 @@ const nextConfig: NextConfig = {
   // https://github.com/artifact-keeper/artifact-keeper-web/issues/56
 };
 
-export default nextConfig;
+// next-intl plugin wires `src/i18n/request.ts` (locale + messages, resolved
+// per-request from the NEXT_LOCALE cookie) into the app. The "no-prefix"
+// strategy is used so existing route paths, deep links and Playwright specs
+// are unaffected — the locale is carried by a cookie, not a URL segment.
+const withNextIntl = createNextIntlPlugin();
+
+export default withNextIntl(nextConfig);
