@@ -82,6 +82,28 @@ afterEach(() => cleanup());
 // ---------------------------------------------------------------------------
 
 describe("ProxySbomPanel — an empty inventory is not an empty SBOM", () => {
+  it("REGRESSION: an empty inventory never renders as an empty or complete SBOM", () => {
+    // The named regression. A zero-component response must render the explicit
+    // not-recorded state — never a component table, never a component count,
+    // never anything a reader could take as "this artifact has no components".
+    // Same class of bug as the green all-clear shield: absence of evidence
+    // presented as evidence of absence.
+    stubQuery({ data: { bomFormat: "CycloneDX", components: [] } });
+
+    renderPanel();
+
+    expect(screen.getByTestId("proxy-sbom-empty")).toHaveTextContent(
+      /No SBOM recorded for this artifact yet/i,
+    );
+    expectNoEmptyComponentTable();
+    // No count badge asserting a total of zero.
+    expect(screen.queryByText(/0 components?/i)).toBeNull();
+    // No download of a document that catalogs nothing.
+    expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
+    // And nothing claiming the (absent) inventory is complete.
+    expect(screen.queryByText(/complete/i)).toBeNull();
+  });
+
   it("renders the explicit not-recorded state for a document with no components", () => {
     stubQuery({ data: { bomFormat: "CycloneDX", components: [] } });
 
@@ -90,8 +112,23 @@ describe("ProxySbomPanel — an empty inventory is not an empty SBOM", () => {
     expect(screen.getByTestId("proxy-sbom-empty")).toHaveTextContent(
       /No SBOM recorded for this artifact yet/i,
     );
-    expect(screen.getByText(/next time it is pulled/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/next time the artifact is pulled/i),
+    ).toBeInTheDocument();
     expectNoEmptyComponentTable();
+  });
+
+  it("says a missing inventory on an older cache entry is expected, not a fault", () => {
+    // On any existing deployment this is the state most users meet first,
+    // because only digests pulled after recording shipped have an inventory.
+    stubQuery({ error: new ApiError(404, "not found") });
+
+    renderPanel();
+
+    expect(screen.getByText(/cached before/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not indicate a problem with the artifact/i),
+    ).toBeInTheDocument();
   });
 
   it("renders the not-recorded state when the endpoint has nothing for this path", () => {
@@ -204,6 +241,45 @@ describe("ProxySbomPanel — inventory", () => {
     renderPanel();
 
     expect(screen.getByText(/Declared licenses \(1\)/)).toBeInTheDocument();
+  });
+
+  it("surfaces a scan-reported partial catalog instead of presenting it as complete", () => {
+    stubQuery({
+      data: {
+        ...CYCLONEDX,
+        metadata: {
+          properties: [
+            { name: "artifact-keeper:inventory_completeness", value: "partial" },
+          ],
+        },
+      },
+    });
+
+    renderPanel();
+
+    expect(screen.getByTestId("proxy-sbom-partial-banner")).toBeInTheDocument();
+    expect(screen.getByText(/reported this inventory as incomplete/i)).toBeInTheDocument();
+    expect(screen.getByText(/partial list/i)).toBeInTheDocument();
+    // The components it did catalog are still shown — a partial list beats none.
+    expect(screen.getByText("jinja2")).toBeInTheDocument();
+  });
+
+  it("does not warn when the scan reported the catalog complete", () => {
+    stubQuery({ data: { ...CYCLONEDX, inventory_completeness: "complete" } });
+
+    renderPanel();
+
+    expect(screen.queryByTestId("proxy-sbom-partial-banner")).toBeNull();
+  });
+
+  it("does not warn when the document makes no completeness claim", () => {
+    // A backend that never emits the field must not put a warning on every
+    // SBOM; the standing caveat already says what the document is.
+    stubQuery({ data: CYCLONEDX });
+
+    renderPanel();
+
+    expect(screen.queryByTestId("proxy-sbom-partial-banner")).toBeNull();
   });
 
   it("does not describe the inventory as a dependency tree", () => {

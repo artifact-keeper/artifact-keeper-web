@@ -1,4 +1,5 @@
 import type {
+  ProxySbomCompleteness,
   ProxySbomComponent,
   ProxySbomFormat,
   ProxySbomInventory,
@@ -26,8 +27,20 @@ import type {
  * class of bug as the green all-clear shield.
  */
 export const PROXY_SBOM_NOT_RECORDED_COPY =
-  "No SBOM recorded for this artifact yet; it will be generated the next time " +
-  "it is pulled.";
+  "No SBOM recorded for this artifact yet — it will be generated the next " +
+  "time the artifact is pulled.";
+
+/**
+ * The reassurance that goes with it.
+ *
+ * Only digests pulled after the inventory feature ships have one recorded, so
+ * on any existing deployment the empty state is what most users meet first.
+ * Without this line it reads as a fault; with it, it reads as a not-yet.
+ */
+export const PROXY_SBOM_NOT_RECORDED_REASON =
+  "Artifacts cached before inventory recording was enabled do not have one " +
+  "until they are pulled again. This is expected and does not indicate a " +
+  "problem with the artifact.";
 
 /**
  * What the document actually is. The scan catalogs what it finds inside the
@@ -38,6 +51,16 @@ export const PROXY_SBOM_NOT_RECORDED_COPY =
 export const PROXY_SBOM_INVENTORY_CAVEAT =
   "This is the package inventory the scanner cataloged from the archive at " +
   "download time, not a resolved transitive dependency tree.";
+
+/**
+ * Shown when the scan itself reported that it did not catalog everything.
+ * Presenting a knowingly-partial inventory as the artifact's full contents is
+ * the same failure mode as an empty table reading as "no dependencies".
+ */
+export const PROXY_SBOM_PARTIAL_COPY =
+  "The scan reported this inventory as incomplete — it is missing components " +
+  "it could not catalog. Treat it as a partial list, not as the artifact's " +
+  "full contents.";
 
 /** Shown on proxy repositories whose format never runs an inline scan. */
 export const PROXY_SBOM_FORMAT_UNSUPPORTED_COPY =
@@ -210,6 +233,52 @@ export function unwrapSbomDocument(raw: unknown): Json | null {
 }
 
 /**
+ * Read a completeness claim out of a CycloneDX `metadata.properties` array,
+ * which is where a generator records non-standard facts about its own output.
+ */
+function completenessFromProperties(doc: Json): string | null {
+  const metadata = asObject(doc.metadata);
+  if (!metadata) return null;
+  for (const raw of asArray(metadata.properties)) {
+    const property = asObject(raw);
+    if (!property) continue;
+    const name = cleanString(property.name)?.toLowerCase();
+    // Generators namespace their properties (`artifact-keeper:…`), so match on
+    // the suffix rather than an exact key.
+    if (!name || !name.includes("completeness")) continue;
+    const value = cleanString(property.value);
+    if (value) return value;
+  }
+  return null;
+}
+
+/**
+ * Whether the scan claimed to have cataloged everything.
+ *
+ * Checked in three places because the backend has not pinned down where it
+ * records this: the response envelope, the document root, and CycloneDX
+ * `metadata.properties`.
+ *
+ * An absent claim is `unknown`, not `complete`. The UI must not assert
+ * completeness the data does not support, and must not warn on every SBOM
+ * served by a backend that never emits the field — so only an explicit
+ * non-complete value raises the banner.
+ */
+export function detectInventoryCompleteness(
+  raw: unknown,
+  doc: Json | null,
+): ProxySbomCompleteness {
+  const envelope = asObject(raw);
+  const claim =
+    cleanString(envelope?.inventory_completeness) ??
+    cleanString(doc?.inventory_completeness) ??
+    (doc ? completenessFromProperties(doc) : null);
+
+  if (!claim) return "unknown";
+  return claim.toLowerCase() === "complete" ? "complete" : "partial";
+}
+
+/**
  * Normalize a response body into what the panel renders.
  *
  * Returns `absent` for a missing document *and* for a document that catalogs
@@ -227,7 +296,12 @@ export function parseProxySbom(raw: unknown): ProxySbomInventory {
     format === "spdx" ? spdxPackages(doc) : cycloneDxComponents(doc);
 
   if (components.length === 0) return { kind: "absent" };
-  return { kind: "present", format, components };
+  return {
+    kind: "present",
+    format,
+    components,
+    completeness: detectInventoryCompleteness(raw, doc),
+  };
 }
 
 /** Pretty-print the document for the raw viewer and the download. */

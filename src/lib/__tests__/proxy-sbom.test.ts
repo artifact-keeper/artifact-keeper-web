@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 
 import {
   PROXY_SBOM_NOT_RECORDED_COPY,
+  PROXY_SBOM_NOT_RECORDED_REASON,
+  detectInventoryCompleteness,
   detectSbomFormat,
   formatHasProxySbom,
   formatSbomDocument,
@@ -119,6 +121,7 @@ describe("parseProxySbom — CycloneDX", () => {
     expect(inventory).toEqual({
       kind: "present",
       format: "cyclonedx",
+      completeness: "unknown",
       components: [
         {
           name: "jinja2",
@@ -170,6 +173,7 @@ describe("parseProxySbom — SPDX", () => {
     expect(parseProxySbom(SPDX)).toEqual({
       kind: "present",
       format: "spdx",
+      completeness: "unknown",
       components: [
         {
           name: "left-pad",
@@ -250,7 +254,83 @@ describe("parseProxySbom — an empty inventory is not an empty SBOM", () => {
 
   it("keeps the not-recorded copy forward-looking about how one appears", () => {
     expect(PROXY_SBOM_NOT_RECORDED_COPY).toContain("No SBOM recorded");
-    expect(PROXY_SBOM_NOT_RECORDED_COPY).toMatch(/next time it is pulled/);
+    expect(PROXY_SBOM_NOT_RECORDED_COPY).toMatch(
+      /next time the artifact is pulled/,
+    );
+  });
+
+  it("explains that a missing inventory on an older cache entry is expected", () => {
+    // Only digests pulled after inventory recording shipped have one, so on
+    // any existing deployment this is the state most users meet first. It must
+    // not read as a fault.
+    expect(PROXY_SBOM_NOT_RECORDED_REASON).toMatch(/cached before/i);
+    expect(PROXY_SBOM_NOT_RECORDED_REASON).toMatch(/does not indicate a problem/i);
+  });
+});
+
+describe("detectInventoryCompleteness", () => {
+  it("reads an explicit claim off the response envelope", () => {
+    expect(
+      detectInventoryCompleteness({ inventory_completeness: "partial" }, null),
+    ).toBe("partial");
+    expect(
+      detectInventoryCompleteness({ inventory_completeness: "complete" }, null),
+    ).toBe("complete");
+  });
+
+  it("reads a claim off the document root", () => {
+    expect(
+      detectInventoryCompleteness(null, { inventory_completeness: "partial" }),
+    ).toBe("partial");
+  });
+
+  it("reads a namespaced claim out of CycloneDX metadata.properties", () => {
+    expect(
+      detectInventoryCompleteness(null, {
+        metadata: {
+          properties: [
+            { name: "artifact-keeper:scanner", value: "grype" },
+            { name: "artifact-keeper:inventory_completeness", value: "partial" },
+          ],
+        },
+      }),
+    ).toBe("partial");
+  });
+
+  it("treats any non-complete value as partial rather than guessing", () => {
+    expect(
+      detectInventoryCompleteness({ inventory_completeness: "truncated" }, null),
+    ).toBe("partial");
+  });
+
+  it("reports unknown when nothing claims anything, rather than asserting complete", () => {
+    // A backend that never emits the field must not put a warning on every
+    // SBOM, and must not have completeness asserted on its behalf either.
+    expect(detectInventoryCompleteness(null, null)).toBe("unknown");
+    expect(detectInventoryCompleteness({}, {})).toBe("unknown");
+    expect(
+      detectInventoryCompleteness(null, { metadata: { properties: [] } }),
+    ).toBe("unknown");
+    expect(
+      detectInventoryCompleteness(null, {
+        metadata: { properties: [{ name: "other", value: "x" }] },
+      }),
+    ).toBe("unknown");
+  });
+
+  it("is carried on the parsed inventory", () => {
+    const inventory = parseProxySbom({
+      bomFormat: "CycloneDX",
+      metadata: {
+        properties: [{ name: "inventory_completeness", value: "partial" }],
+      },
+      components: [{ name: "x", version: "1.0" }],
+    });
+    expect(inventory).toMatchObject({ kind: "present", completeness: "partial" });
+  });
+
+  it("defaults a parsed inventory with no claim to unknown", () => {
+    expect(parseProxySbom(CYCLONEDX)).toMatchObject({ completeness: "unknown" });
   });
 });
 

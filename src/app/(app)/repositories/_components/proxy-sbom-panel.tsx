@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Download,
@@ -18,6 +19,8 @@ import {
   PROXY_SBOM_GENERATION_NOTE,
   PROXY_SBOM_INVENTORY_CAVEAT,
   PROXY_SBOM_NOT_RECORDED_COPY,
+  PROXY_SBOM_NOT_RECORDED_REASON,
+  PROXY_SBOM_PARTIAL_COPY,
   formatHasProxySbom,
   formatSbomDocument,
   parseProxySbom,
@@ -126,7 +129,18 @@ function componentColumns(): DataTableColumn<ProxySbomComponent>[] {
 }
 
 /** Explicit "nothing recorded" state. Never a zero-row table. */
-export function ProxySbomEmptyState({ message }: { message: string }) {
+export function ProxySbomEmptyState({
+  message,
+  detail,
+}: {
+  message: string;
+  /**
+   * Optional second line. Used to say that a missing inventory is expected on
+   * artifacts cached before recording was enabled — without it, the most
+   * common state on an existing deployment reads as a fault.
+   */
+  detail?: string;
+}) {
   return (
     <div
       className="flex flex-col items-center justify-center rounded-lg border border-dashed py-10 text-center"
@@ -134,6 +148,28 @@ export function ProxySbomEmptyState({ message }: { message: string }) {
     >
       <FileText className="size-10 text-muted-foreground/50 mb-3" />
       <p className="text-sm text-muted-foreground max-w-md">{message}</p>
+      {detail && (
+        <p className="mt-2 max-w-md text-xs text-muted-foreground">{detail}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Raised only when the scan explicitly reported an incomplete catalog.
+ * Silence here means "no claim was made", which the standing caveat already
+ * covers — it does not mean the inventory is certified complete.
+ */
+export function ProxySbomPartialBanner() {
+  return (
+    <div
+      className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-950/30"
+      data-testid="proxy-sbom-partial-banner"
+    >
+      <AlertTriangle className="size-4 shrink-0 mt-0.5 text-yellow-600 dark:text-yellow-500" />
+      <p className="text-xs text-yellow-800 dark:text-yellow-400">
+        {PROXY_SBOM_PARTIAL_COPY}
+      </p>
     </div>
   );
 }
@@ -251,9 +287,14 @@ export function ProxySbomPanel({
         // Covers a 404, an empty document, and an unparseable one. All three
         // mean "we have no inventory to show", which is not the same claim as
         // "this artifact has no dependencies".
-        <ProxySbomEmptyState message={PROXY_SBOM_NOT_RECORDED_COPY} />
+        <ProxySbomEmptyState
+          message={PROXY_SBOM_NOT_RECORDED_COPY}
+          detail={PROXY_SBOM_NOT_RECORDED_REASON}
+        />
       ) : (
         <div className="space-y-4">
+          {inventory.completeness === "partial" && <ProxySbomPartialBanner />}
+
           {licenses.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">

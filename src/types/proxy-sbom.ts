@@ -45,4 +45,15 @@ export type ProxySbomInventory =
       /** The format the document declared, when it declared one. */
       format: ProxySbomFormat | "unknown";
       components: ProxySbomComponent[];
+      completeness: ProxySbomCompleteness;
     };
+
+/**
+ * Whether the scan believes it cataloged everything.
+ *
+ * `unknown` is the honest default when the document says nothing: the UI must
+ * not claim completeness it cannot prove, but it also must not warn about
+ * every SBOM on a backend that never emits the field. Only an explicit
+ * non-complete value raises the banner.
+ */
+export type ProxySbomCompleteness = "complete" | "partial" | "unknown";
