@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { ApiError } from "@/lib/api/fetch";
 import type {
@@ -205,6 +206,38 @@ describe("ProxyScanSummarySection — listing", () => {
 
     opts.queryFn();
     expect(mockList).toHaveBeenCalledWith("npm-remote", { page: 1, per_page: 20 });
+  });
+
+  it("sorts by every column without throwing on a null scanned_at", async () => {
+    // `not_scanned` rows carry no timestamp, so the sort accessors have to
+    // tolerate null rather than producing an invalid comparison.
+    stubQuery({
+      data: response({
+        items: [
+          entry({ path: "b.tgz", state: "vulnerable", findings_count: 2, high_count: 2 }),
+          entry({
+            path: "a.tgz",
+            state: "not_scanned",
+            reason: "unknown",
+            scanned_at: null,
+          }),
+        ],
+        total: 2,
+      }),
+    });
+
+    render(<ProxyScanSummarySection repositoryKey="npm-remote" />);
+
+    for (const header of ["Cache path", "Status", "Findings", "Scanned"]) {
+      await userEvent.click(
+        screen.getByRole("button", { name: `Sort by ${header}` }),
+      );
+    }
+
+    expect(screen.getByText("a.tgz")).toBeInTheDocument();
+    expect(screen.getByText("b.tgz")).toBeInTheDocument();
+    // The row with no verdict still renders a placeholder, never a clean date.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
   it("shows a skeleton before the first page arrives", () => {
