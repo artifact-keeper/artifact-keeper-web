@@ -260,6 +260,54 @@ describe("ProxySbomPanel — inventory", () => {
     ).toBeInTheDocument();
   });
 
+  it("sorts by every column without throwing on absent versions and purls", async () => {
+    // markupsafe has neither a license nor a purl, so the sort accessors have
+    // to tolerate nulls rather than producing an invalid comparison.
+    stubQuery({ data: CYCLONEDX });
+
+    renderPanel();
+
+    for (const header of ["Component", "Version", "License"]) {
+      await userEvent.click(
+        screen.getByRole("button", { name: `Sort by ${header}` }),
+      );
+    }
+
+    expect(screen.getByText("jinja2")).toBeInTheDocument();
+    expect(screen.getByText("markupsafe")).toBeInTheDocument();
+  });
+
+  it("downloads the raw document under a name that identifies the artifact and format", async () => {
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:sbom");
+    const revokeObjectURL = vi.fn((_url: string) => {});
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const clicks: HTMLAnchorElement[] = [];
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicks.push(this);
+    };
+
+    try {
+      stubQuery({ data: CYCLONEDX });
+      renderPanel();
+
+      await userEvent.click(screen.getByRole("button", { name: /download/i }));
+
+      expect(clicks).toHaveLength(1);
+      expect(clicks[0].download).toBe(
+        "Jinja2-2.11.2-py2.py3-none-any.whl-proxy-sbom-cyclonedx.json",
+      );
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      // The blob carries the unwrapped document, not the response envelope.
+      const blob = createObjectURL.mock.calls[0][0];
+      expect(JSON.parse(await blob.text())).toEqual(CYCLONEDX);
+      // The object URL is released rather than leaked.
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:sbom");
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+  });
+
   it("offers a download only when there is a document to download", () => {
     stubQuery({ data: CYCLONEDX });
     renderPanel();

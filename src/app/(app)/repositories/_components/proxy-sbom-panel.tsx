@@ -108,7 +108,8 @@ function componentColumns(): DataTableColumn<ProxySbomComponent>[] {
     {
       id: "purl",
       header: "Package URL",
-      accessor: (c) => c.purl ?? "",
+      // No accessor: the column is not sortable, and DataTable reads accessors
+      // only when sorting.
       cell: (c) =>
         c.purl ? (
           <div className="flex items-center gap-1 max-w-[260px]">
