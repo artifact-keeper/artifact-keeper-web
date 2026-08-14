@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert,
   ShieldCheck,
+  ShieldQuestion,
   AlertTriangle,
   Clock,
   ChevronDown,
@@ -20,8 +21,12 @@ import { toast } from "sonner";
 import { sbomApi } from "@/lib/api/sbom";
 import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import { ArtifactScansSection } from "./artifact-scans-section";
+import { ProxyScanPanel } from "./proxy-scan-panel";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -512,6 +517,26 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       )}
 
       {/* ----------------------------------------------------------------- */}
+      {/* Proxy scan verdict (proxy-cached artifacts only) */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Proxy-cached artifacts have no `artifacts` row, so every
+          artifact-keyed source below — CVE history, scan_findings,
+          Dependency-Track — is structurally empty for them. Reading that
+          emptiness as "no vulnerabilities" is exactly the bug: a download the
+          gate returned 403 for showed a green all-clear. The digest-keyed
+          proxy verdict is the authoritative answer for this content, so it
+          leads. */}
+      {!analyzable && (
+        <>
+          <ProxyScanPanel
+            repositoryKey={artifact.repository_key}
+            path={artifact.path}
+          />
+          <Separator />
+        </>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
       {/* Header */}
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center gap-3">
@@ -526,15 +551,27 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 
       {total === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <ShieldCheck className="size-12 text-green-500/50 mb-4" />
-          <p className="text-sm text-muted-foreground">
-            No vulnerabilities detected for this artifact.
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {analyzable
-              ? "Generate an SBOM and run a security scan to check for CVEs."
-              : "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."}
-          </p>
+          {analyzable ? (
+            <>
+              <ShieldCheck className="size-12 text-green-500/50 mb-4" />
+              <p className="text-sm text-muted-foreground">
+                No vulnerabilities detected for this artifact.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Generate an SBOM and run a security scan to check for CVEs.
+              </p>
+            </>
+          ) : (
+            <>
+              <ShieldQuestion className="size-12 text-muted-foreground/50 mb-4" />
+              <p className="text-sm text-muted-foreground">
+                CVE history is not available for this artifact.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {ANALYZABLE_DISABLED_REASON}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <>
