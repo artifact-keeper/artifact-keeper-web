@@ -1367,7 +1367,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               )}
 
               <TabsContent value="sbom" className="flex-1 overflow-y-auto mt-4">
-                <SbomTabContent artifact={selectedArtifact} />
+                <SbomTabContent
+                  artifact={selectedArtifact}
+                  repositoryFormat={repoFormat}
+                />
               </TabsContent>
 
               <TabsContent value="security" className="flex-1 overflow-y-auto mt-4">
