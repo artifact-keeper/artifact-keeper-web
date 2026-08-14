@@ -60,6 +60,17 @@ vi.mock("../artifact-scans-section", () => ({
   ArtifactScansSection: () => <div data-testid="stub-artifact-scans-section" />,
 }));
 
+// Same rationale for the proxy verdict panel — it has its own query and its
+// own tests (proxy-scan-panel.test.tsx). Here we only assert that it is
+// mounted for proxy-cached artifacts and given the right lookup key.
+const proxyPanelProps = vi.hoisted(() => vi.fn());
+vi.mock("../proxy-scan-panel", () => ({
+  ProxyScanPanel: (props: { repositoryKey: string; path: string }) => {
+    proxyPanelProps(props);
+    return <div data-testid="stub-proxy-scan-panel" />;
+  },
+}));
+
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...rest }: React.ComponentProps<"button">) => (
     <button {...rest}>{children}</button>
@@ -168,5 +179,32 @@ describe("SecurityTabContent — CVE empty state (#3344)", () => {
     expect(
       screen.getByText(/No vulnerabilities detected for this artifact/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("SecurityTabContent — proxy verdict panel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubEmptyQueries();
+  });
+  afterEach(() => cleanup());
+
+  it("mounts the proxy verdict panel for proxy-cached artifacts, keyed by cache path", () => {
+    // Every artifact-keyed source on this tab is structurally empty for proxy
+    // content, so the digest-keyed verdict is the only real answer. Lookup is
+    // by cache path — a digest parameter would be a cross-tenant oracle.
+    render(<SecurityTabContent artifact={art({ analyzable: false })} />);
+
+    expect(screen.getByTestId("stub-proxy-scan-panel")).toBeInTheDocument();
+    expect(proxyPanelProps).toHaveBeenCalledWith({
+      repositoryKey: "npm-remote",
+      path: "left-pad/left-pad-1.3.0.tgz",
+    });
+  });
+
+  it("does not mount the proxy verdict panel for hosted artifacts", () => {
+    render(<SecurityTabContent artifact={art({ analyzable: true })} />);
+    expect(screen.queryByTestId("stub-proxy-scan-panel")).toBeNull();
+    expect(proxyPanelProps).not.toHaveBeenCalled();
   });
 });

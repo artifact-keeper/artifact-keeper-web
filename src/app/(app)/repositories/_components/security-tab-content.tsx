@@ -26,6 +26,7 @@ import {
   isArtifactAnalyzable,
 } from "@/lib/artifact-analyzable";
 import { ArtifactScansSection } from "./artifact-scans-section";
+import { ProxyScanPanel } from "./proxy-scan-panel";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -513,6 +514,26 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
           url={dtStatus.url}
           projectLinked={dtProjectUuid != null}
         />
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Proxy scan verdict (proxy-cached artifacts only) */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Proxy-cached artifacts have no `artifacts` row, so every
+          artifact-keyed source below — CVE history, scan_findings,
+          Dependency-Track — is structurally empty for them. Reading that
+          emptiness as "no vulnerabilities" is exactly the bug: a download the
+          gate returned 403 for showed a green all-clear. The digest-keyed
+          proxy verdict is the authoritative answer for this content, so it
+          leads. */}
+      {!analyzable && (
+        <>
+          <ProxyScanPanel
+            repositoryKey={artifact.repository_key}
+            path={artifact.path}
+          />
+          <Separator />
+        </>
       )}
 
       {/* ----------------------------------------------------------------- */}
