@@ -133,6 +133,38 @@ export function resolveProxyScanView(input: {
   return { kind: "verdict", entry: input.entry };
 }
 
+/**
+ * View state for the repository-level summary + list.
+ *
+ * Separate from {@link resolveProxyScanView} because a 404 means something
+ * different here: on a single path it means "this repository's catalog has no
+ * such row", but on the collection it means the endpoint is not mounted for
+ * this repository at all. Reporting the latter as a scan failure would be
+ * alarming and wrong.
+ */
+export type ProxyScanListView =
+  | { kind: "loading" }
+  | { kind: "unavailable" }
+  | { kind: "failure"; failure: Exclude<ProxyScanFailure, "unresolvable"> }
+  | { kind: "ready" };
+
+export function resolveProxyScanListView(input: {
+  isLoading: boolean;
+  error: unknown;
+}): ProxyScanListView {
+  if (input.error != null) {
+    const failure = classifyProxyScanError(input.error);
+    return failure === "unresolvable"
+      ? { kind: "unavailable" }
+      : { kind: "failure", failure };
+  }
+  return input.isLoading ? { kind: "loading" } : { kind: "ready" };
+}
+
+/** Shown when the endpoint is not mounted for this repository. */
+export const PROXY_SCAN_UNAVAILABLE_COPY =
+  "Proxy scan status is not available for this repository.";
+
 // ---------------------------------------------------------------------------
 // Verdict copy
 // ---------------------------------------------------------------------------
@@ -263,6 +295,33 @@ export function showsInheritedVerdict(
 ): boolean {
   if (enforcement.scan_on_proxy) return false;
   return state === "clean" || state === "vulnerable";
+}
+
+/**
+ * Formats whose proxy download path has scan-gate wiring.
+ *
+ * There is no authoritative source for this in the backend — the gate is
+ * inline call sites with no registry or capability function — so this is a
+ * hardcoded list scoped to what actually ships, matching the endpoint's own
+ * scope. Extend it in step with the gate rather than guessing wider: showing
+ * an always-empty proxy-cache panel on a format that has no gate is noise, and
+ * a format that gains a gate without gaining a row here silently loses its
+ * summary.
+ */
+const PROXY_SCANNED_FORMATS: ReadonlySet<string> = new Set(["npm", "pypi"]);
+
+/**
+ * Whether the repository Security tab should render the proxy-cache summary.
+ * Only Remote repositories have a proxy cache at all.
+ */
+export function hasProxyScanSummary(
+  repository:
+    | { repo_type?: string | null; format?: string | null }
+    | null
+    | undefined,
+): boolean {
+  if (repository?.repo_type !== "remote") return false;
+  return PROXY_SCANNED_FORMATS.has(repository.format ?? "");
 }
 
 /** Severity buckets, in descending order, dropping empty ones. */

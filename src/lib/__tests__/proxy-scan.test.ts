@@ -7,6 +7,8 @@ import {
   describeProxyVerdict,
   describeUnresolvedPath,
   formatScannedDate,
+  hasProxyScanSummary,
+  resolveProxyScanListView,
   resolveProxyScanView,
   severityBuckets,
   showsInheritedVerdict,
@@ -274,6 +276,66 @@ describe("severityBuckets", () => {
 
   it("is empty for a clean verdict", () => {
     expect(severityBuckets(entry())).toEqual([]);
+  });
+});
+
+describe("resolveProxyScanListView", () => {
+  it("reads a 404 as 'not mounted here', not as a scan failure", () => {
+    // On a single path a 404 means the catalog has no such row; on the
+    // collection it means the endpoint is not mounted for this repository.
+    expect(
+      resolveProxyScanListView({ isLoading: false, error: new ApiError(404, "") }),
+    ).toEqual({ kind: "unavailable" });
+  });
+
+  it("keeps the anonymous case distinct so the sign-in copy still renders", () => {
+    expect(
+      resolveProxyScanListView({ isLoading: false, error: new ApiError(401, "") }),
+    ).toEqual({ kind: "failure", failure: "unauthenticated" });
+  });
+
+  it("is ready only once an answer has arrived", () => {
+    expect(resolveProxyScanListView({ isLoading: true, error: null })).toEqual({
+      kind: "loading",
+    });
+    expect(resolveProxyScanListView({ isLoading: false, error: null })).toEqual({
+      kind: "ready",
+    });
+  });
+});
+
+describe("hasProxyScanSummary", () => {
+  it("is true for Remote repositories in formats with proxy gate wiring", () => {
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "npm" })).toBe(true);
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "pypi" })).toBe(true);
+  });
+
+  it("is false for repositories that have no proxy cache", () => {
+    expect(hasProxyScanSummary({ repo_type: "local", format: "npm" })).toBe(false);
+    expect(hasProxyScanSummary({ repo_type: "virtual", format: "pypi" })).toBe(
+      false,
+    );
+    expect(hasProxyScanSummary({ repo_type: "staging", format: "npm" })).toBe(
+      false,
+    );
+  });
+
+  it("is false for Remote repositories whose format has no gate", () => {
+    // An always-empty proxy-cache panel is noise, and claiming coverage a
+    // format does not have would be worse.
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "maven" })).toBe(
+      false,
+    );
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "docker" })).toBe(
+      false,
+    );
+  });
+
+  it("tolerates a repository that has not loaded yet", () => {
+    expect(hasProxyScanSummary(null)).toBe(false);
+    expect(hasProxyScanSummary(undefined)).toBe(false);
+    expect(hasProxyScanSummary({})).toBe(false);
+    expect(hasProxyScanSummary({ repo_type: "remote" })).toBe(false);
   });
 });
 

@@ -54,6 +54,7 @@ import { supportsVersioning } from "@/lib/api/versions";
 import { ArtifactVersionsSection } from "./artifact-versions-section";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
+import { ProxyScanSummarySection } from "./proxy-scan-summary";
 import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
@@ -75,6 +76,7 @@ import { RepoSettingsTab } from "./repo-settings-tab";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
 import { resolveInitialRepoTab } from "@/lib/repo-tabs";
+import { hasProxyScanSummary } from "@/lib/proxy-scan";
 import { formatBytes, REPO_TYPE_COLORS } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -86,6 +88,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectTrigger,
@@ -312,6 +315,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     severity_threshold: repoSecurity?.config?.severity_threshold ?? "high",
   };
   const currentSecForm = secForm ?? securityDefaults;
+
+  // Proxy-cache scan verdicts are readable by any authenticated user with
+  // repository visibility, matching the endpoint's own authorization — the
+  // scan-config form on this tab is the admin control, the verdicts are not.
+  // So the Security tab is no longer admin-only: a non-admin developer gets
+  // the summary, and only admins additionally get the form.
+  const showProxyScanSummary =
+    isAuthenticated && hasProxyScanSummary(repository);
+  const showSecurityTab = !!user?.is_admin || showProxyScanSummary;
 
   // --- mutations ---
   const deleteMutation = useMutation({
@@ -880,7 +892,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Tracks
               </TabsTrigger>
             )}
-          {user?.is_admin && (
+          {showSecurityTab && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
               Security
@@ -1078,9 +1090,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           )}
 
         {/* --- Security Tab --- */}
-        {user?.is_admin && (
-          <TabsContent value="security" className="mt-4">
-            {securityLoading ? (
+        {showSecurityTab && (
+          <TabsContent value="security" className="mt-4 space-y-6">
+            {/* Proxy-cache verdicts. Not admin-gated: the endpoint authorizes
+                any authenticated user with repository visibility, and gating
+                it here would leave non-admin developers with the per-artifact
+                panel and no way to see which digests are affected. */}
+            {showProxyScanSummary && (
+              <>
+                <ProxyScanSummarySection repositoryKey={repoKey} />
+                {user?.is_admin && <Separator />}
+              </>
+            )}
+            {!user?.is_admin ? null : securityLoading ? (
               <div className="space-y-3 max-w-md">
                 <Skeleton className="h-8 w-full" />
                 <Skeleton className="h-8 w-full" />
