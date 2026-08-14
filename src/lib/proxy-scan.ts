@@ -105,7 +105,15 @@ export function classifyProxyScanError(error: unknown): ProxyScanFailure {
 
 export type ProxyScanView =
   | { kind: "loading" }
-  | { kind: "failure"; failure: ProxyScanFailure }
+  /**
+   * `unresolvable` is deliberately excluded here rather than the access notice
+   * being widened to accept it: an unresolvable path is a *required* state,
+   * but it is rendered by the `unresolved` branch below as unknown-not-clean,
+   * not as an access failure. Widening the notice instead would create an
+   * unreachable branch with no copy of its own, and the type would stop
+   * proving that every failure the notice receives has wording.
+   */
+  | { kind: "failure"; failure: Exclude<ProxyScanFailure, "unresolvable"> }
   /** Resolved, but with no entry for this path — render as unknown, not clean. */
   | { kind: "unresolved" }
   | { kind: "verdict"; entry: ProxyScanEntry };
