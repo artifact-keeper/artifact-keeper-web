@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert, AlertTriangle, Clock } from "lucide-react";
 
 import { securityApi } from "@/lib/api/security";
-import { ANALYZABLE_DISABLED_REASON } from "@/lib/artifact-analyzable";
+import { PROXY_SCAN_AVAILABILITY_NOTE } from "@/lib/artifact-analyzable";
 import type { ScanResult } from "@/types/security";
 
 import { Badge } from "@/components/ui/badge";
@@ -160,7 +160,7 @@ export function ArtifactScansSection({
           <p className="text-xs text-muted-foreground mt-1">
             {analyzable
               ? "Trigger a scan from the artifact actions menu to populate this section."
-              : ANALYZABLE_DISABLED_REASON}
+              : PROXY_SCAN_AVAILABILITY_NOTE}
           </p>
         </div>
       ) : (

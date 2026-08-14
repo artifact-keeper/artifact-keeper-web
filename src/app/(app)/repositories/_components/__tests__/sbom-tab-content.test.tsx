@@ -129,7 +129,7 @@ describe("SbomTabContent — analyzable gating (artifact-keeper#2292)", () => {
     const generateButtons = screen.getAllByRole("button", { name: /generate/i });
     expect(generateButtons.length).toBeGreaterThan(0);
     for (const btn of generateButtons) expect(btn).toBeDisabled();
-    expect(screen.getByText(/proxy-cached remote artifacts/i)).toBeInTheDocument();
+    expect(screen.getByText(/proxy-cached artifacts/i)).toBeInTheDocument();
     expect(mockMutate).not.toHaveBeenCalled();
   });
 

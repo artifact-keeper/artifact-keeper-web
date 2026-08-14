@@ -8,10 +8,17 @@ import type { Artifact } from "@/types";
  *
  * #3344: this previously said "SBOM and scanning are available only for
  * artifacts hosted in this registry", which is false for scanning - proxy-cached
- * artifacts are scanned at download time when scan-on-proxy is enabled.
+ * artifacts in PyPI, npm and Docker/OCI repositories can be scanned at
+ * download time when scan-on-proxy is enabled. scan_on_proxy is a no-op for
+ * every other format, and is off by default even where it's wired up, so this
+ * intentionally does not claim scanning happens automatically.
  */
+export const PROXY_SCAN_AVAILABILITY_NOTE =
+  "Proxy-cached artifacts in PyPI, npm and Docker/OCI repositories can be scanned at download time when scan-on-proxy is enabled for the repository.";
+
 export const ANALYZABLE_DISABLED_REASON =
-  "SBOM generation and on-demand scans are available only for artifacts hosted in this registry. Proxy-cached remote artifacts are scanned automatically at download time when scan-on-proxy is enabled for the repository.";
+  "SBOM generation and on-demand scans are available only for artifacts hosted in this registry. " +
+  PROXY_SCAN_AVAILABILITY_NOTE;
 
 /**
  * Whether SBOM generation and security scanning are supported for an artifact.

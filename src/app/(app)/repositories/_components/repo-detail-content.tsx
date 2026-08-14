@@ -634,18 +634,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           {user?.is_admin && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => scanArtifactMutation.mutate(a.id)}
-                  disabled={
-                    scanArtifactMutation.isPending || !isArtifactAnalyzable(a)
-                  }
-                >
-                  <Shield className="size-3.5" />
-                </Button>
+                {/* Wrapped: a disabled button emits no pointer events, so the
+                    tooltip explaining why proxy-cached artifacts can't be
+                    scanned would never open. */}
+                <span>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => scanArtifactMutation.mutate(a.id)}
+                    disabled={
+                      scanArtifactMutation.isPending ||
+                      !isArtifactAnalyzable(a)
+                    }
+                  >
+                    <Shield className="size-3.5" />
+                  </Button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent className="max-w-sm">
                 {isArtifactAnalyzable(a) ? "Scan" : ANALYZABLE_DISABLED_REASON}
               </TooltipContent>
             </Tooltip>
