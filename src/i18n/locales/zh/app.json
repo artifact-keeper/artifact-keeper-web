@@ -1,0 +1,145 @@
+{
+  "sidebar": {
+    "groups": {
+      "overview": "概览",
+      "artifacts": "制品",
+      "integration": "集成",
+      "security": "安全",
+      "operations": "运维",
+      "administration": "管理"
+    },
+    "nav": {
+      "dashboard": "仪表盘",
+      "repositories": "仓库",
+      "packages": "软件包",
+      "builds": "构建",
+      "staging": "暂存",
+      "setupGuide": "设置指南",
+      "peers": "对等实例",
+      "replication": "复制",
+      "syncPolicies": "同步策略",
+      "plugins": "插件",
+      "formatHandlers": "格式处理器",
+      "webhooks": "Webhook",
+      "accessTokens": "访问令牌",
+      "migration": "迁移",
+      "securityDashboard": "仪表盘",
+      "scanResults": "扫描结果",
+      "blastRadius": "爆炸半径",
+      "dtProjects": "DT 项目",
+      "qualityGates": "质量门禁",
+      "qualityChecks": "质量检查",
+      "policies": "策略",
+      "licensePolicies": "许可证策略",
+      "curation": "策展",
+      "ageGate": "年龄门禁",
+      "signing": "签名",
+      "permissions": "权限",
+      "analytics": "分析",
+      "downloads": "下载",
+      "approvals": "审批",
+      "promotionRules": "提升规则",
+      "health": "健康",
+      "lifecycle": "生命周期",
+      "monitoring": "监控",
+      "telemetry": "遥测",
+      "users": "用户",
+      "groups": "组",
+      "serviceAccounts": "服务账号",
+      "rateLimits": "速率限制",
+      "auditLog": "审计日志",
+      "backups": "备份",
+      "ssoProviders": "SSO 提供商",
+      "settings": "设置"
+    }
+  },
+  "header": {
+    "brand": "Artifact Keeper",
+    "search": "搜索...",
+    "searchAria": "搜索",
+    "toggleTheme": "切换主题",
+    "userMenu": "用户菜单",
+    "profile": "个人资料",
+    "logout": "登出",
+    "signIn": "登录"
+  },
+  "demoBanner": {
+    "message": "这是一个只读演示 —— 已以 admin 登录。",
+    "deploy": "部署你自己的实例 →"
+  },
+  "passwordExpiry": {
+    "today": "你的密码今天到期。",
+    "tomorrow": "你的密码明天到期。",
+    "inDays": "你的密码将在 {days} 天后到期。",
+    "changeNow": "立即更改"
+  },
+  "instanceSwitcher": {
+    "addInstance": "添加实例",
+    "addTitle": "添加 Artifact Keeper 实例",
+    "addDescription": "连接到远程 Artifact Keeper 实例以浏览其仓库与制品。",
+    "invalidUrl": "实例 URL 无效。不允许使用私有 IP、localhost 与非 HTTP 协议。",
+    "addFailed": "添加实例失败。请检查 URL 后重试。",
+    "name": "名称",
+    "productionPlaceholder": "生产环境",
+    "url": "URL",
+    "urlPlaceholder": "https://artifacts.example.com",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "可选 —— 加密存储于服务器",
+    "cancel": "取消",
+    "adding": "添加中..."
+  },
+  "skipNav": {
+    "skipToContent": "跳转到主要内容"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "welcomeBack": "欢迎回来，{name}",
+    "description": "你的 Artifact Keeper 实例概览。",
+    "refresh": "刷新",
+    "systemHealth": "系统健康",
+    "health": {
+      "overall": "总体",
+      "database": "数据库",
+      "storage": "存储",
+      "securityScanner": "安全扫描器",
+      "searchEngine": "搜索引擎",
+      "unknown": "未知"
+    },
+    "statistics": "统计",
+    "stats": {
+      "repositories": "仓库",
+      "artifacts": "制品",
+      "users": "用户",
+      "storageUsed": "已用存储",
+      "local": "本地",
+      "remote": "远程",
+      "failedToLoad": "无法加载管理员统计。"
+    },
+    "securityOverview": "安全概览",
+    "cve": {
+      "total": "CVE 总数",
+      "open": "未解决 CVE",
+      "critical": "严重",
+      "fixed": "已修复",
+      "severityBreakdown": "严重级别分布",
+      "openLabel": "未解决",
+      "fixedLabel": "已修复",
+      "acknowledgedLabel": "已确认",
+      "avgFixTime": "平均修复时间",
+      "noData": "暂无 CVE 数据。生成 SBOM 并运行安全扫描以跟踪漏洞。"
+    },
+    "recentRepositories": "最近仓库",
+    "viewAll": "查看全部",
+    "table": {
+      "name": "名称",
+      "format": "格式",
+      "type": "类型",
+      "storage": "存储"
+    },
+    "empty": {
+      "title": "暂无仓库",
+      "description": "创建你的第一个仓库，开始使用 Artifact Keeper。",
+      "createRepo": "创建仓库"
+    }
+  }
+}

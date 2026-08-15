@@ -1,0 +1,32 @@
+{
+  "setup": {
+    "title": "设置指南",
+    "description": "配置您的构建工具和 CI/CD 流水线以与 Artifact Keeper 配合使用。",
+    "repositoriesTab": "仓库",
+    "cicdTab": "CI/CD 平台",
+    "searchPlaceholder": "搜索仓库...",
+    "all": "全部",
+    "categoryCore": "核心",
+    "categoryContainer": "容器",
+    "categoryLinux": "Linux",
+    "categoryEcosystem": "生态系统",
+    "categoryInfrastructure": "基础设施",
+    "categoryOther": "其他",
+    "noRepositories": "没有可用的仓库。请先创建仓库。",
+    "noMatch": "没有符合筛选条件的仓库。",
+    "repoCount": "{count, plural, one {# 个仓库} other {# 个仓库}}",
+    "getStarted": "开始使用",
+    "setUpTitle": "设置：{key}",
+    "setUpDescription": "配置您的工具以与 {name} 仓库配合使用。",
+    "platformIntegrationTitle": "{name} 集成",
+    "platformIntegrationDescription": "配置 {name} 以发布和消费来自 Artifact Keeper 的制品。",
+    "platformGithubActions": "GitHub Actions",
+    "platformGithubActionsDescription": "GitHub CI/CD 工作流",
+    "platformGitlabCi": "GitLab CI",
+    "platformGitlabCiDescription": "GitLab 流水线",
+    "platformJenkins": "Jenkins",
+    "platformJenkinsDescription": "Jenkins 流水线",
+    "platformAzureDevops": "Azure DevOps",
+    "platformAzureDevopsDescription": "Azure 流水线"
+  }
+}

@@ -1,6 +1,7 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies } from "next/headers";
 import { LOCALE_COOKIE, defaultLocale, locales } from "./routing";
+import { loadMessages } from "./load-messages";
 
 /**
  * Per-request i18n configuration for next-intl.
@@ -20,6 +21,10 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
-    messages: (await import(`./locales/${locale}.json`)).default,
+    // Only the always-on "core" namespaces are provided globally. Feature
+    // routes load their own groups via a nested NextIntlClientProvider (see
+    // src/i18n/load-messages.ts), so the per-page client payload stays small
+    // instead of shipping the full catalog on every request.
+    messages: await loadMessages(locale, ["core"]),
   };
 });

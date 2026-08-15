@@ -4,7 +4,8 @@
  * The app uses the "no-prefix" i18n strategy (next-intl): the locale is
  * resolved per-request from a cookie (`NEXT_LOCALE`) instead of a URL prefix,
  * so existing route paths, deep links and Playwright specs are unaffected.
- * Add a new language by adding its code here plus a `src/i18n/{locale}.json`.
+ * Add a new language by adding its code here plus the `src/i18n/locales/{locale}/`
+ * message group files (see src/i18n/groups.ts).
  */
 export const locales = ["en", "zh"] as const;
 
