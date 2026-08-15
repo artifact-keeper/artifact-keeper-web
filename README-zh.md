@@ -1,22 +1,24 @@
 # Artifact Keeper — Web
 
-面向 Artifact Keeper（企业级制品仓库）的 Next.js 15 Web 前端。
+面向 Artifact Keeper（企业级制品仓库）的 Next.js 16 Web 前端。
 
 ## 技术栈
 
-- **Next.js 15**（App Router）
-- **TypeScript 5.x**
+- **Next.js 16**（App Router）
+- **React 19** + **TypeScript 6**
 - **Tailwind CSS 4**（样式）
 - **shadcn/ui**（组件原语）
 - **TanStack Query 5**（服务端状态管理）
-- **Axios**（HTTP 客户端）
+- **next-intl**（国际化，en / zh）
+- **next-themes**（主题，brand / light / dark）
+- **@artifact-keeper/sdk**（外加 `apiFetch` 封装）对接后端 API
 - **Lucide React**（图标）
 
 ## 设计原则
 
 灵感来源于 Apple HIG、Material Design 3、Linear 与 Vercel Dashboard：
 
-1. 深色模式优先 —— 开发者工具的默认形态
+1. 品牌优先 —— 默认白/藏青主题，原始的亮色与深色主题一键可切
 2. 排版驱动的层级 —— 极简的界面装饰
 3. 充足的留白 —— 让内容呼吸
 4. 渐进式呈现 —— 先展示核心，细节按需展开
@@ -30,6 +32,37 @@ npm run dev
 ```
 
 运行于 http://localhost:3000。将 `NEXT_PUBLIC_API_URL` 配置为指向 Artifact Keeper 后端。
+
+## 本地化（i18n）
+
+UI 使用 [next-intl](https://next-intl.dev) 完整本地化为英语（`en`）和简体中文
+（`zh`）。语言环境在每个请求中通过 `NEXT_LOCALE` Cookie 解析 —— 而非 URL 前缀
+—— 因此现有的深层链接、书签与 E2E 测试都能保持不变地工作。语言切换器位于应用
+顶栏与登录页。
+
+- 消息目录以扁平 JSON 文件形式存放在 `src/i18n/locales/{en,zh}/` 中，并镜像源码
+  树结构：每个 `page.tsx` 对应一个 `page.json`，每个共享组件对应一个 `*.json`。
+  文件的名称空间就是它相对 locale 的路径。
+- `loadMessages`（仅服务端）从磁盘读取 JSON，并按路由目录加载消息；每个路由
+  layout 将共享的 `CORE_ROOTS` 与自身的路由目录组合起来，因此页面只携带其子树
+  实际渲染所需的消息。
+- 新增语言只需在 `locales/{code}/` 下镜像 `en/`，并在 `src/i18n/routing.ts` 中
+  注册该语言代码。任何缺失的键都会回退到英语，因此原始键永远不会泄露到 UI。
+- `scripts/check-i18n.mjs` 会校验 `locales/` 仅包含 JSON、en/zh 键对等，以及每个
+  消息文件都确实被某个路由 layout 加载。
+
+## 主题
+
+UI 通过 [next-themes](https://github.com/pacocoursey/next-themes) 提供三种主题
+（以 `<html>` 上的类名应用），可在应用顶栏切换：
+
+- **brand**（默认）—— 白/藏青配色（`#023795` 主色、`#4690d2` 辅色），白色顶栏，
+  以及带柔和光晕渐变的浅蓝页面背景。
+- **light** —— 原始的低饱和暖色调亮色配色，纯色背景。
+- **dark** —— 纯色深色模式。
+
+主题变量位于 `src/app/globals.css`；品牌配色及其页面渐变限定在 `.brand` 类名下，
+因此原始的亮色/深色主题逐字节保持不变。
 
 ## 部署
 
@@ -82,8 +115,12 @@ UI 使用 httpOnly 会话 Cookie 进行身份验证（`credentials: "include"`�
 
 ```
 src/
-  app/           # Next.js App Router 页面
+  app/           # Next.js App Router 页面 + globals.css（主题变量）
   components/    # 可复用的 UI 组件
+  hooks/         # 客户端 Hooks
+  i18n/          # next-intl 配置：routing、request、loadMessages、locales/
   lib/           # 工具函数、API 客户端、Hooks
-  styles/        # 全局样式、主题变量
+  middleware.ts  # 安全响应头、AK_ENFORCE_HTTPS、语言环境处理
+  providers/     # 主题 Provider、next-intl Provider 等
+  types/         # 共享 TypeScript 类型
 ```
