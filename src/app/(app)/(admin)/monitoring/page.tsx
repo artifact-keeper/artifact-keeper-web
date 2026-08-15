@@ -77,7 +77,7 @@ function formatTime(dateStr: string): string {
 }
 
 export default function MonitoringPage() {
-  const t = useTranslations("adminMonitoring");
+  const t = useTranslations("admin.monitoring");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [serviceFilter, setServiceFilter] = useState<string>("__all__");

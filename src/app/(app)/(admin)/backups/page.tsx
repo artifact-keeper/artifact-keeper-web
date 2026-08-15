@@ -147,7 +147,7 @@ const TYPE_COLORS: Record<string, string> = {
 // -- page --
 
 export default function BackupsPage() {
-  const t = useTranslations("adminBackups");
+  const t = useTranslations("admin.backups");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

@@ -102,7 +102,7 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export default function SecurityScansPage() {
-  const t = useTranslations("adminScans");
+  const t = useTranslations("admin.scans");
   const router = useRouter();
   const queryClient = useQueryClient();
 

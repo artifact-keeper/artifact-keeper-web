@@ -98,7 +98,7 @@ const ACTION_LABELS: Record<PolicyAction, string> = {
 };
 
 export default function LicensePoliciesPage() {
-  const t = useTranslations("adminLicensePolicies");
+  const t = useTranslations("admin.licensePolicies");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

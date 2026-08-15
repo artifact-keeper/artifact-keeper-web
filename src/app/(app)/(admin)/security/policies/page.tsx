@@ -112,7 +112,7 @@ function PolicyFormFields({
   repos?: Repository[];
   reposLoading?: boolean;
 }) {
-  const t = useTranslations("adminSecurityPolicies");
+  const t = useTranslations("admin.securityPolicies");
   const tSev = useTranslations("severity");
   return (
     <div className="space-y-4">
@@ -224,7 +224,7 @@ function PolicyFormFields({
 }
 
 export default function SecurityPoliciesPage() {
-  const t = useTranslations("adminSecurityPolicies");
+  const t = useTranslations("admin.securityPolicies");
   const tSev = useTranslations("severity");
   const queryClient = useQueryClient();
 

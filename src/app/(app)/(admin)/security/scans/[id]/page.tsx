@@ -102,7 +102,7 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export default function SecurityScanDetailPage() {
-  const t = useTranslations("adminScanDetail");
+  const t = useTranslations("admin.scanDetail");
   const tSev = useTranslations("severity");
   useDocumentTitle(t("title"));
   const { id } = useParams<{ id: string }>();

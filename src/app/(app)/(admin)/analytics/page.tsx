@@ -43,7 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 
 export default function AnalyticsPage() {
-  const t = useTranslations("adminAnalytics");
+  const t = useTranslations("admin.analytics");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [staleDays, setStaleDays] = useState(90);

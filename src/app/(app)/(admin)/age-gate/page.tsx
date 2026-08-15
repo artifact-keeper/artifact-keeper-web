@@ -127,7 +127,7 @@ function describeTransition(
 }
 
 export default function AgeGatePage() {
-  const t = useTranslations("adminAgeGate");
+  const t = useTranslations("admin.ageGate");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();

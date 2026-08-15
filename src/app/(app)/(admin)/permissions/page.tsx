@@ -113,7 +113,7 @@ const PRINCIPAL_TYPE_LABEL_KEYS: Record<PermissionPrincipalType, string> = {
 // -- page --
 
 export default function PermissionsPage() {
-  const t = useTranslations("adminPermissions");
+  const t = useTranslations("admin.permissions");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 

@@ -101,7 +101,7 @@ const EMPTY_CREATE: CreateUserForm = {
 // -- page --
 
 export default function UsersPage() {
-  const t = useTranslations("adminUsers");
+  const t = useTranslations("admin.users");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 

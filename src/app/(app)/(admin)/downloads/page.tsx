@@ -109,7 +109,7 @@ function truncateText(text: string, max: number): string {
 }
 
 export default function DownloadsPage() {
-  const t = useTranslations("adminDownloads");
+  const t = useTranslations("admin.downloads");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

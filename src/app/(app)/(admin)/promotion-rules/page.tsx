@@ -93,7 +93,7 @@ function toRequest(f: FormState): CreatePromotionRuleRequest {
 }
 
 export default function PromotionRulesPage() {
-  const t = useTranslations("adminPromotionRules");
+  const t = useTranslations("admin.promotionRules");
   const tSev = useTranslations("severity");
   useDocumentTitle(t("title"));
   const { user } = useAuth();

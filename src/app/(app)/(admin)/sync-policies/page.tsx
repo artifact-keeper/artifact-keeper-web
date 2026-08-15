@@ -58,7 +58,7 @@ const emptyForm: CreateSyncPolicyRequest = {
 };
 
 export default function SyncPoliciesPage() {
-  const t = useTranslations("adminSyncPolicies");
+  const t = useTranslations("admin.syncPolicies");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();

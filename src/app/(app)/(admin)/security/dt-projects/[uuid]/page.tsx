@@ -126,7 +126,7 @@ function FindingTriageRow({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
-  const t = useTranslations("adminDtProjectDetail");
+  const t = useTranslations("admin.dtProjectDetail");
   const tSev = useTranslations("severity");
   const queryClient = useQueryClient();
   const currentState = finding.analysis?.state ?? "NOT_SET";
@@ -343,7 +343,7 @@ function FindingTriageRow({
 }
 
 export default function DtProjectDetailPage() {
-  const t = useTranslations("adminDtProjectDetail");
+  const t = useTranslations("admin.dtProjectDetail");
   const tSev = useTranslations("severity");
   useDocumentTitle(t("title"));
   const { uuid } = useParams<{ uuid: string }>();

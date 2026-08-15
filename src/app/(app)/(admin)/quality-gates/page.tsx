@@ -183,7 +183,7 @@ function GradeBadge({ grade }: { grade: string }) {
 // -- Health Grade Distribution Bar --
 
 function GradeDistributionBar({ dashboard }: { dashboard: HealthDashboard }) {
-  const t = useTranslations("adminQualityGates");
+  const t = useTranslations("admin.qualityGates");
   const grades = [
     { label: "A", count: dashboard.repos_grade_a, color: "bg-emerald-500" },
     { label: "B", count: dashboard.repos_grade_b, color: "bg-blue-500" },
@@ -245,7 +245,7 @@ function GateFormDialog({
   loading: boolean;
   submitLabel: string;
 }) {
-  const t = useTranslations("adminQualityGates");
+  const t = useTranslations("admin.qualityGates");
   const toggleCheck = (check: string) => {
     setForm({
       ...form,
@@ -476,7 +476,7 @@ function GateFormDialog({
 // -- Main page --
 
 export default function QualityGatesPage() {
-  const t = useTranslations("adminQualityGates");
+  const t = useTranslations("admin.qualityGates");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

@@ -58,7 +58,7 @@ const STATUS_KEYS: Record<string, string> = {
 };
 
 export default function CurationPage() {
-  const t = useTranslations("adminCuration");
+  const t = useTranslations("admin.curation");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();

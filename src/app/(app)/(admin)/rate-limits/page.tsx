@@ -89,7 +89,7 @@ function ConfigCard({
   isLoading: boolean;
   isError: boolean;
 }) {
-  const t = useTranslations("adminRateLimits");
+  const t = useTranslations("admin.rateLimits");
   return (
     <Card>
       <CardHeader>
@@ -141,7 +141,7 @@ function ConfigCard({
 // -- Add exemption dialog --
 
 function AddExemptionDialog() {
-  const t = useTranslations("adminRateLimits");
+  const t = useTranslations("admin.rateLimits");
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<ExemptionType>("username");
@@ -270,7 +270,7 @@ function ExemptionsTable({
   isLoading: boolean;
   isError: boolean;
 }) {
-  const t = useTranslations("adminRateLimits");
+  const t = useTranslations("admin.rateLimits");
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<RateLimitExemption | null>(null);
 
@@ -406,7 +406,7 @@ function ExemptionsTable({
 // -- Page --
 
 export default function RateLimitsPage() {
-  const t = useTranslations("adminRateLimits");
+  const t = useTranslations("admin.rateLimits");
   const { user } = useAuth();
 
   const configQuery = useQuery({

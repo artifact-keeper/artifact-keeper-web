@@ -117,7 +117,7 @@ const VIOLATION_STATE_BADGE: Record<string, string> = {
 };
 
 export default function SecurityDashboardPage() {
-  const t = useTranslations("adminSecurity");
+  const t = useTranslations("admin.security");
   const tSev = useTranslations("severity");
   const router = useRouter();
   const queryClient = useQueryClient();

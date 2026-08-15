@@ -72,7 +72,7 @@ const SSO_READONLY_KEY = "ssoReadonly";
 // -- page --
 
 export default function GroupsPage() {
-  const t = useTranslations("adminGroups");
+  const t = useTranslations("admin.groups");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 

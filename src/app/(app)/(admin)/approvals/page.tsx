@@ -53,7 +53,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // -- helpers --
 
 function PolicySummary({ request }: { request: ApprovalRequest }) {
-  const t = useTranslations("adminApprovals");
+  const t = useTranslations("admin.approvals");
   const result = request.policy_result;
   if (!result) {
     return (
@@ -91,7 +91,7 @@ const STATUS_LABELS: Record<ApprovalRequest["status"], string> = {
 };
 
 function ApprovalStatusBadge({ status }: { status: ApprovalRequest["status"] }) {
-  const t = useTranslations("adminApprovals");
+  const t = useTranslations("admin.approvals");
   const colors = APPROVAL_STATUS_COLORS[status];
   return (
     <Badge
@@ -106,7 +106,7 @@ function ApprovalStatusBadge({ status }: { status: ApprovalRequest["status"] }) 
 // -- page --
 
 export default function ApprovalsPage() {
-  const t = useTranslations("adminApprovals");
+  const t = useTranslations("admin.approvals");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

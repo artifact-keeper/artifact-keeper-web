@@ -16,9 +16,23 @@ const i18nFixture = vi.hoisted(() => {
 
 vi.mock("next-intl", () => ({
   useTranslations: (ns: string) => {
+    // Resolve a possibly-dotted namespace ("admin.users") as a path into the
+    // merged catalog (nested message groups). Falls back to a flat key.
+    const resolvePath = (obj: unknown, path: string): unknown => {
+      let cur: unknown = obj;
+      for (const p of path.split(".")) {
+        if (cur && typeof cur === "object" && p in (cur as object)) {
+          cur = (cur as Record<string, unknown>)[p];
+        } else {
+          return undefined;
+        }
+      }
+      return cur;
+    };
+
     const resolveKey = (key: string): string => {
       // Support dotted nested keys ("principalType.serviceAccount").
-      const nsObj = i18nFixture.en[ns];
+      const nsObj = resolvePath(i18nFixture.en, ns);
       if (!nsObj) return key;
       const parts = key.split(".");
       let cur: unknown = nsObj;

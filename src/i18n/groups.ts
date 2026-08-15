@@ -33,7 +33,10 @@
  *   protected      (protected) layout → /access-tokens, /peers, /plugins,
  *                  /profile, /replication, /webhooks
  *
- *   admin          (admin) layout → every /admin/* page
+ *   admin          (admin) layout → every /admin/* page. The 35 admin page
+ *                  namespaces are nested under a single top-level `admin` key
+ *                  (e.g. `admin.users`, `admin.settings`, `admin.signing`),
+ *                  so components use `useTranslations("admin.users")` etc.
  *
  *   repositories   /repositories (list) and /repositories/[key] (detail):
  *                  detail dialogs, settings, labels, storage/folder storage,
@@ -89,41 +92,7 @@ export const messageGroups = {
     "webhooks"
   ],
   "admin": [
-    "adminAgeGate",
-    "adminAnalytics",
-    "adminApprovals",
-    "adminAudit",
-    "adminBackups",
-    "adminBlastRadius",
-    "adminCuration",
-    "adminCurationRules",
-    "adminDownloads",
-    "adminDtProjectDetail",
-    "adminDtProjects",
-    "adminError",
-    "adminFormatHandlers",
-    "adminGroups",
-    "adminLicensePolicies",
-    "adminLifecycle",
-    "adminMigration",
-    "adminMonitoring",
-    "adminPermissions",
-    "adminPromotionRules",
-    "adminQualityChecks",
-    "adminQualityGates",
-    "adminRateLimits",
-    "adminScanDetail",
-    "adminScans",
-    "adminSecurity",
-    "adminSecurityPolicies",
-    "adminServiceAccounts",
-    "adminSettings",
-    "adminSettingsSso",
-    "adminSigning",
-    "adminSyncPolicies",
-    "adminSystemHealth",
-    "adminTelemetry",
-    "adminUsers"
+    "admin"
   ],
   "repositories": [
     "repositories",

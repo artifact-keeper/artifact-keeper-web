@@ -60,7 +60,7 @@ interface ProjectRow {
 }
 
 export default function DtProjectsPage() {
-  const t = useTranslations("adminDtProjects");
+  const t = useTranslations("admin.dtProjects");
   const tSev = useTranslations("severity");
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");

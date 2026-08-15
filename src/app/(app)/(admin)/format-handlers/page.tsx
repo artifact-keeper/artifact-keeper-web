@@ -36,7 +36,7 @@ import {
 const QUERY_KEY = FORMAT_HANDLERS_QUERY_KEY;
 
 export default function FormatHandlersPage() {
-  const t = useTranslations("adminFormatHandlers");
+  const t = useTranslations("admin.formatHandlers");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
