@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   PackageCheck,
   Check,
@@ -50,8 +51,15 @@ import { ListTruncationNotice } from "@/components/common/list-truncation-notice
 
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
+const STATUS_KEYS: Record<string, string> = {
+  pending: "statusPending",
+  approved: "statusApproved",
+  blocked: "statusBlocked",
+};
+
 export default function CurationPage() {
-  useDocumentTitle("Package Curation");
+  const t = useTranslations("adminCuration");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -86,18 +94,18 @@ export default function CurationPage() {
     mutationFn: (id: string) => curationApi.approve(id),
     onSuccess: () => {
       invalidate();
-      toast.success("Package approved");
+      toast.success(t("approved"));
     },
-    onError: mutationErrorToast("Failed to approve package"),
+    onError: mutationErrorToast(t("approveFailed")),
   });
 
   const blockMutation = useMutation({
     mutationFn: (id: string) => curationApi.block(id),
     onSuccess: () => {
       invalidate();
-      toast.success("Package blocked");
+      toast.success(t("blocked"));
     },
-    onError: mutationErrorToast("Failed to block package"),
+    onError: mutationErrorToast(t("blockFailed")),
   });
 
   const bulkMutation = useMutation({
@@ -107,25 +115,30 @@ export default function CurationPage() {
       invalidate();
       setBulkAction(null);
       setReason("");
-      toast.success(`${count} package${count === 1 ? "" : "s"} ${action === "approve" ? "approved" : "blocked"}`);
+      toast.success(
+        t("bulkDone", {
+          count,
+          verb: action === "approve" ? t("approved") : t("blocked"),
+        }),
+      );
     },
-    onError: mutationErrorToast("Bulk action failed"),
+    onError: mutationErrorToast(t("bulkFailed")),
   });
 
   const reEvaluateMutation = useMutation({
     mutationFn: () => curationApi.reEvaluate(repoId, "block"),
     onSuccess: (count) => {
       invalidate();
-      toast.success(`Re-evaluated ${count} package${count === 1 ? "" : "s"}`);
+      toast.success(t("reEvaluated", { count }));
     },
-    onError: mutationErrorToast("Re-evaluation failed"),
+    onError: mutationErrorToast(t("reEvaluateFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <PackageCheck className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Package curation requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -156,25 +169,24 @@ export default function CurationPage() {
       <div className="flex items-center gap-2">
         <PackageCheck className="size-6" />
         <div>
-          <h1 className="text-xl font-semibold">Package Curation</h1>
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Review packages staged from upstream repositories and author the
-            rules that gate them.
+            {t("description")}
           </p>
         </div>
       </div>
 
       <Tabs defaultValue="queue" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="queue">Review Queue</TabsTrigger>
-          <TabsTrigger value="rules">Rules</TabsTrigger>
+          <TabsTrigger value="queue">{t("tabQueue")}</TabsTrigger>
+          <TabsTrigger value="rules">{t("tabRules")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="queue" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Select value={repoId} onValueChange={(v) => { setRepoId(v); setSelected(new Set()); }}>
-          <SelectTrigger className="w-64" aria-label="Staging repository">
-            <SelectValue placeholder="Select a staging repository" />
+          <SelectTrigger className="w-64" aria-label={t("stagingRepoAria")}>
+            <SelectValue placeholder={t("stagingRepoPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
             {stagingRepos.map((r) => (
@@ -184,12 +196,12 @@ export default function CurationPage() {
         </Select>
 
         <Select value={status} onValueChange={(v) => { setStatus(v); setSelected(new Set()); }}>
-          <SelectTrigger className="w-40" aria-label="Status filter">
+          <SelectTrigger className="w-40" aria-label={t("statusFilterAria")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+              <SelectItem key={s} value={s}>{t(STATUS_KEYS[s])}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -199,23 +211,23 @@ export default function CurationPage() {
           size="sm"
           disabled={!repoId || reEvaluateMutation.isPending}
           onClick={() => reEvaluateMutation.mutate()}
-          title="Re-run curation rules. Packages not matched by any rule are blocked by default."
+          title={t("reEvaluateTitle")}
         >
           <RefreshCw className={`size-4 ${reEvaluateMutation.isPending ? "animate-spin" : ""}`} />
-          Re-evaluate
+          {t("reEvaluate")}
         </Button>
 
         {selected.size > 0 && (
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+            <span className="text-sm text-muted-foreground">{t("selectedCount", { count: selected.size })}</span>
             {canApprove && (
               <Button size="sm" onClick={() => setBulkAction("approve")}>
-                <Check className="size-4" /> Approve
+                <Check className="size-4" /> {t("approve")}
               </Button>
             )}
             {canBlock && (
               <Button size="sm" variant="destructive" onClick={() => setBulkAction("block")}>
-                <Ban className="size-4" /> Block
+                <Ban className="size-4" /> {t("block")}
               </Button>
             )}
           </div>
@@ -229,7 +241,7 @@ export default function CurationPage() {
 
       {!repoId && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Select a staging repository to review its curation queue.
+          {t("selectRepoPrompt")}
         </div>
       )}
 
@@ -243,18 +255,18 @@ export default function CurationPage() {
       {repoId && !isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load the curation queue</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
 
       {repoId && !isLoading && !isError && rows.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          No {status} packages in this queue.
+          {t("noPackages", { status: t(STATUS_KEYS[status]) })}
         </div>
       )}
 
@@ -264,12 +276,12 @@ export default function CurationPage() {
             <thead className="border-b bg-muted/50 text-left">
               <tr>
                 <th className="w-10 px-3 py-2">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label={t("selectAll")} />
                 </th>
-                <th className="px-3 py-2 font-medium">Package</th>
-                <th className="px-3 py-2 font-medium">Version</th>
-                <th className="px-3 py-2 font-medium">Format</th>
-                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">{t("colPackage")}</th>
+                <th className="px-3 py-2 font-medium">{t("colVersion")}</th>
+                <th className="px-3 py-2 font-medium">{t("colFormat")}</th>
+                <th className="px-3 py-2 font-medium">{t("colStatus")}</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -280,7 +292,7 @@ export default function CurationPage() {
                     <Checkbox
                       checked={selected.has(p.id)}
                       onCheckedChange={() => toggle(p.id)}
-                      aria-label={`Select ${p.name}`}
+                      aria-label={t("selectRow", { name: p.name })}
                     />
                   </td>
                   <td className="px-3 py-2 font-medium">{p.name}</td>
@@ -291,18 +303,18 @@ export default function CurationPage() {
                       variant={p.status === "blocked" ? "destructive" : p.status === "approved" ? "secondary" : "outline"}
                       className="capitalize"
                     >
-                      {p.status}
+                      {t(STATUS_KEYS[p.status] ?? "statusPending")}
                     </Badge>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
                       {canApprove && (
-                        <Button variant="ghost" size="icon-sm" aria-label={`Approve ${p.name}`} onClick={() => approveMutation.mutate(p.id)}>
+                        <Button variant="ghost" size="icon-sm" aria-label={t("approveRow", { name: p.name })} onClick={() => approveMutation.mutate(p.id)}>
                           <Check className="size-4 text-emerald-600" />
                         </Button>
                       )}
                       {canBlock && (
-                        <Button variant="ghost" size="icon-sm" aria-label={`Block ${p.name}`} onClick={() => blockMutation.mutate(p.id)}>
+                        <Button variant="ghost" size="icon-sm" aria-label={t("blockRow", { name: p.name })} onClick={() => blockMutation.mutate(p.id)}>
                           <Ban className="size-4 text-destructive" />
                         </Button>
                       )}
@@ -320,22 +332,22 @@ export default function CurationPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {bulkAction === "approve" ? "Approve" : "Block"} {selected.size} package{selected.size === 1 ? "" : "s"}
+              {(bulkAction === "approve" ? t("approve") : t("block"))} {t("packageCount", { count: selected.size })}
             </DialogTitle>
             <DialogDescription>
-              A reason is recorded in the audit log for this bulk action.
+              {t("bulkDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
             <Input
-              placeholder="Reason (e.g. CVE-free, license OK)"
+              placeholder={t("reasonPlaceholder")}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              aria-label="Reason"
+              aria-label={t("reasonLabel")}
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setBulkAction(null); setReason(""); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setBulkAction(null); setReason(""); }}>{t("cancel")}</Button>
             <Button
               variant={bulkAction === "block" ? "destructive" : "default"}
               disabled={reason.trim() === "" || bulkMutation.isPending}
@@ -345,7 +357,7 @@ export default function CurationPage() {
               }
             >
               {bulkMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Confirm
+              {t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

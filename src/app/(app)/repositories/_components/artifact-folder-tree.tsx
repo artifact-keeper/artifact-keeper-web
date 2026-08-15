@@ -11,6 +11,7 @@ import {
   FileArchive,
   Download,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatBytes, formatNumber } from "@/lib/utils";
@@ -73,6 +74,7 @@ function TreeNodeRow({
   onFileSelect: (artifact: Artifact) => void;
   selectedPath?: string | null;
 }) {
+  const t = useTranslations("artifactTree");
   const paddingLeft = depth * INDENT_PX + BASE_PAD_PX;
 
   // --- File leaf ---
@@ -84,7 +86,7 @@ function TreeNodeRow({
         type="button"
         role="treeitem"
         aria-selected={isSelected}
-        aria-label={`File ${node.path}`}
+        aria-label={t("fileAria", { path: node.path })}
         data-testid="artifact-tree-file"
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/50",
@@ -135,6 +137,7 @@ function FolderRow({
   // Top-level folders start expanded so the browser isn't a wall of collapsed
   // rows; deeper folders start collapsed for progressive disclosure.
   const [isOpen, setIsOpen] = useState(depth === 0);
+  const t = useTranslations("artifactTree");
   const paddingLeft = depth * INDENT_PX + BASE_PAD_PX;
 
   return (
@@ -142,7 +145,7 @@ function FolderRow({
       role="treeitem"
       aria-expanded={isOpen}
       aria-selected={false}
-      aria-label={`Folder ${node.path}`}
+      aria-label={t("folderAria", { path: node.path })}
     >
       <button
         type="button"
@@ -164,7 +167,7 @@ function FolderRow({
         <span className="flex-1 truncate font-medium">{node.name}</span>
         <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
           <span>
-            {node.fileCount} {node.fileCount === 1 ? "file" : "files"}
+            {t("fileCount", { count: node.fileCount })}
           </span>
           <span>{formatBytes(node.totalSize)}</span>
         </span>
@@ -207,8 +210,10 @@ export function ArtifactFolderTree({
   onFileSelect,
   loading = false,
   selectedPath,
-  emptyMessage = "No artifacts in this repository.",
+  emptyMessage,
 }: ArtifactFolderTreeProps) {
+  const t = useTranslations("artifactTree");
+  const resolvedEmpty = emptyMessage ?? t("empty");
   const tree = useMemo(() => buildArtifactTree(artifacts), [artifacts]);
   const totalFiles = useMemo(() => countTreeFiles(tree), [tree]);
 
@@ -231,7 +236,7 @@ export function ArtifactFolderTree({
         data-testid="artifact-tree-empty"
       >
         <Folder className="mb-2 size-8 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        <p className="text-sm text-muted-foreground">{resolvedEmpty}</p>
       </div>
     );
   }
@@ -241,15 +246,15 @@ export function ArtifactFolderTree({
       <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <FolderOpen className="size-3.5" aria-hidden="true" />
-          Folder tree
+          {t("folderTree")}
         </span>
         <span>
-          {totalFiles} {totalFiles === 1 ? "file" : "files"}
+          {t("fileCount", { count: totalFiles })}
         </span>
       </div>
       <div
         role="tree"
-        aria-label="Repository folder tree"
+        aria-label={t("treeAria")}
         data-testid="artifact-folder-tree"
         className="py-1"
       >

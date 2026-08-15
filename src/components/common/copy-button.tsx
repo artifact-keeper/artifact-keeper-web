@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Check, Copy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,8 +17,10 @@ interface CopyButtonProps {
   label?: string;
 }
 
-export function CopyButton({ value, className, label = "Copy" }: CopyButtonProps) {
+export function CopyButton({ value, className, label }: CopyButtonProps) {
+  const t = useTranslations("common");
   const [copied, setCopied] = useState(false);
+  const resolvedLabel = label ?? t("copy");
 
   const handleCopy = useCallback(async () => {
     try {
@@ -43,10 +46,10 @@ export function CopyButton({ value, className, label = "Copy" }: CopyButtonProps
           ) : (
             <Copy className="size-3" />
           )}
-          <span className="sr-only">{label}</span>
+          <span className="sr-only">{resolvedLabel}</span>
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{copied ? "Copied!" : label}</TooltipContent>
+      <TooltipContent>{copied ? t("copied") : resolvedLabel}</TooltipContent>
     </Tooltip>
   );
 }

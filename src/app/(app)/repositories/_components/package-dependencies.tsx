@@ -5,6 +5,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -177,6 +179,7 @@ interface PackageDependenciesProps {
 }
 
 export function PackageDependencies({ format, metadata }: PackageDependenciesProps) {
+  const t = useTranslations("packageDependencies");
   const deps = extractDependencies(format, metadata);
 
   if (deps.length === 0) {
@@ -184,10 +187,10 @@ export function PackageDependencies({ format, metadata }: PackageDependenciesPro
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <AlertCircle className="size-8 text-muted-foreground/40 mb-2" />
         <p className="text-sm text-muted-foreground">
-          No dependency information available
+          {t("noDepsTitle")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Dependencies are extracted from package metadata when available.
+          {t("noDepsHint")}
         </p>
       </div>
     );
@@ -201,17 +204,17 @@ export function PackageDependencies({ format, metadata }: PackageDependenciesPro
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <PackageIcon className="size-4" />
         <span>
-          {deps.length} dependenc{deps.length === 1 ? "y" : "ies"}
-          {scopes.length > 1 && ` across ${scopes.length} scopes`}
+          {t("count", { count: deps.length })}
+          {scopes.length > 1 && t("acrossScopes", { count: scopes.length })}
         </span>
       </div>
 
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Package</TableHead>
-            <TableHead>Version</TableHead>
-            <TableHead>Scope</TableHead>
+            <TableHead>{t("package")}</TableHead>
+            <TableHead>{t("version")}</TableHead>
+            <TableHead>{t("scope")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

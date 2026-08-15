@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Folder, Info, Layers } from "lucide-react";
 
 import { treeApi } from "@/lib/api/tree";
@@ -93,6 +94,7 @@ export function RepoFolderStoragePanel({
   repository,
   isAdmin,
 }: RepoFolderStoragePanelProps) {
+  const t = useTranslations("folderStorage");
   const repoKey = repository.key;
 
   const { data: nodes } = useQuery({
@@ -123,9 +125,9 @@ export function RepoFolderStoragePanel({
   return (
     <Card data-testid="folder-storage-panel">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <CardTitle className="text-base">Per-folder storage</CardTitle>
+        <CardTitle className="text-base">{t("title")}</CardTitle>
         <Badge variant="outline" className="text-xs font-normal">
-          Deduplicated
+          {t("deduplicated")}
         </Badge>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -149,21 +151,21 @@ export function RepoFolderStoragePanel({
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {dedup.logical_bytes != null && (
                     <Figure
-                      label="Logical"
+                      label={t("logical")}
                       value={formatBytes(dedup.logical_bytes)}
                     />
                   )}
                   {dedup.physical_bytes != null && (
                     <Figure
-                      label="Physical"
+                      label={t("physical")}
                       value={formatBytes(dedup.physical_bytes)}
                     />
                   )}
                   {dedup.unique_bytes != null && (
-                    <Figure label="Unique" value={formatBytes(unique)} />
+                    <Figure label={t("unique")} value={formatBytes(unique)} />
                   )}
                   {dedup.shared_bytes != null && (
-                    <Figure label="Shared" value={formatBytes(shared)} />
+                    <Figure label={t("shared")} value={formatBytes(shared)} />
                   )}
                 </div>
                 {(dedup.unique_bytes != null || dedup.shared_bytes != null) && (
@@ -172,7 +174,7 @@ export function RepoFolderStoragePanel({
                 {dedup.dedup_ratio != null && (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Layers className="size-3.5" />
-                    {dedup.dedup_ratio.toFixed(2)}× deduplication
+                    {t("dedupRatio", { ratio: dedup.dedup_ratio.toFixed(2) })}
                   </p>
                 )}
               </li>
@@ -182,9 +184,7 @@ export function RepoFolderStoragePanel({
         {isAdmin && (
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            &ldquo;Shared&rdquo; bytes are blobs a folder has in common with
-            other folders or repositories; reclaiming them requires the last
-            referencing path to release them.
+            {t("sharedExplanation")}
           </p>
         )}
       </CardContent>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -42,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 
 export default function AnalyticsPage() {
+  const t = useTranslations("adminAnalytics");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [staleDays, setStaleDays] = useState(90);
@@ -79,19 +81,19 @@ export default function AnalyticsPage() {
   const snapshotMutation = useMutation({
     mutationFn: () => analyticsApi.captureSnapshot(),
     onSuccess: () => {
-      toast.success("Snapshot captured successfully");
+      toast.success(t("snapshotCaptured"));
       queryClient.invalidateQueries({ queryKey: ["analytics-growth"] });
       queryClient.invalidateQueries({ queryKey: ["analytics-trend"] });
     },
-    onError: mutationErrorToast("Failed to capture snapshot"),
+    onError: mutationErrorToast(t("snapshotFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Analytics" />
+        <PageHeader title={t("accessTitle")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -100,8 +102,8 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Storage Analytics"
-        description="Storage growth, repository breakdown, and artifact usage insights."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex gap-2">
             <Button
@@ -112,7 +114,7 @@ export default function AnalyticsPage() {
               }
             >
               <RefreshCw className="size-4 mr-1.5" />
-              Refresh
+              {t("refresh")}
             </Button>
             <Button
               size="sm"
@@ -120,7 +122,7 @@ export default function AnalyticsPage() {
               disabled={snapshotMutation.isPending}
             >
               <Camera className="size-4 mr-1.5" />
-              Capture Snapshot
+              {t("captureSnapshot")}
             </Button>
           </div>
         }
@@ -137,13 +139,13 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard
             icon={HardDrive}
-            label="Total Storage"
+            label={t("statTotalStorage")}
             value={formatBytes(growth.storage_bytes_end)}
             color="blue"
           />
           <StatCard
             icon={TrendingUp}
-            label="Growth"
+            label={t("statGrowth")}
             value={
               growth.storage_growth_percent >= 0
                 ? `+${growth.storage_growth_percent.toFixed(1)}%`
@@ -153,13 +155,13 @@ export default function AnalyticsPage() {
           />
           <StatCard
             icon={Package}
-            label="Artifacts"
+            label={t("statArtifacts")}
             value={growth.artifacts_end.toLocaleString()}
             color="purple"
           />
           <StatCard
             icon={Clock}
-            label="Stale Artifacts"
+            label={t("statStaleArtifacts")}
             value={staleArtifacts?.length ?? "..."}
             color={
               (staleArtifacts?.length ?? 0) > 10 ? "yellow" : "green"
@@ -172,19 +174,19 @@ export default function AnalyticsPage() {
         <TabsList>
           <TabsTrigger value="breakdown">
             <BarChart3 className="size-4 mr-1.5" />
-            Breakdown
+            {t("tabBreakdown")}
           </TabsTrigger>
           <TabsTrigger value="trend">
             <TrendingUp className="size-4 mr-1.5" />
-            Storage Trend
+            {t("tabTrend")}
           </TabsTrigger>
           <TabsTrigger value="downloads">
             <Download className="size-4 mr-1.5" />
-            Downloads
+            {t("tabDownloads")}
           </TabsTrigger>
           <TabsTrigger value="stale">
             <Clock className="size-4 mr-1.5" />
-            Stale Artifacts
+            {t("tabStale")}
           </TabsTrigger>
         </TabsList>
 
@@ -193,10 +195,10 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Storage by Repository
+                {t("breakdownTitle")}
               </CardTitle>
               <CardDescription>
-                Storage usage breakdown across all repositories.
+                {t("breakdownDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
@@ -210,20 +212,20 @@ export default function AnalyticsPage() {
                 <div className="px-6 pb-4">
                   <EmptyState
                     icon={BarChart3}
-                    title="No data yet"
-                    description="Storage breakdown will appear after artifacts are uploaded."
+                    title={t("noDataTitle")}
+                    description={t("noDataDescription")}
                   />
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repository</TableHead>
-                      <TableHead>Format</TableHead>
-                      <TableHead className="text-right">Artifacts</TableHead>
-                      <TableHead className="text-right">Storage</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
-                      <TableHead>Last Upload</TableHead>
+                      <TableHead>{t("colRepository")}</TableHead>
+                      <TableHead>{t("colFormat")}</TableHead>
+                      <TableHead className="text-right">{t("colArtifacts")}</TableHead>
+                      <TableHead className="text-right">{t("colStorage")}</TableHead>
+                      <TableHead className="text-right">{t("colDownloads")}</TableHead>
+                      <TableHead>{t("colLastUpload")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -247,7 +249,7 @@ export default function AnalyticsPage() {
                         <TableCell className="text-muted-foreground">
                           {row.last_upload_at
                             ? formatDate(row.last_upload_at)
-                            : "Never"}
+                            : t("never")}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -263,10 +265,10 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Storage Over Time
+                {t("trendTitle")}
               </CardTitle>
               <CardDescription>
-                Daily snapshots of total storage usage.
+                {t("trendDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
@@ -280,19 +282,19 @@ export default function AnalyticsPage() {
                 <div className="px-6 pb-4">
                   <EmptyState
                     icon={TrendingUp}
-                    title="No trend data yet"
-                    description="Snapshots are captured daily. Data will appear within 24 hours."
+                    title={t("noTrendTitle")}
+                    description={t("noTrendDescription")}
                   />
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Repos</TableHead>
-                      <TableHead className="text-right">Artifacts</TableHead>
-                      <TableHead className="text-right">Storage</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <TableHead>{t("colDate")}</TableHead>
+                      <TableHead className="text-right">{t("colRepos")}</TableHead>
+                      <TableHead className="text-right">{t("colArtifacts")}</TableHead>
+                      <TableHead className="text-right">{t("colStorage")}</TableHead>
+                      <TableHead className="text-right">{t("colDownloads")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -326,9 +328,9 @@ export default function AnalyticsPage() {
         <TabsContent value="downloads" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Download Trends</CardTitle>
+              <CardTitle className="text-base">{t("downloadsTitle")}</CardTitle>
               <CardDescription>
-                Daily download counts over the selected period.
+                {t("downloadsDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
@@ -342,16 +344,16 @@ export default function AnalyticsPage() {
                 <div className="px-6 pb-4">
                   <EmptyState
                     icon={Download}
-                    title="No download data yet"
-                    description="Download trends will appear as artifacts are downloaded."
+                    title={t("noDownloadsTitle")}
+                    description={t("noDownloadsDescription")}
                   />
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <TableHead>{t("colDate")}</TableHead>
+                      <TableHead className="text-right">{t("colDownloads")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -378,9 +380,9 @@ export default function AnalyticsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Stale Artifacts</CardTitle>
+                  <CardTitle className="text-base">{t("staleTitle")}</CardTitle>
                   <CardDescription>
-                    Artifacts not downloaded in {staleDays}+ days.
+                    {t("staleDescription", { days: staleDays })}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -408,19 +410,19 @@ export default function AnalyticsPage() {
                 <div className="px-6 pb-4">
                   <EmptyState
                     icon={Clock}
-                    title="No stale artifacts"
-                    description={`All artifacts have been downloaded within the last ${staleDays} days.`}
+                    title={t("noStaleTitle")}
+                    description={t("noStaleDescription", { days: staleDays })}
                   />
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Repository</TableHead>
-                      <TableHead className="text-right">Size</TableHead>
-                      <TableHead className="text-right">Days Stale</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <TableHead>{t("colName")}</TableHead>
+                      <TableHead>{t("colRepository")}</TableHead>
+                      <TableHead className="text-right">{t("colSize")}</TableHead>
+                      <TableHead className="text-right">{t("colDaysStale")}</TableHead>
+                      <TableHead className="text-right">{t("colDownloads")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

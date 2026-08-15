@@ -17,12 +17,20 @@
  *  - npm scope policy (#2424)
  */
 
+import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import type { DebianRepoConfig } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+
+/** Shared rich-text tags for next-intl messages containing markup. */
+const richTags = {
+  strong: (chunks: ReactNode) => <strong>{chunks}</strong>,
+  code: (chunks: ReactNode) => <code>{chunks}</code>,
+};
 
 // ---------------------------------------------------------------------------
 // Value shapes (string-based so every field stays a controlled input)
@@ -201,16 +209,13 @@ export function RpmTrustedKeyField({
   onRemove,
   removePending = false,
 }: RpmTrustedKeyFieldProps) {
+  const t = useTranslations("formatConfig");
   const id = `${idPrefix}-rpm-gpg-key`;
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Trusted GPG Public Key</Label>
+      <Label htmlFor={id}>{t("rpmLabel")}</Label>
       <p className="text-xs text-muted-foreground">
-        ASCII-armored OpenPGP <strong>public</strong> key trusted to sign this
-        RPM remote&apos;s repository metadata (<code>repomd.xml</code>). When
-        set, curation sync verifies the upstream signature before ingesting.
-        This is the proxy-verification trusted key, not a server-side signing
-        key.
+        {t.rich("rpmDescription", richTags)}
       </p>
       {hasExistingKey && (
         <div
@@ -218,7 +223,7 @@ export function RpmTrustedKeyField({
           data-testid={`${idPrefix}-rpm-gpg-status`}
         >
           <p className="text-xs text-muted-foreground">
-            A trusted key is configured. Entering a new key below replaces it.
+            {t("rpmExisting")}
           </p>
           {onRemove && (
             <Button
@@ -228,7 +233,7 @@ export function RpmTrustedKeyField({
               disabled={removePending}
               onClick={onRemove}
             >
-              {removePending ? "Removing..." : "Remove"}
+              {removePending ? t("removing") : t("remove")}
             </Button>
           )}
         </div>
@@ -263,6 +268,7 @@ export function DebianConfigFields({
   onChange,
   idPrefix,
 }: DebianConfigFieldsProps) {
+  const t = useTranslations("formatConfig");
   const set = (patch: Partial<DebianConfigValue>) =>
     onChange({ ...value, ...patch });
   const fid = (name: string) => `${idPrefix}-debian-${name}`;
@@ -271,16 +277,14 @@ export function DebianConfigFields({
     <div className="space-y-4">
       <div className="space-y-3">
         <p className="text-xs font-medium text-muted-foreground">
-          Proxy filters
+          {t("proxyFilters")}
         </p>
         <p className="text-xs text-muted-foreground">
-          Comma-separated allowlists for a Debian proxy. Leave empty (or use{" "}
-          <code>*</code>) to proxy everything. Architecture-independent{" "}
-          (<code>all</code>) packages are always permitted.
+          {t.rich("proxyFiltersHint", richTags)}
         </p>
         <div className="space-y-2">
           <Label htmlFor={fid("distributions")}>
-            Distributions (suites / codenames)
+            {t("distributions")}
           </Label>
           <Input
             id={fid("distributions")}
@@ -290,7 +294,7 @@ export function DebianConfigFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={fid("components")}>Components</Label>
+          <Label htmlFor={fid("components")}>{t("components")}</Label>
           <Input
             id={fid("components")}
             placeholder="main, contrib, non-free"
@@ -299,7 +303,7 @@ export function DebianConfigFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={fid("architectures")}>Architectures</Label>
+          <Label htmlFor={fid("architectures")}>{t("architectures")}</Label>
           <Input
             id={fid("architectures")}
             placeholder="amd64, arm64"
@@ -311,13 +315,13 @@ export function DebianConfigFields({
 
       <div className="space-y-3">
         <p className="text-xs font-medium text-muted-foreground">
-          Release metadata
+          {t("releaseMetadata")}
         </p>
         <p className="text-xs text-muted-foreground">
-          Optional fields written into generated <code>Release</code> files.
+          {t.rich("releaseMetadataHint", richTags)}
         </p>
         <div className="space-y-2">
-          <Label htmlFor={fid("origin")}>Origin</Label>
+          <Label htmlFor={fid("origin")}>{t("origin")}</Label>
           <Input
             id={fid("origin")}
             placeholder="artifact-keeper"
@@ -326,7 +330,7 @@ export function DebianConfigFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={fid("label")}>Label</Label>
+          <Label htmlFor={fid("label")}>{t("label")}</Label>
           <Input
             id={fid("label")}
             placeholder="artifact-keeper"
@@ -335,7 +339,7 @@ export function DebianConfigFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={fid("version")}>Version</Label>
+          <Label htmlFor={fid("version")}>{t("version")}</Label>
           <Input
             id={fid("version")}
             placeholder="1.0"
@@ -344,7 +348,7 @@ export function DebianConfigFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={fid("description")}>Description</Label>
+          <Label htmlFor={fid("description")}>{t("description")}</Label>
           <Input
             id={fid("description")}
             placeholder="Internal Debian mirror"
@@ -374,6 +378,7 @@ export function NpmScopePolicyFields({
   onChange,
   idPrefix,
 }: NpmScopePolicyFieldsProps) {
+  const t = useTranslations("formatConfig");
   const set = (patch: Partial<NpmScopePolicyValue>) =>
     onChange({ ...value, ...patch });
   const scopesId = `${idPrefix}-npm-scopes`;
@@ -383,7 +388,7 @@ export function NpmScopePolicyFields({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor={scopesId}>Allowed scopes</Label>
+        <Label htmlFor={scopesId}>{t("allowedScopes")}</Label>
         <Textarea
           id={scopesId}
           placeholder="@acme, @internal"
@@ -392,12 +397,11 @@ export function NpmScopePolicyFields({
           rows={2}
         />
         <p className="text-xs text-muted-foreground">
-          Comma or newline-separated <code>@scope</code> literals. Empty leaves
-          the repository unrestricted by scope.
+          {t.rich("allowedScopesHint", richTags)}
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={patternsId}>Allowed name patterns</Label>
+        <Label htmlFor={patternsId}>{t("allowedPatterns")}</Label>
         <Textarea
           id={patternsId}
           placeholder="@acme*, internal-*"
@@ -406,15 +410,14 @@ export function NpmScopePolicyFields({
           rows={2}
         />
         <p className="text-xs text-muted-foreground">
-          Additive glob patterns (<code>*</code>/<code>?</code>). A name is
-          allowed if its scope is allowed OR any pattern matches.
+          {t.rich("allowedPatternsHint", richTags)}
         </p>
       </div>
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <Label htmlFor={unscopedId}>Allow unscoped names</Label>
+          <Label htmlFor={unscopedId}>{t("allowUnscoped")}</Label>
           <p className="text-xs text-muted-foreground">
-            Permit bare (non-<code>@scope</code>) package names to resolve.
+            {t.rich("allowUnscopedHint", richTags)}
           </p>
         </div>
         <Switch

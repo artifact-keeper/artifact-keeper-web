@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Download, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 
@@ -86,6 +87,7 @@ function detailsPreview(details: unknown): string {
 }
 
 export default function AuditLogPage() {
+  const t = useTranslations("adminAudit");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -143,7 +145,7 @@ export default function AuditLogPage() {
   function applyFilters() {
     const uid = draft.user_id.trim();
     if (uid && !isValidUuid(uid)) {
-      setFilterError("User ID must be a UUID");
+      setFilterError(t("userIdInvalid"));
       return;
     }
     setFilterError(null);
@@ -167,7 +169,7 @@ export default function AuditLogPage() {
     try {
       const result = await auditApi.export(appliedQuery);
       if (result.items.length === 0) {
-        toast.info("No audit events match the current filters.");
+        toast.info(t("noEventsMatch"));
         return;
       }
       const content =
@@ -191,15 +193,16 @@ export default function AuditLogPage() {
       const n = result.items.length.toLocaleString();
       if (result.truncated) {
         toast.warning(
-          `Exported the first ${n} of ${result.total.toLocaleString()} matching events. Narrow the filters to export the rest.`
+          t("exportTruncated", {
+            n,
+            total: result.total.toLocaleString(),
+          }),
         );
       } else {
-        toast.success(
-          `Exported ${n} audit event${result.items.length === 1 ? "" : "s"}.`
-        );
+        toast.success(t("exportDone", { count: result.items.length }));
       }
     } catch {
-      toast.error("Failed to export the audit log. Please try again.");
+      toast.error(t("exportFailed"));
     } finally {
       setIsExporting(false);
     }
@@ -208,7 +211,7 @@ export default function AuditLogPage() {
   const columns: DataTableColumn<AuditLogItem>[] = [
     {
       id: "created_at",
-      header: "Time",
+      header: t("colTime"),
       accessor: (r) => r.created_at,
       cell: (r) => (
         <span className="whitespace-nowrap text-sm" title={r.created_at}>
@@ -219,10 +222,10 @@ export default function AuditLogPage() {
     },
     {
       id: "actor",
-      header: "Actor",
+      header: t("colActor"),
       cell: (r) => {
         if (!r.user_id) {
-          return <span className="text-muted-foreground">system</span>;
+          return <span className="text-muted-foreground">{t("system")}</span>;
         }
         const username = usernameById.get(r.user_id);
         return username ? (
@@ -236,14 +239,14 @@ export default function AuditLogPage() {
     },
     {
       id: "action",
-      header: "Action",
+      header: t("colAction"),
       accessor: (r) => r.action,
       cell: (r) => <Badge variant="outline">{r.action}</Badge>,
       sortable: true,
     },
     {
       id: "resource",
-      header: "Resource",
+      header: t("colResource"),
       cell: (r) => (
         <span className="flex items-center gap-1.5">
           <Badge variant="secondary">{r.resource_type}</Badge>
@@ -257,14 +260,14 @@ export default function AuditLogPage() {
     },
     {
       id: "ip_address",
-      header: "IP",
+      header: t("colIp"),
       cell: (r) => (
         <span className="font-mono text-xs">{r.ip_address ?? "—"}</span>
       ),
     },
     {
       id: "details",
-      header: "Details",
+      header: t("colDetails"),
       className: "max-w-[280px]",
       cell: (r) => (
         <span
@@ -286,11 +289,11 @@ export default function AuditLogPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Audit Log" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view the audit log.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -300,8 +303,8 @@ export default function AuditLogPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Audit Log"
-        description="Browse recorded audit events: logins, user and repository changes, token lifecycle, and other administrative actions."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <ScrollText className="size-5 text-muted-foreground" />
@@ -311,14 +314,14 @@ export default function AuditLogPage() {
                   variant="outline"
                   size="sm"
                   disabled={isExporting || noEvents}
-                  aria-label="Export audit log"
+                  aria-label={t("exportAria")}
                 >
                   {isExporting ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
                     <Download className="size-4" />
                   )}
-                  Export
+                  {t("export")}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -326,26 +329,26 @@ export default function AuditLogPage() {
                   onSelect={() => handleExport("csv")}
                   disabled={isExporting}
                 >
-                  Export as CSV
+                  {t("exportCsv")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => handleExport("json")}
                   disabled={isExporting}
                 >
-                  Export as JSON
+                  {t("exportJson")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onSelect={() => handleExport("ndjson")}
                   disabled={isExporting}
                 >
-                  Export as NDJSON (SIEM schema v1)
+                  {t("exportNdjson")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Refresh audit log"
+              aria-label={t("refreshAria")}
               onClick={() =>
                 queryClient.invalidateQueries({ queryKey: AUDIT_LOG_QUERY_KEY })
               }
@@ -362,7 +365,7 @@ export default function AuditLogPage() {
       <div className="space-y-2">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <Label htmlFor="audit-filter-action">Action</Label>
+            <Label htmlFor="audit-filter-action">{t("filterAction")}</Label>
             <Input
               id="audit-filter-action"
               className="w-[180px]"
@@ -373,7 +376,7 @@ export default function AuditLogPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="audit-filter-resource-type">Resource type</Label>
+            <Label htmlFor="audit-filter-resource-type">{t("filterResourceType")}</Label>
             <Input
               id="audit-filter-resource-type"
               className="w-[160px]"
@@ -386,11 +389,11 @@ export default function AuditLogPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="audit-filter-user-id">User ID</Label>
+            <Label htmlFor="audit-filter-user-id">{t("filterUserId")}</Label>
             <Input
               id="audit-filter-user-id"
               className="w-[280px] font-mono"
-              placeholder="UUID of the acting user"
+              placeholder={t("userIdPlaceholder")}
               value={draft.user_id}
               onChange={(e) => {
                 setDraft({ ...draft, user_id: e.target.value });
@@ -402,7 +405,7 @@ export default function AuditLogPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="audit-filter-from">From</Label>
+            <Label htmlFor="audit-filter-from">{t("filterFrom")}</Label>
             <Input
               id="audit-filter-from"
               type="date"
@@ -412,7 +415,7 @@ export default function AuditLogPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="audit-filter-to">To</Label>
+            <Label htmlFor="audit-filter-to">{t("filterTo")}</Label>
             <Input
               id="audit-filter-to"
               type="date"
@@ -421,10 +424,10 @@ export default function AuditLogPage() {
               onChange={(e) => setDraft({ ...draft, to: e.target.value })}
             />
           </div>
-          <Button onClick={applyFilters}>Apply Filters</Button>
+          <Button onClick={applyFilters}>{t("applyFilters")}</Button>
           {hasAppliedFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("clearFilters")}
             </Button>
           )}
         </div>
@@ -442,10 +445,9 @@ export default function AuditLogPage() {
       {/* Data table */}
       {isError ? (
         <Alert variant="destructive">
-          <AlertTitle>Audit log unavailable</AlertTitle>
+          <AlertTitle>{t("unavailableTitle")}</AlertTitle>
           <AlertDescription>
-            Unable to load audit events. This server may not support the audit
-            query endpoint yet, or the request failed.
+            {t("unavailableDescription")}
           </AlertDescription>
         </Alert>
       ) : (
@@ -462,7 +464,7 @@ export default function AuditLogPage() {
           }}
           pageSizeOptions={[25, 50, 100, 200]}
           loading={isLoading}
-          emptyMessage="No audit events found."
+          emptyMessage={t("empty")}
           rowKey={(r) => r.id}
         />
       )}

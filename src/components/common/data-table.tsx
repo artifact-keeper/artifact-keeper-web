@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableHeader,
@@ -52,12 +53,14 @@ export function DataTable<T>({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
   loading = false,
-  emptyMessage = "No data found.",
+  emptyMessage,
   onRowClick,
   rowKey,
 }: DataTableProps<T>) {
+  const t = useTranslations("common");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const resolvedEmptyMessage = emptyMessage ?? t("noDataFound");
 
   const handleSort = useCallback(
     (colId: string) => {
@@ -99,7 +102,7 @@ export function DataTable<T>({
   if (loading) {
     return (
       <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
-        <span className="sr-only">Loading data</span>
+        <span className="sr-only">{t("loadingData")}</span>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -143,7 +146,7 @@ export function DataTable<T>({
           </TableHeader>
         </Table>
         <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-          {emptyMessage}
+          {resolvedEmptyMessage}
         </div>
       </div>
     );
@@ -175,7 +178,7 @@ export function DataTable<T>({
                       <button
                         className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors -ml-2 px-2 py-1 rounded-md hover:bg-accent"
                         onClick={() => handleSort(col.id)}
-                        aria-label={`Sort by ${col.header}`}
+                        aria-label={`${t("sortBy")} ${col.header}`}
                       >
                         {col.header}
                         {isSorted ? (

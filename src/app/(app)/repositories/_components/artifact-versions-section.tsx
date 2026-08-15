@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Download, History } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export function ArtifactVersionsSection({
   repoKey,
   artifact,
 }: ArtifactVersionsSectionProps) {
+  const t = useTranslations("artifactVersions");
   const {
     data,
     isLoading,
@@ -87,7 +89,7 @@ export function ArtifactVersionsSection({
       link.click();
       document.body.removeChild(link);
     } catch {
-      toast.error(`Could not start download for revision ${entry.revision}`);
+      toast.error(t("downloadFailed", { revision: entry.revision }));
     }
   };
 
@@ -106,7 +108,7 @@ export function ArtifactVersionsSection({
       <Alert data-testid="artifact-versions-error">
         <History className="size-4" />
         <AlertDescription>
-          Version history is unavailable for this artifact right now.
+          {t("unavailable")}
         </AlertDescription>
       </Alert>
     );
@@ -121,11 +123,10 @@ export function ArtifactVersionsSection({
         data-testid="artifact-versions-empty"
       >
         <p className="text-sm text-muted-foreground">
-          No version history recorded for this artifact.
+          {t("empty")}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          History starts with the first re-upload after versioning is enabled;
-          until then the single stored copy is downloadable as usual.
+          {t("emptyDetail")}
         </p>
       </div>
     );
@@ -140,21 +141,21 @@ export function ArtifactVersionsSection({
   return (
     <div className="space-y-3" data-testid="artifact-versions-section">
       <p className="text-xs text-muted-foreground">
-        Every different-bytes upload of this path is kept as an immutable
-        revision. Downloading a revision pins the exact stored bytes via{" "}
-        <code>?version=</code>.
+        {t.rich("description", {
+          code: (chunks) => <code>{chunks}</code>,
+        })}
       </p>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Revision</TableHead>
-            <TableHead>Label</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead>SHA-256</TableHead>
-            {showUploader && <TableHead>Uploaded by</TableHead>}
-            <TableHead>Stored</TableHead>
+            <TableHead>{t("revision")}</TableHead>
+            <TableHead>{t("label")}</TableHead>
+            <TableHead>{t("size")}</TableHead>
+            <TableHead>{t("sha256")}</TableHead>
+            {showUploader && <TableHead>{t("uploadedBy")}</TableHead>}
+            <TableHead>{t("stored")}</TableHead>
             <TableHead className="text-right">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("actions")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -166,7 +167,7 @@ export function ArtifactVersionsSection({
                   <span className="text-sm font-medium">{v.revision}</span>
                   {v.revision === latestRevision && (
                     <Badge variant="outline" className="text-xs font-normal">
-                      latest
+                      {t("latest")}
                     </Badge>
                   )}
                 </div>
@@ -196,7 +197,7 @@ export function ArtifactVersionsSection({
               {showUploader && (
                 <TableCell>
                   <span className="text-xs text-muted-foreground">
-                    {v.uploaded_by ?? "unknown"}
+                    {v.uploaded_by ?? t("unknown")}
                   </span>
                 </TableCell>
               )}
@@ -215,13 +216,13 @@ export function ArtifactVersionsSection({
                       variant="ghost"
                       size="icon-xs"
                       onClick={() => handleDownloadRevision(v)}
-                      aria-label={`Download revision ${v.revision}`}
+                      aria-label={t("downloadAria", { revision: v.revision })}
                     >
                       <Download className="size-3.5" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Download revision {v.revision}
+                    {t("downloadTooltip", { revision: v.revision })}
                   </TooltipContent>
                 </Tooltip>
               </TableCell>

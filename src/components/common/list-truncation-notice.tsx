@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface ListTruncationNoticeProps {
   /** Number of items currently rendered. */
@@ -18,11 +19,11 @@ export function ListTruncationNotice({
   total,
   className,
 }: ListTruncationNoticeProps) {
+  const t = useTranslations("common");
   if (total <= shown) return null;
   return (
     <p role="status" className={cn("text-sm text-muted-foreground", className)}>
-      Showing first {shown} of {total} — refine your search or filters to
-      narrow results.
+      {t("listTruncationNotice", { shown, total })}
     </p>
   );
 }

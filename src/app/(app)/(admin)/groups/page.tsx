@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Pencil,
@@ -65,12 +66,13 @@ interface GroupForm {
 const EMPTY_FORM: GroupForm = { name: "", description: "" };
 
 // SSO-synced groups (is_external) are owned by the IdP; the backend blocks edits (#2874).
-const SSO_DISABLED_LABEL = "Editing not permitted (synced via SSO)";
-const SSO_READONLY_LABEL = "Read-only, editing not permitted (synced via SSO)";
+const SSO_DISABLED_KEY = "ssoDisabled";
+const SSO_READONLY_KEY = "ssoReadonly";
 
 // -- page --
 
 export default function GroupsPage() {
+  const t = useTranslations("adminGroups");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 
@@ -124,12 +126,12 @@ export default function GroupsPage() {
     mutationFn: (data: GroupForm) =>
       groupsApi.create({ name: data.name, description: data.description }),
     onSuccess: () => {
-      toast.success("Group created successfully");
+      toast.success(t("toastCreated"));
       invalidateGroup(queryClient, "groups");
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: mutationErrorToast("Failed to create group"),
+    onError: mutationErrorToast(t("toastCreateFailed")),
   });
 
   const updateMutation = useMutation({
@@ -138,50 +140,50 @@ export default function GroupsPage() {
       // (unchanged, non-editable) name alongside the new description.
       groupsApi.update(id, { name: data.name, description: data.description }),
     onSuccess: () => {
-      toast.success("Group updated successfully");
+      toast.success(t("toastUpdated"));
       invalidateGroup(queryClient, "groups");
       setEditOpen(false);
       setSelectedGroup(null);
     },
-    onError: mutationErrorToast("Failed to update group"),
+    onError: mutationErrorToast(t("toastUpdateFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => groupsApi.delete(id),
     onSuccess: () => {
-      toast.success("Group deleted successfully");
+      toast.success(t("toastDeleted"));
       invalidateGroup(queryClient, "groups");
       setDeleteOpen(false);
       setSelectedGroup(null);
     },
-    onError: mutationErrorToast("Failed to delete group"),
+    onError: mutationErrorToast(t("toastDeleteFailed")),
   });
 
   const addMemberMutation = useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
       groupsApi.addMembers(groupId, [userId]),
     onSuccess: () => {
-      toast.success("Member added");
+      toast.success(t("toastMemberAdded"));
       queryClient.invalidateQueries({
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
       invalidateGroup(queryClient, "groups");
       setAddUserId("");
     },
-    onError: mutationErrorToast("Failed to add member"),
+    onError: mutationErrorToast(t("toastMemberAddFailed")),
   });
 
   const removeMemberMutation = useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
       groupsApi.removeMembers(groupId, [userId]),
     onSuccess: () => {
-      toast.success("Member removed");
+      toast.success(t("toastMemberRemoved"));
       queryClient.invalidateQueries({
         queryKey: ["admin-group-detail", selectedGroup?.id],
       });
       invalidateGroup(queryClient, "groups");
     },
-    onError: mutationErrorToast("Failed to remove member"),
+    onError: mutationErrorToast(t("toastMemberRemoveFailed")),
   });
 
   // -- handlers --
@@ -227,14 +229,14 @@ export default function GroupsPage() {
   const columns: DataTableColumn<Group>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (g) => g.name,
       sortable: true,
       cell: (g) => <span className="text-sm font-medium">{g.name}</span>,
     },
     {
       id: "description",
-      header: "Description",
+      header: t("colDescription"),
       accessor: (g) => g.description ?? "",
       cell: (g) => (
         <span className="text-sm text-muted-foreground line-clamp-1">
@@ -244,7 +246,7 @@ export default function GroupsPage() {
     },
     {
       id: "member_count",
-      header: "Members",
+      header: t("colMembers"),
       accessor: (g) => g.member_count,
       sortable: true,
       cell: (g) => (
@@ -255,7 +257,7 @@ export default function GroupsPage() {
     },
     {
       id: "created_at",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (g) => g.created_at,
       sortable: true,
       cell: (g) => (
@@ -287,7 +289,7 @@ export default function GroupsPage() {
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              {g.is_external ? SSO_DISABLED_LABEL : "Edit"}
+              {g.is_external ? t(SSO_DISABLED_KEY) : t("editTooltip")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -301,7 +303,7 @@ export default function GroupsPage() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {g.is_external ? SSO_READONLY_LABEL : "Manage Members"}
+              {g.is_external ? t(SSO_READONLY_KEY) : t("manageMembers")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -315,7 +317,7 @@ export default function GroupsPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("deleteTooltip")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -326,9 +328,9 @@ export default function GroupsPage() {
   if (!currentUser?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Groups" />
+        <PageHeader title={t("title")} />
         <p className="text-sm text-muted-foreground">
-          You must be an administrator to view this page.
+          {t("accessDeniedDescription")}
         </p>
       </div>
     );
@@ -337,12 +339,12 @@ export default function GroupsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Groups"
-        description="Organize users into groups for easier permission management."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Create Group
+            {t("createGroup")}
           </Button>
         }
       />
@@ -350,12 +352,12 @@ export default function GroupsPage() {
       {!isLoading && groups.length === 0 ? (
         <EmptyState
           icon={Users2}
-          title="No groups yet"
-          description="Create a group to organize users and manage permissions collectively."
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create Group
+              {t("createGroup")}
             </Button>
           }
         />
@@ -364,7 +366,7 @@ export default function GroupsPage() {
           columns={columns}
           data={groups}
           loading={isLoading}
-          emptyMessage="No groups found."
+          emptyMessage={t("emptyMessage")}
           rowKey={(g) => g.id}
         />
       )}
@@ -383,9 +385,9 @@ export default function GroupsPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Group</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Add a new group to organize users.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -396,10 +398,10 @@ export default function GroupsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="group-name">Name</Label>
+              <Label htmlFor="group-name">{t("nameLabel")}</Label>
               <Input
                 id="group-name"
-                placeholder="engineering"
+                placeholder={t("namePlaceholder")}
                 value={form.name}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
@@ -408,10 +410,10 @@ export default function GroupsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="group-desc">Description</Label>
+              <Label htmlFor="group-desc">{t("descriptionLabel")}</Label>
               <Textarea
                 id="group-desc"
-                placeholder="Optional description..."
+                placeholder={t("descriptionPlaceholder")}
                 value={form.description}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, description: e.target.value }))
@@ -428,10 +430,10 @@ export default function GroupsPage() {
                   setForm(EMPTY_FORM);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Group"}
+                {createMutation.isPending ? t("creating") : t("createGroup")}
               </Button>
             </DialogFooter>
           </form>
@@ -448,9 +450,9 @@ export default function GroupsPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Group: {selectedGroup?.name}</DialogTitle>
+            <DialogTitle>{t("editDialogTitle", { name: selectedGroup?.name ?? "" })}</DialogTitle>
             <DialogDescription>
-              Update the group description.
+              {t("editDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -466,11 +468,11 @@ export default function GroupsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="edit-group-name">Name</Label>
+              <Label htmlFor="edit-group-name">{t("nameLabel")}</Label>
               <Input id="edit-group-name" value={form.name} disabled />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-group-desc">Description</Label>
+              <Label htmlFor="edit-group-desc">{t("descriptionLabel")}</Label>
               <Textarea
                 id="edit-group-desc"
                 value={form.description}
@@ -489,10 +491,10 @@ export default function GroupsPage() {
                   setSelectedGroup(null);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateMutation.isPending ? t("saving") : t("saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -515,24 +517,24 @@ export default function GroupsPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              Manage Members: {selectedGroup?.name}
+              {t("manageMembersTitle", { name: selectedGroup?.name ?? "" })}
             </DialogTitle>
             <DialogDescription>
               {selectedIsExternal
-                ? SSO_READONLY_LABEL
-                : "Add or remove users from this group."}
+                ? t(SSO_READONLY_KEY)
+                : t("manageMembersDescription")}
             </DialogDescription>
           </DialogHeader>
 
           {/* Add member */}
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-2">
-              <Label>Add Member</Label>
+              <Label>{t("addMemberLabel")}</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <Input
-                  aria-label="Search users to add"
-                  placeholder="Search users..."
+                  aria-label={t("searchUsersToAddAria")}
+                  placeholder={t("searchUsersPlaceholder")}
                   className="pl-8"
                   value={addUserSearch}
                   disabled={selectedIsExternal}
@@ -548,7 +550,7 @@ export default function GroupsPage() {
                 disabled={selectedIsExternal}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a user..." />
+                  <SelectValue placeholder={t("selectUserPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableUsers.map((u: User) => (
@@ -559,8 +561,8 @@ export default function GroupsPage() {
                   {availableUsers.length === 0 && (
                     <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                       {addUserSearch
-                        ? "No users match your search"
-                        : "No users available to add"}
+                        ? t("noUsersMatch")
+                        : t("noUsersAvailable")}
                     </div>
                   )}
                 </SelectContent>
@@ -591,12 +593,12 @@ export default function GroupsPage() {
                     }}
                   >
                     <UserPlus className="size-3.5 mr-1" />
-                    Add
+                    {t("add")}
                   </Button>
                 </span>
               </TooltipTrigger>
               {selectedIsExternal && (
-                <TooltipContent>{SSO_DISABLED_LABEL}</TooltipContent>
+                <TooltipContent>{t(SSO_DISABLED_KEY)}</TooltipContent>
               )}
             </Tooltip>
           </div>
@@ -607,14 +609,14 @@ export default function GroupsPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>
-                Members ({members.length})
+                {t("membersCount", { count: members.length })}
               </Label>
               {members.length > 5 && (
                 <div className="relative w-48">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                   <Input
-                    aria-label="Filter members"
-                    placeholder="Filter members..."
+                    aria-label={t("filterMembersAria")}
+                    placeholder={t("filterMembersPlaceholder")}
                     className="pl-8 h-8 text-xs"
                     value={memberSearch}
                     onChange={(e) => setMemberSearch(e.target.value)}
@@ -625,13 +627,13 @@ export default function GroupsPage() {
             <ScrollArea className="h-[240px] rounded-md border">
               {membersLoading ? (
                 <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                  Loading members...
+                  {t("loadingMembers")}
                 </div>
               ) : filteredMembers.length === 0 ? (
                 <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
                   {members.length === 0
-                    ? "No members in this group"
-                    : "No members match your search"}
+                    ? t("noMembersInGroup")
+                    : t("noMembersMatch")}
                 </div>
               ) : (
                 <div className="divide-y">
@@ -673,7 +675,7 @@ export default function GroupsPage() {
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {selectedIsExternal ? SSO_DISABLED_LABEL : "Remove"}
+                          {selectedIsExternal ? t(SSO_DISABLED_KEY) : t("remove")}
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -691,7 +693,7 @@ export default function GroupsPage() {
                 setSelectedGroup(null);
               }}
             >
-              Done
+              {t("done")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -704,10 +706,10 @@ export default function GroupsPage() {
           setDeleteOpen(o);
           if (!o) setSelectedGroup(null);
         }}
-        title="Delete Group"
-        description={`Deleting "${selectedGroup?.name}" will remove all member associations. Members will lose any permissions granted through this group. This action cannot be undone.`}
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: selectedGroup?.name ?? "" })}
         typeToConfirm={selectedGroup?.name}
-        confirmText="Delete Group"
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {

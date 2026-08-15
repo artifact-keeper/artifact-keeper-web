@@ -48,6 +48,7 @@ import { buildMavenSearchQuery } from "@/lib/maven";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useTranslations } from "next-intl";
 
 // ---- Types ----
 
@@ -145,7 +146,8 @@ const FORMAT_OPTIONS = [
 // ---- Main Content ----
 
 export function SearchContent() {
-  useDocumentTitle("Search");
+  const t = useTranslations("search");
+  useDocumentTitle(t("docTitle"));
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -398,20 +400,22 @@ export function SearchContent() {
   const searchAnnouncement = useMemo(() => {
     if (!searchTriggered || loading) return "";
     const sortLabels: Record<SortField, string> = {
-      relevance: "relevance",
-      created_at: "date",
-      name: "name",
-      size_bytes: "size",
-      download_count: "downloads",
+      relevance: t("announceRelevance"),
+      created_at: t("announceDate"),
+      name: t("announceName"),
+      size_bytes: t("announceSize"),
+      download_count: t("announceDownloads"),
     };
     const parts = [
-      `${totalResults} ${totalResults === 1 ? "result" : "results"} found`,
-      `sorted by ${sortLabels[sortField]}${
-        sortField === "relevance" ? "" : ` ${sortOrder === "asc" ? "ascending" : "descending"}`
+      t("announceResults", { count: totalResults }),
+      `${t("announceSortedBy")} ${sortLabels[sortField]}${
+        sortField === "relevance"
+          ? ""
+          : ` ${sortOrder === "asc" ? t("announceAscending") : t("announceDescending")}`
       }`,
     ];
-    if (facetFormat) parts.push(`filtered to format ${facetFormat}`);
-    if (facetRepository) parts.push(`filtered to repository ${facetRepository}`);
+    if (facetFormat) parts.push(`${t("announceFormatFilter")} ${facetFormat}`);
+    if (facetRepository) parts.push(`${t("announceRepositoryFilter")} ${facetRepository}`);
     return `${parts.join(", ")}.`;
   }, [
     searchTriggered,
@@ -421,6 +425,7 @@ export function SearchContent() {
     sortOrder,
     facetFormat,
     facetRepository,
+    t,
   ]);
 
   // Toggle a facet filter: selecting re-runs the search from page 1, clicking
@@ -449,10 +454,10 @@ export function SearchContent() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
-          Advanced Search
+          {t("heading")}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Search across all repositories, packages, and artifacts
+          {t("headingDescription")}
         </p>
       </div>
 
@@ -462,19 +467,19 @@ export function SearchContent() {
             <TabsList className="mb-6">
               <TabsTrigger value="package" className="gap-1.5">
                 <Package className="size-3.5" />
-                Package
+                {t("tabPackage")}
               </TabsTrigger>
               <TabsTrigger value="property" className="gap-1.5">
                 <Tag className="size-3.5" />
-                Property
+                {t("tabProperty")}
               </TabsTrigger>
               <TabsTrigger value="gavc" className="gap-1.5">
                 <FileSearch className="size-3.5" />
-                GAVC
+                {t("tabGavc")}
               </TabsTrigger>
               <TabsTrigger value="checksum" className="gap-1.5">
                 <Hash className="size-3.5" />
-                Checksum
+                {t("tabChecksum")}
               </TabsTrigger>
             </TabsList>
 
@@ -482,10 +487,10 @@ export function SearchContent() {
             <TabsContent value="package">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="search-package-name" className="text-sm font-medium">Package Name</label>
+                  <label htmlFor="search-package-name" className="text-sm font-medium">{t("packageName")}</label>
                   <Input
                     id="search-package-name"
-                    placeholder="e.g., react, lodash"
+                    placeholder={t("packageNamePlaceholder")}
                     value={packageValues.name}
                     onChange={(e) =>
                       setPackageValues((v) => ({ ...v, name: e.target.value }))
@@ -494,10 +499,10 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-package-version" className="text-sm font-medium">Version</label>
+                  <label htmlFor="search-package-version" className="text-sm font-medium">{t("version")}</label>
                   <Input
                     id="search-package-version"
-                    placeholder="e.g., 1.0.0, ^2.0"
+                    placeholder={t("versionPlaceholder")}
                     value={packageValues.version}
                     onChange={(e) =>
                       setPackageValues((v) => ({
@@ -509,7 +514,7 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-package-repository" className="text-sm font-medium">Repository</label>
+                  <label htmlFor="search-package-repository" className="text-sm font-medium">{t("repository")}</label>
                   <Select
                     value={packageValues.repository}
                     onValueChange={(val) =>
@@ -520,10 +525,10 @@ export function SearchContent() {
                     }
                   >
                     <SelectTrigger id="search-package-repository" className="w-full">
-                      <SelectValue placeholder="All repositories" />
+                      <SelectValue placeholder={t("allRepositories")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__all__">All repositories</SelectItem>
+                      <SelectItem value="__all__">{t("allRepositories")}</SelectItem>
                       {repositories.map((r) => (
                         <SelectItem key={r.id} value={r.key}>
                           {r.name} ({r.key})
@@ -533,7 +538,7 @@ export function SearchContent() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-package-format" className="text-sm font-medium">Format</label>
+                  <label htmlFor="search-package-format" className="text-sm font-medium">{t("format")}</label>
                   <Select
                     value={packageValues.format}
                     onValueChange={(val) =>
@@ -544,10 +549,10 @@ export function SearchContent() {
                     }
                   >
                     <SelectTrigger id="search-package-format" className="w-full">
-                      <SelectValue placeholder="All formats" />
+                      <SelectValue placeholder={t("allFormats")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__all__">All formats</SelectItem>
+                      <SelectItem value="__all__">{t("allFormats")}</SelectItem>
                       {FORMAT_OPTIONS.map((f) => (
                         <SelectItem key={f} value={f}>
                           {f}
@@ -566,11 +571,11 @@ export function SearchContent() {
                   <div key={filter.id} className="flex items-end gap-3">
                     <div className="flex-1 space-y-1.5">
                       <label htmlFor={`prop-key-${index}`} className="text-sm font-medium">
-                        Property Key
+                        {t("propertyKey")}
                       </label>
                       <Input
                         id={`prop-key-${index}`}
-                        placeholder="e.g., build.number"
+                        placeholder={t("propertyKeyPlaceholder")}
                         value={filter.key}
                         onChange={(e) =>
                           updatePropertyFilter(index, "key", e.target.value)
@@ -580,11 +585,11 @@ export function SearchContent() {
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <label htmlFor={`prop-value-${index}`} className="text-sm font-medium">
-                        Property Value
+                        {t("propertyValue")}
                       </label>
                       <Input
                         id={`prop-value-${index}`}
-                        placeholder="e.g., 42"
+                        placeholder={t("propertyValuePlaceholder")}
                         value={filter.value}
                         onChange={(e) =>
                           updatePropertyFilter(index, "value", e.target.value)
@@ -598,7 +603,7 @@ export function SearchContent() {
                         size="icon"
                         onClick={() => removePropertyFilter(index)}
                         className="shrink-0"
-                        aria-label="Remove filter"
+                        aria-label={t("removeFilter")}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -612,7 +617,7 @@ export function SearchContent() {
                   className="gap-1.5"
                 >
                   <Plus className="size-3.5" />
-                  Add filter
+                  {t("addFilter")}
                 </Button>
               </div>
             </TabsContent>
@@ -621,10 +626,10 @@ export function SearchContent() {
             <TabsContent value="gavc">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="search-gavc-group" className="text-sm font-medium">Group ID</label>
+                  <label htmlFor="search-gavc-group" className="text-sm font-medium">{t("groupId")}</label>
                   <Input
                     id="search-gavc-group"
-                    placeholder="e.g., org.apache.maven"
+                    placeholder={t("groupIdPlaceholder")}
                     value={gavcValues.groupId}
                     onChange={(e) =>
                       setGavcValues((v) => ({
@@ -636,10 +641,10 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-gavc-artifact" className="text-sm font-medium">Artifact ID</label>
+                  <label htmlFor="search-gavc-artifact" className="text-sm font-medium">{t("artifactId")}</label>
                   <Input
                     id="search-gavc-artifact"
-                    placeholder="e.g., maven-core"
+                    placeholder={t("artifactIdPlaceholder")}
                     value={gavcValues.artifactId}
                     onChange={(e) =>
                       setGavcValues((v) => ({
@@ -651,10 +656,10 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-gavc-version" className="text-sm font-medium">Version</label>
+                  <label htmlFor="search-gavc-version" className="text-sm font-medium">{t("version")}</label>
                   <Input
                     id="search-gavc-version"
-                    placeholder="e.g., 3.9.0"
+                    placeholder={t("gavcVersionPlaceholder")}
                     value={gavcValues.version}
                     onChange={(e) =>
                       setGavcValues((v) => ({
@@ -666,10 +671,10 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-gavc-classifier" className="text-sm font-medium">Classifier</label>
+                  <label htmlFor="search-gavc-classifier" className="text-sm font-medium">{t("classifier")}</label>
                   <Input
                     id="search-gavc-classifier"
-                    placeholder="e.g., sources, javadoc"
+                    placeholder={t("classifierPlaceholder")}
                     value={gavcValues.classifier}
                     onChange={(e) =>
                       setGavcValues((v) => ({
@@ -681,10 +686,10 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-gavc-extension" className="text-sm font-medium">Extension</label>
+                  <label htmlFor="search-gavc-extension" className="text-sm font-medium">{t("extension")}</label>
                   <Input
                     id="search-gavc-extension"
-                    placeholder="e.g., jar, pom, war"
+                    placeholder={t("extensionPlaceholder")}
                     value={gavcValues.extension}
                     onChange={(e) =>
                       setGavcValues((v) => ({
@@ -702,10 +707,10 @@ export function SearchContent() {
             <TabsContent value="checksum">
               <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
                 <div className="space-y-1.5">
-                  <label htmlFor="search-checksum-value" className="text-sm font-medium">Checksum Value</label>
+                  <label htmlFor="search-checksum-value" className="text-sm font-medium">{t("checksumValue")}</label>
                   <Input
                     id="search-checksum-value"
-                    placeholder="Enter SHA-256, SHA-1, or MD5 checksum"
+                    placeholder={t("checksumValuePlaceholder")}
                     value={checksumValues.value}
                     onChange={(e) =>
                       setChecksumValues((v) => ({
@@ -718,7 +723,7 @@ export function SearchContent() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="search-checksum-algorithm" className="text-sm font-medium">Algorithm</label>
+                  <label htmlFor="search-checksum-algorithm" className="text-sm font-medium">{t("algorithm")}</label>
                   <Select
                     value={checksumValues.type}
                     onValueChange={(val) =>
@@ -749,7 +754,7 @@ export function SearchContent() {
                 ) : (
                   <SearchIcon className="size-4" />
                 )}
-                Search
+                {t("search")}
               </Button>
             </div>
           </Tabs>
@@ -774,10 +779,10 @@ export function SearchContent() {
             {/* Results header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold">Results</h2>
+                <h2 className="text-lg font-semibold">{t("results")}</h2>
                 {!loading && (
                   <span className="text-sm text-muted-foreground">
-                    {totalResults} {totalResults === 1 ? "result" : "results"} found
+                    {t("resultsFound", { count: totalResults })}
                   </span>
                 )}
               </div>
@@ -794,16 +799,16 @@ export function SearchContent() {
                       <SelectTrigger
                         className="w-36"
                         size="sm"
-                        aria-label="Sort by"
+                        aria-label={t("sortBy")}
                       >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="relevance">Relevance</SelectItem>
-                        <SelectItem value="created_at">Date</SelectItem>
-                        <SelectItem value="name">Name</SelectItem>
-                        <SelectItem value="size_bytes">Size</SelectItem>
-                        <SelectItem value="download_count">Downloads</SelectItem>
+                        <SelectItem value="relevance">{t("sortRelevance")}</SelectItem>
+                        <SelectItem value="created_at">{t("sortDate")}</SelectItem>
+                        <SelectItem value="name">{t("sortName")}</SelectItem>
+                        <SelectItem value="size_bytes">{t("sortSize")}</SelectItem>
+                        <SelectItem value="download_count">{t("sortDownloads")}</SelectItem>
                       </SelectContent>
                     </Select>
                     <Button
@@ -816,8 +821,8 @@ export function SearchContent() {
                       }}
                       aria-label={
                         sortOrder === "desc"
-                          ? "Sort descending, switch to ascending"
-                          : "Sort ascending, switch to descending"
+                          ? t("sortDescAria")
+                          : t("sortAscAria")
                       }
                     >
                       {sortOrder === "desc" ? (
@@ -834,7 +839,7 @@ export function SearchContent() {
                     size="icon-sm"
                     onClick={() => setViewMode("list")}
                     className="rounded-r-none"
-                    aria-label="List view"
+                    aria-label={t("listView")}
                   >
                     <LayoutList className="size-4" />
                   </Button>
@@ -843,7 +848,7 @@ export function SearchContent() {
                     size="icon-sm"
                     onClick={() => setViewMode("grid")}
                     className="rounded-l-none"
-                    aria-label="Grid view"
+                    aria-label={t("gridView")}
                   >
                     <LayoutGrid className="size-4" />
                   </Button>
@@ -865,7 +870,7 @@ export function SearchContent() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Refine
+                      {t("refine")}
                     </span>
                     {hasActiveFacets && (
                       <Button
@@ -875,14 +880,14 @@ export function SearchContent() {
                         onClick={clearFacets}
                       >
                         <X className="size-3" />
-                        Clear filters
+                        {t("clearFilters")}
                       </Button>
                     )}
                   </div>
                   {facets.formats.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs text-muted-foreground w-20 shrink-0">
-                        Format
+                        {t("format")}
                       </span>
                       {facets.formats.map((f) => (
                         <button
@@ -908,7 +913,7 @@ export function SearchContent() {
                   {facets.repositories.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs text-muted-foreground w-20 shrink-0">
-                        Repository
+                        {t("repository")}
                       </span>
                       {facets.repositories.map((f) => (
                         <button
@@ -948,7 +953,7 @@ export function SearchContent() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <SearchIcon className="size-10 text-muted-foreground/40 mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  No results found. Try adjusting your search criteria.
+                  {t("noResults")}
                 </p>
               </div>
             )}
@@ -958,12 +963,12 @@ export function SearchContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Version</TableHead>
-                    <TableHead>Format</TableHead>
-                    <TableHead>Repository</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead>{t("colName")}</TableHead>
+                    <TableHead>{t("colVersion")}</TableHead>
+                    <TableHead>{t("colFormat")}</TableHead>
+                    <TableHead>{t("colRepository")}</TableHead>
+                    <TableHead className="text-right">{t("colSize")}</TableHead>
+                    <TableHead>{t("colDate")}</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -1024,7 +1029,7 @@ export function SearchContent() {
                             e.stopPropagation();
                             handleDownload(result);
                           }}
-                          aria-label={`Download ${result.name}`}
+                          aria-label={t("downloadAria", { name: result.name })}
                         >
                           <Download className="size-3.5" />
                         </Button>
@@ -1077,7 +1082,7 @@ export function SearchContent() {
                           e.stopPropagation();
                           handleDownload(result);
                         }}
-                        aria-label={`Download ${result.name}`}
+                        aria-label={t("downloadAria", { name: result.name })}
                       >
                         <Download className="size-3" />
                       </Button>
@@ -1112,7 +1117,7 @@ export function SearchContent() {
             {!loading && totalPages > 1 && (
               <div className="flex items-center justify-between mt-6 pt-4 border-t">
                 <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
+                  {t("pageXOfY", { page, total: totalPages })}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1126,7 +1131,7 @@ export function SearchContent() {
                     className="gap-1"
                   >
                     <ChevronLeft className="size-4" />
-                    Previous
+                    {t("previous")}
                   </Button>
                   <Button
                     variant="outline"
@@ -1138,7 +1143,7 @@ export function SearchContent() {
                     }}
                     className="gap-1"
                   >
-                    Next
+                    {t("next")}
                     <ChevronRight className="size-4" />
                   </Button>
                 </div>

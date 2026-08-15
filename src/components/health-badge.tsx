@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { GRADE_COLORS } from "@/types/quality-gates";
 import {
   Tooltip,
@@ -27,6 +28,7 @@ export function HealthBadge({
   size = "md",
   className,
 }: HealthBadgeProps) {
+  const t = useTranslations("common");
   const badge = (
     <span
       className={cn(
@@ -44,7 +46,7 @@ export function HealthBadge({
     return (
       <Tooltip>
         <TooltipTrigger asChild>{badge}</TooltipTrigger>
-        <TooltipContent>Score: {Math.round(score)}/100</TooltipContent>
+        <TooltipContent>{t("score", { score: Math.round(score) })}</TooltipContent>
       </Tooltip>
     );
   }

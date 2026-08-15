@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 
 import { useRepositories } from "@/hooks/use-repositories";
@@ -35,6 +36,7 @@ interface VirtualMembersPanelProps {
 }
 
 export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
+  const t = useTranslations("virtualMembers");
   const queryClient = useQueryClient();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -80,9 +82,9 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["virtual-members", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
-      toast.success("Member added");
+      toast.success(t("added"));
     },
-    onError: mutationErrorToast("Failed to add member"),
+    onError: mutationErrorToast(t("addFailed")),
   });
 
   const removeMemberMutation = useMutation({
@@ -93,9 +95,9 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       setRemoveDialogOpen(false);
       setMemberToRemove(null);
-      toast.success("Member removed");
+      toast.success(t("removed"));
     },
-    onError: mutationErrorToast("Failed to remove member"),
+    onError: mutationErrorToast(t("removeFailed")),
   });
 
   const reorderMutation = useMutation({
@@ -105,7 +107,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       queryClient.invalidateQueries({ queryKey: ["virtual-members", repository.key] });
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
     },
-    onError: mutationErrorToast("Failed to reorder members"),
+    onError: mutationErrorToast(t("reorderFailed")),
   });
 
   const handleMoveUp = (index: number) => {
@@ -150,22 +152,22 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Member Repositories</h3>
+          <h3 className="text-sm font-medium">{t("title")}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Members are resolved in priority order (lower number = higher priority)
+            {t("description")}
           </p>
         </div>
         <Button size="sm" onClick={() => setAddDialogOpen(true)}>
           <Plus className="size-4" />
-          Add Member
+          {t("add")}
         </Button>
       </div>
 
       {sortedMembers.length === 0 ? (
         <div className="border rounded-lg p-6 text-center text-muted-foreground">
-          <p className="text-sm">No member repositories configured.</p>
+          <p className="text-sm">{t("empty")}</p>
           <p className="text-xs mt-1">
-            Add local or remote repositories to aggregate their artifacts.
+            {t("emptyDetail")}
           </p>
         </div>
       ) : (
@@ -187,7 +189,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                       <ChevronUp className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Move up (higher priority)</TooltipContent>
+                  <TooltipContent>{t("moveUp")}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -200,7 +202,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                       <ChevronDown className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Move down (lower priority)</TooltipContent>
+                  <TooltipContent>{t("moveDown")}</TooltipContent>
                 </Tooltip>
               </div>
 
@@ -210,7 +212,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                     {member.member_repo_key}
                   </span>
                   <Badge variant="outline" className="text-xs shrink-0">
-                    Priority {member.priority}
+                    {t("priority", { priority: member.priority })}
                   </Badge>
                 </div>
               </div>
@@ -227,7 +229,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                     <Trash2 className="size-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Remove member</TooltipContent>
+                <TooltipContent>{t("removeTooltip")}</TooltipContent>
               </Tooltip>
             </div>
           ))}
@@ -238,10 +240,9 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Member Repository</DialogTitle>
+            <DialogTitle>{t("addTitle")}</DialogTitle>
             <DialogDescription>
-              Select a {repository.format.toUpperCase()} repository to add as a member.
-              Only local and remote repositories are eligible.
+              {t("addDescription", { format: repository.format.toUpperCase() })}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -251,9 +252,9 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
               </div>
             ) : eligibleRepos.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">No eligible repositories available.</p>
+                <p className="text-sm">{t("noEligible")}</p>
                 <p className="text-xs mt-1">
-                  Create a local or remote {repository.format.toUpperCase()} repository first.
+                  {t("noEligibleDetail", { format: repository.format.toUpperCase() })}
                 </p>
               </div>
             ) : (
@@ -290,7 +291,7 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -300,9 +301,11 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
       <ConfirmDialog
         open={removeDialogOpen}
         onOpenChange={setRemoveDialogOpen}
-        title="Remove Member"
-        description={`Are you sure you want to remove "${memberToRemove?.member_repo_key}" from this virtual repository? Artifacts from this repository will no longer be resolved through the virtual repository.`}
-        confirmText="Remove"
+        title={t("removeTitle")}
+        description={t("removeDescription", {
+          key: memberToRemove?.member_repo_key ?? "",
+        })}
+        confirmText={t("removeConfirm")}
         danger
         loading={removeMemberMutation.isPending}
         onConfirm={() => {

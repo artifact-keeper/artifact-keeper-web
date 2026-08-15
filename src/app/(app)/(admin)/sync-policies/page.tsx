@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Workflow, Plus, Trash2, Pencil, AlertCircle, RotateCcw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,6 +43,12 @@ import {
 const QUERY_KEY = ["sync-policies"];
 const MODES = ["push", "pull", "mirror"] as const;
 
+const MODE_LABEL_KEYS: Record<string, string> = {
+  push: "modePush",
+  pull: "modePull",
+  mirror: "modeMirror",
+};
+
 const emptyForm: CreateSyncPolicyRequest = {
   name: "",
   description: "",
@@ -51,7 +58,8 @@ const emptyForm: CreateSyncPolicyRequest = {
 };
 
 export default function SyncPoliciesPage() {
-  useDocumentTitle("Sync Policies");
+  const t = useTranslations("adminSyncPolicies");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -88,16 +96,16 @@ export default function SyncPoliciesPage() {
       setDialogOpen(false);
       setEditing(null);
       setForm(emptyForm);
-      toast.success(vars.id ? "Sync policy updated" : "Sync policy created");
+      toast.success(vars.id ? t("updated") : t("created"));
     },
-    onError: mutationErrorToast("Failed to save sync policy"),
+    onError: mutationErrorToast(t("saveFailed")),
   });
 
   const toggleMutation = useMutation({
     mutationFn: (vars: { id: string; enabled: boolean }) =>
       syncPoliciesApi.toggle(vars.id, vars.enabled),
     onSuccess: () => invalidate(),
-    onError: mutationErrorToast("Failed to toggle sync policy"),
+    onError: mutationErrorToast(t("toggleFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -105,16 +113,16 @@ export default function SyncPoliciesPage() {
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
-      toast.success("Sync policy deleted");
+      toast.success(t("deleted"));
     },
-    onError: mutationErrorToast("Failed to delete sync policy"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <Workflow className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Sync policy management requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -151,15 +159,15 @@ export default function SyncPoliciesPage() {
         <div className="flex items-center gap-2">
           <Workflow className="size-6" />
           <div>
-            <h1 className="text-xl font-semibold">Sync Policies</h1>
+            <h1 className="text-xl font-semibold">{t("title")}</h1>
             <p className="text-sm text-muted-foreground">
-              Rules deciding which artifacts replicate to which peers, and how.
+              {t("description")}
             </p>
           </div>
         </div>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
-          New Policy
+          {t("newPolicy")}
         </Button>
       </div>
 
@@ -173,11 +181,11 @@ export default function SyncPoliciesPage() {
       {!isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load sync policies</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -185,8 +193,8 @@ export default function SyncPoliciesPage() {
       {!isLoading && !isError && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center text-muted-foreground">
           <Workflow className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No sync policies yet.</p>
-          <p className="text-xs">Create one to control what replicates and where.</p>
+          <p className="text-sm">{t("noPolicies")}</p>
+          <p className="text-xs">{t("noPoliciesHint")}</p>
         </div>
       )}
 
@@ -198,24 +206,24 @@ export default function SyncPoliciesPage() {
                 <Switch
                   checked={p.enabled}
                   onCheckedChange={(v) => toggleMutation.mutate({ id: p.id, enabled: v })}
-                  aria-label={`Enable ${p.name}`}
+                  aria-label={t("enableAria", { name: p.name })}
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{p.name}</span>
-                    <Badge variant="outline" className="capitalize">{p.replication_mode}</Badge>
-                    <span className="text-xs text-muted-foreground">priority {p.priority}</span>
+                    <Badge variant="outline">{t(MODE_LABEL_KEYS[p.replication_mode] ?? "modePush")}</Badge>
+                    <span className="text-xs text-muted-foreground">{t("priority", { priority: p.priority })}</span>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
-                    {p.filter ? `filter: ${p.filter}` : p.description || "all artifacts"}
+                    {p.filter ? t("listFilter", { filter: p.filter }) : p.description || t("allArtifacts")}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" aria-label={`Edit ${p.name}`} onClick={() => openEdit(p)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("editAria", { name: p.name })} onClick={() => openEdit(p)}>
                   <Pencil className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={`Delete ${p.name}`} onClick={() => setDeleteTarget(p)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("deleteAria", { name: p.name })} onClick={() => setDeleteTarget(p)}>
                   <Trash2 className="size-4 text-destructive" />
                 </Button>
               </div>
@@ -229,34 +237,34 @@ export default function SyncPoliciesPage() {
         <DialogContent>
           <form onSubmit={submit}>
             <DialogHeader>
-              <DialogTitle>{editing ? "Edit sync policy" : "New sync policy"}</DialogTitle>
+              <DialogTitle>{editing ? t("dialogTitleEdit") : t("dialogTitleNew")}</DialogTitle>
               <DialogDescription>
-                A higher priority wins when multiple policies match an artifact.
+                {t("dialogDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-1.5">
-                <Label htmlFor="sp-name">Name</Label>
+                <Label htmlFor="sp-name">{t("nameLabel")}</Label>
                 <Input id="sp-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="mirror-releases" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="sp-desc">Description</Label>
+                <Label htmlFor="sp-desc">{t("descLabel")}</Label>
                 <Input id="sp-desc" value={form.description ?? ""} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="sp-mode">Mode</Label>
+                  <Label htmlFor="sp-mode">{t("modeLabel")}</Label>
                   <Select value={form.replication_mode} onValueChange={(v) => setForm((f) => ({ ...f, replication_mode: v }))}>
                     <SelectTrigger id="sp-mode"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {MODES.map((mode) => (
-                        <SelectItem key={mode} value={mode} className="capitalize">{mode}</SelectItem>
+                        <SelectItem key={mode} value={mode}>{t(MODE_LABEL_KEYS[mode] ?? "modePush")}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="sp-priority">Priority</Label>
+                  <Label htmlFor="sp-priority">{t("priorityLabel")}</Label>
                   <Input
                     id="sp-priority"
                     type="number"
@@ -272,15 +280,15 @@ export default function SyncPoliciesPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="sp-filter">Filter glob (optional)</Label>
+                <Label htmlFor="sp-filter">{t("filterLabel")}</Label>
                 <Input id="sp-filter" value={form.filter ?? ""} onChange={(e) => setForm((f) => ({ ...f, filter: e.target.value }))} placeholder="*.tar.gz" />
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
               <Button type="submit" disabled={!canSave}>
                 {saveMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {editing ? "Save" : "Create"}
+                {editing ? t("save") : t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -290,9 +298,9 @@ export default function SyncPoliciesPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete sync policy?"
-        description={`"${deleteTarget?.name ?? ""}" will be permanently deleted. Replication stops following this rule.`}
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: deleteTarget?.name ?? "" })}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

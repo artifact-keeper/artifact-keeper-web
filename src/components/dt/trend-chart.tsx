@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 interface TrendDataPoint {
   date: string;
   critical: number;
@@ -17,12 +19,12 @@ interface TrendChartProps {
 const SERIES: {
   key: keyof Pick<TrendDataPoint, "critical" | "high" | "medium" | "low">;
   color: string;
-  label: string;
+  labelKey: "critical" | "high" | "medium" | "low";
 }[] = [
-  { key: "critical", color: "#ef4444", label: "Critical" },
-  { key: "high", color: "#f97316", label: "High" },
-  { key: "medium", color: "#f59e0b", label: "Medium" },
-  { key: "low", color: "#3b82f6", label: "Low" },
+  { key: "critical", color: "#ef4444", labelKey: "critical" },
+  { key: "high", color: "#f97316", labelKey: "high" },
+  { key: "medium", color: "#f59e0b", labelKey: "medium" },
+  { key: "low", color: "#3b82f6", labelKey: "low" },
 ];
 
 export function TrendChart({
@@ -30,13 +32,14 @@ export function TrendChart({
   height = 200,
   className,
 }: TrendChartProps) {
+  const t = useTranslations("common");
   if (data.length === 0) {
     return (
       <div
         className={`flex items-center justify-center text-sm text-muted-foreground ${className ?? ""}`}
         style={{ height }}
       >
-        No trend data available
+        {t("noTrendData")}
       </div>
     );
   }
@@ -154,7 +157,7 @@ export function TrendChart({
               className="inline-block size-2.5 rounded-full"
               style={{ backgroundColor: s.color }}
             />
-            <span className="text-muted-foreground">{s.label}</span>
+            <span className="text-muted-foreground">{t(s.labelKey)}</span>
           </div>
         ))}
       </div>

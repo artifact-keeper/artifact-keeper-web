@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Recycle,
@@ -105,6 +106,7 @@ const POLICY_CONFIG_HINTS: Record<string, string> = {
 };
 
 export default function LifecyclePage() {
+  const t = useTranslations("adminLifecycle");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -167,22 +169,22 @@ export default function LifecyclePage() {
   const createMutation = useMutation({
     mutationFn: (req: CreateLifecyclePolicyRequest) => lifecycleApi.create(req),
     onSuccess: () => {
-      toast.success("Policy created");
+      toast.success(t("toastCreated"));
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
       setCreateOpen(false);
       resetForm();
     },
-    onError: mutationErrorToast("Failed to create policy"),
+    onError: mutationErrorToast(t("toastCreateFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.delete(id),
     onSuccess: () => {
-      toast.success("Policy deleted");
+      toast.success(t("toastDeleted"));
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete policy"),
+    onError: mutationErrorToast(t("toastDeleteFailed")),
   });
 
   const toggleMutation = useMutation({
@@ -191,24 +193,27 @@ export default function LifecyclePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: mutationErrorToast("Failed to update policy"),
+    onError: mutationErrorToast(t("toastUpdateFailed")),
   });
 
   const executeMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.execute(id),
     onSuccess: (result) => {
       toast.success(
-        `Removed ${result.artifacts_removed} artifacts (${formatBytes(result.bytes_freed)} freed)`
+        t("toastExecuted", {
+          count: result.artifacts_removed,
+          freed: formatBytes(result.bytes_freed),
+        })
       );
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: mutationErrorToast("Execution failed"),
+    onError: mutationErrorToast(t("toastExecuteFailed")),
   });
 
   const previewMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.preview(id),
     onSuccess: (result) => setPreviewResult(result),
-    onError: mutationErrorToast("Preview failed"),
+    onError: mutationErrorToast(t("toastPreviewFailed")),
   });
 
   const executeAllMutation = useMutation({
@@ -220,11 +225,15 @@ export default function LifecyclePage() {
       );
       const totalFreed = results.reduce((sum, r) => sum + r.bytes_freed, 0);
       toast.success(
-        `Executed ${results.length} policies: ${totalRemoved} artifacts removed, ${formatBytes(totalFreed)} freed`
+        t("toastExecutedAll", {
+          count: results.length,
+          removed: totalRemoved,
+          freed: formatBytes(totalFreed),
+        })
       );
       queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
     },
-    onError: mutationErrorToast("Execute all failed"),
+    onError: mutationErrorToast(t("toastExecuteAllFailed")),
   });
 
   function resetForm() {
@@ -250,7 +259,7 @@ export default function LifecyclePage() {
     try {
       config = JSON.parse(formConfig);
     } catch {
-      toast.error("Invalid JSON in config field");
+      toast.error(t("invalidJsonError"));
       return;
     }
     createMutation.mutate({
@@ -265,9 +274,9 @@ export default function LifecyclePage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Lifecycle Policies" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -284,8 +293,8 @@ export default function LifecyclePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Lifecycle Policies"
-        description="Manage artifact retention and cleanup policies."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex gap-2">
             <Button
@@ -299,11 +308,11 @@ export default function LifecyclePage() {
               ) : (
                 <Play className="size-4 mr-1.5" />
               )}
-              Execute All
+              {t("executeAll")}
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="size-4 mr-1.5" />
-              New Policy
+              {t("newPolicy")}
             </Button>
           </div>
         }
@@ -320,23 +329,23 @@ export default function LifecyclePage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <StatCard
             icon={Recycle}
-            label="Total Policies"
+            label={t("totalPolicies")}
             value={policies?.length ?? 0}
             color="blue"
           />
           <StatCard
             icon={CheckCircle2}
-            label="Enabled"
+            label={t("enabled")}
             value={enabledCount}
             color="green"
           />
           <StatCard
             icon={RefreshCw}
-            label="Last Execution"
+            label={t("lastExecution")}
             value={
               lastRunPolicy?.last_run_at
                 ? formatDateTime(lastRunPolicy.last_run_at)
-                : "Never"
+                : t("never")
             }
             color="purple"
           />
@@ -346,7 +355,7 @@ export default function LifecyclePage() {
       {/* Policy Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Policies</CardTitle>
+          <CardTitle className="text-base">{t("policiesTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
           {isLoading ? (
@@ -359,12 +368,12 @@ export default function LifecyclePage() {
             <div className="px-6 pb-4">
               <EmptyState
                 icon={Recycle}
-                title="No lifecycle policies"
-                description="Create a policy to automatically manage artifact retention."
+                title={t("emptyTitle")}
+                description={t("emptyDescription")}
                 action={
                   <Button size="sm" onClick={() => setCreateOpen(true)}>
                     <Plus className="size-4 mr-1.5" />
-                    Create Policy
+                    {t("createPolicy")}
                   </Button>
                 }
               />
@@ -373,12 +382,12 @@ export default function LifecyclePage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Last Run</TableHead>
-                  <TableHead className="text-right">Removed</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colType")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("colLastRun")}</TableHead>
+                  <TableHead className="text-right">{t("colRemoved")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -409,7 +418,7 @@ export default function LifecyclePage() {
                     <TableCell className="text-right text-muted-foreground">
                       {policy.last_run_at
                         ? formatDateTime(policy.last_run_at)
-                        : "Never"}
+                        : t("never")}
                     </TableCell>
                     <TableCell className="text-right">
                       {policy.last_run_items_removed ?? "-"}
@@ -425,7 +434,7 @@ export default function LifecyclePage() {
                               enabled: !policy.enabled,
                             })
                           }
-                          aria-label={`${policy.enabled ? "Disable" : "Enable"} policy ${policy.name}`}
+                          aria-label={t(policy.enabled ? "disableAria" : "enableAria", { name: policy.name })}
                         >
                           {policy.enabled ? (
                             <XCircle className="size-4" />
@@ -438,7 +447,7 @@ export default function LifecyclePage() {
                           size="sm"
                           onClick={() => previewMutation.mutate(policy.id)}
                           disabled={previewMutation.isPending}
-                          aria-label={`Preview policy ${policy.name} (dry run)`}
+                          aria-label={t("previewAria", { name: policy.name })}
                         >
                           <Eye className="size-4" />
                         </Button>
@@ -447,7 +456,7 @@ export default function LifecyclePage() {
                           size="sm"
                           onClick={() => executeMutation.mutate(policy.id)}
                           disabled={executeMutation.isPending}
-                          aria-label={`Execute policy ${policy.name}`}
+                          aria-label={t("executeAria", { name: policy.name })}
                         >
                           <Play className="size-4" />
                         </Button>
@@ -455,7 +464,7 @@ export default function LifecyclePage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(policy)}
-                          aria-label={`Delete policy ${policy.name}`}
+                          aria-label={t("deleteAria", { name: policy.name })}
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
@@ -474,16 +483,18 @@ export default function LifecyclePage() {
         <Alert>
           <Eye className="size-4" />
           <AlertTitle>
-            Preview: {previewResult.policy_name}
+            {t("previewTitle", { name: previewResult.policy_name })}
           </AlertTitle>
           <AlertDescription>
-            Would match {previewResult.artifacts_matched} artifacts, remove{" "}
-            {previewResult.artifacts_removed}, free{" "}
-            {formatBytes(previewResult.bytes_freed)}.
+            {t("previewDescription", {
+              matched: previewResult.artifacts_matched,
+              removed: previewResult.artifacts_removed,
+              freed: formatBytes(previewResult.bytes_freed),
+            })}
             {previewResult.errors.length > 0 && (
               <span className="text-destructive">
                 {" "}
-                {previewResult.errors.length} error(s).
+                {t("previewErrors", { count: previewResult.errors.length })}.
               </span>
             )}
           </AlertDescription>
@@ -494,32 +505,32 @@ export default function LifecyclePage() {
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Lifecycle Policy</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Define a policy to automatically clean up artifacts.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="lifecycle-name">Name</Label>
+              <Label htmlFor="lifecycle-name">{t("nameLabel")}</Label>
               <Input
                 id="lifecycle-name"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="e.g., Cleanup old snapshots"
+                placeholder={t("namePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lifecycle-description">Description</Label>
+              <Label htmlFor="lifecycle-description">{t("descriptionLabel")}</Label>
               <Input
                 id="lifecycle-description"
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Optional description"
+                placeholder={t("descriptionPlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="lifecycle-type">Policy Type</Label>
+              <Label htmlFor="lifecycle-type">{t("policyTypeLabel")}</Label>
               <Select
                 value={formType}
                 onValueChange={(v) => {
@@ -546,7 +557,7 @@ export default function LifecyclePage() {
             </div>
             {requiresRepositoryId && (
               <div className="space-y-2">
-                <Label htmlFor="lifecycle-repository">Repository</Label>
+                <Label htmlFor="lifecycle-repository">{t("repositoryLabel")}</Label>
                 <Popover
                   open={repositoryPickerOpen}
                   onOpenChange={(open) => {
@@ -559,16 +570,16 @@ export default function LifecyclePage() {
                       id="lifecycle-repository"
                       variant="outline"
                       role="combobox"
-                      aria-label="Repository"
+                      aria-label={t("repositoryLabel")}
                       aria-expanded={repositoryPickerOpen}
                       className="w-full justify-between font-normal"
                       disabled={isLoadingRepositories}
                     >
                       {isLoadingRepositories
-                        ? "Loading repositories..."
+                        ? t("loadingRepositories")
                         : selectedRepository
                           ? `${selectedRepository.key} (${selectedRepository.format}, ${selectedRepository.repo_type})`
-                          : "Select a repository"}
+                          : t("selectRepository")}
                       <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
@@ -578,19 +589,19 @@ export default function LifecyclePage() {
                   >
                     <Command shouldFilter={false}>
                       <CommandInput
-                        aria-label="Search repositories"
-                        placeholder="Search repositories..."
+                        aria-label={t("searchRepositoriesAria")}
+                        placeholder={t("searchRepositoriesPlaceholder")}
                         value={repositorySearch}
                         onValueChange={setRepositorySearch}
                       />
                       <CommandList>
                         {filteredRepositories.length === 0 && (
                           <CommandEmpty>
-                            No repositories match your search.
+                            {t("noRepositoriesMatch")}
                           </CommandEmpty>
                         )}
                         {filteredRepositories.length > 0 && (
-                          <CommandGroup heading="Repositories">
+                          <CommandGroup heading={t("repositoriesHeading")}>
                             {filteredRepositories.map((repository) => (
                               <CommandItem
                                 key={repository.id}
@@ -623,23 +634,22 @@ export default function LifecyclePage() {
                   </PopoverContent>
                 </Popover>
                 <p className="text-xs text-muted-foreground">
-                  Required for Max Versions and Size Quota policies.
+                  {t("repositoryRequiredHint")}
                 </p>
                 {repositoriesError && (
                   <p className="text-xs text-destructive">
-                    Couldn&apos;t load repositories. Close and reopen this dialog
-                    to retry.
+                    {t("repositoriesLoadError")}
                   </p>
                 )}
                 {!isLoadingRepositories && !repositoriesError && repositories.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    No repositories are available.
+                    {t("noRepositoriesAvailable")}
                   </p>
                 )}
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="lifecycle-config">Config (JSON)</Label>
+              <Label htmlFor="lifecycle-config">{t("configLabel")}</Label>
               <Textarea
                 id="lifecycle-config"
                 value={formConfig}
@@ -651,7 +661,7 @@ export default function LifecyclePage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleCreate}
@@ -665,7 +675,7 @@ export default function LifecyclePage() {
               {createMutation.isPending && (
                 <Loader2 className="size-4 mr-1.5 animate-spin" />
               )}
-              Create
+              {t("create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -675,8 +685,8 @@ export default function LifecyclePage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Policy"
-        description={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: deleteTarget?.name ?? "" })}
         danger
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

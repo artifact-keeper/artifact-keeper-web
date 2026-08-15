@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Database,
   FileBox,
@@ -97,13 +98,14 @@ function HealthCard({
   label: string;
   status: string | undefined;
 }>) {
+  const t = useTranslations("dashboard");
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
       {healthIcon(status)}
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className={`text-sm font-medium capitalize ${healthColor(status)}`}>
-          {status ?? "Unknown"}
+          {status ?? t("health.unknown")}
         </p>
       </div>
     </div>
@@ -174,14 +176,15 @@ function StatBreakdown({
   local,
   remote,
 }: Readonly<{ local: string | number; remote: string | number }>) {
+  const t = useTranslations("dashboard");
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-6">
-        <span className="opacity-70">Local</span>
+        <span className="opacity-70">{t("stats.local")}</span>
         <span className="font-medium tabular-nums">{local}</span>
       </div>
       <div className="flex items-center justify-between gap-6">
-        <span className="opacity-70">Remote</span>
+        <span className="opacity-70">{t("stats.remote")}</span>
         <span className="font-medium tabular-nums">{remote}</span>
       </div>
     </div>
@@ -209,6 +212,8 @@ const SEVERITY_TEXT_COLORS: Record<string, string> = {
 };
 
 function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
+  const t = useTranslations("dashboard");
+  const ts = useTranslations("severity");
   const counts = {
     critical: trends.critical_count,
     high: trends.high_count,
@@ -227,7 +232,7 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
           return (
             <div key={sev} className="flex items-center gap-3">
               <span className={`text-xs font-medium capitalize w-16 ${SEVERITY_TEXT_COLORS[sev]}`}>
-                {sev}
+                {ts(sev)}
               </span>
               <div className="flex-1 h-5 bg-muted rounded-full overflow-hidden">
                 <div
@@ -243,11 +248,11 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 
       {/* Status summary row */}
       <div className="flex items-center gap-6 pt-2 border-t text-xs text-muted-foreground">
-        <span>Open: <strong className="text-foreground">{trends.open_cves}</strong></span>
-        <span>Fixed: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
-        <span>Acknowledged: <strong className="text-foreground">{trends.acknowledged_cves}</strong></span>
+        <span>{t("cve.openLabel")}: <strong className="text-foreground">{trends.open_cves}</strong></span>
+        <span>{t("cve.fixedLabel")}: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
+        <span>{t("cve.acknowledgedLabel")}: <strong className="text-foreground">{trends.acknowledged_cves}</strong></span>
         {trends.avg_days_to_fix != null && (
-          <span>Avg fix time: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
+          <span>{t("cve.avgFixTime")}: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
         )}
       </div>
     </div>
@@ -261,6 +266,7 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 export function DashboardContent() {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
+  const t = useTranslations("dashboard");
 
   const {
     data: health,
@@ -316,8 +322,8 @@ export function DashboardContent() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title={greeting ? `Welcome back, ${greeting}` : "Dashboard"}
-        description="Overview of your Artifact Keeper instance."
+        title={greeting ? t("welcomeBack", { name: greeting }) : t("title")}
+        description={t("description")}
         actions={
           isAuthenticated ? (
             <Button
@@ -329,7 +335,7 @@ export function DashboardContent() {
               <RefreshCw
                 className={`size-4 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              Refresh
+              {t("refresh")}
             </Button>
           ) : undefined
         }
@@ -339,30 +345,30 @@ export function DashboardContent() {
       {isAuthenticated && (
         <section>
           <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            System Health
+            {t("systemHealth")}
           </h2>
           {healthLoading ? (
             <HealthSkeleton />
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <HealthCard label="Overall" status={health?.status} />
+              <HealthCard label={t("health.overall")} status={health?.status} />
               <HealthCard
-                label="Database"
+                label={t("health.database")}
                 status={health?.checks?.database?.status}
               />
               <HealthCard
-                label="Storage"
+                label={t("health.storage")}
                 status={health?.checks?.storage?.status}
               />
               {health?.checks?.security_scanner && (
                 <HealthCard
-                  label="Security Scanner"
+                  label={t("health.securityScanner")}
                   status={health.checks.security_scanner.status}
                 />
               )}
               {(health?.checks?.opensearch ?? health?.checks?.meilisearch) && (
                 <HealthCard
-                  label="Search Engine"
+                  label={t("health.searchEngine")}
                   status={
                     (health?.checks?.opensearch ?? health?.checks?.meilisearch)!
                       .status
@@ -378,14 +384,14 @@ export function DashboardContent() {
       {user?.is_admin && (
         <section>
           <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Statistics
+            {t("statistics")}
           </h2>
           {statsLoading && <StatsSkeleton />}
           {!statsLoading && stats && (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatCard
                 icon={Database}
-                label="Repositories"
+                label={t("stats.repositories")}
                 value={stats.total_repositories}
                 color="blue"
                 onClick={() => {
@@ -394,7 +400,7 @@ export function DashboardContent() {
               />
               <StatCard
                 icon={FileBox}
-                label="Artifacts"
+                label={t("stats.artifacts")}
                 value={stats.total_artifacts + stats.proxy_artifact_count}
                 color="green"
                 tooltip={
@@ -406,13 +412,13 @@ export function DashboardContent() {
               />
               <StatCard
                 icon={Users}
-                label="Users"
+                label={t("stats.users")}
                 value={stats.total_users}
                 color="purple"
               />
               <StatCard
                 icon={HardDrive}
-                label="Storage Used"
+                label={t("stats.storageUsed")}
                 value={formatBytes(
                   stats.total_storage_bytes + stats.proxy_storage_bytes
                 )}
@@ -428,7 +434,7 @@ export function DashboardContent() {
           )}
           {!statsLoading && !stats && (
             <div className="rounded-lg border bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              Failed to load admin statistics.
+              {t("stats.failedToLoad")}
             </div>
           )}
         </section>
@@ -438,7 +444,7 @@ export function DashboardContent() {
       {user?.is_admin && (
         <section>
           <h2 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-            Security Overview
+            {t("securityOverview")}
           </h2>
           {cveTrendsLoading && <StatsSkeleton />}
           {!cveTrendsLoading && cveTrends && (
@@ -446,25 +452,25 @@ export function DashboardContent() {
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatCard
                   icon={Shield}
-                  label="Total CVEs"
+                  label={t("cve.total")}
                   value={cveTrends.total_cves}
                   color="blue"
                 />
                 <StatCard
                   icon={ShieldAlert}
-                  label="Open CVEs"
+                  label={t("cve.open")}
                   value={cveTrends.open_cves}
                   color="yellow"
                 />
                 <StatCard
                   icon={ShieldX}
-                  label="Critical"
+                  label={t("cve.critical")}
                   value={cveTrends.critical_count}
                   color="red"
                 />
                 <StatCard
                   icon={ShieldCheck}
-                  label="Fixed"
+                  label={t("cve.fixed")}
                   value={cveTrends.fixed_cves}
                   color="green"
                 />
@@ -474,7 +480,7 @@ export function DashboardContent() {
               {cveTrends.total_cves > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Severity Breakdown</CardTitle>
+                    <CardTitle className="text-sm font-medium">{t("cve.severityBreakdown")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <SeverityBreakdown trends={cveTrends} />
@@ -485,7 +491,7 @@ export function DashboardContent() {
           )}
           {!cveTrendsLoading && !cveTrends && (
             <div className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-              No CVE data available yet. Generate SBOMs and run security scans to track vulnerabilities.
+              {t("cve.noData")}
             </div>
           )}
         </section>
@@ -494,11 +500,11 @@ export function DashboardContent() {
       {/* Recent Repositories */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Repositories</CardTitle>
+          <CardTitle>{t("recentRepositories")}</CardTitle>
           <CardAction>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/repositories">
-                View all
+                {t("viewAll")}
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -510,10 +516,10 @@ export function DashboardContent() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Format</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Storage</TableHead>
+                  <TableHead>{t("table.name")}</TableHead>
+                  <TableHead>{t("table.format")}</TableHead>
+                  <TableHead>{t("table.type")}</TableHead>
+                  <TableHead className="text-right">{t("table.storage")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -528,11 +534,11 @@ export function DashboardContent() {
           <CardContent>
             <EmptyState
               icon={Package}
-              title="No repositories yet"
-              description="Create your first repository to get started with Artifact Keeper."
+              title={t("empty.title")}
+              description={t("empty.description")}
               action={
                 <Button asChild>
-                  <Link href="/repositories">Create Repository</Link>
+                  <Link href="/repositories">{t("empty.createRepo")}</Link>
                 </Button>
               }
             />

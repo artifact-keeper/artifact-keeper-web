@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   FileText,
   Download,
@@ -19,10 +20,7 @@ import { toast } from "sonner";
 
 import { sbomApi } from "@/lib/api/sbom";
 import { mutationErrorToast } from "@/lib/error-utils";
-import {
-  ANALYZABLE_DISABLED_REASON,
-  isArtifactAnalyzable,
-} from "@/lib/artifact-analyzable";
+import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
 import type { SbomComponent, SbomFormat, CveHistoryEntry } from "@/types/sbom";
 import type { Artifact } from "@/types";
 
@@ -51,6 +49,7 @@ interface SbomTabContentProps {
 
 export function SbomTabContent({ artifact }: SbomTabContentProps) {
   const queryClient = useQueryClient();
+  const t = useTranslations("sbom");
   // Proxy-cached remote artifacts have no artifacts row on the backend, so
   // SBOM generation returns 404 (artifact-keeper#2292). Gate the Generate /
   // Regenerate actions on the artifact's `analyzable` flag.
@@ -100,9 +99,9 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sboms", artifact.id] });
-      toast.success("SBOM generated successfully");
+      toast.success(t("sbomGenerated"));
     },
-    onError: mutationErrorToast("Failed to generate SBOM"),
+    onError: mutationErrorToast(t("sbomGenerateFailed")),
   });
 
   // Download SBOM as JSON
@@ -126,7 +125,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
   const componentColumns: DataTableColumn<SbomComponent>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (c) => c.name,
       sortable: true,
       cell: (c) => (
@@ -138,7 +137,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
     },
     {
       id: "version",
-      header: "Version",
+      header: t("colVersion"),
       accessor: (c) => c.version ?? "",
       cell: (c) =>
         c.version ? (
@@ -151,7 +150,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
     },
     {
       id: "licenses",
-      header: "Licenses",
+      header: t("colLicenses"),
       accessor: (c) => c.licenses?.join(", ") ?? "",
       cell: (c) =>
         c.licenses?.length > 0 ? (
@@ -169,12 +168,12 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
             )}
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground">Unknown</span>
+          <span className="text-xs text-muted-foreground">{t("unknownLicense")}</span>
         ),
     },
     {
       id: "purl",
-      header: "Package URL",
+      header: t("colPackageUrl"),
       accessor: (c) => c.purl ?? "",
       cell: (c) =>
         c.purl ? (
@@ -205,7 +204,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FileText className="size-5 text-muted-foreground" />
-          <h3 className="text-sm font-medium">Software Bill of Materials</h3>
+          <h3 className="text-sm font-medium">{t("title")}</h3>
         </div>
         <div className="flex items-center gap-2">
           <Select
@@ -225,17 +224,17 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
             size="sm"
             onClick={() => generateMutation.mutate(selectedFormat)}
             disabled={generateMutation.isPending || !analyzable}
-            title={analyzable ? undefined : ANALYZABLE_DISABLED_REASON}
+            title={analyzable ? undefined : t("analyzableDisabled")}
           >
             <RefreshCw
               className={`size-4 ${generateMutation.isPending ? "animate-spin" : ""}`}
             />
-            {currentSbom ? "Regenerate" : "Generate"}
+            {currentSbom ? t("regenerate") : t("generate")}
           </Button>
           {currentSbom && (
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="size-4" />
-              Download
+              {t("download")}
             </Button>
           )}
         </div>
@@ -247,20 +246,20 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
           {/* Stats grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <StatCard
-              label="Format"
+              label={t("statFormat")}
               value={currentSbom.format.toUpperCase()}
               subvalue={`v${currentSbom.format_version}`}
             />
             <StatCard
-              label="Components"
+              label={t("statComponents")}
               value={currentSbom.component_count.toString()}
             />
             <StatCard
-              label="Dependencies"
+              label={t("statDependencies")}
               value={currentSbom.dependency_count.toString()}
             />
             <StatCard
-              label="Licenses"
+              label={t("statLicenses")}
               value={currentSbom.license_count.toString()}
             />
           </div>
@@ -269,7 +268,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
           {currentSbom.licenses?.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Detected Licenses
+                {t("detectedLicenses")}
               </p>
               <div className="flex flex-wrap gap-1">
                 {currentSbom.licenses.map((lic) => (
@@ -285,7 +284,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
           {(components?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Components ({components?.length ?? 0})
+                {t("componentsCount", { count: components?.length ?? 0 })}
               </p>
               <DataTable
                 columns={componentColumns}
@@ -295,7 +294,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
                 total={components?.length}
                 onPageChange={setComponentsPage}
                 loading={componentsLoading}
-                emptyMessage="No components found"
+                emptyMessage={t("noComponents")}
                 rowKey={(c) => c.id}
               />
             </div>
@@ -305,7 +304,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
           {!cveLoading && (cveHistory?.length ?? 0) > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground">
-                CVE History ({cveHistory?.length ?? 0})
+                {t("cveHistory", { count: cveHistory?.length ?? 0 })}
               </p>
               <div className="rounded-lg border divide-y">
                 {cveHistory?.slice(0, 5).map((cve) => (
@@ -313,7 +312,7 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
                 ))}
                 {(cveHistory?.length ?? 0) > 5 && (
                   <div className="px-4 py-2 text-xs text-muted-foreground text-center">
-                    +{cveHistory!.length - 5} more CVEs
+                    {t("moreCves", { count: cveHistory!.length - 5 })}
                   </div>
                 )}
               </div>
@@ -331,14 +330,14 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
                     <ChevronRight className="size-4" />
                   )}
                   <span className="text-xs font-medium text-muted-foreground">
-                    View Raw JSON
+                    {t("viewRawJson")}
                   </span>
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <pre className="mt-2 rounded-md bg-muted p-4 text-xs overflow-auto max-h-64 font-mono">
                   {contentLoading
-                    ? "Loading..."
+                    ? t("loading")
                     : JSON.stringify(sbomContent.content, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -347,25 +346,29 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
 
           {/* Generation info */}
           <p className="text-xs text-muted-foreground">
-            Generated {new Date(currentSbom.generated_at).toLocaleString()}
-            {currentSbom.generator && ` by ${currentSbom.generator}`}
+            {currentSbom.generator
+              ? t("generatedBy", {
+                  date: new Date(currentSbom.generated_at).toLocaleString(),
+                  generator: currentSbom.generator,
+                })
+              : t("generated", {
+                  date: new Date(currentSbom.generated_at).toLocaleString(),
+                })}
           </p>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FileText className="size-12 text-muted-foreground/50 mb-4" />
           <p className="text-sm text-muted-foreground mb-4">
-            {analyzable
-              ? "No SBOM generated for this artifact yet."
-              : ANALYZABLE_DISABLED_REASON}
+            {analyzable ? t("noSbom") : t("analyzableDisabled")}
           </p>
           <Button
             onClick={() => generateMutation.mutate(selectedFormat)}
             disabled={generateMutation.isPending || !analyzable}
-            title={analyzable ? undefined : ANALYZABLE_DISABLED_REASON}
+            title={analyzable ? undefined : t("analyzableDisabled")}
           >
             <FileText className="size-4" />
-            Generate {selectedFormat.toUpperCase()} SBOM
+            {t("generateSbom", { format: selectedFormat.toUpperCase() })}
           </Button>
         </div>
       )}
@@ -396,11 +399,20 @@ function StatCard({
 
 // Helper component for CVE history rows
 function CveHistoryRow({ cve }: { cve: CveHistoryEntry }) {
+  const t = useTranslations("sbom");
+  const tSev = useTranslations("severity");
   const severityColors: Record<string, string> = {
     critical: "text-red-600 bg-red-100 dark:bg-red-950/40",
     high: "text-orange-600 bg-orange-100 dark:bg-orange-950/40",
     medium: "text-yellow-600 bg-yellow-100 dark:bg-yellow-950/40",
     low: "text-blue-600 bg-blue-100 dark:bg-blue-950/40",
+  };
+
+  const statusKeys: Record<string, string> = {
+    open: "statusOpen",
+    fixed: "statusFixed",
+    acknowledged: "statusAcknowledged",
+    false_positive: "statusFalsePositive",
   };
 
   const statusIcons: Record<string, typeof ShieldAlert> = {
@@ -431,14 +443,14 @@ function CveHistoryRow({ cve }: { cve: CveHistoryEntry }) {
               variant="outline"
               className={`text-xs uppercase ${severityClass}`}
             >
-              {cve.severity}
+              {tSev(cve.severity.toLowerCase())}
             </Badge>
           )}
           <Badge
             variant="outline"
             className="text-xs capitalize"
           >
-            {cve.status}
+            {t(statusKeys[cve.status] ?? "statusOpen")}
           </Badge>
         </div>
         {cve.affected_component && (

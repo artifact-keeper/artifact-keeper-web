@@ -12,6 +12,7 @@ import {
   ToggleRight,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
 import { mutationErrorToast } from "@/lib/error-utils";
@@ -57,38 +58,48 @@ import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
 
-function renderRepoAccess(t: ServiceAccountToken) {
-  if (t.repo_selector) {
+function renderRepoAccess(
+  token: ServiceAccountToken,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  if (token.repo_selector) {
     const parts: string[] = [];
-    if (t.repo_selector.match_formats?.length) {
-      parts.push(`${t.repo_selector.match_formats.length} format(s)`);
+    if (token.repo_selector.match_formats?.length) {
+      parts.push(
+        `${token.repo_selector.match_formats.length} ${t("formatCount", {
+          count: token.repo_selector.match_formats.length,
+        })}`
+      );
     }
-    if (t.repo_selector.match_pattern) {
-      parts.push(t.repo_selector.match_pattern);
+    if (token.repo_selector.match_pattern) {
+      parts.push(token.repo_selector.match_pattern);
     }
-    const labelCount = Object.keys(t.repo_selector.match_labels ?? {}).length;
+    const labelCount = Object.keys(token.repo_selector.match_labels ?? {}).length;
     if (labelCount > 0) {
-      parts.push(`${labelCount} label(s)`);
+      parts.push(`${labelCount} ${t("labelCount", { count: labelCount })}`);
     }
     return (
       <Badge variant="secondary" className="text-xs">
-        {parts.join(", ") || "Selector"}
+        {parts.join(", ") || t("selector")}
       </Badge>
     );
   }
-  if (t.repository_ids?.length > 0) {
+  if (token.repository_ids?.length > 0) {
     return (
       <Badge variant="secondary" className="text-xs">
-        {t.repository_ids.length} repo(s)
+        {token.repository_ids.length} {t("repoCount", {
+          count: token.repository_ids.length,
+        })}
       </Badge>
     );
   }
   return (
-    <span className="text-xs text-muted-foreground">All repos</span>
+    <span className="text-xs text-muted-foreground">{t("allRepos")}</span>
   );
 }
 
 export default function ServiceAccountsPage() {
+  const t = useTranslations("adminServiceAccounts");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 
@@ -144,9 +155,9 @@ export default function ServiceAccountsPage() {
       setCreateOpen(false);
       setCreateName("");
       setCreateDescription("");
-      toast.success("Service account created");
+      toast.success(t("created"));
     },
-    onError: mutationErrorToast("Failed to create service account"),
+    onError: mutationErrorToast(t("createdError")),
   });
 
   const updateMutation = useMutation({
@@ -163,9 +174,9 @@ export default function ServiceAccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       setEditOpen(false);
       setEditAccount(null);
-      toast.success("Service account updated");
+      toast.success(t("updated"));
     },
-    onError: mutationErrorToast("Failed to update service account"),
+    onError: mutationErrorToast(t("updatedError")),
   });
 
   const deleteMutation = useMutation({
@@ -174,9 +185,9 @@ export default function ServiceAccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       setDeleteOpen(false);
       setDeleteAccount(null);
-      toast.success("Service account deleted");
+      toast.success(t("deleted"));
     },
-    onError: mutationErrorToast("Failed to delete service account"),
+    onError: mutationErrorToast(t("deletedError")),
   });
 
   const createTokenMutation = useMutation({
@@ -192,9 +203,9 @@ export default function ServiceAccountsPage() {
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
       setTokenRepoSelector({});
-      toast.success("Token created");
+      toast.success(t("tokenCreated"));
     },
-    onError: mutationErrorToast("Failed to create token"),
+    onError: mutationErrorToast(t("tokenCreatedError")),
   });
 
   const revokeTokenMutation = useMutation({
@@ -206,9 +217,9 @@ export default function ServiceAccountsPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
       setRevokeTokenId(null);
-      toast.success("Token revoked");
+      toast.success(t("tokenRevoked"));
     },
-    onError: mutationErrorToast("Failed to revoke token"),
+    onError: mutationErrorToast(t("tokenRevokedError")),
   });
 
   // Handlers
@@ -226,9 +237,9 @@ export default function ServiceAccountsPage() {
   if (!currentUser?.is_admin) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>Access Denied</AlertTitle>
+        <AlertTitle>{t("accessDenied")}</AlertTitle>
         <AlertDescription>
-          You need admin privileges to manage service accounts.
+          {t("accessDeniedDescription")}
         </AlertDescription>
       </Alert>
     );
@@ -238,7 +249,7 @@ export default function ServiceAccountsPage() {
   const columns: DataTableColumn<ServiceAccount>[] = [
     {
       id: "username",
-      header: "Username",
+      header: t("colUsername"),
       accessor: (a) => a.username,
       sortable: true,
       cell: (a) => (
@@ -250,7 +261,7 @@ export default function ServiceAccountsPage() {
     },
     {
       id: "display_name",
-      header: "Description",
+      header: t("colDescription"),
       cell: (a) => (
         <span className="text-sm text-muted-foreground">
           {a.display_name || "-"}
@@ -259,17 +270,17 @@ export default function ServiceAccountsPage() {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (a) => (
         <StatusBadge
-          status={a.is_active ? "Active" : "Inactive"}
+          status={a.is_active ? t("active") : t("inactive")}
           color={a.is_active ? "green" : "red"}
         />
       ),
     },
     {
       id: "tokens",
-      header: "Tokens",
+      header: t("colTokens"),
       accessor: (a) => a.token_count,
       cell: (a) => (
         <Badge variant="secondary" className="text-xs">
@@ -279,7 +290,7 @@ export default function ServiceAccountsPage() {
     },
     {
       id: "created",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (a) => a.created_at,
       sortable: true,
       cell: (a) => (
@@ -303,7 +314,7 @@ export default function ServiceAccountsPage() {
                 <Key className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Manage Tokens</TooltipContent>
+            <TooltipContent>{t("manageTokens")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -315,7 +326,7 @@ export default function ServiceAccountsPage() {
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t("edit")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -337,7 +348,7 @@ export default function ServiceAccountsPage() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {a.is_active ? "Deactivate" : "Activate"}
+              {a.is_active ? t("deactivate") : t("activate")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -354,7 +365,7 @@ export default function ServiceAccountsPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("delete")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -365,15 +376,15 @@ export default function ServiceAccountsPage() {
   const tokenColumns: DataTableColumn<ServiceAccountToken>[] = [
     {
       id: "name",
-      header: "Name",
-      accessor: (t) => t.name,
-      cell: (t) => (
+      header: t("colName"),
+      accessor: (tok) => tok.name,
+      cell: (tok) => (
         <div className="flex items-center gap-2">
           <Key className="size-3.5 text-muted-foreground" />
-          <span className="font-medium text-sm">{t.name}</span>
-          {t.is_expired && (
+          <span className="font-medium text-sm">{tok.name}</span>
+          {tok.is_expired && (
             <Badge variant="destructive" className="text-xs">
-              Expired
+              {t("expired")}
             </Badge>
           )}
         </div>
@@ -381,19 +392,19 @@ export default function ServiceAccountsPage() {
     },
     {
       id: "prefix",
-      header: "Prefix",
-      cell: (t) => (
+      header: t("colPrefix"),
+      cell: (tok) => (
         <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-          {t.token_prefix}...
+          {tok.token_prefix}...
         </code>
       ),
     },
     {
       id: "scopes",
-      header: "Scopes",
-      cell: (t) => (
+      header: t("colScopes"),
+      cell: (tok) => (
         <div className="flex flex-wrap gap-1">
-          {t.scopes.map((s) => (
+          {tok.scopes.map((s) => (
             <Badge key={s} variant="secondary" className="text-xs">
               {s}
             </Badge>
@@ -403,25 +414,25 @@ export default function ServiceAccountsPage() {
     },
     {
       id: "repo_access",
-      header: "Repo Access",
-      cell: renderRepoAccess,
+      header: t("colRepoAccess"),
+      cell: (row) => renderRepoAccess(row, t),
     },
     {
       id: "last_used",
-      header: "Last Used",
-      cell: (t) =>
-        t.last_used_at ? (
+      header: t("colLastUsed"),
+      cell: (tok) =>
+        tok.last_used_at ? (
           <span className="text-sm text-muted-foreground">
-            {new Date(t.last_used_at).toLocaleDateString()}
+            {new Date(tok.last_used_at).toLocaleDateString()}
           </span>
         ) : (
-          <span className="text-sm text-muted-foreground">Never</span>
+          <span className="text-sm text-muted-foreground">{t("never")}</span>
         ),
     },
     {
       id: "actions",
       header: "",
-      cell: (t) => (
+      cell: (tok) => (
         <div className="flex justify-end">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -429,12 +440,12 @@ export default function ServiceAccountsPage() {
                 variant="ghost"
                 size="icon-xs"
                 className="text-destructive hover:text-destructive"
-                onClick={() => setRevokeTokenId(t.id)}
+                onClick={() => setRevokeTokenId(tok.id)}
               >
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Revoke</TooltipContent>
+            <TooltipContent>{t("revoke")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -444,12 +455,12 @@ export default function ServiceAccountsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Service Accounts"
-        description="Machine identities for CI/CD pipelines and automated systems. Each service account can have its own API tokens, independent of any human user."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Create Service Account
+            {t("create")}
           </Button>
         }
       />
@@ -457,12 +468,12 @@ export default function ServiceAccountsPage() {
       {accounts.length === 0 && !isLoading ? (
         <EmptyState
           icon={Bot}
-          title="No service accounts"
-          description="Create a service account to give CI/CD pipelines and automated systems their own identity and API tokens."
+          title={t("noAccounts")}
+          description={t("noAccountsDescription")}
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create Service Account
+              {t("create")}
             </Button>
           }
         />
@@ -472,7 +483,7 @@ export default function ServiceAccountsPage() {
           data={accounts}
           loading={isLoading}
           rowKey={(a) => a.id}
-          emptyMessage="No service accounts found."
+          emptyMessage={t("noAccountsFound")}
         />
       )}
 
@@ -489,10 +500,9 @@ export default function ServiceAccountsPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Service Account</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Service accounts are machine identities. The username will be
-              prefixed with &quot;svc-&quot; automatically.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -506,28 +516,28 @@ export default function ServiceAccountsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="svc-name">Name</Label>
+              <Label htmlFor="svc-name">{t("name")}</Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">svc-</span>
                 <Input
                   id="svc-name"
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="deploy-pipeline"
+                  placeholder={t("namePlaceholder")}
                   required
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Alphanumeric characters and hyphens only.
+                {t("nameHint")}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="svc-description">Description</Label>
+              <Label htmlFor="svc-description">{t("description")}</Label>
               <Input
                 id="svc-description"
                 value={createDescription}
                 onChange={(e) => setCreateDescription(e.target.value)}
-                placeholder="Production deployment pipeline"
+                placeholder={t("descriptionPlaceholder")}
               />
             </div>
             <DialogFooter>
@@ -536,13 +546,13 @@ export default function ServiceAccountsPage() {
                 type="button"
                 onClick={() => setCreateOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
                 disabled={createMutation.isPending || !createName}
               >
-                {createMutation.isPending ? "Creating..." : "Create"}
+                {createMutation.isPending ? t("creating") : t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -560,7 +570,7 @@ export default function ServiceAccountsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Edit: {editAccount?.username}
+              {t("editDialogTitle", { username: editAccount?.username ?? "" })}
             </DialogTitle>
           </DialogHeader>
           <form
@@ -576,12 +586,12 @@ export default function ServiceAccountsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="edit-display-name">Description</Label>
+              <Label htmlFor="edit-display-name">{t("description")}</Label>
               <Input
                 id="edit-display-name"
                 value={editDisplayName}
                 onChange={(e) => setEditDisplayName(e.target.value)}
-                placeholder="Description for this service account"
+                placeholder={t("editDescriptionPlaceholder")}
               />
             </div>
             <DialogFooter>
@@ -590,10 +600,10 @@ export default function ServiceAccountsPage() {
                 type="button"
                 onClick={() => setEditOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save"}
+                {updateMutation.isPending ? t("saving") : t("save")}
               </Button>
             </DialogFooter>
           </form>
@@ -616,27 +626,29 @@ export default function ServiceAccountsPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              Tokens: {tokenAccount?.username}
+              {t("tokensDialogTitle", {
+                username: tokenAccount?.username ?? "",
+              })}
             </DialogTitle>
             <DialogDescription>
-              Manage API tokens for this service account.
+              {t("tokensDialogDescription")}
             </DialogDescription>
           </DialogHeader>
 
           {newlyCreatedToken ? (
             <TokenCreatedAlert
-              title="Token Created"
-              description="Copy this token now. You will not be able to see it again."
+              title={t("tokenCreatedTitle")}
+              description={t("tokenCreatedDescription")}
               token={newlyCreatedToken}
               onDone={() => setNewlyCreatedToken(null)}
             />
           ) : createTokenOpen ? (
             <TokenCreateForm
-              title="Create Token"
-              description="Generate a new API token for this service account."
+              title={t("createToken")}
+              description={t("createTokenDescription")}
               name={tokenName}
               onNameChange={setTokenName}
-              namePlaceholder="e.g., production-deploy"
+              namePlaceholder={t("tokenNamePlaceholder")}
               expiry={tokenExpiry}
               onExpiryChange={setTokenExpiry}
               scopes={tokenScopes}
@@ -662,7 +674,7 @@ export default function ServiceAccountsPage() {
                 }
               }}
               onCancel={() => setCreateTokenOpen(false)}
-              submitLabel="Create Token"
+              submitLabel={t("createToken")}
               showRepoSelector
               repoSelector={tokenRepoSelector}
               onRepoSelectorChange={setTokenRepoSelector}
@@ -675,22 +687,22 @@ export default function ServiceAccountsPage() {
                   onClick={() => setCreateTokenOpen(true)}
                 >
                   <Plus className="size-4" />
-                  Create Token
+                  {t("createToken")}
                 </Button>
               </div>
 
               {tokens.length === 0 && !tokensLoading ? (
                 <EmptyState
                   icon={Key}
-                  title="No tokens"
-                  description="Create a token for this service account."
+                  title={t("noTokens")}
+                  description={t("noTokensDescription")}
                   action={
                     <Button
                       size="sm"
                       onClick={() => setCreateTokenOpen(true)}
                     >
                       <Plus className="size-4" />
-                      Create Token
+                      {t("createToken")}
                     </Button>
                   }
                 />
@@ -699,8 +711,8 @@ export default function ServiceAccountsPage() {
                   columns={tokenColumns}
                   data={tokens}
                   loading={tokensLoading}
-                  rowKey={(t) => t.id}
-                  emptyMessage="No tokens found."
+                  rowKey={(tok) => tok.id}
+                  emptyMessage={t("noTokensFound")}
                 />
               )}
             </div>
@@ -717,9 +729,11 @@ export default function ServiceAccountsPage() {
             setDeleteAccount(null);
           }
         }}
-        title="Delete Service Account"
-        description={`This will permanently delete "${deleteAccount?.username}" and revoke all its tokens. Any pipelines using those tokens will lose access immediately.`}
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", {
+          username: deleteAccount?.username ?? "",
+        })}
+        confirmText={t("delete")}
         typeToConfirm={deleteAccount?.username}
         danger
         loading={deleteMutation.isPending}
@@ -734,9 +748,9 @@ export default function ServiceAccountsPage() {
         onOpenChange={(o) => {
           if (!o) setRevokeTokenId(null);
         }}
-        title="Revoke Token"
-        description="This will permanently invalidate this token. Any systems using it will lose access immediately."
-        confirmText="Revoke"
+        title={t("revokeTitle")}
+        description={t("revokeDescription")}
+        confirmText={t("revoke")}
         danger
         loading={revokeTokenMutation.isPending}
         onConfirm={() => {

@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
   Bug,
@@ -68,6 +69,7 @@ function truncateId(id: string): string {
  * so everyone — not just the recorded downloaders — is exposed.
  */
 export function AccessScopeBadge({ scope }: { scope: string }) {
+  const t = useTranslations("adminBlastRadius");
   if (scope === "public") {
     return (
       <Badge
@@ -75,7 +77,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
         className="border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
       >
         <AlertTriangle className="mr-1 size-3" />
-        Public — everyone exposed
+        {t("publicExposed")}
       </Badge>
     );
   }
@@ -86,7 +88,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
         className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
       >
         <Lock className="mr-1 size-3" />
-        Restricted (explicit ACL)
+        {t("restrictedAcl")}
       </Badge>
     );
   }
@@ -94,7 +96,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
     return (
       <Badge variant="secondary">
         <Lock className="mr-1 size-3" />
-        Restricted (roles)
+        {t("restrictedRoles")}
       </Badge>
     );
   }
@@ -108,6 +110,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
  * can reach the artifact, so per-user enumeration is not applicable.
  */
 export function ExposureBadge({ exposure }: { exposure: string }) {
+  const t = useTranslations("adminBlastRadius");
   if (exposure === "everyone") {
     return (
       <Badge
@@ -115,7 +118,7 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
         className="border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
       >
         <Globe className="mr-1 size-3" />
-        Everyone — public repository
+        {t("everyonePublic")}
       </Badge>
     );
   }
@@ -126,7 +129,7 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
         className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
       >
         <AlertTriangle className="mr-1 size-3" />
-        Effectively everyone
+        {t("effectivelyEveryone")}
       </Badge>
     );
   }
@@ -134,7 +137,7 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
     return (
       <Badge variant="secondary">
         <Users className="mr-1 size-3" />
-        Enumerable set
+        {t("enumerableSet")}
       </Badge>
     );
   }
@@ -147,23 +150,36 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
  * `permission` (direct or group grant), or `role` (role assignment).
  */
 export function ViaBadge({ via }: { via: string }) {
+  const t = useTranslations("adminBlastRadius");
   const label =
     via === "admin"
-      ? "Administrator"
+      ? t("admin")
       : via === "permission"
-        ? "Permission grant"
+        ? t("permissionGrant")
         : via === "role"
-          ? "Role assignment"
+          ? t("roleAssignment")
           : via;
   return <Badge variant="secondary">{label}</Badge>;
 }
 
 /** Compact preview of a downloader's IP sample: first few, then "+n more". */
-export function ipPreview(ips: string[], distinctCount: number): string {
+export function ipPreview(
+  ips: string[],
+  distinctCount: number,
+  tr: (key: string, values?: Record<string, string | number>) => string = (
+    _key,
+    values
+  ) => {
+    const n = typeof values?.count === "number" ? values.count : 0;
+    return `+${n} more`;
+  }
+): string {
   if (ips.length === 0) return "—";
   const shown = ips.slice(0, 3);
   const more = Math.max(distinctCount, ips.length) - shown.length;
-  return more > 0 ? `${shown.join(", ")} +${more} more` : shown.join(", ");
+  return more > 0
+    ? `${shown.join(", ")} ${tr("ipMore", { count: more })}`
+    : shown.join(", ");
 }
 
 export default function BlastRadiusPage() {
@@ -182,6 +198,7 @@ export default function BlastRadiusPage() {
 }
 
 function BlastRadiusContent() {
+  const t = useTranslations("adminBlastRadius");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -275,16 +292,14 @@ function BlastRadiusContent() {
     const value = draft.trim();
     if (mode === "cve") {
       if (!isValidVulnId(value)) {
-        setInputError(
-          "Enter a CVE id like CVE-2021-44228 (GHSA ids are accepted too)"
-        );
+        setInputError(t("cveIdError"));
         return;
       }
       setInputError(null);
       setApplied({ kind: "cve", value: normalizeVulnId(value) });
     } else {
       if (!isValidUuid(value)) {
-        setInputError("Artifact ID must be a UUID");
+        setInputError(t("artifactIdError"));
         return;
       }
       setInputError(null);
@@ -304,7 +319,7 @@ function BlastRadiusContent() {
   const repoColumns: DataTableColumn<AffectedRepo>[] = [
     {
       id: "repository",
-      header: "Repository",
+      header: t("colRepository"),
       accessor: (r) => r.repository_key,
       cell: (r) => (
         <span className="font-medium" title={r.repository_id}>
@@ -315,25 +330,25 @@ function BlastRadiusContent() {
     },
     {
       id: "visibility",
-      header: "Visibility",
+      header: t("colVisibility"),
       accessor: (r) => (r.is_public ? "public" : "private"),
       cell: (r) =>
         r.is_public ? (
           <Badge variant="outline">
             <Globe className="mr-1 size-3" />
-            public
+            {t("public")}
           </Badge>
         ) : (
           <Badge variant="outline">
             <Lock className="mr-1 size-3" />
-            private
+            {t("private")}
           </Badge>
         ),
       sortable: true,
     },
     {
       id: "access_scope",
-      header: "Access scope",
+      header: t("colAccessScope"),
       accessor: (r) => (r.access_scope === "public" ? 0 : 1),
       cell: (r) => <AccessScopeBadge scope={r.access_scope} />,
       sortable: true,
@@ -343,11 +358,11 @@ function BlastRadiusContent() {
   const downloaderColumns: DataTableColumn<BlastRadiusDownloader>[] = [
     {
       id: "user",
-      header: "User",
+      header: t("colUser"),
       accessor: (d) => d.username ?? "",
       cell: (d) => {
         if (!d.user_id) {
-          return <span className="text-muted-foreground">anonymous</span>;
+          return <span className="text-muted-foreground">{t("anonymous")}</span>;
         }
         return d.username ? (
           <span title={d.user_id}>{d.username}</span>
@@ -361,14 +376,14 @@ function BlastRadiusContent() {
     },
     {
       id: "downloads",
-      header: "Downloads",
+      header: t("colDownloads"),
       accessor: (d) => d.download_count,
       cell: (d) => <span className="tabular-nums">{d.download_count}</span>,
       sortable: true,
     },
     {
       id: "ips",
-      header: "IPs",
+      header: t("colIps"),
       accessor: (d) => d.distinct_ip_count,
       className: "max-w-[280px]",
       cell: (d) => (
@@ -376,14 +391,16 @@ function BlastRadiusContent() {
           className="block truncate font-mono text-xs"
           title={d.ip_addresses.join(", ") || undefined}
         >
-          {ipPreview(d.ip_addresses, d.distinct_ip_count)}
+          {ipPreview(d.ip_addresses, d.distinct_ip_count, (key, values) =>
+            t(key, values)
+          )}
         </span>
       ),
       sortable: true,
     },
     {
       id: "first_download",
-      header: "First download",
+      header: t("colFirstDownload"),
       accessor: (d) => d.first_download,
       cell: (d) => (
         <span className="whitespace-nowrap text-sm" title={d.first_download}>
@@ -394,7 +411,7 @@ function BlastRadiusContent() {
     },
     {
       id: "last_download",
-      header: "Last download",
+      header: t("colLastDownload"),
       accessor: (d) => d.last_download,
       cell: (d) => (
         <span className="whitespace-nowrap text-sm" title={d.last_download}>
@@ -408,7 +425,7 @@ function BlastRadiusContent() {
   const accessibleColumns: DataTableColumn<AccessibleUser>[] = [
     {
       id: "user",
-      header: "User",
+      header: t("colUser"),
       accessor: (u) => u.username,
       cell: (u) => (
         <span title={u.user_id}>
@@ -421,7 +438,7 @@ function BlastRadiusContent() {
     },
     {
       id: "via",
-      header: "Access via",
+      header: t("colAccessVia"),
       accessor: (u) => u.via,
       cell: (u) => <ViaBadge via={u.via} />,
       sortable: true,
@@ -431,11 +448,11 @@ function BlastRadiusContent() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Blast Radius" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view CVE blast-radius reports.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -445,15 +462,15 @@ function BlastRadiusContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Blast Radius"
-        description="Who is exposed to a vulnerability — the users and network locations that downloaded an affected artifact, and how widely each affected repository is reachable."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Crosshair className="size-5 text-muted-foreground" />
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Refresh blast radius"
+              aria-label={t("refreshAria")}
               onClick={() => {
                 queryClient.invalidateQueries({
                   queryKey: BLAST_RADIUS_QUERY_KEY,
@@ -477,20 +494,20 @@ function BlastRadiusContent() {
       <div className="space-y-2">
         <Tabs value={mode} onValueChange={(v) => switchMode(v as TargetKind)}>
           <TabsList>
-            <TabsTrigger value="cve">By CVE</TabsTrigger>
-            <TabsTrigger value="artifact">By Artifact</TabsTrigger>
+            <TabsTrigger value="cve">{t("byCve")}</TabsTrigger>
+            <TabsTrigger value="artifact">{t("byArtifact")}</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <Label htmlFor="blast-radius-target">
-              {mode === "cve" ? "CVE / advisory ID" : "Artifact ID"}
+              {mode === "cve" ? t("cveOrAdvisoryId") : t("artifactId")}
             </Label>
             <Input
               id="blast-radius-target"
               className="w-[320px] font-mono"
               placeholder={
-                mode === "cve" ? "e.g. CVE-2021-44228" : "UUID of the artifact"
+                mode === "cve" ? t("cvePlaceholder") : t("artifactPlaceholder")
               }
               value={draft}
               onChange={(e) => {
@@ -502,7 +519,7 @@ function BlastRadiusContent() {
               aria-describedby="blast-radius-input-error"
             />
           </div>
-          <Button onClick={analyze}>Analyze</Button>
+          <Button onClick={analyze}>{t("analyze")}</Button>
         </div>
         {/* Persistent live region so the validation error is announced and
             stays associated with the target input. */}
@@ -517,20 +534,16 @@ function BlastRadiusContent() {
 
       {applied == null ? (
         <Alert>
-          <AlertTitle>Pick a target</AlertTitle>
+          <AlertTitle>{t("pickTarget")}</AlertTitle>
           <AlertDescription>
-            Enter a CVE id (or switch to artifact mode and enter an artifact
-            id) to see who downloaded the affected artifacts and which
-            repositories expose them. You can also open this page from a scan
-            finding&apos;s advisory link.
+            {t("pickTargetDescription")}
           </AlertDescription>
         </Alert>
       ) : isError ? (
         <Alert variant="destructive">
-          <AlertTitle>Blast radius unavailable</AlertTitle>
+          <AlertTitle>{t("unavailableTitle")}</AlertTitle>
           <AlertDescription>
-            Unable to load the blast-radius report. This server may not
-            support the blast-radius endpoints yet, or the request failed.
+            {t("unavailableDescription")}
           </AlertDescription>
         </Alert>
       ) : isLoading || !data ? (
@@ -541,7 +554,7 @@ function BlastRadiusContent() {
         <>
           {/* Report scope + anonymous flag */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">Report for</span>
+            <span className="text-sm text-muted-foreground">{t("reportFor")}</span>
             <Badge variant="outline" className="font-mono">
               {data.target.value}
             </Badge>
@@ -551,7 +564,7 @@ function BlastRadiusContent() {
                 className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
               >
                 <AlertTriangle className="mr-1 size-3" />
-                Anonymous downloads present
+                {t("anonymousDownloadsPresent")}
               </Badge>
             )}
           </div>
@@ -560,7 +573,7 @@ function BlastRadiusContent() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard
               icon={Bug}
-              label="Affected artifacts"
+              label={t("affectedArtifacts")}
               value={data.summary.affected_artifact_count}
               color={
                 data.summary.affected_artifact_count > 0 ? "red" : "green"
@@ -568,17 +581,17 @@ function BlastRadiusContent() {
             />
             <StatCard
               icon={Database}
-              label="Affected repos"
+              label={t("affectedRepos")}
               value={data.summary.affected_repo_count}
               color={data.summary.affected_repo_count > 0 ? "yellow" : "green"}
             />
             <StatCard
               icon={Users}
-              label="Downloaders"
+              label={t("downloaders")}
               value={data.summary.downloader_user_count}
               description={
                 data.summary.anonymous_download_present
-                  ? "+ anonymous"
+                  ? t("plusAnonymous")
                   : undefined
               }
               color={
@@ -590,36 +603,36 @@ function BlastRadiusContent() {
             />
             <StatCard
               icon={Network}
-              label="Distinct IPs"
+              label={t("distinctIps")}
               value={data.summary.distinct_ip_count}
               color="blue"
             />
             <StatCard
               icon={Download}
-              label="Total downloads"
+              label={t("totalDownloads")}
               value={data.summary.total_download_count}
               color={data.summary.total_download_count > 0 ? "yellow" : "green"}
             />
           </div>
 
           {/* Affected repositories */}
-          <section className="space-y-2" aria-label="Affected repositories">
+          <section className="space-y-2" aria-label={t("affectedRepositories")}>
             <h2 className="text-lg font-semibold tracking-tight">
-              Affected repositories
+              {t("affectedRepositories")}
             </h2>
             <DataTable
               columns={repoColumns}
               data={data.affected_repos}
               loading={false}
-              emptyMessage="No repositories hold an affected artifact."
+              emptyMessage={t("noAffectedRepos")}
               rowKey={(r) => r.repository_id}
             />
           </section>
 
           {/* Downloaders */}
-          <section className="space-y-2" aria-label="Downloaders">
+          <section className="space-y-2" aria-label={t("downloadersTitle")}>
             <h2 className="text-lg font-semibold tracking-tight">
-              Downloaders
+              {t("downloadersTitle")}
             </h2>
             <DataTable
               columns={downloaderColumns}
@@ -634,7 +647,7 @@ function BlastRadiusContent() {
               }}
               pageSizeOptions={[20, 50, 100]}
               loading={false}
-              emptyMessage="No downloads of affected artifacts recorded."
+              emptyMessage={t("noDownloaders")}
               rowKey={(d) => d.user_id ?? "anonymous"}
             />
           </section>
@@ -644,26 +657,25 @@ function BlastRadiusContent() {
               distinct from the confirmed downloaders above. */}
           <section
             className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20"
-            aria-label="Accessible but not downloaded"
+            aria-label={t("accessibleNotDownloaded")}
           >
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <ShieldAlert className="size-5 text-amber-600 dark:text-amber-400" />
                 <h2 className="text-lg font-semibold tracking-tight">
-                  Accessible, not downloaded
+                  {t("accessibleNotDownloaded")}
                 </h2>
                 <Badge
                   variant="outline"
                   className="border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
                 >
-                  Latent exposure
+                  {t("latentExposure")}
                 </Badge>
               </div>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Users who <strong>could</strong> read an affected artifact but
-                have <strong>not</strong> downloaded it. This is{" "}
-                <strong>potential</strong> reach, not confirmed exposure — the
-                downloaders above are who actually pulled the artifact.
+                {t.rich("latentDescription", {
+                  strong: (chunks) => <strong>{chunks}</strong>,
+                })}
               </p>
             </div>
 
@@ -671,7 +683,7 @@ function BlastRadiusContent() {
             {applied.kind === "cve" && affectedRepos.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <Label htmlFor="accessible-repo" className="text-sm">
-                  Repository
+                  {t("repository")}
                 </Label>
                 <Select
                   value={effectiveRepoId ?? undefined}
@@ -681,7 +693,7 @@ function BlastRadiusContent() {
                   }}
                 >
                   <SelectTrigger id="accessible-repo" className="w-[280px]">
-                    <SelectValue placeholder="Select a repository" />
+                    <SelectValue placeholder={t("selectRepositoryPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {affectedRepos.map((r) => (
@@ -696,11 +708,9 @@ function BlastRadiusContent() {
 
             {accessibleError ? (
               <Alert variant="destructive">
-                <AlertTitle>Latent exposure unavailable</AlertTitle>
+                <AlertTitle>{t("latentUnavailableTitle")}</AlertTitle>
                 <AlertDescription>
-                  Unable to load the accessible-but-not-downloaded report. This
-                  server may not support the accessible-users endpoint yet, or
-                  the request failed.
+                  {t("latentUnavailableDescription")}
                 </AlertDescription>
               </Alert>
             ) : accessibleLoading || !accessibleData ? (
@@ -711,7 +721,7 @@ function BlastRadiusContent() {
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm text-muted-foreground">
-                    Exposure
+                    {t("exposure")}
                   </span>
                   <ExposureBadge exposure={accessibleData.exposure} />
                   <Badge variant="outline" className="font-mono">
@@ -719,7 +729,7 @@ function BlastRadiusContent() {
                   </Badge>
                   {accessibleData.total != null && (
                     <span className="text-sm text-muted-foreground">
-                      {accessibleData.total} with latent access
+                      {t("withLatentAccess", { count: accessibleData.total ?? 0 })}
                     </span>
                   )}
                 </div>
@@ -741,20 +751,20 @@ function BlastRadiusContent() {
                     }}
                     pageSizeOptions={[20, 50, 100]}
                     loading={false}
-                    emptyMessage="No users have latent access without a recorded download."
+                    emptyMessage={t("noLatentAccess")}
                     rowKey={(u) => u.user_id}
                   />
                 ) : (
                   <Alert>
                     <AlertTitle>
                       {accessibleData.exposure === "everyone"
-                        ? "Public repository — everyone can access"
-                        : "Access is too broad to enumerate"}
+                        ? t("publicRepoAlertTitle")
+                        : t("tooBroadAlertTitle")}
                     </AlertTitle>
                     <AlertDescription>
                       {accessibleData.exposure === "everyone"
-                        ? "This artifact lives in an anonymous-readable repository, so every user (and unauthenticated clients) can reach it. A per-user list is not applicable."
-                        : "So many principals can reach this artifact that a per-user list is not meaningful. Tighten the repository's access scope to narrow the latent blast radius."}
+                        ? t("publicRepoAlertDescription")
+                        : t("tooBroadAlertDescription")}
                     </AlertDescription>
                   </Alert>
                 )}

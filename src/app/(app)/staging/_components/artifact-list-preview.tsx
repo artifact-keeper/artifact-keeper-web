@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import type { StagingArtifact } from "@/types/promotion";
 import { formatBytes } from "@/lib/utils";
 
@@ -17,9 +20,10 @@ export function ArtifactListPreview({
   height = "h-32",
   renderTrailing,
 }: ArtifactListPreviewProps) {
+  const t = useTranslations("staging");
   return (
     <div className="space-y-2">
-      <Label>Selected Artifacts</Label>
+      <Label>{t("selectedArtifacts")}</Label>
       <ScrollArea className={`${height} rounded-md border`}>
         <div className="p-2 space-y-1">
           {artifacts.map((artifact) => (

@@ -5,6 +5,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Search, RefreshCw, Package, ArrowUpRight } from "lucide-react";
 
 import { promotionApi } from "@/lib/api/promotion";
@@ -38,7 +39,8 @@ import { StagingListItem } from "./_components/staging-list-item";
 import { StagingDetailPanel } from "./_components/staging-detail-panel";
 
 export default function StagingPage() {
-  useDocumentTitle("Staging");
+  const t = useTranslations("staging");
+  useDocumentTitle(t("title"));
   const router = useRouter();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -118,7 +120,7 @@ export default function StagingPage() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Search staging repos..."
+            placeholder={t("searchPlaceholder")}
             className="pl-8 h-8 text-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -133,10 +135,10 @@ export default function StagingPage() {
             }}
           >
             <SelectTrigger className="h-7 text-xs flex-1">
-              <SelectValue placeholder="Format" />
+              <SelectValue placeholder={t("format")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All formats</SelectItem>
+              <SelectItem value="__all__">{t("allFormats")}</SelectItem>
               {FORMAT_OPTIONS.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
@@ -161,9 +163,9 @@ export default function StagingPage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Package className="size-8 mb-2 opacity-50" />
-            <p className="text-sm">No staging repositories found.</p>
+            <p className="text-sm">{t("noRepos")}</p>
             <p className="text-xs mt-1">
-              Create a staging repository to begin the promotion workflow.
+              {t("noReposDetail")}
             </p>
           </div>
         ) : (
@@ -184,7 +186,7 @@ export default function StagingPage() {
       {totalPages > 1 && (
         <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Page {page} of {totalPages}
+            {t("pageOf", { page, totalPages })}
           </span>
           <div className="flex gap-1">
             <Button
@@ -214,9 +216,9 @@ export default function StagingPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Staging</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Review and promote artifacts from staging to release repositories.
+            {t("subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -236,7 +238,7 @@ export default function StagingPage() {
                 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh</TooltipContent>
+            <TooltipContent>{t("refresh")}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -261,9 +263,9 @@ export default function StagingPage() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <ArrowUpRight className="size-12 mb-3 opacity-30" />
-                <p className="text-sm font-medium">Select a staging repository</p>
+                <p className="text-sm font-medium">{t("selectRepo")}</p>
                 <p className="text-xs mt-1">
-                  Choose a repository to view artifacts and promote to release.
+                  {t("selectRepoDetail")}
                 </p>
               </div>
             )}

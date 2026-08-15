@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
 import type { FormatHandler } from "@/lib/api/format-handlers";
 import {
@@ -135,6 +136,7 @@ export function RepoDialogs({
   availableRepos = [],
   pluginFormats = [],
 }: RepoDialogsProps) {
+  const t = useTranslations("repoDialogs");
   // Create form state
   // Private by default: matches the backend default and keeps new
   // repositories from being exposed unintentionally.
@@ -292,6 +294,14 @@ export function RepoDialogs({
     setNpmScopePolicy(EMPTY_NPM_SCOPE_POLICY);
   };
 
+  // Build member_repos array from selected keys
+  const buildMemberRepos = (): VirtualRepoMemberInput[] => {
+    return selectedMembers.map((key, idx) => ({
+      repo_key: key,
+      priority: idx + 1,
+    }));
+  };
+
   // Reset the create form whenever the dialog opens. The parent flips
   // `createOpen` back to false programmatically on a successful submit
   // (mutation onSuccess), but Radix Dialog does NOT fire onOpenChange for
@@ -304,14 +314,6 @@ export function RepoDialogs({
     // resetCreateForm only sets local state via stable setters; safe to omit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createOpen]);
-
-  // Build member_repos array from selected keys
-  const buildMemberRepos = (): VirtualRepoMemberInput[] => {
-    return selectedMembers.map((key, idx) => ({
-      repo_key: key,
-      priority: idx + 1,
-    }));
-  };
 
   const handleCreateClose = (open: boolean) => {
     onCreateOpenChange(open);
@@ -326,9 +328,9 @@ export function RepoDialogs({
       <Dialog open={createOpen} onOpenChange={handleCreateClose}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Repository</DialogTitle>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
             <DialogDescription>
-              Add a new artifact repository to your registry.
+              {t("createDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -388,7 +390,7 @@ export function RepoDialogs({
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="create-key">Key</Label>
+              <Label htmlFor="create-key">{t("keyLabel")}</Label>
               <Input
                 id="create-key"
                 placeholder="my-repo"
@@ -404,15 +406,15 @@ export function RepoDialogs({
               />
               {keyTaken && (
                 <p id="create-key-error" role="alert" className="text-sm text-red-500">
-                  Repository key &quot;{createForm.key}&quot; is already taken. Please choose a different key.
+                  {t("keyTaken", { key: createForm.key })}
                 </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-name">Name</Label>
+              <Label htmlFor="create-name">{t("nameLabel")}</Label>
               <Input
                 id="create-name"
-                placeholder="My Repository"
+                placeholder={t("namePlaceholder")}
                 value={createForm.name}
                 onChange={(e) =>
                   setCreateForm((f) => ({ ...f, name: e.target.value }))
@@ -422,10 +424,10 @@ export function RepoDialogs({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-desc">Description</Label>
+              <Label htmlFor="create-desc">{t("descriptionLabel")}</Label>
               <Textarea
                 id="create-desc"
-                placeholder="Optional description..."
+                placeholder={t("descriptionPlaceholder")}
                 value={createForm.description}
                 onChange={(e) =>
                   setCreateForm((f) => ({ ...f, description: e.target.value }))
@@ -435,7 +437,7 @@ export function RepoDialogs({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Format</Label>
+                <Label>{t("formatLabel")}</Label>
                 <Select
                   value={createForm.format}
                   onValueChange={(v) => {
@@ -459,14 +461,14 @@ export function RepoDialogs({
                         labeled as plugin-provided; absent when none. */}
                     {pluginFormats.map((h) => (
                       <SelectItem key={h.format_key} value={h.format_key}>
-                        {`Custom (plugin: ${h.display_name})`}
+                        {t("customPlugin", { name: h.display_name })}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>{t("typeLabel")}</Label>
                 <Select
                   value={createForm.repo_type}
                   onValueChange={(v) => {
@@ -498,14 +500,13 @@ export function RepoDialogs({
             {/* Staging repository: inline hint */}
             {createForm.repo_type === "staging" && (
               <p className="text-xs text-muted-foreground">
-                Staging repos hold artifacts for review before promotion to a release repository.
-                Configure promotion rules after creation.
+                {t("stagingHint")}
               </p>
             )}
             {/* Remote repository: upstream URL */}
             {createForm.repo_type === "remote" && (
               <div className="space-y-2">
-                <Label htmlFor="create-upstream">Upstream URL</Label>
+                <Label htmlFor="create-upstream">{t("upstreamUrlLabel")}</Label>
                 <Input
                   id="create-upstream"
                   placeholder={DEFAULT_UPSTREAM_URLS[createForm.format] ?? "https://upstream-registry.example.com"}
@@ -516,7 +517,7 @@ export function RepoDialogs({
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  The upstream registry URL to proxy requests to.
+                  {t("upstreamUrlHint")}
                 </p>
               </div>
             )}
@@ -524,37 +525,37 @@ export function RepoDialogs({
             {/* Remote repository: upstream authentication */}
             {createForm.repo_type === "remote" && (
               <div className="space-y-3">
-                <Label htmlFor="create-upstream-auth-type">Upstream Authentication</Label>
+                <Label htmlFor="create-upstream-auth-type">{t("upstreamAuthLabel")}</Label>
                 <Select value={upstreamAuthType} onValueChange={setUpstreamAuthType}>
                   <SelectTrigger className="w-full" id="create-upstream-auth-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="basic">Basic (username + password)</SelectItem>
-                    <SelectItem value="bearer">Bearer token</SelectItem>
+                    <SelectItem value="none">{t("authNone")}</SelectItem>
+                    <SelectItem value="basic">{t("authBasic")}</SelectItem>
+                    <SelectItem value="bearer">{t("authBearer")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Credentials are stored encrypted and used when fetching artifacts from the upstream registry.
+                  {t("credentialsHint")}
                 </p>
 
                 {upstreamAuthType === "basic" && (
                   <>
-                    <Label htmlFor="create-upstream-username">Username</Label>
+                    <Label htmlFor="create-upstream-username">{t("usernameLabel")}</Label>
                     <Input
                       id="create-upstream-username"
-                      placeholder="Username"
+                      placeholder={t("usernamePlaceholder")}
                       required
                       value={upstreamUsername}
                       onChange={(e) => setUpstreamUsername(e.target.value)}
                       autoComplete="off"
                     />
-                    <Label htmlFor="create-upstream-password">Password</Label>
+                    <Label htmlFor="create-upstream-password">{t("passwordLabel")}</Label>
                     <Input
                       id="create-upstream-password"
                       type="password"
-                      placeholder="Password or access token"
+                      placeholder={t("passwordPlaceholder")}
                       required
                       value={upstreamPassword}
                       onChange={(e) => setUpstreamPassword(e.target.value)}
@@ -565,11 +566,11 @@ export function RepoDialogs({
 
                 {upstreamAuthType === "bearer" && (
                   <>
-                    <Label htmlFor="create-upstream-token">Token</Label>
+                    <Label htmlFor="create-upstream-token">{t("tokenLabel")}</Label>
                     <Input
                       id="create-upstream-token"
                       type="password"
-                      placeholder="Bearer token"
+                      placeholder={t("tokenPlaceholder")}
                       required
                       value={upstreamPassword}
                       onChange={(e) => setUpstreamPassword(e.target.value)}
@@ -583,10 +584,10 @@ export function RepoDialogs({
             {/* Virtual repository: member selection */}
             {createForm.repo_type === "virtual" && (
               <div className="space-y-2">
-                <Label>Member Repositories</Label>
+                <Label>{t("memberReposLabel")}</Label>
                 {eligibleMembers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No {createForm.format} local or remote repositories available. Create some first.
+                    {t("noEligibleMembers", { format: createForm.format })}
                   </p>
                 ) : (
                   <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-1">
@@ -614,7 +615,7 @@ export function RepoDialogs({
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Select repositories to aggregate. Order determines priority.
+                  {t("memberSelectHint")}
                 </p>
               </div>
             )}
@@ -633,7 +634,7 @@ export function RepoDialogs({
             {/* Advanced Debian/APT config (#2407/#2460/#2489/#2459) */}
             {hasDebianConfig(createForm.format) && (
               <div className="space-y-3 border-t pt-4">
-                <Label>Debian / APT Configuration</Label>
+                <Label>{t("debianConfigTitle")}</Label>
                 <DebianConfigFields
                   idPrefix="create"
                   value={debianConfig}
@@ -645,7 +646,7 @@ export function RepoDialogs({
             {/* npm scope policy (#2424) */}
             {hasNpmScopePolicy(createForm.format, createForm.repo_type) && (
               <div className="space-y-3 border-t pt-4">
-                <Label>npm Scope Policy</Label>
+                <Label>{t("npmScopeTitle")}</Label>
                 <NpmScopePolicyFields
                   idPrefix="create"
                   value={npmScopePolicy}
@@ -663,22 +664,22 @@ export function RepoDialogs({
                     setCreateForm((f) => ({ ...f, is_public: v }))
                   }
                 />
-                <Label htmlFor="create-public">Public repository</Label>
+                <Label htmlFor="create-public">{t("publicRepoLabel")}</Label>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Public repositories are disabled by the operator.
+                {t("publicDisabled")}
               </p>
             )}
             <div className="space-y-2">
-              <Label htmlFor="create-quota">Storage Quota</Label>
+              <Label htmlFor="create-quota">{t("storageQuotaLabel")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="create-quota"
                   type="number"
                   min="0"
                   step="any"
-                  placeholder="No limit"
+                  placeholder={t("noLimitPlaceholder")}
                   value={createQuotaValue}
                   onChange={(e) => setCreateQuotaValue(e.target.value)}
                   className="flex-1"
@@ -697,7 +698,7 @@ export function RepoDialogs({
                 </Select>
               </div>
               <p className="text-xs text-muted-foreground">
-                Maximum storage for this repository. Leave empty for no limit.
+                {t("quotaHint")}
               </p>
             </div>
             <DialogFooter>
@@ -706,10 +707,10 @@ export function RepoDialogs({
                 type="button"
                 onClick={() => handleCreateClose(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={createPending || keyTaken}>
-                {createPending ? "Creating..." : "Create"}
+                {createPending ? t("creating") : t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -731,9 +732,9 @@ export function RepoDialogs({
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Repository: {editRepo?.key}</DialogTitle>
+            <DialogTitle>{t("editTitle", { key: editRepo?.key ?? "" })}</DialogTitle>
             <DialogDescription>
-              Update the repository name, description, or visibility.
+              {t("editDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -751,7 +752,7 @@ export function RepoDialogs({
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="edit-key">Key (URL slug)</Label>
+              <Label htmlFor="edit-key">{t("editKeyLabel")}</Label>
               <Input
                 id="edit-key"
                 value={editForm.key}
@@ -768,12 +769,12 @@ export function RepoDialogs({
                   role="status"
                   className="text-sm text-yellow-600 dark:text-yellow-500"
                 >
-                  Changing the key will update all URLs for this repository.
+                  {t("editKeyWarning")}
                 </p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Name</Label>
+              <Label htmlFor="edit-name">{t("nameLabel")}</Label>
               <Input
                 id="edit-name"
                 value={editForm.name}
@@ -785,7 +786,7 @@ export function RepoDialogs({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-desc">Description</Label>
+              <Label htmlFor="edit-desc">{t("descriptionLabel")}</Label>
               <Textarea
                 id="edit-desc"
                 value={editForm.description}
@@ -804,22 +805,22 @@ export function RepoDialogs({
                     setEditFormOverrides((f) => ({ ...f, is_public: v }))
                   }
                 />
-                <Label htmlFor="edit-public">Public repository</Label>
+                <Label htmlFor="edit-public">{t("publicRepoLabel")}</Label>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Public repositories are disabled by the operator.
+                {t("publicDisabled")}
               </p>
             )}
             <div className="space-y-2">
-              <Label htmlFor="edit-quota">Storage Quota</Label>
+              <Label htmlFor="edit-quota">{t("storageQuotaLabel")}</Label>
               <div className="flex gap-2">
                 <Input
                   id="edit-quota"
                   type="number"
                   min="0"
                   step="any"
-                  placeholder="No limit"
+                  placeholder={t("noLimitPlaceholder")}
                   value={editQuotaValue}
                   onChange={(e) => setEditQuotaOverrides((o) => ({ ...o, value: e.target.value }))}
                   className="flex-1"
@@ -838,16 +839,16 @@ export function RepoDialogs({
                 </Select>
               </div>
               <p className="text-xs text-muted-foreground">
-                Maximum storage for this repository. Leave empty for no limit.
+                {t("quotaHint")}
               </p>
             </div>
 
             {/* Upstream authentication for remote repos (saved separately from main form) */}
             {editRepo?.repo_type === "remote" && (
               <div className="space-y-3 border-t pt-4">
-                <Label>Upstream Authentication</Label>
+                <Label>{t("upstreamAuthLabel")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Credentials are stored encrypted and saved separately from other repository settings.
+                  {t("credentialsEditHint")}
                 </p>
 
                 {/*
@@ -878,7 +879,14 @@ export function RepoDialogs({
                     {editRepo.upstream_auth_configured ? (
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-muted-foreground">
-                          Authentication configured ({editRepo.upstream_auth_type === "basic" ? "Basic Auth" : editRepo.upstream_auth_type === "bearer" ? "Bearer Token" : editRepo.upstream_auth_type})
+                          {t("authConfigured", {
+                            type:
+                              editRepo.upstream_auth_type === "basic"
+                                ? t("basicAuth")
+                                : editRepo.upstream_auth_type === "bearer"
+                                  ? t("bearerToken")
+                                  : editRepo.upstream_auth_type ?? "",
+                          })}
                         </p>
                         <div className="flex gap-2">
                           <Button
@@ -891,7 +899,7 @@ export function RepoDialogs({
                               setEditAuthType(editRepo.upstream_auth_type ?? "basic");
                             }}
                           >
-                            Change
+                            {t("change")}
                           </Button>
                           <Button
                             type="button"
@@ -900,14 +908,14 @@ export function RepoDialogs({
                             disabled={upstreamAuthPending || removeAuthConfirm}
                             onClick={() => setRemoveAuthConfirm(true)}
                           >
-                            Remove
+                            {t("remove")}
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-muted-foreground">
-                          No authentication configured
+                          {t("noAuthConfigured")}
                         </p>
                         <Button
                           id="edit-upstream-auth-toggle"
@@ -916,14 +924,14 @@ export function RepoDialogs({
                           size="sm"
                           onClick={() => setEditAuthMode("edit")}
                         >
-                          Configure
+                          {t("configure")}
                         </Button>
                       </div>
                     )}
                     {removeAuthConfirm && (
                       <div className="flex items-center gap-2 rounded border border-destructive/50 bg-destructive/5 p-2">
                         <p className="text-xs text-destructive flex-1">
-                          Removing credentials will cause upstream requests to fail if the registry requires authentication.
+                          {t("removeWarning")}
                         </p>
                         <Button
                           type="button"
@@ -931,7 +939,7 @@ export function RepoDialogs({
                           size="sm"
                           onClick={() => setRemoveAuthConfirm(false)}
                         >
-                          Keep
+                          {t("keep")}
                         </Button>
                         <Button
                           type="button"
@@ -945,14 +953,14 @@ export function RepoDialogs({
                             setRemoveAuthConfirm(false);
                           }}
                         >
-                          Confirm Remove
+                          {t("confirmRemove")}
                         </Button>
                       </div>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <Label htmlFor="edit-upstream-auth-type">Authentication type</Label>
+                    <Label htmlFor="edit-upstream-auth-type">{t("authTypeLabel")}</Label>
                     <Select value={editAuthType} onValueChange={setEditAuthType}>
                       <SelectTrigger
                         className="w-full"
@@ -961,28 +969,28 @@ export function RepoDialogs({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="basic">Basic (username + password)</SelectItem>
-                        <SelectItem value="bearer">Bearer token</SelectItem>
+                        <SelectItem value="none">{t("authNone")}</SelectItem>
+                        <SelectItem value="basic">{t("authBasic")}</SelectItem>
+                        <SelectItem value="bearer">{t("authBearer")}</SelectItem>
                       </SelectContent>
                     </Select>
 
                     {editAuthType === "basic" && (
                       <>
-                        <Label htmlFor="edit-upstream-username">Username</Label>
+                        <Label htmlFor="edit-upstream-username">{t("usernameLabel")}</Label>
                         <Input
                           id="edit-upstream-username"
-                          placeholder="Username"
+                          placeholder={t("usernamePlaceholder")}
                           required
                           value={editAuthUsername}
                           onChange={(e) => setEditAuthUsername(e.target.value)}
                           autoComplete="off"
                         />
-                        <Label htmlFor="edit-upstream-password">Password</Label>
+                        <Label htmlFor="edit-upstream-password">{t("passwordLabel")}</Label>
                         <Input
                           id="edit-upstream-password"
                           type="password"
-                          placeholder="Password or access token"
+                          placeholder={t("passwordPlaceholder")}
                           required
                           value={editAuthPassword}
                           onChange={(e) => setEditAuthPassword(e.target.value)}
@@ -993,11 +1001,11 @@ export function RepoDialogs({
 
                     {editAuthType === "bearer" && (
                       <>
-                        <Label htmlFor="edit-upstream-token">Token</Label>
+                        <Label htmlFor="edit-upstream-token">{t("tokenLabel")}</Label>
                         <Input
                           id="edit-upstream-token"
                           type="password"
-                          placeholder="Bearer token"
+                          placeholder={t("tokenPlaceholder")}
                           required
                           value={editAuthPassword}
                           onChange={(e) => setEditAuthPassword(e.target.value)}
@@ -1018,7 +1026,7 @@ export function RepoDialogs({
                           setEditAuthPassword("");
                         }}
                       >
-                        Cancel
+                        {t("cancel")}
                       </Button>
                       <Button
                         type="button"
@@ -1043,7 +1051,7 @@ export function RepoDialogs({
                           }
                         }}
                       >
-                        {upstreamAuthPending ? "Saving..." : "Save Authentication"}
+                        {upstreamAuthPending ? t("saving") : t("saveAuth")}
                       </Button>
                     </div>
                   </div>
@@ -1057,10 +1065,10 @@ export function RepoDialogs({
                 type="button"
                 onClick={() => onEditOpenChange(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={editPending}>
-                {editPending ? "Saving..." : "Save Changes"}
+                {editPending ? t("saving") : t("saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -1071,10 +1079,10 @@ export function RepoDialogs({
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={onDeleteOpenChange}
-        title="Delete Repository"
-        description={`Deleting "${deleteRepo?.key}" will permanently remove all artifacts and metadata. This action cannot be undone.`}
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { key: deleteRepo?.key ?? "" })}
         typeToConfirm={deleteRepo?.key}
-        confirmText="Delete Repository"
+        confirmText={t("deleteConfirmText")}
         danger
         loading={deletePending}
         onConfirm={() => {

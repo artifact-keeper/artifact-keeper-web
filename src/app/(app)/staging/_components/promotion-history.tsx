@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowRight,
   ChevronDown,
@@ -47,15 +48,16 @@ interface PromotionHistoryProps {
 
 const STATUS_OPTIONS: Array<{
   value: string;
-  label: string;
+  labelKey: string;
 }> = [
-  { value: "__all__", label: "All statuses" },
-  { value: "promoted", label: "Promoted" },
-  { value: "rejected", label: "Rejected" },
-  { value: "pending_approval", label: "Pending Approval" },
+  { value: "__all__", labelKey: "allStatuses" },
+  { value: "promoted", labelKey: "promoted" },
+  { value: "rejected", labelKey: "rejected" },
+  { value: "pending_approval", labelKey: "pendingApproval" },
 ];
 
 export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
+  const t = useTranslations("promotionHistory");
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("__all__");
   const pageSize = 20;
@@ -101,12 +103,12 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
           }}
         >
           <SelectTrigger className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="Filter by status" />
+            <SelectValue placeholder={t("filterByStatus")} />
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
-                {o.label}
+                {t(o.labelKey)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -116,9 +118,9 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
       {entries.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <ArrowRight className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No promotion history yet.</p>
+          <p className="text-sm">{t("noHistory")}</p>
           <p className="text-xs mt-1">
-            Promotions from this staging repository will appear here.
+            {t("noHistoryDetail")}
           </p>
         </div>
       ) : (
@@ -135,7 +137,7 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between pt-2 border-t">
           <span className="text-xs text-muted-foreground">
-            Page {page} of {totalPages}
+            {t("pageOf", { page, totalPages })}
           </span>
           <div className="flex gap-1">
             <Button
@@ -144,7 +146,7 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
             >
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -152,7 +154,7 @@ export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
             >
-              Next
+              {t("next")}
             </Button>
           </div>
         </div>
@@ -182,13 +184,14 @@ const STATUS_ICON: Record<
   },
 };
 
-const STATUS_LABEL: Record<PromotionHistoryStatus, string> = {
-  promoted: "Promoted",
-  rejected: "Rejected",
-  pending_approval: "Pending Approval",
+const STATUS_LABEL_KEY: Record<PromotionHistoryStatus, string> = {
+  promoted: "promoted",
+  rejected: "rejected",
+  pending_approval: "pendingApproval",
 };
 
 function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
+  const t = useTranslations("promotionHistory");
   const [expanded, setExpanded] = useState(false);
   const hasViolations = (entry.policy_result?.violations?.length ?? 0) > 0;
 
@@ -222,7 +225,7 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
                     variant="outline"
                     className={`text-[10px] font-medium ${PROMOTION_HISTORY_STATUS_COLORS[status]}`}
                   >
-                    {STATUS_LABEL[status]}
+                    {t(STATUS_LABEL_KEY[status])}
                   </Badge>
                   {expanded ? (
                     <ChevronDown className="size-4 text-muted-foreground" />
@@ -272,7 +275,7 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
             {status === "rejected" && entry.rejection_reason && (
               <div className="pt-3">
                 <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">
-                  Rejection Reason
+                  {t("rejectionReason")}
                 </p>
                 <p className="text-sm">{entry.rejection_reason}</p>
               </div>
@@ -282,7 +285,7 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
             {entry.notes && (
               <div className="pt-3">
                 <p className="text-xs font-medium text-muted-foreground mb-1">
-                  Notes
+                  {t("notes")}
                 </p>
                 <p className="text-sm">{entry.notes}</p>
               </div>
@@ -292,7 +295,7 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
             {hasViolations && (
               <div className="pt-3">
                 <p className="text-xs font-medium text-muted-foreground mb-2">
-                  Policy Violations
+                  {t("policyViolations")}
                 </p>
                 <div className="space-y-1">
                   {entry.policy_result?.violations.map(
@@ -318,28 +321,28 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
             {entry.policy_result?.cve_summary && (
               <div className="pt-3">
                 <p className="text-xs font-medium text-muted-foreground mb-1">
-                  CVE Summary
+                  {t("cveSummary")}
                 </p>
                 <div className="flex items-center gap-3 text-xs">
                   {entry.policy_result.cve_summary.critical_count > 0 && (
                     <span className="text-red-600 dark:text-red-400">
                       <XCircle className="size-3 inline mr-0.5" />
-                      {entry.policy_result.cve_summary.critical_count} critical
+                      {t("criticalCount", { count: entry.policy_result.cve_summary.critical_count })}
                     </span>
                   )}
                   {entry.policy_result.cve_summary.high_count > 0 && (
                     <span className="text-orange-600 dark:text-orange-400">
-                      {entry.policy_result.cve_summary.high_count} high
+                      {t("highCount", { count: entry.policy_result.cve_summary.high_count })}
                     </span>
                   )}
                   {entry.policy_result.cve_summary.medium_count > 0 && (
                     <span className="text-yellow-600 dark:text-yellow-400">
-                      {entry.policy_result.cve_summary.medium_count} medium
+                      {t("mediumCount", { count: entry.policy_result.cve_summary.medium_count })}
                     </span>
                   )}
                   {entry.policy_result.cve_summary.low_count > 0 && (
                     <span className="text-blue-600 dark:text-blue-400">
-                      {entry.policy_result.cve_summary.low_count} low
+                      {t("lowCount", { count: entry.policy_result.cve_summary.low_count })}
                     </span>
                   )}
                 </div>
@@ -349,17 +352,17 @@ function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
             {entry.policy_result?.license_summary && (
               <div className="pt-3">
                 <p className="text-xs font-medium text-muted-foreground mb-1">
-                  License Summary
+                  {t("licenseSummary")}
                 </p>
                 <div className="text-xs">
                   {entry.policy_result.license_summary.denied_licenses.length > 0 && (
                     <p className="text-red-600 dark:text-red-400">
-                      Denied: {entry.policy_result.license_summary.denied_licenses.join(", ")}
+                      {t("deniedLicenses", { licenses: entry.policy_result.license_summary.denied_licenses.join(", ") })}
                     </p>
                   )}
                   {entry.policy_result.license_summary.licenses_found.length > 0 && (
                     <p className="text-muted-foreground">
-                      Found: {entry.policy_result.license_summary.licenses_found.slice(0, 5).join(", ")}
+                      {t("foundLicenses", { licenses: entry.policy_result.license_summary.licenses_found.slice(0, 5).join(", ") })}
                       {entry.policy_result.license_summary.licenses_found.length > 5 && " ..."}
                     </p>
                   )}

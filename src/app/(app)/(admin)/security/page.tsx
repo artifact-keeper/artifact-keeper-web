@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ShieldCheck,
   ScanSearch,
@@ -116,6 +117,8 @@ const VIOLATION_STATE_BADGE: Record<string, string> = {
 };
 
 export default function SecurityDashboardPage() {
+  const t = useTranslations("adminSecurity");
+  const tSev = useTranslations("severity");
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -223,14 +226,14 @@ export default function SecurityDashboardPage() {
       setSelectedArtifactId(undefined);
       setScanMode("repo");
     },
-    onError: mutationErrorToast("Failed to trigger scan"),
+    onError: mutationErrorToast(t("triggerScanFailed")),
   });
 
   // -- table columns --
   const columns: DataTableColumn<RepoSecurityScore>[] = [
     {
       id: "repository_id",
-      header: "Repository",
+      header: t("colRepository"),
       accessor: (r) => repoNameMap.get(r.repository_id) ?? r.repository_id,
       cell: (r) => {
         const name = repoNameMap.get(r.repository_id);
@@ -243,14 +246,14 @@ export default function SecurityDashboardPage() {
     },
     {
       id: "grade",
-      header: "Grade",
+      header: t("colGrade"),
       accessor: (r) => r.score,
       sortable: true,
       cell: (r) => <GradeBadge grade={r.grade} />,
     },
     {
       id: "score",
-      header: "Score",
+      header: t("colScore"),
       accessor: (r) => r.score,
       sortable: true,
       cell: (r) => (
@@ -259,7 +262,7 @@ export default function SecurityDashboardPage() {
     },
     {
       id: "critical",
-      header: "Critical",
+      header: tSev("critical"),
       accessor: (r) => r.critical_count,
       sortable: true,
       cell: (r) => (
@@ -268,28 +271,28 @@ export default function SecurityDashboardPage() {
     },
     {
       id: "high",
-      header: "High",
+      header: tSev("high"),
       accessor: (r) => r.high_count,
       sortable: true,
       cell: (r) => <SeverityPill count={r.high_count} level="high" />,
     },
     {
       id: "medium",
-      header: "Medium",
+      header: tSev("medium"),
       accessor: (r) => r.medium_count,
       sortable: true,
       cell: (r) => <SeverityPill count={r.medium_count} level="medium" />,
     },
     {
       id: "low",
-      header: "Low",
+      header: tSev("low"),
       accessor: (r) => r.low_count,
       sortable: true,
       cell: (r) => <SeverityPill count={r.low_count} level="low" />,
     },
     {
       id: "acknowledged",
-      header: "Ack'd",
+      header: t("colAcknowledged"),
       accessor: (r) => r.acknowledged_count,
       sortable: true,
       cell: (r) => (
@@ -300,7 +303,7 @@ export default function SecurityDashboardPage() {
     },
     {
       id: "last_scan",
-      header: "Last Scan",
+      header: t("colLastScan"),
       accessor: (r) => r.last_scan_at ?? "",
       sortable: true,
       cell: (r) =>
@@ -310,7 +313,7 @@ export default function SecurityDashboardPage() {
           </span>
         ) : (
           <Badge variant="secondary" className="text-xs font-normal">
-            Never
+            {t("never")}
           </Badge>
         ),
     },
@@ -319,14 +322,14 @@ export default function SecurityDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Security"
-        description="Monitor vulnerability scanning, security scores, and policy enforcement across all repositories."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon"
-              aria-label="Refresh security data"
+              aria-label={t("refreshAria")}
               onClick={() =>
                 queryClient.invalidateQueries({ queryKey: ["security"] })
               }
@@ -338,11 +341,11 @@ export default function SecurityDashboardPage() {
               onClick={() => router.push("/security/scans")}
             >
               <ScanSearch className="size-4" />
-              View All Scans
+              {t("viewAllScans")}
             </Button>
             <Button onClick={() => setTriggerOpen(true)}>
               <Zap className="size-4" />
-              Trigger Scan
+              {t("triggerScan")}
             </Button>
           </div>
         }
@@ -353,49 +356,49 @@ export default function SecurityDashboardPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           <StatCard
             icon={ShieldCheck}
-            label="Repos with Scanning"
+            label={t("reposWithScanning")}
             value={dashboard.repos_with_scanning}
             color="green"
           />
           <StatCard
             icon={ScanSearch}
-            label="Total Scans"
+            label={t("totalScans")}
             value={dashboard.total_scans}
             color="blue"
           />
           <StatCard
             icon={AlertCircle}
-            label="Critical Findings"
+            label={t("criticalFindings")}
             value={dashboard.critical_findings}
             color={dashboard.critical_findings > 0 ? "red" : "green"}
           />
           <StatCard
             icon={AlertTriangle}
-            label="High Findings"
+            label={t("highFindings")}
             value={dashboard.high_findings}
             color={dashboard.high_findings > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={Bug}
-            label="Open Findings"
+            label={t("openFindings")}
             value={dashboard.total_findings}
             color={dashboard.total_findings > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={Award}
-            label="Grade A Repos"
+            label={t("gradeARepos")}
             value={dashboard.repos_grade_a}
             color="green"
           />
           <StatCard
             icon={Award}
-            label="Grade F Repos"
+            label={t("gradeFRepos")}
             value={dashboard.repos_grade_f}
             color={dashboard.repos_grade_f > 0 ? "red" : "green"}
           />
           <StatCard
             icon={ShieldBan}
-            label="Policy Blocks"
+            label={t("policyBlocks")}
             value={dashboard.policy_violations_blocked}
             color="purple"
           />
@@ -419,7 +422,7 @@ export default function SecurityDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-lg font-semibold tracking-tight">
-              Dependency-Track
+              {t("dtTitle")}
             </CardTitle>
             <div className="flex items-center gap-2">
               {dtEnabled && (
@@ -429,15 +432,15 @@ export default function SecurityDashboardPage() {
                   onClick={() => router.push("/security/dt-projects")}
                 >
                   <FolderSearch className="size-4" />
-                  View DT Projects
+                  {t("viewDtProjects")}
                 </Button>
               )}
               {dtEnabled ? (
                 <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
-                  Connected
+                  {t("connected")}
                 </Badge>
               ) : (
-                <Badge variant="secondary">Disconnected</Badge>
+                <Badge variant="secondary">{t("disconnected")}</Badge>
               )}
             </div>
           </CardHeader>
@@ -447,11 +450,10 @@ export default function SecurityDashboardPage() {
                 <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
-                    Dependency-Track is unavailable
+                    {t("dtUnavailable")}
                   </p>
                   <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
-                    Portfolio metrics, findings, and policy violations are temporarily offline.
-                    The service will reconnect automatically when the container recovers.
+                    {t("dtUnavailableDescription")}
                   </p>
                 </div>
               </div>
@@ -463,7 +465,7 @@ export default function SecurityDashboardPage() {
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                   <div className="rounded-lg border p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Critical</span>
+                      <span className="text-sm text-muted-foreground">{tSev("critical")}</span>
                       <Sparkline
                         data={dtHistory?.map((d) => d.critical) ?? []}
                         color="#ef4444"
@@ -475,7 +477,7 @@ export default function SecurityDashboardPage() {
                   </div>
                   <div className="rounded-lg border p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">High</span>
+                      <span className="text-sm text-muted-foreground">{tSev("high")}</span>
                       <Sparkline
                         data={dtHistory?.map((d) => d.high) ?? []}
                         color="#f97316"
@@ -487,7 +489,7 @@ export default function SecurityDashboardPage() {
                   </div>
                   <div className="rounded-lg border p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Medium</span>
+                      <span className="text-sm text-muted-foreground">{tSev("medium")}</span>
                       <Sparkline
                         data={dtHistory?.map((d) => d.medium) ?? []}
                         color="#f59e0b"
@@ -499,7 +501,7 @@ export default function SecurityDashboardPage() {
                   </div>
                   <div className="rounded-lg border p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Low</span>
+                      <span className="text-sm text-muted-foreground">{tSev("low")}</span>
                       <Sparkline
                         data={dtHistory?.map((d) => d.low) ?? []}
                         color="#3b82f6"
@@ -514,7 +516,7 @@ export default function SecurityDashboardPage() {
                 {/* Severity distribution bar */}
                 <div>
                   <h3 className="text-sm font-medium mb-2">
-                    Vulnerability Distribution
+                    {t("vulnerabilityDistribution")}
                   </h3>
                   <SeverityBar
                     critical={dtPortfolio.critical}
@@ -528,13 +530,13 @@ export default function SecurityDashboardPage() {
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-4">
                     <ProgressRow
-                      label="Findings Audited"
+                      label={t("findingsAudited")}
                       current={dtPortfolio.findingsAudited}
                       total={dtPortfolio.findingsTotal}
                       color="bg-green-500"
                     />
                     <ProgressRow
-                      label="Policy Violations"
+                      label={t("policyViolations")}
                       current={
                         dtPortfolio.policyViolationsFail +
                         dtPortfolio.policyViolationsWarn
@@ -543,7 +545,7 @@ export default function SecurityDashboardPage() {
                       color="bg-orange-500"
                     />
                     <ProgressRow
-                      label="Projects Tracked"
+                      label={t("projectsTracked")}
                       current={dtPortfolio.projects}
                       total={dtPortfolio.projects}
                       color="bg-blue-500"
@@ -558,7 +560,7 @@ export default function SecurityDashboardPage() {
                 {dtHistory && dtHistory.length > 1 && (
                   <div>
                     <h3 className="text-sm font-medium mb-2">
-                      Vulnerability Trend (30 days)
+                      {t("vulnerabilityTrend")}
                     </h3>
                     <TrendChart data={dtHistory} />
                   </div>
@@ -574,12 +576,12 @@ export default function SecurityDashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-lg font-semibold tracking-tight">
-              Policy Violations
+              {t("policyViolations")}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Scale className="size-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {dtPortfolio.policyViolationsTotal} total
+                {t("totalCount", { count: dtPortfolio.policyViolationsTotal })}
               </span>
             </div>
           </CardHeader>
@@ -589,7 +591,7 @@ export default function SecurityDashboardPage() {
               <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-4 space-y-1">
                 <div className="flex items-center gap-2">
                   <XCircle className="size-4 text-red-600 dark:text-red-400" />
-                  <span className="text-sm font-medium text-red-700 dark:text-red-400">Fail</span>
+                  <span className="text-sm font-medium text-red-700 dark:text-red-400">{t("fail")}</span>
                 </div>
                 <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
                   {dtPortfolio.policyViolationsFail}
@@ -598,7 +600,7 @@ export default function SecurityDashboardPage() {
               <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-1">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
-                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Warn</span>
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">{t("warn")}</span>
                 </div>
                 <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
                   {dtPortfolio.policyViolationsWarn}
@@ -607,7 +609,7 @@ export default function SecurityDashboardPage() {
               <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-1">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="size-4 text-blue-600 dark:text-blue-400" />
-                  <span className="text-sm font-medium text-blue-700 dark:text-blue-400">Info</span>
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-400">{t("info")}</span>
                 </div>
                 <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
                   {dtPortfolio.policyViolationsInfo}
@@ -627,10 +629,10 @@ export default function SecurityDashboardPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Component</th>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Policy</th>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">State</th>
-                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Type</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">{t("colComponent")}</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">{t("colPolicy")}</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">{t("colState")}</th>
+                      <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">{t("colType")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -670,14 +672,16 @@ export default function SecurityDashboardPage() {
                 </table>
                 {dtViolations.length > 20 && (
                   <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/30">
-                    Showing 20 of {dtViolations.length} violations.
-                    View individual projects for the full list.
+                    {t.rich("showingViolations", {
+                      count: dtViolations.length,
+                      strong: (chunks) => <strong>{chunks}</strong>,
+                    })}
                   </div>
                 )}
               </div>
             ) : (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                No policy violations found across tracked projects.
+                {t("noViolations")}
               </div>
             )}
           </CardContent>
@@ -687,13 +691,13 @@ export default function SecurityDashboardPage() {
       {/* Repository Security Scores table */}
       <div>
         <h2 className="text-lg font-semibold tracking-tight mb-4">
-          Repository Security Scores
+          {t("repoScoresTitle")}
         </h2>
         <DataTable
           columns={columns}
           data={scores ?? []}
           loading={scoresLoading}
-          emptyMessage="No security scores yet. Enable scanning on a repository to get started."
+          emptyMessage={t("noScores")}
           rowKey={(r) => r.id}
         />
       </div>
@@ -712,17 +716,17 @@ export default function SecurityDashboardPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Trigger Security Scan</DialogTitle>
+            <DialogTitle>{t("triggerScanTitle")}</DialogTitle>
             <DialogDescription>
               {scanMode === "repo"
-                ? "Select a repository to scan all its artifacts for vulnerabilities."
-                : "Select a specific artifact to scan for vulnerabilities."}
+                ? t("triggerScanRepoDescription")
+                : t("triggerScanArtifactDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {/* Scan Mode Toggle */}
             <div className="space-y-2">
-              <Label>Scan Mode</Label>
+              <Label>{t("scanMode")}</Label>
               <div className="flex rounded-lg border p-1 gap-1">
                 <button
                   type="button"
@@ -736,7 +740,7 @@ export default function SecurityDashboardPage() {
                     setSelectedArtifactId(undefined);
                   }}
                 >
-                  Entire Repository
+                  {t("entireRepository")}
                 </button>
                 <button
                   type="button"
@@ -749,13 +753,13 @@ export default function SecurityDashboardPage() {
                     setScanMode("artifact");
                   }}
                 >
-                  Specific Artifact
+                  {t("specificArtifact")}
                 </button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Repository</Label>
+              <Label>{t("repository")}</Label>
               <Select
                 value={selectedRepoId ?? ""}
                 onValueChange={(v) => {
@@ -764,7 +768,7 @@ export default function SecurityDashboardPage() {
                 }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a repository..." />
+                  <SelectValue placeholder={t("selectRepositoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {(repos ?? []).map((r) => (
@@ -779,7 +783,7 @@ export default function SecurityDashboardPage() {
             {/* Artifact selector (only in artifact mode) */}
             {scanMode === "artifact" && selectedRepoId && (
               <div className="space-y-2">
-                <Label>Artifact</Label>
+                <Label>{t("artifact")}</Label>
                 <Select
                   value={selectedArtifactId ?? ""}
                   onValueChange={(v) => setSelectedArtifactId(v || undefined)}
@@ -788,8 +792,8 @@ export default function SecurityDashboardPage() {
                     <SelectValue
                       placeholder={
                         artifactsLoading
-                          ? "Loading artifacts..."
-                          : "Select an artifact..."
+                          ? t("loadingArtifacts")
+                          : t("selectArtifactPlaceholder")
                       }
                     />
                   </SelectTrigger>
@@ -802,7 +806,7 @@ export default function SecurityDashboardPage() {
                     {!artifactsLoading &&
                       (artifactsList?.items ?? []).length === 0 && (
                         <SelectItem value="__none__" disabled>
-                          No artifacts found
+                          {t("noArtifactsFound")}
                         </SelectItem>
                       )}
                   </SelectContent>
@@ -824,7 +828,7 @@ export default function SecurityDashboardPage() {
                 setScanMode("repo");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               disabled={
@@ -843,7 +847,7 @@ export default function SecurityDashboardPage() {
                 }
               }}
             >
-              {triggerScanMutation.isPending ? "Starting..." : "Start Scan"}
+              {triggerScanMutation.isPending ? t("starting") : t("startScan")}
             </Button>
           </DialogFooter>
         </DialogContent>

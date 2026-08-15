@@ -10,6 +10,7 @@ import {
   Play,
   RotateCcw,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,13 +49,16 @@ function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
 
-function formatEta(seconds: number): string {
+function formatEta(
+  seconds: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
   if (seconds <= 0 || !isFinite(seconds)) return "";
-  if (seconds < 60) return `~${Math.ceil(seconds)}s remaining`;
-  if (seconds < 3600) return `~${Math.ceil(seconds / 60)} min remaining`;
+  if (seconds < 60) return t("etaSeconds", { s: Math.ceil(seconds) });
+  if (seconds < 3600) return t("etaMinutes", { m: Math.ceil(seconds / 60) });
   const hours = Math.floor(seconds / 3600);
   const mins = Math.ceil((seconds % 3600) / 60);
-  return `~${hours}h ${mins}m remaining`;
+  return t("etaHours", { h: hours, m: mins });
 }
 
 function ChunkedProgressDisplay({
@@ -64,6 +68,7 @@ function ChunkedProgressDisplay({
   progress: UploadProgress;
   status: UploadStatus;
 }) {
+  const t = useTranslations("common");
   return (
     <div className="space-y-2">
       <Progress value={progress.percentage} className="h-2" />
@@ -77,23 +82,23 @@ function ChunkedProgressDisplay({
         {status === "uploading" && progress.speed > 0 && (
           <>
             <span>{formatSpeed(progress.speed)}</span>
-            <span className="text-right">{formatEta(progress.eta)}</span>
+            <span className="text-right">{formatEta(progress.eta, t)}</span>
           </>
         )}
         {status === "hashing" && (
-          <span className="col-span-2">Computing file checksum...</span>
+          <span className="col-span-2">{t("computingChecksum")}</span>
         )}
         {status === "finalizing" && (
-          <span className="col-span-2">Finalizing upload...</span>
+          <span className="col-span-2">{t("finalizingUpload")}</span>
         )}
         {status === "paused" && (
-          <span className="col-span-2">Upload paused</span>
+          <span className="col-span-2">{t("uploadPaused")}</span>
         )}
       </div>
       {progress.chunksTotal > 0 && (
         <p className="text-xs text-muted-foreground">
           {progress.chunksCompleted.toLocaleString()} /{" "}
-          {progress.chunksTotal.toLocaleString()} chunks
+          {progress.chunksTotal.toLocaleString()} {t("chunks")}
         </p>
       )}
     </div>
@@ -111,6 +116,7 @@ export function FileUpload({
   onChunkedComplete,
   maxUploadSizeBytes = 0,
 }: FileUploadProps) {
+  const t = useTranslations("common");
   const [file, setFile] = useState<File | null>(null);
   const [customPath, setCustomPath] = useState("");
   const [simpleProgress, setSimpleProgress] = useState(0);
@@ -228,7 +234,7 @@ export function FileUpload({
     } catch (err) {
       if (!isChunkedMode) {
         const message =
-          err instanceof Error ? err.message : "Upload failed";
+          err instanceof Error ? err.message : t("uploadFailed");
         setError(message);
       }
     } finally {
@@ -237,7 +243,7 @@ export function FileUpload({
         setSimpleProgress(0);
       }
     }
-  }, [file, customPath, isChunkedMode, chunked, onUpload, handleClear]);
+  }, [file, customPath, isChunkedMode, chunked, onUpload, handleClear, t]);
 
   const handleCancel = useCallback(() => {
     if (isChunkedMode && isActive) {
@@ -258,10 +264,10 @@ export function FileUpload({
     <div className={cn("space-y-4", className)}>
       {showPathInput && (
         <div className="space-y-2">
-          <Label htmlFor="upload-path">Custom path (optional)</Label>
+          <Label htmlFor="upload-path">{t("customPath")}</Label>
           <Input
             id="upload-path"
-            placeholder="e.g. libs/mylib-1.0.jar"
+            placeholder={t("customPathPlaceholder")}
             value={customPath}
             onChange={(e) => setCustomPath(e.target.value)}
             disabled={isActive}
@@ -310,7 +316,7 @@ export function FileUpload({
               <p className="text-muted-foreground">
                 {formatBytes(file.size)}
                 {isChunkedMode && (
-                  <span className="ml-2 text-xs opacity-70">(chunked upload)</span>
+                  <span className="ml-2 text-xs opacity-70">({t("chunkedUpload")})</span>
                 )}
               </p>
             </div>
@@ -332,12 +338,12 @@ export function FileUpload({
             <Upload className="size-8 text-muted-foreground/60" />
             <div className="text-center">
               <p className="text-sm font-medium">
-                Drop a file here, or click to browse
+                {t("dropFile")}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Upload a single artifact file
+                {t("uploadSingleArtifact")}
                 {maxUploadSizeBytes > 0 && (
-                  <> (max {formatBytes(maxUploadSizeBytes)})</>
+                  <> ({t("maxSize")} {formatBytes(maxUploadSizeBytes)})</>
                 )}
               </p>
             </div>
@@ -350,8 +356,7 @@ export function FileUpload({
         <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
           <RotateCcw className="size-4 text-amber-500 shrink-0" />
           <span className="text-muted-foreground">
-            A previous upload session was found for this file. Uploading will
-            resume from where it left off.
+            {t("resumePrompt")}
           </span>
         </div>
       )}
@@ -369,7 +374,7 @@ export function FileUpload({
         <div className="space-y-1.5">
           <Progress value={simpleProgress} className="h-1.5" />
           <p className="text-xs text-muted-foreground text-center">
-            Uploading... {simpleProgress}%
+            {t("uploadingProgress")} {simpleProgress}%
           </p>
         </div>
       )}
@@ -380,7 +385,7 @@ export function FileUpload({
           role="alert"
         >
           <AlertCircle className="size-4 mt-0.5 shrink-0" />
-          <p>{error ?? `Upload failed: ${chunked.error?.message}`}</p>
+          <p>{error ?? `${t("uploadFailed")}: ${chunked.error?.message}`}</p>
         </div>
       )}
 
@@ -390,22 +395,22 @@ export function FileUpload({
           {isChunkedMode && chunked.status === "uploading" && (
             <Button variant="outline" size="sm" onClick={chunked.pause}>
               <Pause className="size-3.5 mr-1.5" />
-              Pause
+              {t("pause")}
             </Button>
           )}
           {isChunkedMode && chunked.status === "paused" && (
             <Button variant="outline" size="sm" onClick={chunked.resume}>
               <Play className="size-3.5 mr-1.5" />
-              Resume
+              {t("resume")}
             </Button>
           )}
 
           <Button variant="outline" onClick={handleCancel} disabled={chunked.status === "finalizing"}>
-            Cancel
+            {t("cancel")}
           </Button>
           {!isActive && (
             <Button onClick={handleUpload}>
-              {showResumePrompt ? "Resume Upload" : "Upload"}
+              {showResumePrompt ? t("resumeUpload") : t("upload")}
             </Button>
           )}
         </div>

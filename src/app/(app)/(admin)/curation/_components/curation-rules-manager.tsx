@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Trash2,
@@ -55,10 +56,17 @@ import {
 
 const QUERY_KEY = ["curation-rules"];
 
-const RULE_TYPE_LABELS: Record<RuleType, string> = {
-  pattern: "Pattern",
-  publisher_trust: "Publisher trust",
-  popularity: "Popularity",
+const RULE_TYPE_LABEL_KEYS: Record<RuleType, string> = {
+  pattern: "typePattern",
+  publisher_trust: "typePublisherTrust",
+  popularity: "typePopularity",
+};
+
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  flag: "actionFlag",
+  block: "actionBlock",
+  allow: "actionAllow",
+  audit: "actionAudit",
 };
 
 const RULE_TYPE_ICONS: Record<RuleType, typeof Filter> = {
@@ -217,6 +225,7 @@ function numField(v: string): number | undefined {
 
 export function CurationRulesManager() {
   const queryClient = useQueryClient();
+  const t = useTranslations("adminCurationRules");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CurationRule | null>(null);
@@ -255,9 +264,9 @@ export function CurationRulesManager() {
       setDialogOpen(false);
       setEditing(null);
       setForm(emptyForm);
-      toast.success(vars.id ? "Rule updated" : "Rule created");
+      toast.success(vars.id ? t("ruleUpdated") : t("ruleCreated"));
     },
-    onError: mutationErrorToast("Failed to save rule"),
+    onError: mutationErrorToast(t("saveFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -265,9 +274,9 @@ export function CurationRulesManager() {
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
-      toast.success("Rule deleted");
+      toast.success(t("ruleDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete rule"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   function openCreate() {
@@ -298,12 +307,11 @@ export function CurationRulesManager() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Standing policy the curation queue is evaluated against: pattern,
-          publisher-trust, and popularity (typo-squat) gates.
+          {t("description")}
         </p>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
-          New Rule
+          {t("newRule")}
         </Button>
       </div>
 
@@ -320,9 +328,9 @@ export function CurationRulesManager() {
           role="alert"
         >
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load curation rules</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {toUserMessage(error, "Unknown error")}
+            {toUserMessage(error, t("unknownError"))}
           </p>
           <Button
             variant="outline"
@@ -332,7 +340,7 @@ export function CurationRulesManager() {
             disabled={isFetching}
           >
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -340,10 +348,9 @@ export function CurationRulesManager() {
       {!isLoading && !isError && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center text-muted-foreground">
           <ShieldCheck className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No curation rules yet.</p>
+          <p className="text-sm">{t("noRules")}</p>
           <p className="text-xs">
-            Create one to gate proxied packages by pattern, publisher trust, or
-            popularity.
+            {t("noRulesHint")}
           </p>
         </div>
       )}
@@ -353,12 +360,12 @@ export function CurationRulesManager() {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
               <tr>
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Pattern</th>
-                <th className="px-3 py-2 font-medium">Scope</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">Priority</th>
-                <th className="px-3 py-2 font-medium">Enabled</th>
+                <th className="px-3 py-2 font-medium">{t("colType")}</th>
+                <th className="px-3 py-2 font-medium">{t("colPattern")}</th>
+                <th className="px-3 py-2 font-medium">{t("colScope")}</th>
+                <th className="px-3 py-2 font-medium">{t("colAction")}</th>
+                <th className="px-3 py-2 font-medium">{t("colPriority")}</th>
+                <th className="px-3 py-2 font-medium">{t("colEnabled")}</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
@@ -370,17 +377,17 @@ export function CurationRulesManager() {
                     <td className="px-3 py-2">
                       <span className="flex items-center gap-1.5">
                         <Icon className="size-4 text-muted-foreground" />
-                        {RULE_TYPE_LABELS[r.rule_type]}
+                        {t(RULE_TYPE_LABEL_KEYS[r.rule_type])}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">
                       {r.package_pattern}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge variant="outline" className="capitalize">
+                      <Badge variant="outline">
                         {r.scope === "global"
-                          ? "global"
-                          : repoKey(r.staging_repo_id) ?? "repository"}
+                          ? t("globalOption")
+                          : repoKey(r.staging_repo_id) ?? t("repositoryOption")}
                       </Badge>
                     </td>
                     <td className="px-3 py-2">
@@ -388,17 +395,16 @@ export function CurationRulesManager() {
                         variant={
                           r.action === "block" ? "destructive" : "secondary"
                         }
-                        className="capitalize"
                       >
-                        {r.action}
+                        {t(ACTION_LABEL_KEYS[r.action] ?? "actionFlag")}
                       </Badge>
                     </td>
                     <td className="px-3 py-2 tabular-nums">{r.priority}</td>
                     <td className="px-3 py-2">
                       {r.enabled ? (
-                        <Badge variant="secondary">enabled</Badge>
+                        <Badge variant="secondary">{t("enabled")}</Badge>
                       ) : (
-                        <Badge variant="outline">disabled</Badge>
+                        <Badge variant="outline">{t("disabled")}</Badge>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -406,7 +412,7 @@ export function CurationRulesManager() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Edit ${r.rule_type} rule ${r.package_pattern}`}
+                          aria-label={t("editAria", { type: t(RULE_TYPE_LABEL_KEYS[r.rule_type]), pattern: r.package_pattern })}
                           onClick={() => openEdit(r)}
                         >
                           <Pencil className="size-4" />
@@ -414,7 +420,7 @@ export function CurationRulesManager() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Delete ${r.rule_type} rule ${r.package_pattern}`}
+                          aria-label={t("deleteAria", { type: t(RULE_TYPE_LABEL_KEYS[r.rule_type]), pattern: r.package_pattern })}
                           onClick={() => setDeleteTarget(r)}
                         >
                           <Trash2 className="size-4 text-destructive" />
@@ -435,31 +441,30 @@ export function CurationRulesManager() {
           <form onSubmit={submit}>
             <DialogHeader>
               <DialogTitle>
-                {editing ? "Edit curation rule" : "New curation rule"}
+                {editing ? t("dialogTitleEdit") : t("dialogTitleNew")}
               </DialogTitle>
               <DialogDescription>
-                Rules are evaluated in priority order over packages entering the
-                curation queue.
+                {t("dialogDescription")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
               {/* Rule type */}
               <div className="space-y-1.5">
-                <Label htmlFor="cr-type">Rule type</Label>
+                <Label htmlFor="cr-type">{t("ruleTypeLabel")}</Label>
                 <Select
                   value={form.rule_type}
                   onValueChange={(v) =>
                     setForm((f) => ({ ...f, rule_type: v as RuleType }))
                   }
                 >
-                  <SelectTrigger id="cr-type" aria-label="Rule type">
+                  <SelectTrigger id="cr-type" aria-label={t("ruleTypeLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {RULE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {RULE_TYPE_LABELS[t]}
+                    {RULE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {t(RULE_TYPE_LABEL_KEYS[type])}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -469,7 +474,7 @@ export function CurationRulesManager() {
               {/* Common: scope + repo */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-scope">Scope</Label>
+                  <Label htmlFor="cr-scope">{t("scopeLabel")}</Label>
                   <Select
                     value={form.scope}
                     onValueChange={(v) =>
@@ -479,17 +484,17 @@ export function CurationRulesManager() {
                       }))
                     }
                   >
-                    <SelectTrigger id="cr-scope" aria-label="Scope">
+                    <SelectTrigger id="cr-scope" aria-label={t("scopeLabel")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="repository">Repository</SelectItem>
-                      <SelectItem value="global">Global</SelectItem>
+                      <SelectItem value="repository">{t("repositoryOption")}</SelectItem>
+                      <SelectItem value="global">{t("globalOption")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-repo">Staging repository</Label>
+                  <Label htmlFor="cr-repo">{t("stagingRepoLabel")}</Label>
                   <Select
                     value={form.staging_repo_id}
                     onValueChange={(v) =>
@@ -498,10 +503,10 @@ export function CurationRulesManager() {
                   >
                     <SelectTrigger
                       id="cr-repo"
-                      aria-label="Staging repository"
+                      aria-label={t("stagingRepoLabel")}
                       disabled={form.scope === "global"}
                     >
-                      <SelectValue placeholder="Select a repository" />
+                      <SelectValue placeholder={t("stagingRepoPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       {stagingRepos.map((r) => (
@@ -517,7 +522,7 @@ export function CurationRulesManager() {
               {/* Common: pattern / version / arch */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-pattern">Package pattern</Label>
+                  <Label htmlFor="cr-pattern">{t("patternLabel")}</Label>
                   <Input
                     id="cr-pattern"
                     value={form.package_pattern}
@@ -528,7 +533,7 @@ export function CurationRulesManager() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-version">Version</Label>
+                  <Label htmlFor="cr-version">{t("versionLabel")}</Label>
                   <Input
                     id="cr-version"
                     value={form.version_constraint}
@@ -542,7 +547,7 @@ export function CurationRulesManager() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-arch">Architecture</Label>
+                  <Label htmlFor="cr-arch">{t("archLabel")}</Label>
                   <Input
                     id="cr-arch"
                     value={form.architecture}
@@ -557,27 +562,27 @@ export function CurationRulesManager() {
               {/* Common: action + priority */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-action">Action</Label>
+                  <Label htmlFor="cr-action">{t("actionLabel")}</Label>
                   <Select
                     value={form.action}
                     onValueChange={(v) =>
                       setForm((f) => ({ ...f, action: v }))
                     }
                   >
-                    <SelectTrigger id="cr-action" aria-label="Action">
+                    <SelectTrigger id="cr-action" aria-label={t("actionLabel")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {RULE_ACTIONS.map((a) => (
-                        <SelectItem key={a} value={a} className="capitalize">
-                          {a}
+                        <SelectItem key={a} value={a}>
+                          {t(ACTION_LABEL_KEYS[a] ?? "actionFlag")}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cr-priority">Priority</Label>
+                  <Label htmlFor="cr-priority">{t("priorityLabel")}</Label>
                   <Input
                     id="cr-priority"
                     type="number"
@@ -597,11 +602,11 @@ export function CurationRulesManager() {
               {form.rule_type === "publisher_trust" && (
                 <div className="space-y-4 rounded-md border p-3">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Publisher-trust configuration
+                    {t("ptConfigTitle")}
                   </p>
                   <div className="space-y-1.5">
                     <Label htmlFor="cr-pt-publishers">
-                      Trusted publishers (one per line or comma-separated)
+                      {t("trustedPublishersLabel")}
                     </Label>
                     <Textarea
                       id="cr-pt-publishers"
@@ -618,23 +623,19 @@ export function CurationRulesManager() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="cr-pt-match">Match</Label>
+                      <Label htmlFor="cr-pt-match">{t("matchLabel")}</Label>
                       <Select
                         value={form.pt_match}
                         onValueChange={(v) =>
                           setForm((f) => ({ ...f, pt_match: v }))
                         }
                       >
-                        <SelectTrigger id="cr-pt-match" aria-label="Match">
+                        <SelectTrigger id="cr-pt-match" aria-label={t("matchLabel")}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {PUBLISHER_MATCHES.map((m) => (
-                            <SelectItem
-                              key={m}
-                              value={m}
-                              className="capitalize"
-                            >
+                            <SelectItem key={m} value={m}>
                               {m}
                             </SelectItem>
                           ))}
@@ -642,7 +643,7 @@ export function CurationRulesManager() {
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="cr-pt-action">Untrusted action</Label>
+                      <Label htmlFor="cr-pt-action">{t("untrustedActionLabel")}</Label>
                       <Select
                         value={form.pt_action}
                         onValueChange={(v) =>
@@ -651,19 +652,15 @@ export function CurationRulesManager() {
                       >
                         <SelectTrigger
                           id="cr-pt-action"
-                          aria-label="Untrusted action"
+                          aria-label={t("untrustedActionLabel")}
                         >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {(["flag", "block", "allow", "audit"] as const).map(
                             (a) => (
-                              <SelectItem
-                                key={a}
-                                value={a}
-                                className="capitalize"
-                              >
-                                {a}
+                              <SelectItem key={a} value={a}>
+                                {t(ACTION_LABEL_KEYS[a] ?? "actionFlag")}
                               </SelectItem>
                             ),
                           )}
@@ -677,11 +674,11 @@ export function CurationRulesManager() {
               {form.rule_type === "popularity" && (
                 <div className="space-y-4 rounded-md border p-3">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Popularity configuration
+                    {t("popConfigTitle")}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="cr-pop-min">Min downloads</Label>
+                      <Label htmlFor="cr-pop-min">{t("minDownloadsLabel")}</Label>
                       <Input
                         id="cr-pop-min"
                         type="number"
@@ -697,7 +694,7 @@ export function CurationRulesManager() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="cr-pop-action">Flagged action</Label>
+                      <Label htmlFor="cr-pop-action">{t("flaggedActionLabel")}</Label>
                       <Select
                         value={form.pop_action}
                         onValueChange={(v) =>
@@ -706,18 +703,14 @@ export function CurationRulesManager() {
                       >
                         <SelectTrigger
                           id="cr-pop-action"
-                          aria-label="Flagged action"
+                          aria-label={t("flaggedActionLabel")}
                         >
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {(["flag", "block"] as const).map((a) => (
-                            <SelectItem
-                              key={a}
-                              value={a}
-                              className="capitalize"
-                            >
-                              {a}
+                            <SelectItem key={a} value={a}>
+                              {t(ACTION_LABEL_KEYS[a] ?? "actionFlag")}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -726,7 +719,7 @@ export function CurationRulesManager() {
                   </div>
 
                   <div className="flex items-center justify-between rounded-md border p-3">
-                    <Label htmlFor="cr-pop-typo">Typo-squat check</Label>
+                    <Label htmlFor="cr-pop-typo">{t("typoCheckLabel")}</Label>
                     <Switch
                       id="cr-pop-typo"
                       checked={form.typosquat_check}
@@ -740,7 +733,7 @@ export function CurationRulesManager() {
                     <div className="space-y-4 border-l-2 pl-3">
                       <div className="space-y-1.5">
                         <Label htmlFor="cr-pop-distance">
-                          Max edit distance (1–2)
+                          {t("maxDistanceLabel")}
                         </Label>
                         <Input
                           id="cr-pop-distance"
@@ -760,7 +753,7 @@ export function CurationRulesManager() {
                       </div>
                       <div className="flex items-center justify-between rounded-md border p-3">
                         <Label htmlFor="cr-pop-homoglyph">
-                          Homoglyph check
+                          {t("homoglyphLabel")}
                         </Label>
                         <Switch
                           id="cr-pop-homoglyph"
@@ -771,7 +764,7 @@ export function CurationRulesManager() {
                         />
                       </div>
                       <div className="flex items-center justify-between rounded-md border p-3">
-                        <Label htmlFor="cr-pop-affix">Affix check</Label>
+                        <Label htmlFor="cr-pop-affix">{t("affixLabel")}</Label>
                         <Switch
                           id="cr-pop-affix"
                           checked={form.affix_check}
@@ -783,7 +776,7 @@ export function CurationRulesManager() {
                       {form.affix_check && (
                         <div className="space-y-1.5">
                           <Label htmlFor="cr-pop-affix-max">
-                            Affix max downloads
+                            {t("affixMaxDownloadsLabel")}
                           </Label>
                           <Input
                             id="cr-pop-affix-max"
@@ -804,7 +797,7 @@ export function CurationRulesManager() {
 
                   <div className="space-y-1.5">
                     <Label htmlFor="cr-pop-packages">
-                      Popular packages (optional; one per line or comma-separated)
+                      {t("popularPackagesLabel")}
                     </Label>
                     <Textarea
                       id="cr-pop-packages"
@@ -824,18 +817,18 @@ export function CurationRulesManager() {
 
               {/* Common: reason + enabled */}
               <div className="space-y-1.5">
-                <Label htmlFor="cr-reason">Reason</Label>
+                <Label htmlFor="cr-reason">{t("reasonLabel")}</Label>
                 <Input
                   id="cr-reason"
                   value={form.reason}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, reason: e.target.value }))
                   }
-                  placeholder="Why this rule exists (recorded on matches)"
+                  placeholder={t("reasonPlaceholder")}
                 />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label htmlFor="cr-enabled">Enabled</Label>
+                <Label htmlFor="cr-enabled">{t("enabledLabel")}</Label>
                 <Switch
                   id="cr-enabled"
                   checked={form.enabled}
@@ -852,13 +845,13 @@ export function CurationRulesManager() {
                 variant="ghost"
                 onClick={() => setDialogOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={!canSave}>
                 {saveMutation.isPending ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : null}
-                {editing ? "Save" : "Create"}
+                {editing ? t("save") : t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -868,11 +861,9 @@ export function CurationRulesManager() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete curation rule?"
-        description={`This ${
-          deleteTarget?.rule_type ?? ""
-        } rule will be permanently deleted. The curation queue stops applying it.`}
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { type: deleteTarget?.rule_type ?? "" })}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

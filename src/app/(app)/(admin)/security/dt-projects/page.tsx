@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueries } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -59,6 +60,8 @@ interface ProjectRow {
 }
 
 export default function DtProjectsPage() {
+  const t = useTranslations("adminDtProjects");
+  const tSev = useTranslations("severity");
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -123,7 +126,7 @@ export default function DtProjectsPage() {
   const columns: DataTableColumn<ProjectRow>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (r) => r.project.name,
       sortable: true,
       cell: (r) => (
@@ -139,7 +142,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "version",
-      header: "Version",
+      header: t("colVersion"),
       accessor: (r) => r.project.version ?? "",
       sortable: true,
       cell: (r) =>
@@ -153,7 +156,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "lastBomImport",
-      header: "Last BOM Import",
+      header: t("colLastBomImport"),
       accessor: (r) => r.project.lastBomImport ?? 0,
       sortable: true,
       cell: (r) =>
@@ -163,13 +166,13 @@ export default function DtProjectsPage() {
           </span>
         ) : (
           <Badge variant="secondary" className="text-xs font-normal">
-            Never
+            {t("never")}
           </Badge>
         ),
     },
     {
       id: "critical",
-      header: "Critical",
+      header: tSev("critical"),
       accessor: (r) => r.metrics?.critical ?? 0,
       sortable: true,
       cell: (r) =>
@@ -181,7 +184,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "high",
-      header: "High",
+      header: tSev("high"),
       accessor: (r) => r.metrics?.high ?? 0,
       sortable: true,
       cell: (r) =>
@@ -193,7 +196,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "medium",
-      header: "Medium",
+      header: tSev("medium"),
       accessor: (r) => r.metrics?.medium ?? 0,
       sortable: true,
       cell: (r) =>
@@ -205,7 +208,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "low",
-      header: "Low",
+      header: tSev("low"),
       accessor: (r) => r.metrics?.low ?? 0,
       sortable: true,
       cell: (r) =>
@@ -217,7 +220,7 @@ export default function DtProjectsPage() {
     },
     {
       id: "risk",
-      header: "Risk Score",
+      header: t("colRiskScore"),
       accessor: (r) => r.metrics?.inheritedRiskScore ?? 0,
       sortable: true,
       cell: (r) =>
@@ -240,8 +243,8 @@ export default function DtProjectsPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="DT Projects"
-          description="Browse Dependency-Track projects and their vulnerability metrics."
+          title={t("title")}
+          description={t("description")}
           actions={
             <Button
               variant="outline"
@@ -249,7 +252,7 @@ export default function DtProjectsPage() {
               onClick={() => router.push("/security")}
             >
               <ArrowLeft className="size-4" />
-              Back to Security
+              {t("backToSecurity")}
             </Button>
           }
         />
@@ -257,11 +260,10 @@ export default function DtProjectsPage() {
           <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
-              Dependency-Track is unavailable
+              {t("dtUnavailable")}
             </p>
             <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
-              The Dependency-Track integration is currently disconnected.
-              Projects cannot be displayed until the service recovers.
+              {t("dtUnavailableDescription")}
             </p>
           </div>
         </div>
@@ -272,8 +274,8 @@ export default function DtProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="DT Projects"
-        description="Browse Dependency-Track projects and their vulnerability metrics."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             variant="outline"
@@ -281,7 +283,7 @@ export default function DtProjectsPage() {
             onClick={() => router.push("/security")}
           >
             <ArrowLeft className="size-4" />
-            Back to Security
+            {t("backToSecurity")}
           </Button>
         }
       />
@@ -290,7 +292,7 @@ export default function DtProjectsPage() {
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search projects..."
+          placeholder={t("searchPlaceholder")}
           className="pl-9"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -304,8 +306,8 @@ export default function DtProjectsPage() {
         loading={projectsLoading}
         emptyMessage={
           searchQuery.trim()
-            ? "No projects match your search."
-            : "No Dependency-Track projects found."
+            ? t("noSearchResults")
+            : t("noProjects")
         }
         onRowClick={(r) =>
           router.push(`/security/dt-projects/${r.project.uuid}`)

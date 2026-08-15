@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "react-qr-code";
+import { useTranslations } from "next-intl";
 
 import { profileApi } from "@/lib/api/profile";
 import { totpApi } from "@/lib/api/totp";
@@ -56,6 +57,7 @@ import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 // -- Profile Page --
 
 export default function ProfilePage() {
+  const t = useTranslations("profile");
   const { user, refreshUser, changePassword } = useAuth();
 
   // -- General tab state --
@@ -84,9 +86,9 @@ export default function ProfilePage() {
       profileApi.update(data),
     onSuccess: () => {
       refreshUser();
-      toast.success("Profile updated successfully");
+      toast.success(t("profileUpdated"));
     },
-    onError: mutationErrorToast("Failed to update profile"),
+    onError: mutationErrorToast(t("profileUpdatedError")),
   });
 
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -98,14 +100,14 @@ export default function ProfilePage() {
       setNewPassword("");
       setConfirmPassword("");
       setPasswordError(null);
-      toast.success("Password changed successfully");
+      toast.success(t("passwordChanged"));
     },
     onError: (err: unknown) => {
       if (isPasswordReuseError(err)) {
         setPasswordError(PASSWORD_REUSE_MESSAGE);
         toast.error(PASSWORD_REUSE_MESSAGE);
       } else {
-        const msg = toUserMessage(err, "Failed to change password. Check your current password.");
+        const msg = toUserMessage(err, t("passwordChangeError"));
         setPasswordError(null);
         toast.error(msg);
       }
@@ -115,27 +117,27 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Profile"
-        description="Manage your account settings, API keys, and security preferences."
+        title={t("title")}
+        description={t("description")}
       />
 
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">
             <User className="size-4" />
-            General
+            {t("tabGeneral")}
           </TabsTrigger>
           <TabsTrigger value="api-keys">
             <Key className="size-4" />
-            API Keys
+            {t("tabApiKeys")}
           </TabsTrigger>
           <TabsTrigger value="access-tokens">
             <Shield className="size-4" />
-            Access Tokens
+            {t("tabAccessTokens")}
           </TabsTrigger>
           <TabsTrigger value="security">
             <Lock className="size-4" />
-            Security
+            {t("tabSecurity")}
           </TabsTrigger>
         </TabsList>
 
@@ -143,9 +145,9 @@ export default function ProfilePage() {
         <TabsContent value="general" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
+              <CardTitle>{t("profileInfoTitle")}</CardTitle>
               <CardDescription>
-                Update your display name and email address.
+                {t("profileInfoDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -160,7 +162,7 @@ export default function ProfilePage() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">{t("username")}</Label>
                   <Input
                     id="username"
                     value={user?.username ?? ""}
@@ -168,20 +170,20 @@ export default function ProfilePage() {
                     className="bg-muted"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Username cannot be changed.
+                    {t("usernameCannotChange")}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="display-name">Display Name</Label>
+                  <Label htmlFor="display-name">{t("displayName")}</Label>
                   <Input
                     id="display-name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Your display name"
+                    placeholder={t("displayNamePlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -191,7 +193,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <Button type="submit" disabled={profileMutation.isPending}>
-                  {profileMutation.isPending ? "Saving..." : "Save Changes"}
+                  {profileMutation.isPending ? t("saving") : t("saveChanges")}
                 </Button>
               </form>
             </CardContent>
@@ -204,17 +206,17 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key className="size-5" />
-                API Keys
+                {t("tabApiKeys")}
               </CardTitle>
               <CardDescription>
-                API keys and access tokens have moved to their own page for easier management.
+                {t("apiKeysDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild>
                 <Link href="/access-tokens">
                   <ExternalLink className="size-4" />
-                  Manage Access Tokens
+                  {t("manageAccessTokens")}
                 </Link>
               </Button>
             </CardContent>
@@ -227,17 +229,17 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="size-5" />
-                Access Tokens
+                {t("tabAccessTokens")}
               </CardTitle>
               <CardDescription>
-                Personal access tokens have moved to their own page for easier management.
+                {t("accessTokensDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild>
                 <Link href="/access-tokens">
                   <ExternalLink className="size-4" />
-                  Manage Access Tokens
+                  {t("manageAccessTokens")}
                 </Link>
               </Button>
             </CardContent>
@@ -248,9 +250,9 @@ export default function ProfilePage() {
         <TabsContent value="security" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Change Password</CardTitle>
+              <CardTitle>{t("changePasswordTitle")}</CardTitle>
               <CardDescription>
-                Update your password. Must be at least 8 characters.
+                {t("changePasswordDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -259,29 +261,29 @@ export default function ProfilePage() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (newPassword !== confirmPassword) {
-                    toast.error("Passwords do not match");
+                    toast.error(t("passwordsMismatch"));
                     return;
                   }
                   if (newPassword.length < 8) {
-                    toast.error("Password must be at least 8 characters");
+                    toast.error(t("passwordTooShort"));
                     return;
                   }
                   passwordMutation.mutate();
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
+                  <Label htmlFor="current-password">{t("currentPassword")}</Label>
                   <Input
                     id="current-password"
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Enter current password"
+                    placeholder={t("currentPasswordPlaceholder")}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
+                  <Label htmlFor="new-password">{t("newPassword")}</Label>
                   <Input
                     id="new-password"
                     type="password"
@@ -290,7 +292,7 @@ export default function ProfilePage() {
                       setNewPassword(e.target.value);
                       setPasswordError(null);
                     }}
-                    placeholder="Enter new password"
+                    placeholder={t("newPasswordPlaceholder")}
                     required
                     minLength={8}
                     aria-invalid={!!passwordError}
@@ -304,20 +306,20 @@ export default function ProfilePage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Label htmlFor="confirm-password">{t("confirmPassword")}</Label>
                   <Input
                     id="confirm-password"
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
+                    placeholder={t("confirmPasswordPlaceholder")}
                     required
                   />
                 </div>
                 <Button type="submit" disabled={passwordMutation.isPending}>
                   {passwordMutation.isPending
-                    ? "Changing..."
-                    : "Change Password"}
+                    ? t("changing")
+                    : t("changePassword")}
                 </Button>
               </form>
             </CardContent>
@@ -327,24 +329,24 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="size-5" />
-                Two-Factor Authentication
+                {t("twoFaTitle")}
               </CardTitle>
               <CardDescription>
-                Add an extra layer of security with a TOTP authenticator app.
+                {t("twoFaDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {user?.totp_enabled ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <Badge variant="default" className="bg-green-600">Enabled</Badge>
+                    <Badge variant="default" className="bg-green-600">{t("enabled")}</Badge>
                     <span className="text-sm text-muted-foreground">
-                      Two-factor authentication is active
+                      {t("twoFaActive")}
                     </span>
                   </div>
                   {!showTotpDisable ? (
                     <Button variant="destructive" size="sm" onClick={() => setShowTotpDisable(true)}>
-                      Disable 2FA
+                      {t("disable2fa")}
                     </Button>
                   ) : (
                     <form
@@ -359,45 +361,45 @@ export default function ProfilePage() {
                           setShowTotpDisable(false);
                           setTotpDisablePassword("");
                           setTotpDisableCode("");
-                          toast.success("Two-factor authentication disabled");
+                          toast.success(t("twoFaDisabled"));
                         } catch (err) {
-                          setTotpError(toUserMessage(err, "Failed to disable 2FA"));
+                          setTotpError(toUserMessage(err, t("disable2faError")));
                         } finally {
                           setTotpIsLoading(false);
                         }
                       }}
                     >
-                      <p className="text-sm font-medium">Confirm disable 2FA</p>
+                      <p className="text-sm font-medium">{t("confirmDisable2fa")}</p>
                       {totpError && <p className="text-sm text-destructive">{totpError}</p>}
                       <div className="space-y-2">
-                        <Label>Password</Label>
+                        <Label>{t("password")}</Label>
                         <Input
                           type="password"
                           value={totpDisablePassword}
                           onChange={(e) => setTotpDisablePassword(e.target.value)}
-                          placeholder="Your password"
+                          placeholder={t("passwordPlaceholder")}
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>TOTP Code</Label>
+                        <Label>{t("totpCode")}</Label>
                         <Input
                           value={totpDisableCode}
                           onChange={(e) => setTotpDisableCode(e.target.value)}
-                          placeholder="6-digit code"
+                          placeholder={t("totpCodePlaceholder")}
                           maxLength={6}
                           required
                         />
                       </div>
                       <div className="flex gap-2">
                         <Button type="submit" variant="destructive" size="sm" disabled={totpIsLoading}>
-                          {totpIsLoading ? "Disabling..." : "Confirm Disable"}
+                          {totpIsLoading ? t("disabling") : t("confirmDisable")}
                         </Button>
                         <Button type="button" variant="ghost" size="sm" onClick={() => {
                           setShowTotpDisable(false);
                           setTotpError(null);
                         }}>
-                          Cancel
+                          {t("cancel")}
                         </Button>
                       </div>
                     </form>
@@ -407,9 +409,9 @@ export default function ProfilePage() {
                 <div className="space-y-4">
                   <Alert>
                     <AlertTriangle className="size-4" />
-                    <AlertTitle>Save your backup codes</AlertTitle>
+                    <AlertTitle>{t("saveBackupCodes")}</AlertTitle>
                     <AlertDescription>
-                      Store these codes in a safe place. Each can be used once if you lose access to your authenticator app.
+                      {t("saveBackupCodesDescription")}
                     </AlertDescription>
                   </Alert>
                   <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted p-4">
@@ -425,20 +427,20 @@ export default function ProfilePage() {
                       setTotpSetupData(null);
                       setTotpVerifyCode("");
                     }}>
-                      I&apos;ve saved these codes
+                      {t("savedCodes")}
                     </Button>
                   </div>
                 </div>
               ) : showTotpSetup && totpSetupData ? (
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                    {t("scanQr")}
                   </p>
                   <div className="flex justify-center rounded-lg border bg-white p-4">
                     <QRCode value={totpSetupData.qr_code_url} size={200} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Manual entry key</Label>
+                    <Label className="text-xs text-muted-foreground">{t("manualEntryKey")}</Label>
                     <div className="flex items-center gap-2 rounded border bg-muted px-3 py-2">
                       <code className="flex-1 break-all text-xs">{totpSetupData.secret}</code>
                       <CopyButton value={totpSetupData.secret} />
@@ -454,9 +456,9 @@ export default function ProfilePage() {
                         const result = await totpApi.enable(totpVerifyCode);
                         setTotpBackupCodes(result.backup_codes);
                         await refreshUser();
-                        toast.success("Two-factor authentication enabled");
+                        toast.success(t("twoFaEnabled"));
                       } catch (err) {
-                        setTotpError(toUserMessage(err, "Invalid code"));
+                        setTotpError(toUserMessage(err, t("invalidCode")));
                       } finally {
                         setTotpIsLoading(false);
                       }
@@ -464,18 +466,18 @@ export default function ProfilePage() {
                   >
                     {totpError && <p className="text-sm text-destructive">{totpError}</p>}
                     <div className="space-y-2">
-                      <Label>Verification Code</Label>
+                      <Label>{t("verificationCode")}</Label>
                       <Input
                         value={totpVerifyCode}
                         onChange={(e) => setTotpVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="Enter 6-digit code"
+                        placeholder={t("enterCode")}
                         className="w-48 font-mono text-lg tracking-widest"
                         maxLength={6}
                       />
                     </div>
                     <div className="flex gap-2">
                       <Button type="submit" disabled={totpIsLoading || totpVerifyCode.length < 6}>
-                        {totpIsLoading ? "Verifying..." : "Enable 2FA"}
+                        {totpIsLoading ? t("verifying") : t("enable2fa")}
                       </Button>
                       <Button type="button" variant="ghost" onClick={() => {
                         setShowTotpSetup(false);
@@ -483,7 +485,7 @@ export default function ProfilePage() {
                         setTotpVerifyCode("");
                         setTotpError(null);
                       }}>
-                        Cancel
+                        {t("cancel")}
                       </Button>
                     </div>
                   </form>
@@ -497,14 +499,14 @@ export default function ProfilePage() {
                       setTotpSetupData(data);
                       setShowTotpSetup(true);
                     } catch (err) {
-                      toast.error(toUserMessage(err, "Failed to start 2FA setup"));
+                      toast.error(toUserMessage(err, t("setupError")));
                     } finally {
                       setTotpIsLoading(false);
                     }
                   }}
                   disabled={totpIsLoading}
                 >
-                  {totpIsLoading ? "Setting up..." : "Enable Two-Factor Authentication"}
+                  {totpIsLoading ? t("settingUp") : t("enableTwoFa")}
                 </Button>
               )}
             </CardContent>
@@ -512,18 +514,17 @@ export default function ProfilePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Sessions</CardTitle>
+              <CardTitle>{t("sessionsTitle")}</CardTitle>
               <CardDescription>
-                Manage your active sessions across devices.
+                {t("sessionsDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Alert>
                 <Info className="size-4" />
-                <AlertTitle>Active sessions</AlertTitle>
+                <AlertTitle>{t("activeSessions")}</AlertTitle>
                 <AlertDescription>
-                  You are currently logged in from this device. Session
-                  management will be available in a future update.
+                  {t("activeSessionsDescription")}
                 </AlertDescription>
               </Alert>
             </CardContent>

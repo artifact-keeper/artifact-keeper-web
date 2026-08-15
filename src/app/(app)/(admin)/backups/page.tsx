@@ -3,6 +3,7 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Trash2,
@@ -34,7 +35,6 @@ import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -90,8 +90,12 @@ interface BackupsResponse {
 
 // -- helpers --
 
-function formatDuration(start: string, end?: string): string {
-  if (!end) return "In progress...";
+function formatDuration(
+  start: string,
+  end: string | undefined,
+  t: (key: string) => string
+): string {
+  if (!end) return t("inProgress");
   const ms = new Date(end).getTime() - new Date(start).getTime();
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -100,6 +104,20 @@ function formatDuration(start: string, end?: string): string {
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
   return `${seconds}s`;
 }
+
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  pending: "statusPending",
+  in_progress: "statusInProgress",
+  completed: "statusCompleted",
+  failed: "statusFailed",
+  cancelled: "statusCancelled",
+};
+
+const TYPE_LABEL_KEYS: Record<string, string> = {
+  full: "typeFull",
+  incremental: "typeIncremental",
+  metadata: "typeMetadata",
+};
 
 const STATUS_COLORS: Record<string, "green" | "yellow" | "red" | "blue" | "default"> =
   {
@@ -129,6 +147,7 @@ const TYPE_COLORS: Record<string, string> = {
 // -- page --
 
 export default function BackupsPage() {
+  const t = useTranslations("adminBackups");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -176,12 +195,12 @@ export default function BackupsPage() {
       return data as any as Backup;
     },
     onSuccess: () => {
-      toast.success("Backup created successfully");
+      toast.success(t("created"));
       queryClient.invalidateQueries({ queryKey: ["backups"] });
       setCreateOpen(false);
       setBackupType("full");
     },
-    onError: mutationErrorToast("Failed to create backup"),
+    onError: mutationErrorToast(t("createFailed")),
   });
 
   const executeMutation = useMutation({
@@ -189,10 +208,10 @@ export default function BackupsPage() {
       await unwrap(executeBackup({ path: { id } }));
     },
     onSuccess: () => {
-      toast.success("Backup started");
+      toast.success(t("started"));
       queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
-    onError: mutationErrorToast("Failed to start backup"),
+    onError: mutationErrorToast(t("startFailed")),
   });
 
   const cancelMutation = useMutation({
@@ -200,10 +219,10 @@ export default function BackupsPage() {
       await unwrap(cancelBackup({ path: { id } }));
     },
     onSuccess: () => {
-      toast.success("Backup cancelled");
+      toast.success(t("cancelled"));
       queryClient.invalidateQueries({ queryKey: ["backups"] });
     },
-    onError: mutationErrorToast("Failed to cancel backup"),
+    onError: mutationErrorToast(t("cancelFailed")),
   });
 
   const restoreMutation = useMutation({
@@ -214,12 +233,12 @@ export default function BackupsPage() {
       }));
     },
     onSuccess: () => {
-      toast.success("Restore started");
+      toast.success(t("restoreStarted"));
       queryClient.invalidateQueries({ queryKey: ["backups"] });
       setRestoreOpen(false);
       setSelectedBackup(null);
     },
-    onError: mutationErrorToast("Failed to start restore"),
+    onError: mutationErrorToast(t("restoreStartFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -227,12 +246,12 @@ export default function BackupsPage() {
       await unwrap(deleteBackup({ path: { id } }));
     },
     onSuccess: () => {
-      toast.success("Backup deleted");
+      toast.success(t("deleted"));
       queryClient.invalidateQueries({ queryKey: ["backups"] });
       setDeleteOpen(false);
       setSelectedBackup(null);
     },
-    onError: mutationErrorToast("Failed to delete backup"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   // -- handlers --
@@ -250,25 +269,25 @@ export default function BackupsPage() {
   const columns: DataTableColumn<Backup>[] = [
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       accessor: (b) => b.type,
       cell: (b) => (
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[b.type] ?? ""}`}
         >
-          {b.type.toUpperCase()}
+          {t(TYPE_LABEL_KEYS[b.type] ?? "typeFull")}
         </span>
       ),
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       accessor: (b) => b.status,
       cell: (b) => (
         <div className="flex items-center gap-1.5">
           {STATUS_ICONS[b.status]}
           <StatusBadge
-            status={b.status.replace("_", " ")}
+            status={t(STATUS_LABEL_KEYS[b.status] ?? "statusPending")}
             color={STATUS_COLORS[b.status] ?? "default"}
           />
         </div>
@@ -276,7 +295,7 @@ export default function BackupsPage() {
     },
     {
       id: "size",
-      header: "Size",
+      header: t("colSize"),
       accessor: (b) => b.size_bytes,
       sortable: true,
       cell: (b) => (
@@ -287,7 +306,7 @@ export default function BackupsPage() {
     },
     {
       id: "artifacts",
-      header: "Artifacts",
+      header: t("colArtifacts"),
       accessor: (b) => b.artifact_count,
       sortable: true,
       cell: (b) => (
@@ -298,16 +317,16 @@ export default function BackupsPage() {
     },
     {
       id: "duration",
-      header: "Duration",
+      header: t("colDuration"),
       cell: (b) => (
         <span className="text-sm text-muted-foreground">
-          {b.started_at ? formatDuration(b.started_at, b.completed_at) : "\u2014"}
+          {b.started_at ? formatDuration(b.started_at, b.completed_at, t) : "\u2014"}
         </span>
       ),
     },
     {
       id: "created_at",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (b) => b.created_at,
       sortable: true,
       cell: (b) => (
@@ -318,7 +337,7 @@ export default function BackupsPage() {
     },
     {
       id: "error",
-      header: "Error",
+      header: t("colError"),
       cell: (b) =>
         b.error_message ? (
           <Tooltip>
@@ -355,7 +374,7 @@ export default function BackupsPage() {
                   <Play className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Execute</TooltipContent>
+              <TooltipContent>{t("execute")}</TooltipContent>
             </Tooltip>
           )}
           {b.status === "in_progress" && (
@@ -370,7 +389,7 @@ export default function BackupsPage() {
                   <StopCircle className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Cancel</TooltipContent>
+              <TooltipContent>{t("cancel")}</TooltipContent>
             </Tooltip>
           )}
           {b.status === "completed" && (
@@ -384,7 +403,7 @@ export default function BackupsPage() {
                   <Download className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Restore</TooltipContent>
+              <TooltipContent>{t("restore")}</TooltipContent>
             </Tooltip>
           )}
           {(b.status === "completed" ||
@@ -401,7 +420,7 @@ export default function BackupsPage() {
                   <Trash2 className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
+              <TooltipContent>{t("delete")}</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -413,11 +432,11 @@ export default function BackupsPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Backups" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view this page.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -427,8 +446,8 @@ export default function BackupsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Backups"
-        description="Create, manage, and restore system backups."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -445,11 +464,11 @@ export default function BackupsPage() {
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh</TooltipContent>
+              <TooltipContent>{t("refresh")}</TooltipContent>
             </Tooltip>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create Backup
+              {t("createBackup")}
             </Button>
           </div>
         }
@@ -459,10 +478,9 @@ export default function BackupsPage() {
       {inProgressBackups > 0 && (
         <Alert>
           <Loader2 className="size-4 animate-spin" />
-          <AlertTitle>Backup in progress</AlertTitle>
+          <AlertTitle>{t("inProgressTitle")}</AlertTitle>
           <AlertDescription>
-            {inProgressBackups} backup(s) currently running. This page auto-refreshes
-            every 10 seconds.
+            {t("inProgressDescription", { count: inProgressBackups })}
           </AlertDescription>
         </Alert>
       )}
@@ -471,29 +489,29 @@ export default function BackupsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Archive}
-          label="Total Backups"
+          label={t("statTotalBackups")}
           value={backups.length}
           color="blue"
         />
         <StatCard
           icon={CheckCircle2}
-          label="Completed"
+          label={t("statCompleted")}
           value={completedBackups}
           color="green"
         />
         <StatCard
           icon={HardDrive}
-          label="Total Backup Size"
+          label={t("statTotalSize")}
           value={formatBytes(totalSize)}
           color="purple"
         />
         <StatCard
           icon={CalendarDays}
-          label="Last Backup"
+          label={t("statLastBackup")}
           value={
             lastBackup
               ? new Date(lastBackup.created_at).toLocaleDateString()
-              : "Never"
+              : t("never")
           }
           color="default"
         />
@@ -503,15 +521,15 @@ export default function BackupsPage() {
       <div className="flex items-center gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter by status" />
+            <SelectValue placeholder={t("filterPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="__all__">{t("allStatuses")}</SelectItem>
+            <SelectItem value="pending">{t("statusPending")}</SelectItem>
+            <SelectItem value="in_progress">{t("statusInProgress")}</SelectItem>
+            <SelectItem value="completed">{t("statusCompleted")}</SelectItem>
+            <SelectItem value="failed">{t("statusFailed")}</SelectItem>
+            <SelectItem value="cancelled">{t("statusCancelled")}</SelectItem>
           </SelectContent>
         </Select>
         {statusFilter !== "__all__" && (
@@ -520,7 +538,7 @@ export default function BackupsPage() {
             size="sm"
             onClick={() => setStatusFilter("__all__")}
           >
-            Clear filter
+            {t("clearFilter")}
           </Button>
         )}
       </div>
@@ -529,12 +547,12 @@ export default function BackupsPage() {
       {!isLoading && backups.length === 0 ? (
         <EmptyState
           icon={Archive}
-          title="No backups yet"
-          description="Create a backup to protect your data."
+          title={t("noBackupsTitle")}
+          description={t("noBackupsDescription")}
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create Backup
+              {t("createBackup")}
             </Button>
           }
         />
@@ -543,7 +561,7 @@ export default function BackupsPage() {
           columns={columns}
           data={backups}
           loading={isLoading}
-          emptyMessage="No backups found."
+          emptyMessage={t("empty")}
           rowKey={(b) => b.id}
         />
       )}
@@ -559,9 +577,9 @@ export default function BackupsPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Backup</DialogTitle>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
             <DialogDescription>
-              Choose a backup type to create a new system backup.
+              {t("createDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -572,20 +590,20 @@ export default function BackupsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label>Backup Type</Label>
+              <Label>{t("backupTypeLabel")}</Label>
               <Select value={backupType} onValueChange={setBackupType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="full">
-                    Full - Complete backup of all data and artifacts
+                    {t("typeFull")} - {t("typeFullDesc")}
                   </SelectItem>
                   <SelectItem value="incremental">
-                    Incremental - Only changes since last backup
+                    {t("typeIncremental")} - {t("typeIncrementalDesc")}
                   </SelectItem>
                   <SelectItem value="metadata">
-                    Metadata - Database only, no artifacts
+                    {t("typeMetadata")} - {t("typeMetadataDesc")}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -599,10 +617,10 @@ export default function BackupsPage() {
                   setBackupType("full");
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Backup"}
+                {createMutation.isPending ? t("creating") : t("createBackup")}
               </Button>
             </DialogFooter>
           </form>
@@ -616,9 +634,13 @@ export default function BackupsPage() {
           setRestoreOpen(o);
           if (!o) setSelectedBackup(null);
         }}
-        title="Restore from Backup"
-        description={`This will restore all data from the backup created on ${selectedBackup ? new Date(selectedBackup.created_at).toLocaleString() : ""}. This operation may overwrite current data. Are you sure?`}
-        confirmText="Yes, Restore"
+        title={t("restoreTitle")}
+        description={t("restoreDescription", {
+          date: selectedBackup
+            ? new Date(selectedBackup.created_at).toLocaleString()
+            : "",
+        })}
+        confirmText={t("restoreConfirm")}
         danger
         loading={restoreMutation.isPending}
         onConfirm={() => {
@@ -633,9 +655,9 @@ export default function BackupsPage() {
           setDeleteOpen(o);
           if (!o) setSelectedBackup(null);
         }}
-        title="Delete Backup"
-        description="This will permanently delete the backup file. This action cannot be undone."
-        confirmText="Delete Backup"
+        title={t("deleteTitle")}
+        description={t("deleteDescription")}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {

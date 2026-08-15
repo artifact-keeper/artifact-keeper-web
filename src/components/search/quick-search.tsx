@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   CommandDialog,
   CommandInput,
@@ -27,6 +28,7 @@ interface QuickSearchProps {
 }
 
 export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
+  const t = useTranslations("common");
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -115,11 +117,11 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Quick Search"
-      description="Search for repositories, packages, and artifacts"
+      title={t("quickSearch")}
+      description={t("quickSearchDescription")}
     >
       <CommandInput
-        placeholder="Search repositories, packages, artifacts..."
+        placeholder={t("quickSearchPlaceholder")}
         value={query}
         onValueChange={setQuery}
       />
@@ -131,15 +133,15 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
         )}
 
         {!isLoading && query.length >= 2 && results.length === 0 && (
-          <CommandEmpty>No results found for &ldquo;{query}&rdquo;</CommandEmpty>
+          <CommandEmpty>{t("noResultsFor", { query })}</CommandEmpty>
         )}
 
         {!isLoading && query.length < 2 && (
-          <CommandEmpty>Type at least 2 characters to search...</CommandEmpty>
+          <CommandEmpty>{t("typeAtLeast")}</CommandEmpty>
         )}
 
         {repositories.length > 0 && (
-          <CommandGroup heading="Repositories">
+          <CommandGroup heading={t("repositories")}>
             {repositories.map((result) => (
               <CommandItem
                 key={`repo-${result.id}`}
@@ -161,7 +163,7 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
         {packages.length > 0 && (
           <>
             {repositories.length > 0 && <CommandSeparator />}
-            <CommandGroup heading="Packages">
+            <CommandGroup heading={t("packages")}>
               {packages.map((result) => (
                 <CommandItem
                   key={`pkg-${result.id}`}
@@ -193,7 +195,7 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
             {(repositories.length > 0 || packages.length > 0) && (
               <CommandSeparator />
             )}
-            <CommandGroup heading="Artifacts">
+            <CommandGroup heading={t("artifacts")}>
               {artifacts.map((result) => (
                 <CommandItem
                   key={`art-${result.id}`}
@@ -221,7 +223,7 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
             <CommandGroup>
               <CommandItem onSelect={handleSearchMore}>
                 <ArrowRight className="size-4 text-muted-foreground" />
-                <span>Search for more results...</span>
+                <span>{t("searchMore")}</span>
               </CommandItem>
             </CommandGroup>
           </>

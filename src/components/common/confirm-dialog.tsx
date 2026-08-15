@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,14 +36,17 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText,
+  cancelText,
   typeToConfirm,
   danger = false,
   loading = false,
   onConfirm,
 }: ConfirmDialogProps) {
+  const t = useTranslations("common");
   const [typed, setTyped] = useState("");
+  const resolvedConfirm = confirmText ?? t("confirm");
+  const resolvedCancel = cancelText ?? t("cancel");
 
   const canConfirm = typeToConfirm ? typed === typeToConfirm : true;
 
@@ -62,7 +66,9 @@ export function ConfirmDialog({
         {typeToConfirm && (
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">
-              Type <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">{typeToConfirm}</code> to confirm
+              {t("typeToConfirm")}{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">{typeToConfirm}</code>{" "}
+              {t("toConfirm")}
             </Label>
             <Input
               value={typed}
@@ -74,13 +80,13 @@ export function ConfirmDialog({
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>{cancelText}</AlertDialogCancel>
+          <AlertDialogCancel disabled={loading}>{resolvedCancel}</AlertDialogCancel>
           <Button
             variant={danger ? "destructive" : "default"}
             disabled={!canConfirm || loading}
             onClick={onConfirm}
           >
-            {loading ? "Processing..." : confirmText}
+            {loading ? t("processing") : resolvedConfirm}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Network, RefreshCw } from "lucide-react";
 
 import {
@@ -108,6 +109,7 @@ function truncateText(text: string, max: number): string {
 }
 
 export default function DownloadsPage() {
+  const t = useTranslations("adminDownloads");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -162,11 +164,11 @@ export default function DownloadsPage() {
     const artifactId = draft.artifact_id.trim();
     const userId = draft.user_id.trim();
     if (artifactId && !isValidUuid(artifactId)) {
-      setFilterError("Artifact ID must be a UUID");
+      setFilterError(t("filterArtifactUuidError"));
       return;
     }
     if (userId && !isValidUuid(userId)) {
-      setFilterError("User ID must be a UUID");
+      setFilterError(t("filterUserUuidError"));
       return;
     }
     setFilterError(null);
@@ -202,7 +204,7 @@ export default function DownloadsPage() {
   const eventColumns: DataTableColumn<DownloadRecord>[] = [
     {
       id: "downloaded_at",
-      header: "Time",
+      header: t("colTime"),
       accessor: (r) => r.downloaded_at,
       cell: (r) => (
         <span className="whitespace-nowrap text-sm" title={r.downloaded_at}>
@@ -213,11 +215,11 @@ export default function DownloadsPage() {
     },
     {
       id: "user",
-      header: "User",
+      header: t("colUser"),
       accessor: (r) => r.username ?? "",
       cell: (r) => {
         if (!r.user_id) {
-          return <span className="text-muted-foreground">anonymous</span>;
+          return <span className="text-muted-foreground">{t("anonymous")}</span>;
         }
         return r.username ? (
           <span title={r.user_id}>{r.username}</span>
@@ -231,7 +233,7 @@ export default function DownloadsPage() {
     },
     {
       id: "ip_address",
-      header: "IP",
+      header: t("colIp"),
       accessor: (r) => r.ip_address ?? "",
       cell: (r) => (
         <span className="font-mono text-xs">{r.ip_address ?? "—"}</span>
@@ -240,7 +242,7 @@ export default function DownloadsPage() {
     },
     {
       id: "artifact",
-      header: "Artifact",
+      header: t("colArtifact"),
       cell: (r) => (
         <span className="font-mono text-xs" title={r.artifact_id}>
           {truncateId(r.artifact_id)}
@@ -249,7 +251,7 @@ export default function DownloadsPage() {
     },
     {
       id: "user_agent",
-      header: "User agent",
+      header: t("colUserAgent"),
       className: "max-w-[260px]",
       cell: (r) => (
         <span
@@ -265,11 +267,11 @@ export default function DownloadsPage() {
   const ipColumns: DataTableColumn<IpGroup>[] = [
     {
       id: "ip",
-      header: "IP",
+      header: t("colIp"),
       accessor: (g) => g.ip,
       cell: (g) =>
         g.ip === UNKNOWN_NETWORK ? (
-          <span className="text-muted-foreground">unknown</span>
+          <span className="text-muted-foreground">{t("unknownIp")}</span>
         ) : (
           <span className="font-mono text-xs">{g.ip}</span>
         ),
@@ -277,27 +279,27 @@ export default function DownloadsPage() {
     },
     {
       id: "subnet",
-      header: "Subnet",
+      header: t("colSubnet"),
       accessor: (g) => g.subnet,
       cell: (g) => <Badge variant="secondary">{g.subnet}</Badge>,
       sortable: true,
     },
     {
       id: "downloads",
-      header: "Downloads",
+      header: t("colDownloads"),
       accessor: (g) => g.downloads,
       cell: (g) => <span className="tabular-nums">{g.downloads}</span>,
       sortable: true,
     },
     {
       id: "users",
-      header: "Users",
+      header: t("colUsers"),
       accessor: (g) => g.unique_users,
       cell: (g) => (
         <span className="tabular-nums">
           {g.unique_users}
           {g.has_anonymous && (
-            <span className="ml-1 text-xs text-muted-foreground">+anon</span>
+            <span className="ml-1 text-xs text-muted-foreground">{t("anonSuffix")}</span>
           )}
         </span>
       ),
@@ -305,14 +307,14 @@ export default function DownloadsPage() {
     },
     {
       id: "artifacts",
-      header: "Artifacts",
+      header: t("colArtifacts"),
       accessor: (g) => g.unique_artifacts,
       cell: (g) => <span className="tabular-nums">{g.unique_artifacts}</span>,
       sortable: true,
     },
     {
       id: "last",
-      header: "Last download",
+      header: t("colLastDownload"),
       accessor: (g) => g.last_downloaded_at,
       cell: (g) => (
         <span className="whitespace-nowrap text-sm" title={g.last_downloaded_at}>
@@ -329,10 +331,10 @@ export default function DownloadsPage() {
           <Button
             variant="ghost"
             size="sm"
-            aria-label={`View downloads from ${g.ip}`}
+            aria-label={t("viewFromIpAria", { ip: g.ip })}
             onClick={() => drillIntoIp(g.ip)}
           >
-            View events
+            {t("viewEvents")}
           </Button>
         ) : null,
     },
@@ -341,11 +343,11 @@ export default function DownloadsPage() {
   const userColumns: DataTableColumn<UserGroup>[] = [
     {
       id: "user",
-      header: "User",
+      header: t("colUser"),
       accessor: (g) => g.username ?? "",
       cell: (g) => {
         if (!g.user_id) {
-          return <span className="text-muted-foreground">anonymous</span>;
+          return <span className="text-muted-foreground">{t("anonymous")}</span>;
         }
         return g.username ? (
           <span title={g.user_id}>{g.username}</span>
@@ -359,28 +361,28 @@ export default function DownloadsPage() {
     },
     {
       id: "downloads",
-      header: "Downloads",
+      header: t("colDownloads"),
       accessor: (g) => g.downloads,
       cell: (g) => <span className="tabular-nums">{g.downloads}</span>,
       sortable: true,
     },
     {
       id: "ips",
-      header: "IPs",
+      header: t("colIps"),
       accessor: (g) => g.unique_ips,
       cell: (g) => <span className="tabular-nums">{g.unique_ips}</span>,
       sortable: true,
     },
     {
       id: "artifacts",
-      header: "Artifacts",
+      header: t("colArtifacts"),
       accessor: (g) => g.unique_artifacts,
       cell: (g) => <span className="tabular-nums">{g.unique_artifacts}</span>,
       sortable: true,
     },
     {
       id: "last",
-      header: "Last download",
+      header: t("colLastDownload"),
       accessor: (g) => g.last_downloaded_at,
       cell: (g) => (
         <span className="whitespace-nowrap text-sm" title={g.last_downloaded_at}>
@@ -398,10 +400,10 @@ export default function DownloadsPage() {
           <Button
             variant="ghost"
             size="sm"
-            aria-label={`View downloads by ${g.username ?? uid}`}
+            aria-label={t("viewByUserAria", { user: g.username ?? uid })}
             onClick={() => drillIntoUser(uid)}
           >
-            View events
+            {t("viewEvents")}
           </Button>
         ) : null;
       },
@@ -411,11 +413,11 @@ export default function DownloadsPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Downloads" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view download attribution.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -427,15 +429,15 @@ export default function DownloadsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Downloads"
-        description="Attributed download events — who pulled what, from which network location. Group by IP/subnet for a network-topology view or by user for per-user activity."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Network className="size-5 text-muted-foreground" />
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Refresh downloads"
+              aria-label={t("refreshAria")}
               onClick={() =>
                 queryClient.invalidateQueries({ queryKey: DOWNLOADS_QUERY_KEY })
               }
@@ -452,11 +454,11 @@ export default function DownloadsPage() {
       <div className="space-y-2">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <Label htmlFor="downloads-filter-artifact-id">Artifact ID</Label>
+            <Label htmlFor="downloads-filter-artifact-id">{t("artifactIdLabel")}</Label>
             <Input
               id="downloads-filter-artifact-id"
               className="w-[280px] font-mono"
-              placeholder="UUID of the artifact"
+              placeholder={t("artifactIdPlaceholder")}
               value={draft.artifact_id}
               onChange={(e) => {
                 setDraft({ ...draft, artifact_id: e.target.value });
@@ -468,11 +470,11 @@ export default function DownloadsPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="downloads-filter-user-id">User ID</Label>
+            <Label htmlFor="downloads-filter-user-id">{t("userIdLabel")}</Label>
             <Input
               id="downloads-filter-user-id"
               className="w-[280px] font-mono"
-              placeholder="UUID of the downloader"
+              placeholder={t("userIdPlaceholder")}
               value={draft.user_id}
               onChange={(e) => {
                 setDraft({ ...draft, user_id: e.target.value });
@@ -484,18 +486,18 @@ export default function DownloadsPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="downloads-filter-ip">Client IP</Label>
+            <Label htmlFor="downloads-filter-ip">{t("clientIpLabel")}</Label>
             <Input
               id="downloads-filter-ip"
               className="w-[180px] font-mono"
-              placeholder="e.g. 10.0.0.12"
+              placeholder={t("clientIpPlaceholder")}
               value={draft.ip}
               onChange={(e) => setDraft({ ...draft, ip: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && applyFilters()}
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="downloads-filter-from">From</Label>
+            <Label htmlFor="downloads-filter-from">{t("fromLabel")}</Label>
             <Input
               id="downloads-filter-from"
               type="date"
@@ -505,7 +507,7 @@ export default function DownloadsPage() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="downloads-filter-to">To</Label>
+            <Label htmlFor="downloads-filter-to">{t("toLabel")}</Label>
             <Input
               id="downloads-filter-to"
               type="date"
@@ -514,10 +516,10 @@ export default function DownloadsPage() {
               onChange={(e) => setDraft({ ...draft, to: e.target.value })}
             />
           </div>
-          <Button onClick={applyFilters}>Apply Filters</Button>
+          <Button onClick={applyFilters}>{t("applyFilters")}</Button>
           {hasAppliedFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("clearFilters")}
             </Button>
           )}
         </div>
@@ -535,18 +537,17 @@ export default function DownloadsPage() {
       {/* View switch */}
       <Tabs value={view} onValueChange={(v) => setView(v as ViewMode)}>
         <TabsList>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="by-ip">By IP / Subnet</TabsTrigger>
-          <TabsTrigger value="by-user">By User</TabsTrigger>
+          <TabsTrigger value="events">{t("tabEvents")}</TabsTrigger>
+          <TabsTrigger value="by-ip">{t("tabByIp")}</TabsTrigger>
+          <TabsTrigger value="by-user">{t("tabByUser")}</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {viewError ? (
         <Alert variant="destructive">
-          <AlertTitle>Download attribution unavailable</AlertTitle>
+          <AlertTitle>{t("errorTitle")}</AlertTitle>
           <AlertDescription>
-            Unable to load download events. This server may not support the
-            download-attribution endpoints yet, or the request failed.
+            {t("errorDescription")}
           </AlertDescription>
         </Alert>
       ) : view === "events" ? (
@@ -563,16 +564,17 @@ export default function DownloadsPage() {
           }}
           pageSizeOptions={[20, 50, 100]}
           loading={isLoading}
-          emptyMessage="No downloads recorded."
+          emptyMessage={t("emptyMessage")}
           rowKey={(r) => `${r.artifact_id}:${r.downloaded_at}:${r.ip_address}`}
         />
       ) : (
         <div className="space-y-2">
           {sampleTruncated && sample && (
             <p className="text-sm text-muted-foreground">
-              Grouped over the {sample.downloads.length} most recent of{" "}
-              {sample.total} matching events. Narrow the filters for a complete
-              picture.
+              {t("truncatedNote", {
+                count: sample.downloads.length,
+                total: sample.total,
+              })}
             </p>
           )}
           {view === "by-ip" ? (
@@ -580,7 +582,7 @@ export default function DownloadsPage() {
               columns={ipColumns}
               data={ipGroups}
               loading={sampleLoading}
-              emptyMessage="No downloads recorded."
+              emptyMessage={t("emptyMessage")}
               rowKey={(g) => g.ip}
             />
           ) : (
@@ -588,7 +590,7 @@ export default function DownloadsPage() {
               columns={userColumns}
               data={userGroups}
               loading={sampleLoading}
-              emptyMessage="No downloads recorded."
+              emptyMessage={t("emptyMessage")}
               rowKey={(g) => g.user_id ?? "anonymous"}
             />
           )}

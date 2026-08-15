@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ export function DataTablePagination({
   pageSizeOptions = [10, 20, 50, 100],
   itemLabel = "results",
 }: DataTablePaginationProps) {
+  const t = useTranslations("common");
   if (!onPageChange && !onPageSizeChange) return null;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -52,7 +54,7 @@ export function DataTablePagination({
   return (
     <div className="flex items-center justify-between" data-testid="data-table-pagination">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>Rows per page</span>
+        <span>{t("rowsPerPage")}</span>
         <Select
           value={String(pageSize)}
           onValueChange={(v) => onPageSizeChange?.(Number(v))}
@@ -69,7 +71,9 @@ export function DataTablePagination({
           </SelectContent>
         </Select>
         <span className="ml-2">
-          {total > 0 ? `${rangeStart}-${rangeEnd} of ${total}` : `0 ${itemLabel}`}
+          {total > 0
+            ? t("rangeOf", { start: rangeStart, end: rangeEnd, total })
+            : `0 ${itemLabel}`}
         </span>
       </div>
       <div className="flex items-center gap-1">
@@ -78,19 +82,19 @@ export function DataTablePagination({
           size="icon-sm"
           disabled={page <= 1}
           onClick={() => onPageChange?.(page - 1)}
-          aria-label="Previous page"
+          aria-label={t("previousPage")}
         >
           <ChevronLeft className="size-4" />
         </Button>
         <span className="px-2 text-sm text-muted-foreground">
-          Page {page} of {totalPages}
+          {t("pageOf", { page, total: totalPages })}
         </span>
         <Button
           variant="outline"
           size="icon-sm"
           disabled={page >= totalPages}
           onClick={() => onPageChange?.(page + 1)}
-          aria-label="Next page"
+          aria-label={t("nextPage")}
         >
           <ChevronRight className="size-4" />
         </Button>

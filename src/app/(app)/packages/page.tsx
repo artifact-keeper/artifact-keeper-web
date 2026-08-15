@@ -6,6 +6,7 @@ import { Suspense, useState, useCallback, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   SearchIcon,
   Download,
@@ -80,6 +81,7 @@ function PackageListItem({
   onClick: () => void;
   viewMode: ViewMode;
 }) {
+  const t = useTranslations("packages");
   if (viewMode === "grid") {
     return (
       <div
@@ -165,7 +167,7 @@ function PackageListItem({
       </div>
       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
         {pkg.version && <span>v{pkg.version}</span>}
-        <span>{formatNumber(pkg.download_count)} downloads</span>
+        <span>{t("itemDownloads", { count: formatNumber(pkg.download_count) })}</span>
       </div>
     </div>
   );
@@ -182,6 +184,7 @@ function PackageDetailPanel({
   versions: PackageVersion[];
   isLoadingDetail: boolean;
 }) {
+  const t = useTranslations("packages");
   const [copiedInstall, setCopiedInstall] = useState(false);
 
   const installCmd = getInstallCommand(
@@ -212,7 +215,7 @@ function PackageDetailPanel({
             </div>
             {pkg.version && (
               <p className="text-sm text-muted-foreground mt-0.5">
-                Latest: v{pkg.version}
+                {t("latest", { version: pkg.version })}
               </p>
             )}
             {pkg.description && (
@@ -231,7 +234,7 @@ function PackageDetailPanel({
                   className="gap-1.5"
                 >
                   <ExternalLink className="size-3.5" />
-                  Homepage
+                  {t("homepage")}
                 </a>
               </Button>
             ) : homepageUrl ? (
@@ -240,7 +243,7 @@ function PackageDetailPanel({
             <Button variant="outline" size="sm" asChild>
               <Link href={`/packages/${pkg.id}`} className="gap-1.5">
                 <ExternalLink className="size-3.5" />
-                View Details
+                {t("viewDetails")}
               </Link>
             </Button>
           </div>
@@ -252,9 +255,9 @@ function PackageDetailPanel({
         <Tabs defaultValue="overview" className="h-full flex flex-col">
           <div className="px-6 pt-4">
             <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
               <TabsTrigger value="versions">
-                Versions{versions.length > 0 ? ` (${versions.length})` : ""}
+                {t("tabs.versions")}{versions.length > 0 ? ` (${versions.length})` : ""}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -264,7 +267,7 @@ function PackageDetailPanel({
             <div className="space-y-6">
               {/* Install command */}
               <div>
-                <h3 className="text-sm font-medium mb-2">Install</h3>
+                <h3 className="text-sm font-medium mb-2">{t("install")}</h3>
                 <div className="relative">
                   <pre className="rounded-lg bg-muted p-3 text-xs font-mono overflow-x-auto">
                     {installCmd}
@@ -286,30 +289,30 @@ function PackageDetailPanel({
 
               {/* Metadata grid */}
               <div>
-                <h3 className="text-sm font-medium mb-2">Details</h3>
+                <h3 className="text-sm font-medium mb-2">{t("details")}</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <MetadataItem label="Format" value={pkg.format} />
-                  <MetadataItem label="Repository" value={pkg.repository_key} />
+                  <MetadataItem label={t("meta.format")} value={pkg.format} />
+                  <MetadataItem label={t("meta.repository")} value={pkg.repository_key} />
                   <MetadataItem
-                    label="Size"
+                    label={t("meta.size")}
                     value={formatBytes(pkg.size_bytes)}
                   />
                   <MetadataItem
-                    label="Downloads"
+                    label={t("meta.downloads")}
                     value={formatNumber(pkg.download_count)}
                   />
                   {license && (
-                    <MetadataItem label="License" value={license} />
+                    <MetadataItem label={t("meta.license")} value={license} />
                   )}
                   {author && (
-                    <MetadataItem label="Author" value={author} />
+                    <MetadataItem label={t("meta.author")} value={author} />
                   )}
                   <MetadataItem
-                    label="Created"
+                    label={t("meta.created")}
                     value={formatDate(pkg.created_at)}
                   />
                   <MetadataItem
-                    label="Updated"
+                    label={t("meta.updated")}
                     value={formatDate(pkg.updated_at)}
                   />
                 </div>
@@ -330,17 +333,17 @@ function PackageDetailPanel({
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Tag className="size-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  No version information available
+                  {t("noVersions")}
                 </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Version</TableHead>
-                    <TableHead className="text-right">Size</TableHead>
-                    <TableHead className="text-right">Downloads</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead>{t("table.version")}</TableHead>
+                    <TableHead className="text-right">{t("table.size")}</TableHead>
+                    <TableHead className="text-right">{t("table.downloads")}</TableHead>
+                    <TableHead>{t("table.date")}</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -390,7 +393,8 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 // ---- Main Packages Page ----
 
 export default function PackagesPage() {
-  useDocumentTitle("Packages");
+  const t = useTranslations("packages");
+  useDocumentTitle(t("title"));
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-[50vh]"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
       <PackagesContent />
@@ -399,6 +403,7 @@ export default function PackagesPage() {
 }
 
 function PackagesContent() {
+  const t = useTranslations("packages");
   const searchParams = useSearchParams();
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -519,10 +524,10 @@ function PackagesContent() {
         {/* Header */}
         <div className="p-4 border-b space-y-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">Packages</h1>
+            <h1 className="text-lg font-semibold">{t("title")}</h1>
             {!packagesLoading && (
               <span className="text-xs text-muted-foreground">
-                {totalPackages} total
+                {t("total", { count: totalPackages })}
               </span>
             )}
           </div>
@@ -531,7 +536,7 @@ function PackagesContent() {
           <div className="relative">
             <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              placeholder="Search packages..."
+              placeholder={t("searchPlaceholder")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -551,10 +556,10 @@ function PackagesContent() {
               }}
             >
               <SelectTrigger className="w-[120px]" size="sm">
-                <SelectValue placeholder="Format" />
+                <SelectValue placeholder={t("format")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All formats</SelectItem>
+                <SelectItem value="__all__">{t("allFormats")}</SelectItem>
                 {FORMAT_OPTIONS.map((f) => (
                   <SelectItem key={f} value={f}>
                     {f}
@@ -571,10 +576,10 @@ function PackagesContent() {
               }}
             >
               <SelectTrigger className="w-[130px]" size="sm">
-                <SelectValue placeholder="Repository" />
+                <SelectValue placeholder={t("repository")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All repos</SelectItem>
+                <SelectItem value="__all__">{t("allRepos")}</SelectItem>
                 {repositories.map((r) => (
                   <SelectItem key={r.id} value={r.key}>
                     {r.key}
@@ -591,9 +596,9 @@ function PackagesContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="downloads">Downloads</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="updated">Updated</SelectItem>
+                <SelectItem value="downloads">{t("sort.downloads")}</SelectItem>
+                <SelectItem value="name">{t("sort.name")}</SelectItem>
+                <SelectItem value="updated">{t("sort.updated")}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -631,7 +636,7 @@ function PackagesContent() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <PackageIcon className="size-10 text-muted-foreground/40 mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  No packages found
+                  {t("noPackages")}
                 </p>
               </div>
             )}
@@ -681,9 +686,9 @@ function PackagesContent() {
   const detailPanel = !effectiveSelectedId ? (
     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
       <PackageIcon className="size-12 mb-3 opacity-30" />
-      <p className="text-sm font-medium">Select a package</p>
+      <p className="text-sm font-medium">{t("selectPackage")}</p>
       <p className="text-xs mt-1">
-        Choose a package from the list to view details.
+        {t("selectPackageDetail")}
       </p>
     </div>
   ) : detailPkg ? (

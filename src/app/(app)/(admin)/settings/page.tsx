@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
@@ -52,32 +53,38 @@ function SettingRow({
   );
 }
 
-function formatPasswordPolicy(policy: PasswordPolicy | undefined): string {
-  if (!policy) return "Loading...";
-  const parts = [`Minimum ${policy.min_length} characters`];
+function formatPasswordPolicy(
+  policy: PasswordPolicy | undefined,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  if (!policy) return t("loading");
+  const parts = [t("minChars", { min: policy.min_length })];
   const complexity: string[] = [];
-  if (policy.require_uppercase) complexity.push("uppercase");
-  if (policy.require_lowercase) complexity.push("lowercase");
-  if (policy.require_digit) complexity.push("number");
-  if (policy.require_special) complexity.push("special character");
+  if (policy.require_uppercase) complexity.push(t("uppercase"));
+  if (policy.require_lowercase) complexity.push(t("lowercase"));
+  if (policy.require_digit) complexity.push(t("number"));
+  if (policy.require_special) complexity.push(t("specialChar"));
   if (complexity.length > 0) {
-    parts.push(`requires ${complexity.join(", ")}`);
+    parts.push(t("requiresComplexity", { list: complexity.join(", ") }));
   }
   if (policy.history_count > 0) {
-    parts.push(`${policy.history_count} password history`);
+    parts.push(t("passwordHistory", { count: policy.history_count }));
   }
   return parts.join("; ");
 }
 
-const STORAGE_BACKEND_LABELS: Record<string, string> = {
-  filesystem: "Local Filesystem",
-  s3: "S3",
-  gcs: "Google Cloud Storage",
-  azure: "Azure Blob Storage",
+const STORAGE_BACKEND_KEYS: Record<string, string> = {
+  filesystem: "storageFilesystem",
+  s3: "storageS3",
+  gcs: "storageGcs",
+  azure: "storageAzure",
 };
 
-function formatStorageBackend(backend: string): string {
-  return STORAGE_BACKEND_LABELS[backend] ?? backend;
+function formatStorageBackend(
+  backend: string,
+  t: (key: string) => string
+): string {
+  return t(STORAGE_BACKEND_KEYS[backend] ?? backend);
 }
 
 // -- Upload size limit editor (#189) --
@@ -113,6 +120,7 @@ function UploadSizeSetting({
   unavailable: boolean;
 }) {
   const queryClient = useQueryClient();
+  const t = useTranslations("adminSettings");
   const initial = bytesToUploadSize(currentBytes ?? 0);
   const [value, setValue] = useState(initial.value);
   const [unit, setUnit] = useState<UploadSizeUnit>(initial.unit);
@@ -133,19 +141,19 @@ function UploadSizeSetting({
   const saveMutation = useMutation({
     mutationFn: (bytes: number) => settingsApi.updateMaxUploadSize(bytes),
     onSuccess: () => {
-      toast.success("Upload size limit saved");
+      toast.success(t("uploadSizeSaved"));
       queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
       setDirty(false);
     },
-    onError: mutationErrorToast("Failed to save upload size limit"),
+    onError: mutationErrorToast(t("uploadSizeSaveFailed")),
   });
 
   if (loading) {
     return (
       <SettingRow
-        label="Max Upload Size"
-        value="Loading..."
-        description="Maximum allowed size for a single artifact upload."
+        label={t("maxUploadSize")}
+        value={t("loading")}
+        description={t("maxUploadSizeHint")}
       />
     );
   }
@@ -153,9 +161,9 @@ function UploadSizeSetting({
   if (unavailable) {
     return (
       <SettingRow
-        label="Max Upload Size"
-        value="Unavailable"
-        description="Maximum allowed size for a single artifact upload."
+        label={t("maxUploadSize")}
+        value={t("unavailable")}
+        description={t("maxUploadSizeHint")}
       />
     );
   }
@@ -163,7 +171,7 @@ function UploadSizeSetting({
   return (
     <div className="space-y-2">
       <Label htmlFor="max-upload-size" className="text-sm">
-        Max Upload Size
+        {t("maxUploadSize")}
       </Label>
       <div className="flex gap-2">
         <Input
@@ -171,7 +179,7 @@ function UploadSizeSetting({
           type="number"
           min={0}
           step="any"
-          placeholder="No limit"
+          placeholder={t("noLimit")}
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
@@ -186,7 +194,7 @@ function UploadSizeSetting({
             setDirty(true);
           }}
         >
-          <SelectTrigger className="w-20" aria-label="Upload size unit">
+          <SelectTrigger className="w-20" aria-label={t("unitAria")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -201,12 +209,11 @@ function UploadSizeSetting({
           {saveMutation.isPending && (
             <Loader2 className="size-4 mr-2 animate-spin" />
           )}
-          Save
+          {t("save")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Maximum allowed size for a single artifact upload. Leave empty for no
-        limit. Applies to every repository.
+        {t("maxUploadSizeHintLong")}
       </p>
     </div>
   );
@@ -215,23 +222,24 @@ function UploadSizeSetting({
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
+  const t = useTranslations("adminSettings");
   const [testRecipient, setTestRecipient] = useState("");
 
   const testMutation = useMutation({
     mutationFn: (recipient: string) => settingsApi.sendTestEmail(recipient),
     onSuccess: (result) => {
       if (result.success) {
-        toast.success(result.message || "Test email sent successfully");
+        toast.success(result.message || t("testEmailSent"));
       } else {
-        toast.error(result.message || "Test email failed");
+        toast.error(result.message || t("testEmailFailed"));
       }
     },
-    onError: mutationErrorToast("Failed to send test email"),
+    onError: mutationErrorToast(t("testEmailSendFailed")),
   });
 
   function handleSendTest() {
     if (!testRecipient.trim()) {
-      toast.error("Please enter a recipient email address");
+      toast.error(t("recipientRequired"));
       return;
     }
     testMutation.mutate(testRecipient.trim());
@@ -241,10 +249,9 @@ function SmtpSettingsTab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">SMTP Configuration</CardTitle>
+          <CardTitle className="text-base">{t("smtpTitle")}</CardTitle>
           <CardDescription>
-            Outbound email server used for notifications, password resets, and
-            other system emails.
+            {t("smtpDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -254,13 +261,9 @@ function SmtpSettingsTab() {
               configuration only, so this tab is informational. */}
           <Alert>
             <Info className="size-4" />
-            <AlertTitle>Configured via environment variables</AlertTitle>
+            <AlertTitle>{t("envConfigured")}</AlertTitle>
             <AlertDescription>
-              SMTP is configured on the server with the SMTP_HOST, SMTP_PORT,
-              SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_ADDRESS, and
-              SMTP_TLS_MODE environment variables; changes take effect on
-              server restart. When SMTP_HOST is not set, email delivery is
-              disabled.
+              {t("envConfiguredDescription")}
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -268,20 +271,19 @@ function SmtpSettingsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Send Test Email</CardTitle>
+          <CardTitle className="text-base">{t("sendTestEmail")}</CardTitle>
           <CardDescription>
-            Verify the server-side SMTP configuration by sending a test
-            message.
+            {t("sendTestEmailDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-3">
             <div className="flex-1 space-y-2">
-              <Label htmlFor="test-recipient">Recipient</Label>
+              <Label htmlFor="test-recipient">{t("recipient")}</Label>
               <Input
                 id="test-recipient"
                 type="email"
-                placeholder="admin@example.com"
+                placeholder={t("recipientPlaceholder")}
                 value={testRecipient}
                 onChange={(e) => setTestRecipient(e.target.value)}
               />
@@ -294,7 +296,7 @@ function SmtpSettingsTab() {
               {testMutation.isPending && (
                 <Loader2 className="size-4 mr-2 animate-spin" />
               )}
-              Send Test Email
+              {t("sendTestEmail")}
             </Button>
           </div>
         </CardContent>
@@ -306,6 +308,7 @@ function SmtpSettingsTab() {
 // -- page --
 
 export default function SettingsPage() {
+  const t = useTranslations("adminSettings");
   const { user } = useAuth();
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -327,8 +330,8 @@ export default function SettingsPage() {
   // Render the storage row value, distinguishing loading from error so an
   // API failure doesn't silently fall back to placeholder strings (#334).
   const storageValue = (format: (s: StorageSettings) => string): string => {
-    if (settingsLoading) return "Loading...";
-    if (settingsError || !storageSettings) return "Unavailable";
+    if (settingsLoading) return t("loading");
+    if (settingsError || !storageSettings) return t("unavailable");
     return format(storageSettings);
   };
 
@@ -336,9 +339,9 @@ export default function SettingsPage() {
   // password-policy row so a backend outage shows "Unavailable" instead
   // of plausible-looking default policy text (#347).
   function passwordPolicyValue(): string {
-    if (settingsLoading) return "Loading...";
-    if (settingsError || !passwordPolicy) return "Unavailable";
-    return formatPasswordPolicy(passwordPolicy);
+    if (settingsLoading) return t("loading");
+    if (settingsError || !passwordPolicy) return t("unavailable");
+    return formatPasswordPolicy(passwordPolicy, t);
   }
 
   // Deployment environment label, rendered as a badge in the General tab.
@@ -347,19 +350,19 @@ export default function SettingsPage() {
   // than the previous hardcoded "Production", which was wrong everywhere but
   // prod). Same loading/error gating as the sibling rows.
   const environmentLabel = settingsLoading
-    ? "Loading..."
+    ? t("loading")
     : settingsError || !adminSettings?.environment
-      ? "Unknown"
+      ? t("unknown")
       : adminSettings.environment;
 
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Settings" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view settings.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -369,16 +372,15 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Settings"
-        description="System configuration overview. Settings are configured via environment variables and shown read-only."
+        title={t("title")}
+        description={t("description")}
       />
 
       <Alert>
         <Info className="size-4" />
-        <AlertTitle>Read-only Configuration</AlertTitle>
+        <AlertTitle>{t("readOnlyTitle")}</AlertTitle>
         <AlertDescription>
-          Server settings are configured via environment variables. The values
-          shown below reflect the current runtime configuration.
+          {t("readOnlyDescription")}
         </AlertDescription>
       </Alert>
 
@@ -386,47 +388,47 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="general">
             <Server className="size-4 mr-1.5" />
-            General
+            {t("tabGeneral")}
           </TabsTrigger>
           <TabsTrigger value="storage">
             <HardDrive className="size-4 mr-1.5" />
-            Storage
+            {t("tabStorage")}
           </TabsTrigger>
           <TabsTrigger value="auth">
             <Lock className="size-4 mr-1.5" />
-            Authentication
+            {t("tabAuth")}
           </TabsTrigger>
           <TabsTrigger value="email">
             <Mail className="size-4 mr-1.5" />
-            Email
+            {t("tabEmail")}
           </TabsTrigger>
           <TabsTrigger value="npm-upstream">
             <Rss className="size-4 mr-1.5" />
-            npm Upstream
+            {t("tabNpm")}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">General Settings</CardTitle>
+              <CardTitle className="text-base">{t("generalTitle")}</CardTitle>
               <CardDescription>
-                Core server configuration and version information.
+                {t("generalDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <SettingRow
-                label="API URL"
+                label={t("apiUrl")}
                 value={
                   typeof window !== "undefined"
                     ? process.env.NEXT_PUBLIC_API_URL || window.location.origin
-                    : "Loading..."
+                    : t("loading")
                 }
-                description="The base URL used by the frontend to reach the API server."
+                description={t("apiUrlHint")}
               />
               <Separator />
               <SettingRow
-                label="Server Version"
+                label={t("serverVersion")}
                 value={
                   health?.version
                     ? health.dirty && health.commit
@@ -434,11 +436,11 @@ export default function SettingsPage() {
                       : health.version
                     : "..."
                 }
-                description="Current Artifact Keeper server version."
+                description={t("serverVersionHint")}
               />
               <Separator />
               <SettingRow
-                label="Web Version"
+                label={t("webVersion")}
                 value={
                   process.env.NEXT_PUBLIC_APP_VERSION?.includes("-") &&
                   process.env.NEXT_PUBLIC_GIT_SHA &&
@@ -446,11 +448,11 @@ export default function SettingsPage() {
                     ? `${process.env.NEXT_PUBLIC_APP_VERSION} (${process.env.NEXT_PUBLIC_GIT_SHA.slice(0, 7)})`
                     : process.env.NEXT_PUBLIC_APP_VERSION ?? "..."
                 }
-                description="Current web frontend version."
+                description={t("webVersionHint")}
               />
               <Separator />
               <div className="space-y-2">
-                <Label className="text-sm">Environment</Label>
+                <Label className="text-sm">{t("environment")}</Label>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">{environmentLabel}</Badge>
                 </div>
@@ -462,22 +464,22 @@ export default function SettingsPage() {
         <TabsContent value="storage" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Storage Settings</CardTitle>
+              <CardTitle className="text-base">{t("storageTitle")}</CardTitle>
               <CardDescription>
-                Artifact storage backend and path configuration.
+                {t("storageDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <SettingRow
-                label="Storage Backend"
-                value={storageValue((s) => formatStorageBackend(s.storage_backend))}
-                description="The type of storage backend used for artifact data."
+                label={t("storageBackend")}
+                value={storageValue((s) => formatStorageBackend(s.storage_backend, t))}
+                description={t("storageBackendHint")}
               />
               <Separator />
               <SettingRow
-                label="Storage Path"
+                label={t("storagePath")}
                 value={storageValue((s) => s.storage_path)}
-                description="The filesystem path where artifact files are stored (when storage backend is local)."
+                description={t("storagePathHint")}
               />
               <Separator />
               <UploadSizeSetting
@@ -490,9 +492,9 @@ export default function SettingsPage() {
                   exposes it on /api/v1/admin/settings. Until then this row is a
                   build-time invariant (always SHA-256 content addressing). */}
               <SettingRow
-                label="Deduplication"
-                value="Enabled (SHA-256)"
-                description="Content-addressable storage to avoid storing duplicate artifacts."
+                label={t("deduplication")}
+                value={t("deduplicationValue")}
+                description={t("deduplicationHint")}
               />
             </CardContent>
           </Card>
@@ -501,34 +503,34 @@ export default function SettingsPage() {
         <TabsContent value="auth" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Authentication Settings</CardTitle>
+              <CardTitle className="text-base">{t("authTitle")}</CardTitle>
               <CardDescription>
-                Token and session configuration for user authentication.
+                {t("authDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <SettingRow
-                label="Authentication Method"
-                value="JWT (JSON Web Token)"
-                description="The method used to authenticate API requests."
+                label={t("authMethod")}
+                value={t("authMethodValue")}
+                description={t("authMethodHint")}
               />
               <Separator />
               <SettingRow
-                label="Access Token Expiry"
-                value="1 hour"
-                description="How long an access token remains valid before requiring refresh."
+                label={t("accessTokenExpiry")}
+                value={t("accessTokenExpiryValue")}
+                description={t("accessTokenExpiryHint")}
               />
               <Separator />
               <SettingRow
-                label="Refresh Token Expiry"
-                value="7 days"
-                description="How long a refresh token remains valid."
+                label={t("refreshTokenExpiry")}
+                value={t("refreshTokenExpiryValue")}
+                description={t("refreshTokenExpiryHint")}
               />
               <Separator />
               <SettingRow
-                label="Password Policy"
+                label={t("passwordPolicy")}
                 value={passwordPolicyValue()}
-                description="Minimum password requirements for user accounts."
+                description={t("passwordPolicyHint")}
               />
             </CardContent>
           </Card>

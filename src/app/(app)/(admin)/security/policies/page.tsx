@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,10 +58,10 @@ const SEVERITY_BADGE: Record<string, string> = {
 };
 
 const SEVERITY_OPTIONS = [
-  { value: "critical", label: "Critical" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
+  { value: "critical", labelKey: "critical" },
+  { value: "high", labelKey: "high" },
+  { value: "medium", labelKey: "medium" },
+  { value: "low", labelKey: "low" },
 ];
 
 // -- form state types --
@@ -111,13 +112,15 @@ function PolicyFormFields({
   repos?: Repository[];
   reposLoading?: boolean;
 }) {
+  const t = useTranslations("adminSecurityPolicies");
+  const tSev = useTranslations("severity");
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="policy-name">Policy Name</Label>
+        <Label htmlFor="policy-name">{t("policyName")}</Label>
         <Input
           id="policy-name"
-          placeholder="e.g., Block Critical CVEs"
+          placeholder={t("policyNamePlaceholder")}
           value={form.name}
           onChange={(e) =>
             setForm((f) => ({ ...f, name: e.target.value }))
@@ -126,7 +129,7 @@ function PolicyFormFields({
         />
       </div>
       <div className="space-y-2">
-        <Label>Max Severity Threshold</Label>
+        <Label>{t("maxSeverityThreshold")}</Label>
         <Select
           value={form.max_severity}
           onValueChange={(v) =>
@@ -139,13 +142,13 @@ function PolicyFormFields({
           <SelectContent>
             {SEVERITY_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
-                {o.label}
+                {tSev(o.labelKey)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Block artifacts with findings at or above this severity.
+          {t("maxSeverityHint")}
         </p>
       </div>
       <div className="flex items-center gap-3">
@@ -157,7 +160,7 @@ function PolicyFormFields({
           }
         />
         <Label htmlFor="block-unscanned" className="text-sm">
-          Block unscanned artifacts
+          {t("blockUnscanned")}
         </Label>
       </div>
       <div className="flex items-center gap-3">
@@ -169,7 +172,7 @@ function PolicyFormFields({
           }
         />
         <Label htmlFor="block-on-fail" className="text-sm">
-          Block on scan failure
+          {t("blockOnFail")}
         </Label>
       </div>
       {showEnabled && (
@@ -182,13 +185,13 @@ function PolicyFormFields({
             }
           />
           <Label htmlFor="policy-enabled" className="text-sm">
-            Policy enabled
+            {t("policyEnabled")}
           </Label>
         </div>
       )}
       {showRepoId && (
         <div className="space-y-2">
-          <Label htmlFor="policy-repo-id">Repository (optional)</Label>
+          <Label htmlFor="policy-repo-id">{t("repositoryOptional")}</Label>
           <Select
             value={form.repository_id || GLOBAL_VALUE}
             onValueChange={(v) =>
@@ -200,10 +203,10 @@ function PolicyFormFields({
             disabled={reposLoading}
           >
             <SelectTrigger id="policy-repo-id" className="w-full">
-              <SelectValue placeholder={reposLoading ? "Loading..." : "Select a repository"} />
+              <SelectValue placeholder={reposLoading ? t("loading") : t("selectRepositoryPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={GLOBAL_VALUE}>Global (all repositories)</SelectItem>
+              <SelectItem value={GLOBAL_VALUE}>{t("globalAllRepositories")}</SelectItem>
               {(repos ?? []).map((repo) => (
                 <SelectItem key={repo.id} value={repo.id}>
                   {repoLabel(repo)}
@@ -212,8 +215,7 @@ function PolicyFormFields({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Scope this policy to a specific repository, or choose Global for
-            all repositories.
+            {t("repoScopeHint")}
           </p>
         </div>
       )}
@@ -222,6 +224,8 @@ function PolicyFormFields({
 }
 
 export default function SecurityPoliciesPage() {
+  const t = useTranslations("adminSecurityPolicies");
+  const tSev = useTranslations("severity");
   const queryClient = useQueryClient();
 
   // -- modal state --
@@ -262,9 +266,9 @@ export default function SecurityPoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["security", "policies"] });
       setCreateOpen(false);
       setCreateForm({ ...DEFAULT_FORM });
-      toast.success("Policy created.");
+      toast.success(t("policyCreated"));
     },
-    onError: mutationErrorToast("Failed to create policy"),
+    onError: mutationErrorToast(t("createFailed")),
   });
 
   const updateMutation = useMutation({
@@ -274,9 +278,9 @@ export default function SecurityPoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["security", "policies"] });
       setEditOpen(false);
       setSelectedPolicy(null);
-      toast.success("Policy updated.");
+      toast.success(t("policyUpdated"));
     },
-    onError: mutationErrorToast("Failed to update policy"),
+    onError: mutationErrorToast(t("updateFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -285,9 +289,9 @@ export default function SecurityPoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["security", "policies"] });
       setDeleteOpen(false);
       setSelectedPolicy(null);
-      toast.success("Policy deleted.");
+      toast.success(t("policyDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete policy"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   const handleEdit = useCallback((policy: ScanPolicy) => {
@@ -312,77 +316,77 @@ export default function SecurityPoliciesPage() {
   const columns: DataTableColumn<ScanPolicy>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (r) => r.name,
       sortable: true,
       cell: (r) => <span className="text-sm font-medium">{r.name}</span>,
     },
     {
       id: "scope",
-      header: "Scope",
+      header: t("colScope"),
       accessor: (r) => (r.repository_id ? "repo" : "global"),
       cell: (r) =>
         r.repository_id ? (
           <Badge variant="secondary" className="text-xs font-normal">
             {repoById.get(r.repository_id)
               ? repoLabel(repoById.get(r.repository_id)!)
-              : `Repo: ${r.repository_id.slice(0, 8)}...`}
+              : t("repoPrefix", { id: r.repository_id.slice(0, 8) })}
           </Badge>
         ) : (
           <Badge
             variant="outline"
             className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs font-medium"
           >
-            Global
+            {t("global")}
           </Badge>
         ),
     },
     {
       id: "max_severity",
-      header: "Severity Threshold",
+      header: t("colSeverityThreshold"),
       accessor: (r) => r.max_severity,
       cell: (r) => (
         <Badge
           variant="outline"
           className={`border font-semibold uppercase text-xs ${SEVERITY_BADGE[r.max_severity] ?? ""}`}
         >
-          {r.max_severity}
+          {tSev(r.max_severity)}
         </Badge>
       ),
     },
     {
       id: "block_unscanned",
-      header: "Block Unscanned",
+      header: t("colBlockUnscanned"),
       cell: (r) =>
         r.block_unscanned ? (
           <Badge
             variant="outline"
             className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
           >
-            Yes
+            {t("yes")}
           </Badge>
         ) : (
-          <span className="text-sm text-muted-foreground">No</span>
+          <span className="text-sm text-muted-foreground">{t("no")}</span>
         ),
     },
     {
       id: "block_on_fail",
-      header: "Block on Fail",
+      header: t("colBlockOnFail"),
       cell: (r) =>
         r.block_on_fail ? (
           <Badge
             variant="outline"
             className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
           >
-            Yes
+            {t("yes")}
           </Badge>
         ) : (
-          <span className="text-sm text-muted-foreground">No</span>
+          <span className="text-sm text-muted-foreground">{t("no")}</span>
         ),
     },
     {
       id: "enabled",
-      header: "Enabled",
+      header: t("colEnabled"),
       accessor: (r) => (r.is_enabled ? "yes" : "no"),
       cell: (r) =>
         r.is_enabled ? (
@@ -390,17 +394,17 @@ export default function SecurityPoliciesPage() {
             variant="outline"
             className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
           >
-            Active
+            {t("active")}
           </Badge>
         ) : (
           <Badge variant="secondary" className="text-xs font-normal">
-            Disabled
+            {t("disabled")}
           </Badge>
         ),
     },
     {
       id: "created_at",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (r) => r.created_at,
       sortable: true,
       cell: (r) => (
@@ -427,7 +431,7 @@ export default function SecurityPoliciesPage() {
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t("edit")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -440,7 +444,7 @@ export default function SecurityPoliciesPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("delete")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -450,12 +454,12 @@ export default function SecurityPoliciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Security Policies"
-        description="Define enforcement rules that control which artifacts can be downloaded based on scan results."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Create Policy
+            {t("createPolicy")}
           </Button>
         }
       />
@@ -465,7 +469,7 @@ export default function SecurityPoliciesPage() {
         columns={columns}
         data={policies ?? []}
         loading={isLoading}
-        emptyMessage="No security policies defined yet."
+        emptyMessage={t("noPolicies")}
         rowKey={(r) => r.id}
       />
 
@@ -479,10 +483,9 @@ export default function SecurityPoliciesPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Security Policy</DialogTitle>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
             <DialogDescription>
-              Define a new policy to enforce security requirements on artifact
-              downloads.
+              {t("createDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -514,7 +517,7 @@ export default function SecurityPoliciesPage() {
                   setCreateForm({ ...DEFAULT_FORM });
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -522,7 +525,7 @@ export default function SecurityPoliciesPage() {
                   !createForm.name.trim() || createMutation.isPending
                 }
               >
-                {createMutation.isPending ? "Creating..." : "Create Policy"}
+                {createMutation.isPending ? t("creating") : t("createPolicy")}
               </Button>
             </DialogFooter>
           </form>
@@ -539,9 +542,9 @@ export default function SecurityPoliciesPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Policy</DialogTitle>
+            <DialogTitle>{t("editTitle")}</DialogTitle>
             <DialogDescription>
-              Update the enforcement rules for this security policy.
+              {t("editDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -576,7 +579,7 @@ export default function SecurityPoliciesPage() {
                   setSelectedPolicy(null);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -584,7 +587,7 @@ export default function SecurityPoliciesPage() {
                   !editForm.name.trim() || updateMutation.isPending
                 }
               >
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateMutation.isPending ? t("saving") : t("saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -598,9 +601,9 @@ export default function SecurityPoliciesPage() {
           setDeleteOpen(o);
           if (!o) setSelectedPolicy(null);
         }}
-        title="Delete Policy"
-        description={`Are you sure you want to delete the policy "${selectedPolicy?.name}"? This action cannot be undone.`}
-        confirmText="Delete Policy"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: selectedPolicy?.name ?? "" })}
+        confirmText={t("confirmDelete")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {

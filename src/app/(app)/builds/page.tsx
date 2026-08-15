@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   SearchIcon,
   Loader2,
@@ -117,13 +118,21 @@ function statusBadgeVariant(
   }
 }
 
-const STATUS_OPTIONS: { value: BuildStatus; label: string }[] = [
-  { value: "success", label: "Success" },
-  { value: "failed", label: "Failed" },
-  { value: "running", label: "Running" },
-  { value: "pending", label: "Pending" },
-  { value: "cancelled", label: "Cancelled" },
+const STATUS_OPTIONS: { value: BuildStatus; labelKey: string }[] = [
+  { value: "success", labelKey: "statusSuccess" },
+  { value: "failed", labelKey: "statusFailed" },
+  { value: "running", labelKey: "statusRunning" },
+  { value: "pending", labelKey: "statusPending" },
+  { value: "cancelled", labelKey: "statusCancelled" },
 ];
+
+const STATUS_LABEL_KEYS: Record<BuildStatus, string> = {
+  success: "statusSuccess",
+  failed: "statusFailed",
+  running: "statusRunning",
+  pending: "statusPending",
+  cancelled: "statusCancelled",
+};
 
 // ---- Build Detail Dialog ----
 
@@ -138,6 +147,7 @@ function BuildDetailDialog({
   onOpenChange: (open: boolean) => void;
   onCompare: () => void;
 }) {
+  const t = useTranslations("builds");
   if (!build) return null;
 
   return (
@@ -152,9 +162,9 @@ function BuildDetailDialog({
 
         <Tabs defaultValue="overview" className="flex-1 overflow-hidden flex flex-col">
           <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             <TabsTrigger value="modules">
-              Modules ({build.modules?.length ?? 0})
+              {t("tabModules", { count: build.modules?.length ?? 0 })}
             </TabsTrigger>
           </TabsList>
 
@@ -164,34 +174,34 @@ function BuildDetailDialog({
               <div className="grid grid-cols-2 gap-3">
                 <InfoItem
                   icon={<Clock className="size-3.5" />}
-                  label="Status"
+                  label={t("infoStatus")}
                 >
                   <Badge variant={statusBadgeVariant(build.status)}>
-                    {build.status}
+                    {t(STATUS_LABEL_KEYS[build.status])}
                   </Badge>
                 </InfoItem>
                 <InfoItem
                   icon={<Timer className="size-3.5" />}
-                  label="Duration"
+                  label={t("infoDuration")}
                 >
                   {formatDuration(build.duration_ms)}
                 </InfoItem>
                 <InfoItem
                   icon={<CalendarDays className="size-3.5" />}
-                  label="Started"
+                  label={t("infoStarted")}
                 >
                   {formatDateTime(build.started_at)}
                 </InfoItem>
                 <InfoItem
                   icon={<CalendarDays className="size-3.5" />}
-                  label="Finished"
+                  label={t("infoFinished")}
                 >
                   {formatDateTime(build.finished_at)}
                 </InfoItem>
                 {build.vcs_branch && (
                   <InfoItem
                     icon={<GitBranch className="size-3.5" />}
-                    label="Branch"
+                    label={t("infoBranch")}
                   >
                     {build.vcs_branch}
                   </InfoItem>
@@ -199,7 +209,7 @@ function BuildDetailDialog({
                 {build.vcs_revision && (
                   <InfoItem
                     icon={<GitCommit className="size-3.5" />}
-                    label="Commit"
+                    label={t("infoCommit")}
                   >
                     <code className="text-xs">
                       {build.vcs_revision.slice(0, 8)}
@@ -208,13 +218,13 @@ function BuildDetailDialog({
                 )}
                 <InfoItem
                   icon={<Layers className="size-3.5" />}
-                  label="Modules"
+                  label={t("infoModules")}
                 >
                   {build.modules?.length ?? 0}
                 </InfoItem>
                 <InfoItem
                   icon={<Package className="size-3.5" />}
-                  label="Artifacts"
+                  label={t("infoArtifacts")}
                 >
                   {build.artifact_count ?? 0}
                 </InfoItem>
@@ -222,17 +232,19 @@ function BuildDetailDialog({
 
               {build.vcs_message && (
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Commit:</span>{" "}
+                  <span className="font-medium text-foreground">{t("commitLabel")}:</span>{" "}
                   {build.vcs_message}
                 </div>
               )}
 
               {build.agent && (
                 <div className="text-sm text-muted-foreground">
-                  Triggered by{" "}
-                  <span className="font-medium text-foreground">
-                    {build.agent}
-                  </span>
+                  {t.rich("triggeredBy", {
+                    agent: build.agent,
+                    strong: (chunks) => (
+                      <span className="font-medium text-foreground">{chunks}</span>
+                    ),
+                  })}
                 </div>
               )}
 
@@ -244,7 +256,7 @@ function BuildDetailDialog({
                   className="gap-1.5"
                 >
                   <ArrowRightLeft className="size-3.5" />
-                  Compare with another build
+                  {t("compareWithAnother")}
                 </Button>
               </div>
             </div>
@@ -257,7 +269,7 @@ function BuildDetailDialog({
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Layers className="size-8 text-muted-foreground/40 mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    No module information available
+                    {t("noModules")}
                   </p>
                 </div>
               ) : (
@@ -323,13 +335,14 @@ function BuildDiffDialog({
   onOpenChange: (open: boolean) => void;
   isLoading: boolean;
 }) {
+  const t = useTranslations("builds");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft className="size-4" />
-            Build Comparison
+            {t("buildComparison")}
           </DialogTitle>
         </DialogHeader>
 
@@ -340,7 +353,7 @@ function BuildDiffDialog({
         ) : !diff ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm text-muted-foreground">
-              No diff data available
+              {t("noDiff")}
             </p>
           </div>
         ) : (
@@ -348,11 +361,11 @@ function BuildDiffDialog({
             {/* Build IDs */}
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground mb-1">Build A</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("buildA")}</p>
                 <code className="text-xs">{diff.build_a.slice(0, 8)}</code>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground mb-1">Build B</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("buildB")}</p>
                 <code className="text-xs">{diff.build_b.slice(0, 8)}</code>
               </div>
             </div>
@@ -361,7 +374,7 @@ function BuildDiffDialog({
             {diff.added.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Added ({diff.added.length})
+                  {t("added", { count: diff.added.length })}
                 </h3>
                 <div className="space-y-1">
                   {diff.added.map((art) => (
@@ -386,7 +399,7 @@ function BuildDiffDialog({
             {diff.removed.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Removed ({diff.removed.length})
+                  {t("removed", { count: diff.removed.length })}
                 </h3>
                 <div className="space-y-1">
                   {diff.removed.map((art) => (
@@ -411,14 +424,14 @@ function BuildDiffDialog({
             {diff.modified.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Modified ({diff.modified.length})
+                  {t("modified", { count: diff.modified.length })}
                 </h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="text-right">Old Size</TableHead>
-                      <TableHead className="text-right">New Size</TableHead>
+                      <TableHead>{t("colName")}</TableHead>
+                      <TableHead className="text-right">{t("colOldSize")}</TableHead>
+                      <TableHead className="text-right">{t("colNewSize")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -443,7 +456,7 @@ function BuildDiffDialog({
             {diff.added.length === 0 && diff.removed.length === 0 && diff.modified.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No differences found between these builds
+                  {t("noDifferences")}
                 </p>
               </div>
             )}
@@ -457,7 +470,8 @@ function BuildDiffDialog({
 // ---- Main Builds Page ----
 
 export default function BuildsPage() {
-  useDocumentTitle("Builds");
+  const t = useTranslations("builds");
+  useDocumentTitle(t("title"));
   // Filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BuildStatus | "">("");
@@ -546,9 +560,9 @@ export default function BuildsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Builds</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            View build history, details, and comparisons
+            {t("subtitle")}
           </p>
         </div>
         {comparisonMode && (
@@ -559,7 +573,7 @@ export default function BuildsPage() {
             className="gap-1.5"
           >
             <X className="size-3.5" />
-            Exit comparison
+            {t("exitComparison")}
           </Button>
         )}
       </div>
@@ -570,8 +584,8 @@ export default function BuildsPage() {
           <ArrowRightLeft className="size-4 text-primary shrink-0" />
           <p className="text-sm">
             {compareBuildA && !compareBuildB
-              ? "Select another build to compare"
-              : "Select the first build to compare"}
+              ? t("selectAnotherBuild")
+              : t("selectFirstBuild")}
           </p>
         </div>
       )}
@@ -583,7 +597,7 @@ export default function BuildsPage() {
             <div className="relative flex-1 min-w-[200px]">
               <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search builds..."
+                placeholder={t("searchPlaceholder")}
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -601,13 +615,13 @@ export default function BuildsPage() {
               }}
             >
               <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Status" />
+                <SelectValue placeholder={t("statusPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All statuses</SelectItem>
+                <SelectItem value="__all__">{t("allStatuses")}</SelectItem>
                 {STATUS_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -618,9 +632,9 @@ export default function BuildsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="created_at">Date</SelectItem>
-                <SelectItem value="build_number">Build Number</SelectItem>
-                <SelectItem value="duration">Duration</SelectItem>
+                <SelectItem value="created_at">{t("sortDate")}</SelectItem>
+                <SelectItem value="build_number">{t("sortBuildNumber")}</SelectItem>
+                <SelectItem value="duration">{t("sortDuration")}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -634,7 +648,7 @@ export default function BuildsPage() {
                   setPage(1);
                 }}
               >
-                Clear filters
+                {t("clearFilters")}
               </Button>
             )}
           </div>
@@ -644,7 +658,7 @@ export default function BuildsPage() {
       {/* Results summary */}
       {!isLoading && (
         <div className="text-sm text-muted-foreground">
-          {totalBuilds} {totalBuilds === 1 ? "build" : "builds"} found
+          {t("buildsFound", { count: totalBuilds })}
         </div>
       )}
 
@@ -658,20 +672,20 @@ export default function BuildsPage() {
           ) : builds.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Hammer className="size-10 text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground">No builds found</p>
+              <p className="text-sm text-muted-foreground">{t("noBuilds")}</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10" />
-                  <TableHead>Build</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">Modules</TableHead>
-                  <TableHead className="text-right">Artifacts</TableHead>
+                  <TableHead>{t("colBuild")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead>{t("colStarted")}</TableHead>
+                  <TableHead>{t("colDuration")}</TableHead>
+                  <TableHead>{t("colBranch")}</TableHead>
+                  <TableHead className="text-right">{t("colModules")}</TableHead>
+                  <TableHead className="text-right">{t("colArtifacts")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -703,7 +717,7 @@ export default function BuildsPage() {
                         </div>
                         {build.agent && (
                           <p className="text-xs text-muted-foreground">
-                            by {build.agent}
+                            {t("byAgent", { agent: build.agent })}
                           </p>
                         )}
                       </TableCell>
@@ -712,7 +726,7 @@ export default function BuildsPage() {
                           variant={statusBadgeVariant(build.status)}
                           className="text-xs"
                         >
-                          {build.status}
+                          {t(STATUS_LABEL_KEYS[build.status])}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
@@ -748,7 +762,7 @@ export default function BuildsPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            {t("pageOf", { page, total: totalPages })}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -759,7 +773,7 @@ export default function BuildsPage() {
               className="gap-1"
             >
               <ChevronLeft className="size-4" />
-              Previous
+              {t("previous")}
             </Button>
             <Button
               variant="outline"
@@ -768,7 +782,7 @@ export default function BuildsPage() {
               onClick={() => setPage((p) => p + 1)}
               className="gap-1"
             >
-              Next
+              {t("next")}
               <ChevronRight className="size-4" />
             </Button>
           </div>

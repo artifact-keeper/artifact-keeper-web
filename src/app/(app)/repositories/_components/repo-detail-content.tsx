@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   Bell,
@@ -43,10 +44,7 @@ import {
   quarantineDownloadBlockedReason,
   type QuarantineFields,
 } from "@/lib/quarantine";
-import {
-  ANALYZABLE_DISABLED_REASON,
-  isArtifactAnalyzable,
-} from "@/lib/artifact-analyzable";
+import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
 import {
   buildPomDependencySnippet,
   mavenGavcFromMetadata,
@@ -155,6 +153,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const t = useTranslations("repoDetail");
+  const tSev = useTranslations("severity");
   const { isAuthenticated, user } = useAuth();
   const { config: systemConfig } = useSystemConfig();
 
@@ -348,19 +348,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
       setDetailOpen(false);
       setSelectedArtifact(null);
-      toast.success("Artifact deleted");
-      setActionAnnounce("Artifact deleted.");
+      toast.success(t("artifactDeleted"));
+      setActionAnnounce(t("artifactDeletedAria"));
     },
-    onError: mutationErrorToast("Failed to delete artifact"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   const scanArtifactMutation = useMutation({
     mutationFn: (artifactId: string) =>
       securityApi.triggerScan({ artifact_id: artifactId }),
     onSuccess: (res) => {
-      toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+      toast.success(t("scanQueued", { count: res.artifacts_queued }));
     },
-    onError: mutationErrorToast("Failed to trigger scan"),
+    onError: mutationErrorToast(t("scanFailed")),
   });
 
   // Invalidate a single cached entry on a Remote (proxy) repository
@@ -382,12 +382,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       // list refetch above gives the operator the current state.
       setDetailOpen(false);
       setSelectedArtifact(null);
-      const message =
-        "Cache entry invalidated; next download will re-fetch from upstream.";
+      const message = t("cacheInvalidated");
       toast.success(message);
       setActionAnnounce(message);
     },
-    onError: mutationErrorToast("Failed to invalidate cache"),
+    onError: mutationErrorToast(t("cacheInvalidateFailed")),
   });
 
   // Release or reject a held artifact (#650). Both endpoints are admin-only on
@@ -429,22 +428,20 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       );
       closeQuarantineDialog();
       const message =
-        action === "release"
-          ? "Artifact released from quarantine; downloads are allowed again."
-          : "Artifact rejected; downloads stay blocked.";
+        action === "release" ? t("releaseSuccess") : t("rejectSuccess");
       toast.success(message);
       setActionAnnounce(message);
     },
-    onError: mutationErrorToast("Quarantine action failed"),
+    onError: mutationErrorToast(t("quarantineActionFailed")),
   });
 
   const scanRepoMutation = useMutation({
     mutationFn: () =>
       securityApi.triggerScan({ repository_id: repository?.id }),
     onSuccess: (res) => {
-      toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+      toast.success(t("scanQueued", { count: res.artifacts_queued }));
     },
-    onError: mutationErrorToast("Failed to trigger scan"),
+    onError: mutationErrorToast(t("scanFailed")),
   });
 
   const updateSecurityMutation = useMutation({
@@ -453,9 +450,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository-security", repoKey] });
       setSecForm(null); // reset to refetched defaults
-      toast.success("Security settings saved");
+      toast.success(t("securitySaved"));
     },
-    onError: mutationErrorToast("Failed to save security settings"),
+    onError: mutationErrorToast(t("securitySaveFailed")),
   });
 
   // --- handlers ---
@@ -527,10 +524,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         setSelectedArtifact(artifact);
         setDetailOpen(true);
       } catch {
-        toast.error(`Could not load details for ${filename}`);
+        toast.error(t("loadDetailsFailed", { filename }));
       }
     },
-    [repoKey],
+    [repoKey, t],
   );
 
   // --- artifact columns ---
@@ -545,7 +542,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (a) => a.name,
       sortable: true,
       // The name is width-capped and middle-elided (#768). Uncapped, a long
@@ -588,7 +585,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     },
     {
       id: "path",
-      header: "Path",
+      header: t("colPath"),
       accessor: (a) => a.path,
       cell: (a) => (
         <code className="text-xs text-muted-foreground max-w-[200px] truncate block">
@@ -598,7 +595,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     },
     {
       id: "version",
-      header: "Version",
+      header: t("colVersion"),
       accessor: (a) => a.version ?? "",
       cell: (a) =>
         a.version ? (
@@ -613,7 +610,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       ? [
           {
             id: "classifier",
-            header: "Classifier",
+            header: t("colClassifier"),
             accessor: (a: Artifact) => artifactGavc(a)?.classifier ?? "",
             cell: (a: Artifact) => {
               const gavc = artifactGavc(a);
@@ -640,7 +637,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       : []),
     {
       id: "size",
-      header: "Size",
+      header: t("colSize"),
       accessor: (a) => a.size_bytes,
       sortable: true,
       cell: (a) => (
@@ -651,7 +648,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     },
     {
       id: "downloads",
-      header: "Downloads",
+      header: t("colDownloads"),
       accessor: (a) => a.download_count,
       sortable: true,
       cell: (a) => (
@@ -662,7 +659,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     },
     {
       id: "created",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (a) => a.created_at,
       sortable: true,
       cell: (a) => (
@@ -689,7 +686,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 <Info className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Details</TooltipContent>
+            <TooltipContent>{t("details")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -702,8 +699,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   disabled={isActivelyQuarantined(a)}
                   aria-label={
                     isActivelyQuarantined(a)
-                      ? `Download ${a.name} (blocked)`
-                      : `Download ${a.name}`
+                      ? t("downloadBlockedAria", { name: a.name })
+                      : t("downloadAria", { name: a.name })
                   }
                   onClick={() => handleDownload(a)}
                 >
@@ -714,7 +711,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <TooltipContent>
               {isActivelyQuarantined(a)
                 ? quarantineDownloadBlockedReason(a)
-                : "Download"}
+                : t("download")}
             </TooltipContent>
           </Tooltip>
           {user?.is_admin && (
@@ -732,7 +729,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isArtifactAnalyzable(a) ? "Scan" : ANALYZABLE_DISABLED_REASON}
+                {isArtifactAnalyzable(a) ? t("scan") : t("analyzableDisabled")}
               </TooltipContent>
             </Tooltip>
           )}
@@ -748,7 +745,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Trash2 className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
+              <TooltipContent>{t("delete")}</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -775,13 +772,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   if (!repository) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-        <p className="text-lg font-medium">Repository not found</p>
+        <p className="text-lg font-medium">{t("repoNotFound")}</p>
         <Button
           variant="outline"
           className="mt-4"
           onClick={() => router.push("/repositories")}
         >
-          Back to Repositories
+          {t("backToRepositories")}
         </Button>
       </div>
     );
@@ -796,7 +793,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbLink href="/repositories">Repositories</BreadcrumbLink>
+                <BreadcrumbLink href="/repositories">{t("repositories")}</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
@@ -826,7 +823,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </Badge>
               {isPluginBackedRepo(repository) && (
                 <Badge variant="outline" className="text-xs font-normal">
-                  WASM plugin
+                  {t("wasmPlugin")}
                 </Badge>
               )}
               <span
@@ -838,10 +835,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 variant={repository.is_public ? "outline" : "secondary"}
                 className="text-xs font-normal"
               >
-                {repository.is_public ? "Public" : "Private"}
+                {repository.is_public ? t("public") : t("private")}
               </Badge>
               <span className="text-sm text-muted-foreground ml-2">
-                {formatBytes(repository.storage_used_bytes)} used
+                {t("used", { size: formatBytes(repository.storage_used_bytes) })}
               </span>
             </div>
 
@@ -864,7 +861,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   </a>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open in new tab</TooltipContent>
+              <TooltipContent>{t("openInNewTab")}</TooltipContent>
             </Tooltip>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -873,7 +870,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </Badge>
             {isPluginBackedRepo(repository) && (
               <Badge variant="outline" className="text-xs font-normal">
-                WASM plugin
+                {t("wasmPlugin")}
               </Badge>
             )}
             <span
@@ -885,10 +882,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               variant={repository.is_public ? "outline" : "secondary"}
               className="text-xs font-normal"
             >
-              {repository.is_public ? "Public" : "Private"}
+              {repository.is_public ? t("public") : t("private")}
             </Badge>
             <span className="text-sm text-muted-foreground ml-2">
-              {formatBytes(repository.storage_used_bytes)} used
+              {t("used", { size: formatBytes(repository.storage_used_bytes) })}
             </span>
           </div>
           {repository.description && (
@@ -934,26 +931,26 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         <TabsList variant="line">
           <TabsTrigger value="artifacts">
             <FileArchive className="size-3.5 mr-1" />
-            Artifacts
+            {t("tabArtifacts")}
           </TabsTrigger>
           <TabsTrigger value="packages">
             <PackageIcon className="size-3.5 mr-1" />
-            Packages
+            {t("tabPackages")}
           </TabsTrigger>
           <TabsTrigger value="setup">
             <Rocket className="size-3.5 mr-1" />
-            Setup
+            {t("tabSetup")}
           </TabsTrigger>
           {isAuthenticated && (
             <TabsTrigger value="upload">
               <Upload className="size-3.5 mr-1" />
-              Upload
+              {t("tabUpload")}
             </TabsTrigger>
           )}
           {repository.repo_type === "virtual" && (
             <TabsTrigger value="members">
               <Layers className="size-3.5 mr-1" />
-              Members
+              {t("tabMembers")}
             </TabsTrigger>
           )}
           {user?.is_admin &&
@@ -961,31 +958,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             repository.repo_type === "virtual" && (
               <TabsTrigger value="pypi-tracks">
                 <Link2 className="size-3.5 mr-1" />
-                Tracks
+                {t("tabTracks")}
               </TabsTrigger>
             )}
           {user?.is_admin && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
-              Security
+              {t("tabSecurity")}
             </TabsTrigger>
           )}
           {user?.is_admin && (
             <TabsTrigger value="notifications">
               <Bell className="size-3.5 mr-1" />
-              Notifications
+              {t("tabNotifications")}
             </TabsTrigger>
           )}
           {user?.is_admin && (
             <TabsTrigger value="settings">
               <Settings className="size-3.5 mr-1" />
-              Settings
+              {t("tabSettings")}
             </TabsTrigger>
           )}
           {user?.is_admin && (
             <TabsTrigger value="labels">
               <Tag className="size-3.5 mr-1" />
-              Labels
+              {t("tabLabels")}
             </TabsTrigger>
           )}
         </TabsList>
@@ -996,7 +993,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search artifacts..."
+                placeholder={t("searchPlaceholder")}
                 className="pl-8"
                 value={searchQuery}
                 onChange={(e) => {
@@ -1021,7 +1018,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 disabled={scanRepoMutation.isPending}
               >
                 <Shield className="size-4" />
-                {scanRepoMutation.isPending ? "Scanning..." : "Scan All"}
+                {scanRepoMutation.isPending ? t("scanning") : t("scanAll")}
               </Button>
             )}
           </div>
@@ -1034,14 +1031,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           */}
           <div role="status" aria-live="polite" className="sr-only">
             {viewMode === "grouped"
-              ? `Showing grouped ${
-                  repoFormat && DOCKER_FAMILY_FORMATS.has(repoFormat)
-                    ? "tag"
-                    : "component"
-                } view`
+              ? repoFormat && DOCKER_FAMILY_FORMATS.has(repoFormat)
+                ? t("showingGroupedTag")
+                : t("showingGroupedComponent")
               : viewMode === "tree"
-                ? "Showing folder tree view"
-                : "Showing flat list view"}
+                ? t("showingTree")
+                : t("showingFlat")}
           </div>
 
           {/* Outcome announcements for destructive actions (delete / cache
@@ -1064,7 +1059,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 setPage(1);
               }}
               onFileSelect={showDetailByPath}
-              emptyMessage="No Maven components could be grouped — switch to flat view to see raw files."
+              emptyMessage={t("emptyMavenGrouped")}
             />
           ) : isTreeView ? (
             <ArtifactFolderTree
@@ -1072,7 +1067,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               loading={artifactsLoading}
               onFileSelect={showDetail}
               selectedPath={selectedArtifact?.path ?? null}
-              emptyMessage="No artifacts in this repository."
+              emptyMessage={t("emptyArtifacts")}
             />
           ) : isDockerGrouped ? (
             <DockerTagList
@@ -1116,7 +1111,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 setPage(1);
               }}
               loading={artifactsLoading}
-              emptyMessage="No artifacts in this repository."
+              emptyMessage={t("emptyArtifacts")}
               rowKey={(a) => a.id}
               onRowClick={showDetail}
             />
@@ -1135,8 +1130,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         <TabsContent value="setup" className="mt-4">
           <div className="max-w-3xl space-y-4">
             <p className="text-sm text-muted-foreground">
-              Configure your tools to publish to and install from{" "}
-              <span className="font-medium text-foreground">{repository.key}</span>.
+              {t.rich("setupIntro", {
+                name: repository.key,
+                strong: (chunks) => (
+                  <span className="font-medium text-foreground">{chunks}</span>
+                ),
+              })}
             </p>
             <RepoSetupGuide repo={repository} />
           </div>
@@ -1147,7 +1146,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <TabsContent value="upload" className="mt-4">
             <div className="max-w-lg">
               <h3 className="text-sm font-medium mb-4">
-                Upload an artifact to {repository.key}
+                {t("uploadTitle", { name: repository.key })}
               </h3>
               <FileUpload
                 onUpload={handleUpload}
@@ -1194,7 +1193,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 }}
               >
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="sec-enabled">Enable Scanning</Label>
+                  <Label htmlFor="sec-enabled">{t("enableScanning")}</Label>
                   <Switch
                     id="sec-enabled"
                     checked={currentSecForm.scan_enabled}
@@ -1204,7 +1203,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="sec-upload">Scan on Upload</Label>
+                  <Label htmlFor="sec-upload">{t("scanOnUpload")}</Label>
                   <Switch
                     id="sec-upload"
                     checked={currentSecForm.scan_on_upload}
@@ -1214,7 +1213,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="sec-proxy">Scan on Proxy</Label>
+                  <Label htmlFor="sec-proxy">{t("scanOnProxy")}</Label>
                   <Switch
                     id="sec-proxy"
                     checked={currentSecForm.scan_on_proxy}
@@ -1224,7 +1223,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="sec-block">Block on Violation</Label>
+                  <Label htmlFor="sec-block">{t("blockOnViolation")}</Label>
                   <Switch
                     id="sec-block"
                     checked={currentSecForm.block_on_policy_violation}
@@ -1237,7 +1236,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Severity Threshold</Label>
+                  <Label>{t("severityThreshold")}</Label>
                   <Select
                     value={currentSecForm.severity_threshold}
                     onValueChange={(v) =>
@@ -1248,10 +1247,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="critical">Critical</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="critical">{tSev("critical")}</SelectItem>
+                      <SelectItem value="high">{tSev("high")}</SelectItem>
+                      <SelectItem value="medium">{tSev("medium")}</SelectItem>
+                      <SelectItem value="low">{tSev("low")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1260,8 +1259,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   disabled={updateSecurityMutation.isPending}
                 >
                   {updateSecurityMutation.isPending
-                    ? "Saving..."
-                    : "Save Settings"}
+                    ? t("saving")
+                    : t("saveSettings")}
                 </Button>
               </form>
             )}
@@ -1296,7 +1295,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileIcon className="size-4" />
-              {selectedArtifact?.name ?? "Artifact Details"}
+              {selectedArtifact?.name ?? t("artifactDetails")}
             </DialogTitle>
           </DialogHeader>
           {quarantineBlocked && (
@@ -1311,50 +1310,50 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               <TabsList variant="line" className="shrink-0">
                 <TabsTrigger value="details">
                   <Info className="size-3.5 mr-1" />
-                  Details
+                  {t("tabDetails")}
                 </TabsTrigger>
                 {versioningActive && (
                   <TabsTrigger value="versions">
                     <History className="size-3.5 mr-1" />
-                    Versions
+                    {t("tabVersions")}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="sbom">
                   <FileIcon className="size-3.5 mr-1" />
-                  SBOM
+                  {t("tabSbom")}
                 </TabsTrigger>
                 <TabsTrigger value="security">
                   <Shield className="size-3.5 mr-1" />
-                  Security
+                  {t("tabSecurity")}
                 </TabsTrigger>
                 <TabsTrigger value="health">
                   <HeartPulse className="size-3.5 mr-1" />
-                  Health
+                  {t("tabHealth")}
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="details" className="flex-1 overflow-y-auto mt-4">
                 <div className="space-y-3 text-sm">
-                  <DetailRow label="Name" value={selectedArtifact.name} />
-                  <DetailRow label="Path" value={selectedArtifact.path} copy />
+                  <DetailRow label={t("detailName")} value={selectedArtifact.name} />
+                  <DetailRow label={t("detailPath")} value={selectedArtifact.path} copy />
                   {selectedArtifact.version && (
-                    <DetailRow label="Version" value={selectedArtifact.version} />
+                    <DetailRow label={t("detailVersion")} value={selectedArtifact.version} />
                   )}
                   <DetailRow
-                    label="Size"
+                    label={t("detailSize")}
                     value={`${formatBytes(selectedArtifact.size_bytes)} (${selectedArtifact.size_bytes.toLocaleString()} bytes)`}
                   />
                   <DetailRow
-                    label="Content Type"
+                    label={t("detailContentType")}
                     value={selectedArtifact.content_type}
                   />
                   <DetailRow
-                    label="Downloads"
+                    label={t("detailDownloads")}
                     value={selectedArtifact.download_count.toLocaleString()}
                   />
                   {artifactStats?.last_downloaded && (
                     <DetailRow
-                      label="Last downloaded"
+                      label={t("detailLastDownloaded")}
                       value={new Date(
                         artifactStats.last_downloaded
                       ).toLocaleString()}
@@ -1363,33 +1362,33 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   {quarantineBlocked && (
                     <>
                       <DetailRow
-                        label="Quarantine"
+                        label={t("detailQuarantine")}
                         value={
                           // The reason is redacted for callers who cannot
                           // access the repository, so fall back to the status
                           // rather than rendering a blank row.
                           quarantine?.quarantine_reason ||
                           (isQuarantineRejected(quarantine)
-                            ? "Rejected in review"
-                            : "Active")
+                            ? t("rejectedInReview")
+                            : t("active"))
                         }
                       />
                       {quarantine?.quarantine_until && (
                         <DetailRow
-                          label="Quarantine Until"
+                          label={t("detailQuarantineUntil")}
                           value={new Date(quarantine.quarantine_until).toLocaleString()}
                         />
                       )}
                     </>
                   )}
                   <DetailRow
-                    label="Created"
+                    label={t("detailCreated")}
                     value={new Date(selectedArtifact.created_at).toLocaleString()}
                   />
                   {repository.repo_type === "remote" &&
                     selectedArtifact.cache_cached_at && (
                       <DetailRow
-                        label="Cached"
+                        label={t("detailCached")}
                         value={formatRelativeTimestamp(
                           selectedArtifact.cache_cached_at
                         )}
@@ -1401,7 +1400,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   {repository.repo_type === "remote" &&
                     selectedArtifact.cache_expires_at && (
                       <DetailRow
-                        label="Cache expires"
+                        label={t("detailCacheExpires")}
                         value={formatCacheExpiry(
                           selectedArtifact.cache_expires_at
                         )}
@@ -1411,13 +1410,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       />
                     )}
                   <DetailRow
-                    label="SHA-256"
+                    label={t("detailSha256")}
                     value={selectedArtifact.checksum_sha256}
                     copy
                     mono
                   />
                   <DetailRow
-                    label="Download URL"
+                    label={t("detailDownloadUrl")}
                     value={artifactsApi.getAbsoluteDownloadUrl(repoKey, selectedArtifact.path)}
                     copy
                     mono
@@ -1432,7 +1431,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     Object.keys(selectedArtifact.metadata).length > 0 && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">
-                          Metadata
+                          {t("metadata")}
                         </p>
                         <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-40">
                           {JSON.stringify(selectedArtifact.metadata, null, 2)}
@@ -1472,7 +1471,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               variant="outline"
               onClick={() => setDetailOpen(false)}
             >
-              Close
+              {t("close")}
             </Button>
             {selectedArtifact && (
               <>
@@ -1487,11 +1486,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     title={
                       isArtifactAnalyzable(selectedArtifact)
                         ? undefined
-                        : ANALYZABLE_DISABLED_REASON
+                        : t("analyzableDisabled")
                     }
                   >
                     <Shield className="size-4" />
-                    {scanArtifactMutation.isPending ? "Scanning..." : "Scan"}
+                    {scanArtifactMutation.isPending ? t("scanning") : t("scan")}
                   </Button>
                 )}
                 {user?.is_admin && quarantineActionable && (
@@ -1502,7 +1501,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       onClick={() => setQuarantineAction("release")}
                     >
                       <Check className="size-4 text-emerald-600" />
-                      Release
+                      {t("release")}
                     </Button>
                     <Button
                       variant="outline"
@@ -1510,7 +1509,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       onClick={() => setQuarantineAction("reject")}
                     >
                       <X className="size-4 text-destructive" />
-                      Reject
+                      {t("reject")}
                     </Button>
                   </>
                 )}
@@ -1522,7 +1521,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   disabled={deleteMutation.isPending}
                 >
                   <Trash2 className="size-4" />
-                  Delete
+                  {t("delete")}
                 </Button>
                 {repository.repo_type === "remote" && (
                   <AlertDialog>
@@ -1530,29 +1529,28 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       <Button
                         variant="outline"
                         disabled={invalidateCacheMutation.isPending}
-                        title="Evict this artifact from the proxy cache; next download re-fetches from upstream"
+                        title={t("invalidateTooltip")}
                       >
                         <RotateCcw className="size-4" />
                         {invalidateCacheMutation.isPending
-                          ? "Invalidating..."
-                          : "Invalidate cache"}
+                          ? t("invalidating")
+                          : t("invalidateCache")}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Invalidate cache entry?</AlertDialogTitle>
+                        <AlertDialogTitle>{t("invalidateTitle")}</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This evicts{" "}
-                          <span className="font-medium">
-                            {selectedArtifact.name}
-                          </span>{" "}
-                          from the proxy cache. The next download re-fetches it
-                          from upstream, which may be slower and could return a
-                          different artifact if upstream has changed.
+                          {t.rich("invalidateDescription", {
+                            name: selectedArtifact.name,
+                            medium: (chunks) => (
+                              <span className="font-medium">{chunks}</span>
+                            ),
+                          })}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => {
                             if (selectedArtifact) {
@@ -1562,7 +1560,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                             }
                           }}
                         >
-                          Invalidate
+                          {t("invalidate")}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -1581,7 +1579,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   onClick={() => selectedArtifact && handleDownload(selectedArtifact)}
                 >
                   <Download className="size-4" />
-                  {quarantineBlocked ? "Download blocked" : "Download"}
+                  {quarantineBlocked ? t("downloadBlocked") : t("download")}
                 </Button>
               </>
             )}
@@ -1603,28 +1601,29 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {quarantineAction === "reject" ? "Reject" : "Release"}{" "}
-              {selectedArtifact?.name}
+              {quarantineAction === "reject"
+                ? t("rejectConfirmTitle", { name: selectedArtifact?.name ?? "" })
+                : t("releaseConfirmTitle", { name: selectedArtifact?.name ?? "" })}
             </DialogTitle>
             <DialogDescription>
               {quarantineAction === "reject"
-                ? "Rejecting is permanent: the artifact stays blocked and cannot be released afterwards. The reason is stored on the artifact and recorded in the audit log."
-                : "Releasing lifts the hold and allows downloads again. The recorded quarantine reason is cleared."}
+                ? t("rejectDescription")
+                : t("releaseDescription")}
             </DialogDescription>
           </DialogHeader>
           {quarantineAction === "reject" && (
             <div className="py-2">
               <Input
-                placeholder="Reason (optional)"
+                placeholder={t("reasonPlaceholder")}
                 value={quarantineReason}
                 onChange={(e) => setQuarantineReason(e.target.value)}
-                aria-label="Rejection reason"
+                aria-label={t("reasonAria")}
               />
             </div>
           )}
           <DialogFooter>
             <Button variant="ghost" onClick={closeQuarantineDialog}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               variant={quarantineAction === "reject" ? "destructive" : "default"}
@@ -1641,7 +1640,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               {quarantineMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
-              Confirm
+              {t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1669,24 +1668,25 @@ function MavenGavSection({
   path: string;
   metadata?: Record<string, unknown>;
 }) {
+  const t = useTranslations("repoDetail");
   const gav = mavenGavcFromMetadata(metadata) ?? parseMavenGav(path);
   if (!gav) return null;
   const snippet = buildPomDependencySnippet(gav);
   return (
     <div data-testid="maven-gav-section" className="space-y-3">
-      <DetailRow label="Group ID" value={gav.groupId} copy mono />
-      <DetailRow label="Artifact ID" value={gav.artifactId} copy mono />
-      <DetailRow label="Version" value={gav.version} copy mono />
+      <DetailRow label={t("gavGroupId")} value={gav.groupId} copy mono />
+      <DetailRow label={t("gavArtifactId")} value={gav.artifactId} copy mono />
+      <DetailRow label={t("gavVersion")} value={gav.version} copy mono />
       {gav.classifier && (
-        <DetailRow label="Classifier" value={gav.classifier} copy mono />
+        <DetailRow label={t("gavClassifier")} value={gav.classifier} copy mono />
       )}
       {gav.extension && (
-        <DetailRow label="Extension" value={gav.extension} copy mono />
+        <DetailRow label={t("gavExtension")} value={gav.extension} copy mono />
       )}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <p className="text-xs font-medium text-muted-foreground">
-            pom.xml dependency
+            {t("pomDependency")}
           </p>
           <CopyButton value={snippet} />
         </div>

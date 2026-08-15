@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Pencil,
@@ -90,7 +91,14 @@ const ACTION_COLORS: Record<PolicyAction, string> = {
   block: "text-red-500",
 };
 
+const ACTION_LABELS: Record<PolicyAction, string> = {
+  allow: "actionAllow",
+  warn: "actionWarn",
+  block: "actionBlock",
+};
+
 export default function LicensePoliciesPage() {
+  const t = useTranslations("adminLicensePolicies");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -119,9 +127,9 @@ export default function LicensePoliciesPage() {
       setEditOpen(false);
       setSelectedPolicy(null);
       setForm(EMPTY_FORM);
-      toast.success(selectedPolicy ? "Policy updated" : "Policy created");
+      toast.success(selectedPolicy ? t("toastUpdated") : t("toastCreated"));
     },
-    onError: mutationErrorToast("Failed to save policy"),
+    onError: mutationErrorToast(t("toastSaveFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -130,9 +138,9 @@ export default function LicensePoliciesPage() {
       queryClient.invalidateQueries({ queryKey: ["license-policies"] });
       setDeleteOpen(false);
       setSelectedPolicy(null);
-      toast.success("Policy deleted");
+      toast.success(t("toastDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete policy"),
+    onError: mutationErrorToast(t("toastDeleteFailed")),
   });
 
   const toggleMutation = useMutation({
@@ -149,9 +157,9 @@ export default function LicensePoliciesPage() {
     },
     onSuccess: (_, policy) => {
       queryClient.invalidateQueries({ queryKey: ["license-policies"] });
-      toast.success(`Policy ${policy.is_enabled ? "disabled" : "enabled"}`);
+      toast.success(policy.is_enabled ? t("toastDisabled") : t("toastEnabled"));
     },
-    onError: mutationErrorToast("Failed to toggle policy"),
+    onError: mutationErrorToast(t("toastToggleFailed")),
   });
 
   // -- handlers --
@@ -214,7 +222,7 @@ export default function LicensePoliciesPage() {
   const columns: DataTableColumn<LicensePolicy>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (p) => p.name,
       sortable: true,
       cell: (p) => (
@@ -226,7 +234,7 @@ export default function LicensePoliciesPage() {
     },
     {
       id: "action",
-      header: "Action",
+      header: t("colAction"),
       accessor: (p) => p.action,
       cell: (p) => {
         const Icon = ACTION_ICONS[p.action as PolicyAction] ?? AlertTriangle;
@@ -234,14 +242,14 @@ export default function LicensePoliciesPage() {
         return (
           <div className="flex items-center gap-1.5">
             <Icon className={`size-4 ${color}`} />
-            <span className="text-sm capitalize">{p.action}</span>
+            <span className="text-sm capitalize">{t(ACTION_LABELS[p.action as PolicyAction])}</span>
           </div>
         );
       },
     },
     {
       id: "allowed",
-      header: "Allowed",
+      header: t("colAllowed"),
       accessor: (p) => p.allowed_licenses.length,
       cell: (p) => (
         <div className="flex flex-wrap gap-1">
@@ -259,14 +267,14 @@ export default function LicensePoliciesPage() {
               )}
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">Any</span>
+            <span className="text-xs text-muted-foreground">{t("anyLicenses")}</span>
           )}
         </div>
       ),
     },
     {
       id: "denied",
-      header: "Denied",
+      header: t("colDenied"),
       accessor: (p) => p.denied_licenses.length,
       cell: (p) => (
         <div className="flex flex-wrap gap-1">
@@ -284,18 +292,18 @@ export default function LicensePoliciesPage() {
               )}
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">None</span>
+            <span className="text-xs text-muted-foreground">{t("noneLicenses")}</span>
           )}
         </div>
       ),
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       accessor: (p) => (p.is_enabled ? "Enabled" : "Disabled"),
       cell: (p) => (
         <StatusBadge
-          status={p.is_enabled ? "Enabled" : "Disabled"}
+          status={p.is_enabled ? t("statusEnabled") : t("statusDisabled")}
           color={p.is_enabled ? "green" : "default"}
         />
       ),
@@ -314,7 +322,7 @@ export default function LicensePoliciesPage() {
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t("editTooltip")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -326,7 +334,7 @@ export default function LicensePoliciesPage() {
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{p.is_enabled ? "Disable" : "Enable"}</TooltipContent>
+            <TooltipContent>{p.is_enabled ? t("disableTooltip") : t("enableTooltip")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -339,7 +347,7 @@ export default function LicensePoliciesPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("deleteTooltip")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -350,11 +358,11 @@ export default function LicensePoliciesPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="License Policies" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view this page.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -367,12 +375,12 @@ export default function LicensePoliciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="License Policies"
-        description="Define allowed and denied software licenses for compliance."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button onClick={handleCreate}>
             <Plus className="size-4" />
-            Create Policy
+            {t("createPolicy")}
           </Button>
         }
       />
@@ -380,12 +388,12 @@ export default function LicensePoliciesPage() {
       {!isLoading && (policies?.length ?? 0) === 0 ? (
         <EmptyState
           icon={Scale}
-          title="No license policies"
-          description="Create your first license policy to enforce compliance rules."
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
           action={
             <Button onClick={handleCreate}>
               <Plus className="size-4" />
-              Create Policy
+              {t("createPolicy")}
             </Button>
           }
         />
@@ -394,7 +402,7 @@ export default function LicensePoliciesPage() {
           columns={columns}
           data={policies ?? []}
           loading={isLoading}
-          emptyMessage="No policies found."
+          emptyMessage={t("emptyMessage")}
           rowKey={(p) => p.id}
           onRowClick={handleEdit}
         />
@@ -414,29 +422,29 @@ export default function LicensePoliciesPage() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isEditing ? "Edit Policy" : "Create Policy"}</DialogTitle>
+            <DialogTitle>{isEditing ? t("dialogEditTitle") : t("dialogCreateTitle")}</DialogTitle>
             <DialogDescription>
               {isEditing
-                ? "Update the license policy settings."
-                : "Define a new license compliance policy."}
+                ? t("dialogEditDescription")
+                : t("dialogCreateDescription")}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="policy-name">Name</Label>
+              <Label htmlFor="policy-name">{t("nameLabel")}</Label>
               <Input
                 id="policy-name"
-                placeholder="e.g., Default Policy"
+                placeholder={t("namePlaceholder")}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="policy-desc">Description</Label>
+              <Label htmlFor="policy-desc">{t("descriptionLabel")}</Label>
               <Textarea
                 id="policy-desc"
-                placeholder="Optional description..."
+                placeholder={t("descriptionPlaceholder")}
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 rows={2}
@@ -444,29 +452,29 @@ export default function LicensePoliciesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="policy-allowed">
-                Allowed Licenses{" "}
-                <span className="text-muted-foreground font-normal">(comma-separated)</span>
+                {t("allowedLabel")}{" "}
+                <span className="text-muted-foreground font-normal">({t("commaSeparated")})</span>
               </Label>
               <Input
                 id="policy-allowed"
-                placeholder="MIT, Apache-2.0, BSD-3-Clause"
+                placeholder={t("allowedPlaceholder")}
                 value={form.allowed_licenses}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, allowed_licenses: e.target.value }))
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Leave empty to allow any license not in the denied list.
+                {t("allowedHint")}
               </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="policy-denied">
-                Denied Licenses{" "}
-                <span className="text-muted-foreground font-normal">(comma-separated)</span>
+                {t("deniedLabel")}{" "}
+                <span className="text-muted-foreground font-normal">({t("commaSeparated")})</span>
               </Label>
               <Input
                 id="policy-denied"
-                placeholder="GPL-3.0, AGPL-3.0"
+                placeholder={t("deniedPlaceholder")}
                 value={form.denied_licenses}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, denied_licenses: e.target.value }))
@@ -474,7 +482,7 @@ export default function LicensePoliciesPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Action on Violation</Label>
+              <Label>{t("actionLabel")}</Label>
               <Select
                 value={form.action}
                 onValueChange={(v) => setForm((f) => ({ ...f, action: v as PolicyAction }))}
@@ -486,26 +494,26 @@ export default function LicensePoliciesPage() {
                   <SelectItem value="allow">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="size-4 text-green-500" />
-                      Allow (log only)
+                      {t("actionAllowOption")}
                     </div>
                   </SelectItem>
                   <SelectItem value="warn">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="size-4 text-yellow-500" />
-                      Warn (show warning)
+                      {t("actionWarnOption")}
                     </div>
                   </SelectItem>
                   <SelectItem value="block">
                     <div className="flex items-center gap-2">
                       <ShieldAlert className="size-4 text-red-500" />
-                      Block (prevent download)
+                      {t("actionBlockOption")}
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="policy-unknown">Allow Unknown Licenses</Label>
+              <Label htmlFor="policy-unknown">{t("allowUnknownLabel")}</Label>
               <Switch
                 id="policy-unknown"
                 checked={form.allow_unknown}
@@ -513,7 +521,7 @@ export default function LicensePoliciesPage() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <Label htmlFor="policy-enabled">Enabled</Label>
+              <Label htmlFor="policy-enabled">{t("enabledLabel")}</Label>
               <Switch
                 id="policy-enabled"
                 checked={form.is_enabled}
@@ -531,14 +539,14 @@ export default function LicensePoliciesPage() {
                   setForm(EMPTY_FORM);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={upsertMutation.isPending}>
                 {upsertMutation.isPending
-                  ? "Saving..."
+                  ? t("saving")
                   : isEditing
-                    ? "Save Changes"
-                    : "Create Policy"}
+                    ? t("saveChanges")
+                    : t("createPolicy")}
               </Button>
             </DialogFooter>
           </form>
@@ -552,9 +560,9 @@ export default function LicensePoliciesPage() {
           setDeleteOpen(o);
           if (!o) setSelectedPolicy(null);
         }}
-        title="Delete Policy"
-        description={`Are you sure you want to delete "${selectedPolicy?.name}"? This action cannot be undone.`}
-        confirmText="Delete Policy"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: selectedPolicy?.name ?? "" })}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {

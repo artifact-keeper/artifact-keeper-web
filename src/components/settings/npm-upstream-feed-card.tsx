@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, Rss } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import {
   Card,
@@ -35,7 +36,7 @@ export const BACKEND_ISSUE_URL =
 interface EnvVarDoc {
   name: string;
   defaultValue: string;
-  description: string;
+  descriptionKey: string;
 }
 
 /** Environment variables that configure the feed, shown read-only. */
@@ -43,30 +44,27 @@ export const NPM_UPSTREAM_FEED_ENV_VARS: EnvVarDoc[] = [
   {
     name: "NPM_UPSTREAM_FEED_ENABLED",
     defaultValue: "false",
-    description:
-      "Set to true to subscribe to the upstream change-feed. One replica consumes cluster-wide via an advisory lock; leadership fails over automatically (300s terms).",
+    descriptionKey: "npmFeedEnabledDescription",
   },
   {
     name: "NPM_UPSTREAM_FEED_URL",
     defaultValue: NPM_REPLICATION_FEED_DEFAULT_URL,
-    description:
-      "Endpoint of the npm replication feed. Only needs changing when mirroring the feed through an internal relay.",
+    descriptionKey: "npmFeedUrlDescription",
   },
 ];
 
 export function NpmUpstreamFeedCard() {
+  const t = useTranslations("common");
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Rss className="size-4 text-muted-foreground" />
-          <CardTitle className="text-base">npm Upstream Change-Feed</CardTitle>
-          <Badge variant="secondary">Configured via environment</Badge>
+          <CardTitle className="text-base">{t("npmFeedTitle")}</CardTitle>
+          <Badge variant="secondary">{t("configuredViaEnv")}</Badge>
         </div>
         <CardDescription>
-          Subscribes to npm&apos;s replication feed and proactively evicts stale
-          cached packuments in remote and virtual npm repositories, instead of
-          waiting for the packument cache TTL. Requires backend 1.7.0+.
+          {t("npmFeedDescription")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -78,23 +76,19 @@ export function NpmUpstreamFeedCard() {
                 <code>{envVar.name}</code>
               </p>
               <p className="text-xs text-muted-foreground">
-                Default: <code>{envVar.defaultValue}</code>
+                {t("default")}: <code>{envVar.defaultValue}</code>
               </p>
               <p className="text-xs text-muted-foreground">
-                {envVar.description}
+                {t(envVar.descriptionKey)}
               </p>
             </div>
           </div>
         ))}
         <Separator />
         <div className="space-y-2">
-          <p className="text-sm font-medium">Runtime status</p>
+          <p className="text-sm font-medium">{t("runtimeStatus")}</p>
           <p className="text-xs text-muted-foreground">
-            Consumption status (feed cursor, last poll, cluster leadership) and
-            in-UI enable/URL configuration require a backend admin API that is
-            not implemented yet. When the feed URL becomes configurable through
-            the API it will be subject to the same SSRF validation as remote
-            repository upstreams (http/https only). Track{" "}
+            {t("runtimeStatusDescription")}{" "}
             <a
               href={BACKEND_ISSUE_URL}
               target="_blank"

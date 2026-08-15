@@ -18,6 +18,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 import "@/lib/sdk-client";
 import {
@@ -134,6 +135,7 @@ const STATUS_COLORS: Record<string, "green" | "red" | "default"> = {
 // -- page --
 
 export default function PluginsPage() {
+  const t = useTranslations("plugins");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   // Plugin configuration read/write is admin-only on the backend
@@ -197,9 +199,9 @@ export default function PluginsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin enabled");
+      toast.success(t("enabled"));
     },
-    onError: mutationErrorToast("Failed to enable plugin"),
+    onError: mutationErrorToast(t("enabledError")),
   });
 
   const disableMutation = useMutation({
@@ -208,9 +210,9 @@ export default function PluginsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
-      toast.success("Plugin disabled");
+      toast.success(t("disabled"));
     },
-    onError: mutationErrorToast("Failed to disable plugin"),
+    onError: mutationErrorToast(t("disabledError")),
   });
 
   const uninstallMutation = useMutation({
@@ -220,9 +222,9 @@ export default function PluginsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       setUninstallId(null);
-      toast.success("Plugin uninstalled");
+      toast.success(t("uninstalled"));
     },
-    onError: mutationErrorToast("Failed to uninstall plugin"),
+    onError: mutationErrorToast(t("uninstalledError")),
   });
 
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
@@ -242,9 +244,9 @@ export default function PluginsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["plugin-config"] });
-      toast.success("Configuration saved");
+      toast.success(t("configSaved"));
     },
-    onError: mutationErrorToast("Failed to save configuration"),
+    onError: mutationErrorToast(t("configSaveError")),
   });
 
   const resetInstallForm = () => {
@@ -265,11 +267,9 @@ export default function PluginsPage() {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       setInstallOpen(false);
       resetInstallForm();
-      toast.success(
-        `Plugin "${data?.name ?? "unknown"}" installed successfully`,
-      );
+      toast.success(t("installed", { name: data?.name ?? t("unknown") }));
     },
-    onError: mutationErrorToast("Failed to install plugin from Git"),
+    onError: mutationErrorToast(t("installGitError")),
   });
 
   const installZipMutation = useMutation({
@@ -285,11 +285,9 @@ export default function PluginsPage() {
       queryClient.invalidateQueries({ queryKey: ["plugins"] });
       setInstallOpen(false);
       resetInstallForm();
-      toast.success(
-        `Plugin "${data?.name ?? "unknown"}" installed successfully`,
-      );
+      toast.success(t("installed", { name: data?.name ?? t("unknown") }));
     },
-    onError: mutationErrorToast("Failed to install plugin from ZIP"),
+    onError: mutationErrorToast(t("installZipError")),
   });
 
   const isInstalling =
@@ -299,7 +297,7 @@ export default function PluginsPage() {
   const columns: DataTableColumn<Plugin>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (p) => p.name,
       sortable: true,
       cell: (p) => (
@@ -314,28 +312,28 @@ export default function PluginsPage() {
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       cell: (p) => (
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[p.plugin_type] ?? ""}`}
         >
-          {p.plugin_type.replace(/_/g, " ")}
+          {t(`type_${p.plugin_type}`)}
         </span>
       ),
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (p) => (
         <StatusBadge
-          status={p.status}
+          status={t(`status_${p.status}`)}
           color={STATUS_COLORS[p.status] ?? "default"}
         />
       ),
     },
     {
       id: "description",
-      header: "Description",
+      header: t("colDescription"),
       cell: (p) => (
         <span className="text-sm text-muted-foreground truncate block max-w-[200px]">
           {p.description || "-"}
@@ -344,7 +342,7 @@ export default function PluginsPage() {
     },
     {
       id: "author",
-      header: "Author",
+      header: t("colAuthor"),
       cell: (p) => (
         <span className="text-sm text-muted-foreground">
           {p.author || "-"}
@@ -353,7 +351,7 @@ export default function PluginsPage() {
     },
     {
       id: "installed",
-      header: "Installed",
+      header: t("colInstalled"),
       accessor: (p) => p.installed_at,
       cell: (p) => (
         <span className="text-sm text-muted-foreground">
@@ -375,7 +373,7 @@ export default function PluginsPage() {
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Configure ${p.name}`}
+                  aria-label={t("configureAria", { name: p.name })}
                   onClick={() => {
                     setConfigPlugin(p);
                     setConfigValues({});
@@ -384,7 +382,7 @@ export default function PluginsPage() {
                   <Settings className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Configure</TooltipContent>
+              <TooltipContent>{t("configure")}</TooltipContent>
             </Tooltip>
           )}
           {p.status === "disabled" ? (
@@ -398,7 +396,7 @@ export default function PluginsPage() {
                   <Play className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Enable</TooltipContent>
+              <TooltipContent>{t("enable")}</TooltipContent>
             </Tooltip>
           ) : (
             <Tooltip>
@@ -411,7 +409,7 @@ export default function PluginsPage() {
                   <Pause className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Disable</TooltipContent>
+              <TooltipContent>{t("disable")}</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>
@@ -425,7 +423,7 @@ export default function PluginsPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Uninstall</TooltipContent>
+            <TooltipContent>{t("uninstall")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -435,8 +433,8 @@ export default function PluginsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Plugins"
-        description="Manage WASM format handler plugins."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -453,11 +451,11 @@ export default function PluginsPage() {
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh</TooltipContent>
+              <TooltipContent>{t("refresh")}</TooltipContent>
             </Tooltip>
             <Button onClick={() => setInstallOpen(true)}>
               <Plus className="size-4" />
-              Install Plugin
+              {t("installPlugin")}
             </Button>
           </div>
         }
@@ -468,7 +466,7 @@ export default function PluginsPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total</p>
+              <p className="text-sm text-muted-foreground">{t("statTotal")}</p>
               <p className="text-2xl font-semibold">{plugins.length}</p>
             </div>
             <Puzzle className="size-8 text-muted-foreground/30" />
@@ -477,7 +475,7 @@ export default function PluginsPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Active</p>
+              <p className="text-sm text-muted-foreground">{t("statActive")}</p>
               <p className="text-2xl font-semibold text-emerald-600">
                 {activeCount}
               </p>
@@ -488,7 +486,7 @@ export default function PluginsPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Errors</p>
+              <p className="text-sm text-muted-foreground">{t("statErrors")}</p>
               <p
                 className={`text-2xl font-semibold ${errorCount > 0 ? "text-red-600" : ""}`}
               >
@@ -502,7 +500,7 @@ export default function PluginsPage() {
         </Card>
         <Card className="py-4">
           <CardContent>
-            <p className="text-sm text-muted-foreground">Disabled</p>
+            <p className="text-sm text-muted-foreground">{t("statDisabled")}</p>
             <p className="text-2xl font-semibold">
               {plugins.length - activeCount - errorCount}
             </p>
@@ -514,13 +512,13 @@ export default function PluginsPage() {
       <div className="flex items-center gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter by status" />
+            <SelectValue placeholder={t("filterByStatus")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
+            <SelectItem value="__all__">{t("allStatuses")}</SelectItem>
+            <SelectItem value="active">{t("status_active")}</SelectItem>
+            <SelectItem value="disabled">{t("status_disabled")}</SelectItem>
+            <SelectItem value="error">{t("status_error")}</SelectItem>
           </SelectContent>
         </Select>
         {statusFilter !== "__all__" && (
@@ -529,7 +527,7 @@ export default function PluginsPage() {
             size="sm"
             onClick={() => setStatusFilter("__all__")}
           >
-            Clear filter
+            {t("clearFilter")}
           </Button>
         )}
       </div>
@@ -538,12 +536,12 @@ export default function PluginsPage() {
       {plugins.length === 0 && !isLoading ? (
         <EmptyState
           icon={Puzzle}
-          title="No plugins installed"
-          description="Install a plugin to extend Artifact Keeper with custom functionality."
+          title={t("noPlugins")}
+          description={t("noPluginsDescription")}
           action={
             <Button onClick={() => setInstallOpen(true)}>
               <Plus className="size-4" />
-              Install Plugin
+              {t("installPlugin")}
             </Button>
           }
         />
@@ -553,7 +551,7 @@ export default function PluginsPage() {
           data={plugins}
           loading={isLoading}
           rowKey={(p) => p.id}
-          emptyMessage="No plugins found."
+          emptyMessage={t("noPluginsFound")}
         />
       )}
 
@@ -567,9 +565,9 @@ export default function PluginsPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Install Plugin</DialogTitle>
+            <DialogTitle>{t("installDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Install a format handler plugin from a Git repository or ZIP file.
+              {t("installDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <Tabs
@@ -579,11 +577,11 @@ export default function PluginsPage() {
             <TabsList className="w-full">
               <TabsTrigger value="git" className="flex-1 gap-1.5">
                 <GitBranch className="size-3.5" />
-                Git Repository
+                {t("gitRepository")}
               </TabsTrigger>
               <TabsTrigger value="zip" className="flex-1 gap-1.5">
                 <Upload className="size-3.5" />
-                ZIP Upload
+                {t("zipUpload")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="git" className="mt-4">
@@ -599,28 +597,28 @@ export default function PluginsPage() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="git-url">Repository URL</Label>
+                  <Label htmlFor="git-url">{t("repositoryUrl")}</Label>
                   <Input
                     id="git-url"
                     value={gitUrl}
                     onChange={(e) => setGitUrl(e.target.value)}
-                    placeholder="https://github.com/org/plugin-repo.git"
+                    placeholder={t("repositoryUrlPlaceholder")}
                     required
                     disabled={isInstalling}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="git-ref">
-                    Git Ref{" "}
+                    {t("gitRef")}{" "}
                     <span className="text-muted-foreground font-normal">
-                      (optional)
+                      ({t("optional")})
                     </span>
                   </Label>
                   <Input
                     id="git-ref"
                     value={gitRef}
                     onChange={(e) => setGitRef(e.target.value)}
-                    placeholder="v1.0.0, main, or commit SHA"
+                    placeholder={t("gitRefPlaceholder")}
                     disabled={isInstalling}
                   />
                 </div>
@@ -631,10 +629,10 @@ export default function PluginsPage() {
                     onClick={() => setInstallOpen(false)}
                     disabled={isInstalling}
                   >
-                    Cancel
+                    {t("cancel")}
                   </Button>
                   <Button type="submit" disabled={isInstalling || !gitUrl.trim()}>
-                    {installGitMutation.isPending ? "Installing..." : "Install"}
+                    {installGitMutation.isPending ? t("installing") : t("install")}
                   </Button>
                 </DialogFooter>
               </form>
@@ -649,7 +647,7 @@ export default function PluginsPage() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="zip-file">Plugin ZIP File</Label>
+                  <Label htmlFor="zip-file">{t("pluginZipFile")}</Label>
                   <Input
                     id="zip-file"
                     type="file"
@@ -670,10 +668,10 @@ export default function PluginsPage() {
                     onClick={() => setInstallOpen(false)}
                     disabled={isInstalling}
                   >
-                    Cancel
+                    {t("cancel")}
                   </Button>
                   <Button type="submit" disabled={isInstalling || !zipFile}>
-                    {installZipMutation.isPending ? "Uploading..." : "Upload & Install"}
+                    {installZipMutation.isPending ? t("uploading") : t("uploadAndInstall")}
                   </Button>
                 </DialogFooter>
               </form>
@@ -696,56 +694,56 @@ export default function PluginsPage() {
           {configPlugin && (
             <>
               <DialogHeader>
-                <DialogTitle>Configure: {configPlugin.name}</DialogTitle>
+                <DialogTitle>{t("configureTitle", { name: configPlugin.name })}</DialogTitle>
                 <DialogDescription>
-                  View plugin information and edit configuration.
+                  {t("configureDescription")}
                 </DialogDescription>
               </DialogHeader>
               <Tabs defaultValue="info">
                 <TabsList>
-                  <TabsTrigger value="info">Information</TabsTrigger>
-                  <TabsTrigger value="config">Configuration</TabsTrigger>
+                  <TabsTrigger value="info">{t("infoTab")}</TabsTrigger>
+                  <TabsTrigger value="config">{t("configTab")}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="info" className="mt-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Name</p>
+                      <p className="text-muted-foreground">{t("infoName")}</p>
                       <p className="font-medium">{configPlugin.name}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Version</p>
+                      <p className="text-muted-foreground">{t("infoVersion")}</p>
                       <p className="font-medium">{configPlugin.version}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Type</p>
+                      <p className="text-muted-foreground">{t("infoType")}</p>
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[configPlugin.plugin_type] ?? ""}`}
                       >
-                        {configPlugin.plugin_type.replace(/_/g, " ")}
+                        {t(`type_${configPlugin.plugin_type}`)}
                       </span>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Status</p>
+                      <p className="text-muted-foreground">{t("infoStatus")}</p>
                       <StatusBadge
-                        status={configPlugin.status}
+                        status={t(`status_${configPlugin.status}`)}
                         color={STATUS_COLORS[configPlugin.status] ?? "default"}
                       />
                     </div>
                     {configPlugin.description && (
                       <div className="col-span-2">
-                        <p className="text-muted-foreground">Description</p>
+                        <p className="text-muted-foreground">{t("infoDescription")}</p>
                         <p>{configPlugin.description}</p>
                       </div>
                     )}
                     {configPlugin.author && (
                       <div>
-                        <p className="text-muted-foreground">Author</p>
+                        <p className="text-muted-foreground">{t("infoAuthor")}</p>
                         <p>{configPlugin.author}</p>
                       </div>
                     )}
                     {configPlugin.homepage && (
                       <div>
-                        <p className="text-muted-foreground">Homepage</p>
+                        <p className="text-muted-foreground">{t("infoHomepage")}</p>
                         {isSafeUrl(configPlugin.homepage) ? (
                           <a
                             href={configPlugin.homepage}
@@ -765,7 +763,7 @@ export default function PluginsPage() {
                     )}
                     {configPlugin.error_message && (
                       <div className="col-span-2">
-                        <p className="text-muted-foreground">Error</p>
+                        <p className="text-muted-foreground">{t("infoError")}</p>
                         <p className="text-red-500">
                           {configPlugin.error_message}
                         </p>
@@ -779,16 +777,14 @@ export default function PluginsPage() {
                       className="text-sm text-muted-foreground py-8 text-center"
                       role="alert"
                     >
-                      You don&apos;t have permission to view or edit this
-                      plugin&apos;s configuration. Plugin configuration is
-                      restricted to administrators.
+                      {t("configPermissionDenied")}
                     </p>
                   ) : configIsError ? (
                     <p
                       className="text-sm text-red-500 py-8 text-center"
                       role="alert"
                     >
-                      {toUserMessage(configError, "Failed to load configuration.")}
+                      {toUserMessage(configError, t("configLoadError"))}
                     </p>
                   ) : pluginConfig && pluginConfig.length > 0 ? (
                     <form
@@ -838,13 +834,13 @@ export default function PluginsPage() {
                         disabled={saveConfigMutation.isPending}
                       >
                         {saveConfigMutation.isPending
-                          ? "Saving..."
-                          : "Save Configuration"}
+                          ? t("saving")
+                          : t("saveConfiguration")}
                       </Button>
                     </form>
                   ) : (
                     <p className="text-sm text-muted-foreground py-8 text-center">
-                      No configuration options available for this plugin.
+                      {t("noConfigOptions")}
                     </p>
                   )}
                 </TabsContent>
@@ -860,9 +856,9 @@ export default function PluginsPage() {
         onOpenChange={(o) => {
           if (!o) setUninstallId(null);
         }}
-        title="Uninstall Plugin"
-        description="This will permanently remove this plugin and its configuration. Any features provided by this plugin will stop working."
-        confirmText="Uninstall"
+        title={t("uninstallTitle")}
+        description={t("uninstallDescription")}
+        confirmText={t("uninstall")}
         danger
         loading={uninstallMutation.isPending}
         onConfirm={() => {

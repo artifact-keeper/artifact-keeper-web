@@ -19,6 +19,7 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslations } from "next-intl";
 import { treeApi } from "@/lib/api/tree";
 import { cn, formatBytes } from "@/lib/utils";
 import type { TreeNode } from "@/types/tree";
@@ -87,6 +88,7 @@ function TreeNodeRow({
   onFileSelect?: (node: TreeNode) => void;
   selectedPath?: string | null;
 }) {
+  const t = useTranslations("common");
   const [isOpen, setIsOpen] = useState(false);
   const isFolder = isFolderLike(node);
 
@@ -181,7 +183,7 @@ function TreeNodeRow({
             className="py-2 text-xs text-muted-foreground"
             style={{ paddingLeft: paddingLeft + 16 }}
           >
-            Empty
+            {t("empty")}
           </div>
         )}
         {!isLoading &&
@@ -214,6 +216,7 @@ export function FileTree({
   onFileSelect?: (node: TreeNode) => void;
   selectedPath?: string | null;
 }) {
+  const t = useTranslations("common");
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["tree-children", repositoryKey, rootPath ?? "/"],
     queryFn: () =>
@@ -240,7 +243,7 @@ export function FileTree({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Folder className="size-8 text-muted-foreground/40 mb-2" />
-        <p className="text-sm text-muted-foreground">No files found</p>
+        <p className="text-sm text-muted-foreground">{t("noFilesFound")}</p>
       </div>
     );
   }

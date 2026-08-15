@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Plus, Trash2, Loader2, Link2, ShieldCheck } from "lucide-react";
 
 import { pypiTracksApi, type PypiTrack } from "@/lib/api/pypi-tracks";
@@ -27,6 +28,7 @@ const TRACKS_QUERY_KEY = (key: string) => ["pypi-tracks", key];
  * re-unions that project with a named upstream Simple index.
  */
 export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
+  const t = useTranslations("pypiTracks");
   const queryClient = useQueryClient();
   const [project, setProject] = useState("");
   const [tracksUrl, setTracksUrl] = useState("");
@@ -47,9 +49,9 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
       invalidate();
       setProject("");
       setTracksUrl("");
-      toast.success(`Tracking declared for "${proj}"`);
+      toast.success(t("declared", { project: proj }));
     },
-    onError: mutationErrorToast("Failed to declare tracks relationship"),
+    onError: mutationErrorToast(t("declareFailed")),
   });
 
   const removeMutation = useMutation({
@@ -57,9 +59,9 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
     onSuccess: () => {
       invalidate();
       setTrackToRemove(null);
-      toast.success("Tracks declaration removed");
+      toast.success(t("removed"));
     },
-    onError: mutationErrorToast("Failed to remove tracks relationship"),
+    onError: mutationErrorToast(t("removeFailed")),
   });
 
   const trimmedProject = project.trim();
@@ -77,10 +79,11 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
       <div className="flex items-start gap-2 text-sm text-muted-foreground">
         <ShieldCheck className="size-4 mt-0.5 shrink-0 text-emerald-500" />
         <p>
-          PyPI virtual repositories isolate locally-owned project names from the same name
-          upstream by default (PEP 708, dependency-confusion mitigation). Declare a{" "}
-          <span className="font-medium text-foreground">tracks</span> relationship to re-union a
-          local project&apos;s versions with a named upstream Simple index.
+          {t.rich("description", {
+            track: (chunks) => (
+              <span className="font-medium text-foreground">{chunks}</span>
+            ),
+          })}
         </p>
       </div>
 
@@ -88,20 +91,20 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
       <form
         onSubmit={handleSubmit}
         className="flex flex-col gap-2 sm:flex-row sm:items-center"
-        aria-label="Declare a tracks relationship"
+        aria-label={t("formAria")}
       >
         <Input
-          placeholder="Project name (e.g. acme-sdk)"
+          placeholder={t("projectPlaceholder")}
           value={project}
           onChange={(e) => setProject(e.target.value)}
-          aria-label="Project name"
+          aria-label={t("projectAria")}
           className="sm:max-w-xs"
         />
         <Input
-          placeholder="https://pypi.org/simple/acme-sdk/"
+          placeholder={t("urlPlaceholder")}
           value={tracksUrl}
           onChange={(e) => setTracksUrl(e.target.value)}
-          aria-label="Upstream Simple index URL"
+          aria-label={t("urlAria")}
           inputMode="url"
         />
         <Button type="submit" disabled={!canSubmit}>
@@ -110,7 +113,7 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
           ) : (
             <Plus className="size-4" />
           )}
-          Add
+          {t("add")}
         </Button>
       </form>
 
@@ -125,27 +128,27 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
       {!isLoading && (tracks?.length ?? 0) === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-10 text-center text-muted-foreground">
           <Link2 className="size-7 mb-2 opacity-50" />
-          <p className="text-sm">No tracks declarations.</p>
-          <p className="text-xs">Locally-owned project names are fully isolated from upstream.</p>
+          <p className="text-sm">{t("empty")}</p>
+          <p className="text-xs">{t("emptyDetail")}</p>
         </div>
       )}
 
       {!isLoading && (tracks?.length ?? 0) > 0 && (
         <ul className="divide-y rounded-md border">
-          {tracks!.map((t) => (
+          {tracks!.map((track) => (
             <li
-              key={t.normalized_name}
+              key={track.normalized_name}
               className="flex items-center justify-between gap-3 px-3 py-2.5"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{t.normalized_name}</p>
-                <p className="truncate text-xs text-muted-foreground">{t.tracks_url}</p>
+                <p className="truncate text-sm font-medium">{track.normalized_name}</p>
+                <p className="truncate text-xs text-muted-foreground">{track.tracks_url}</p>
               </div>
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Remove tracks declaration for ${t.normalized_name}`}
-                onClick={() => setTrackToRemove(t)}
+                aria-label={t("removeAria", { name: track.normalized_name })}
+                onClick={() => setTrackToRemove(track)}
               >
                 <Trash2 className="size-4 text-destructive" />
               </Button>
@@ -157,13 +160,13 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
       <ConfirmDialog
         open={trackToRemove !== null}
         onOpenChange={(open) => !open && setTrackToRemove(null)}
-        title="Remove tracks declaration?"
+        title={t("confirmTitle")}
         description={
           trackToRemove
-            ? `"${trackToRemove.normalized_name}" will be isolated from upstream again. Unpinned installs will resolve only the local project's versions.`
+            ? t("confirmDescription", { name: trackToRemove.normalized_name })
             : ""
         }
-        confirmText="Remove"
+        confirmText={t("confirmRemove")}
         danger
         loading={removeMutation.isPending}
         onConfirm={() => {
