@@ -12,7 +12,7 @@ import {
 // English message catalog for renderRepoAccess translation assertions.
 const i18nEn = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const en = require(process.cwd() + "/src/i18n/en.json") as Record<
+  const en = require(process.cwd() + "/src/i18n/locales/en.json") as Record<
     string,
     Record<string, string>
   >;

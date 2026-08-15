@@ -1,12 +1,12 @@
 // Global test setup that mocks next-intl so component tests that render
 // translated text through useTranslations do not need per-file mocks.
-// Translations resolve from src/i18n/en.json (the test default locale),
+// Translations resolve from src/i18n/locales/en.json (the test default locale),
 // keeping English assertions in existing tests valid.
 import { vi } from "vitest";
 
 const i18nFixture = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const en = require("./src/i18n/en.json") as Record<
+  const en = require("./src/i18n/locales/en.json") as Record<
     string,
     Record<string, string>
   >;
