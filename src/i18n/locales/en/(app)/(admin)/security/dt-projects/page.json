@@ -1,0 +1,15 @@
+{
+  "title": "DT Projects",
+  "description": "Browse Dependency-Track projects and their vulnerability metrics.",
+  "backToSecurity": "Back to Security",
+  "dtUnavailable": "Dependency-Track is unavailable",
+  "dtUnavailableDescription": "The Dependency-Track integration is currently disconnected. Projects cannot be displayed until the service recovers.",
+  "searchPlaceholder": "Search projects...",
+  "colName": "Name",
+  "colVersion": "Version",
+  "colLastBomImport": "Last BOM Import",
+  "colRiskScore": "Risk Score",
+  "never": "Never",
+  "noSearchResults": "No projects match your search.",
+  "noProjects": "No Dependency-Track projects found."
+}

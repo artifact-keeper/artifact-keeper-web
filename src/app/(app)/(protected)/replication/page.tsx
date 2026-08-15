@@ -84,7 +84,7 @@ type ReplicationModeOption = "push" | "pull" | "mirror" | "none";
 // -- page --
 
 export default function ReplicationPage() {
-  const t = useTranslations("replication");
+  const t = useTranslations("app/protected/replication");
   const queryClient = useQueryClient();
   const [selectedPeerId, setSelectedPeerId] = useState<string>("__none__");
   const [topologyPeerId, setTopologyPeerId] = useState<string>("__none__");

@@ -1,0 +1,8 @@
+{
+  "critical": "严重",
+  "high": "高",
+  "medium": "中",
+  "low": "低",
+  "info": "信息",
+  "unassigned": "未分配"
+}

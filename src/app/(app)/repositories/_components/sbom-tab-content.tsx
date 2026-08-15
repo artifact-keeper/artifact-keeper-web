@@ -49,7 +49,7 @@ interface SbomTabContentProps {
 
 export function SbomTabContent({ artifact }: SbomTabContentProps) {
   const queryClient = useQueryClient();
-  const t = useTranslations("sbom");
+  const t = useTranslations("app/repositories/_components/sbom-tab-content");
   // Proxy-cached remote artifacts have no artifacts row on the backend, so
   // SBOM generation returns 404 (artifact-keeper#2292). Gate the Generate /
   // Regenerate actions on the artifact's `analyzable` flag.
@@ -399,8 +399,8 @@ function StatCard({
 
 // Helper component for CVE history rows
 function CveHistoryRow({ cve }: { cve: CveHistoryEntry }) {
-  const t = useTranslations("sbom");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/repositories/_components/sbom-tab-content");
+  const tSev = useTranslations("core/severity");
   const severityColors: Record<string, string> = {
     critical: "text-red-600 bg-red-100 dark:bg-red-950/40",
     high: "text-orange-600 bg-orange-100 dark:bg-orange-950/40",

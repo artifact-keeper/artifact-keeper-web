@@ -1,0 +1,6 @@
+{
+  "title": "Authentication Error",
+  "description": "Something went wrong during authentication. Please try again.",
+  "errorId": "Error ID: {digest}",
+  "tryAgain": "Try again"
+}

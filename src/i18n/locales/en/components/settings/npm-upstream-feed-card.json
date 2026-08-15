@@ -1,0 +1,8 @@
+{
+  "npmFeedTitle": "npm Upstream Change-Feed",
+  "configuredViaEnv": "Configured via environment",
+  "npmFeedDescription": "Subscribes to npm's replication feed and proactively evicts stale cached packuments in remote and virtual npm repositories, instead of waiting for the packument cache TTL. Requires backend 1.7.0+.",
+  "default": "Default",
+  "runtimeStatus": "Runtime status",
+  "runtimeStatusDescription": "Consumption status (feed cursor, last poll, cluster leadership) and in-UI enable/URL configuration require a backend admin API that is not implemented yet. When the feed URL becomes configurable through the API it will be subject to the same SSRF validation as remote repository upstreams (http/https only). Track"
+}

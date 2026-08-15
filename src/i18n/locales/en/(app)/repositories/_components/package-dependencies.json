@@ -1,0 +1,9 @@
+{
+  "noDepsTitle": "No dependency information available",
+  "noDepsHint": "Dependencies are extracted from package metadata when available.",
+  "count": "{count, plural, one {# dependency} other {# dependencies}}",
+  "acrossScopes": " across {count} scopes",
+  "package": "Package",
+  "version": "Version",
+  "scope": "Scope"
+}

@@ -1,0 +1,19 @@
+{
+  "noData": "暂无健康数据",
+  "noDataDetail": "健康评分在质量检查完成后计算。",
+  "grade": "等级",
+  "overallHealth": "总体健康",
+  "checksPassed": "已通过 {passed}/{total} 项检查",
+  "issues": "{count, plural, other {# 个问题}}",
+  "criticalCount": "（{count} 个严重）",
+  "scoreBreakdown": "评分分解",
+  "weight": "（权重 {weight}）",
+  "na": "N/A",
+  "lastEvaluated": "上次评估：{date}",
+  "components": {
+    "security": "安全",
+    "quality": "质量",
+    "license": "许可证",
+    "metadata": "元数据"
+  }
+}

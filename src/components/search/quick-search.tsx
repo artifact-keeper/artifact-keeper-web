@@ -28,7 +28,7 @@ interface QuickSearchProps {
 }
 
 export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/search/quick-search");
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);

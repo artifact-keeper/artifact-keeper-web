@@ -25,7 +25,7 @@ function getSsoErrorKey(errorCode: string | null): string {
 }
 
 function CallbackHandler() {
-  const t = useTranslations("ssoCallback");
+  const t = useTranslations("auth/callback");
   useDocumentTitle(t("signingIn"));
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -118,7 +118,7 @@ function CallbackHandler() {
 }
 
 export default function SsoCallbackPage() {
-  const t = useTranslations("ssoCallback");
+  const t = useTranslations("auth/callback");
   return (
     <Suspense
       fallback={

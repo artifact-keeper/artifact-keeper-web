@@ -43,7 +43,7 @@ function TruncationBanner({
   totalBytes: number;
   downloadUrl: string;
 }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-viewer");
   return (
     <div className="flex items-center gap-2 px-4 py-2 text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-b">
       <span>
@@ -189,7 +189,7 @@ function ImageRenderer({ downloadUrl, fileName }: { downloadUrl: string; fileNam
 // ---- PdfRenderer ----
 
 function PdfRenderer({ downloadUrl }: { downloadUrl: string }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-viewer");
   return (
     <div className="flex-1 p-4">
       <object
@@ -218,7 +218,7 @@ function BinaryRenderer({
   data: ArrayBuffer;
   downloadUrl: string;
 }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-viewer");
   const hex = useMemo(() => hexDump(data, 256), [data]);
 
   return (
@@ -253,7 +253,7 @@ export function FileViewer({
   fileSize,
   onClose,
 }: FileViewerProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-viewer");
   const downloadUrl = `/api/v1/repositories/${repositoryKey}/download/${filePath}`;
 
   const category = useMemo(

@@ -1,0 +1,13 @@
+{
+  "title": "Staging",
+  "searchPlaceholder": "Search staging repos...",
+  "format": "Format",
+  "allFormats": "All formats",
+  "noRepos": "No staging repositories found.",
+  "noReposDetail": "Create a staging repository to begin the promotion workflow.",
+  "pageOf": "Page {page} of {totalPages}",
+  "subtitle": "Review and promote artifacts from staging to release repositories.",
+  "refresh": "Refresh",
+  "selectRepo": "Select a staging repository",
+  "selectRepoDetail": "Choose a repository to view artifacts and promote to release."
+}

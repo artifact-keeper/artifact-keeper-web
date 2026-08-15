@@ -55,7 +55,7 @@ export function ArtifactVersionsSection({
   repoKey,
   artifact,
 }: ArtifactVersionsSectionProps) {
-  const t = useTranslations("artifactVersions");
+  const t = useTranslations("app/repositories/_components/artifact-versions-section");
   const {
     data,
     isLoading,

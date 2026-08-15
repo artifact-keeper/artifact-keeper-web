@@ -47,7 +47,7 @@ function buildSchema(t: (key: string) => string) {
 }
 
 export default function ChangePasswordPage() {
-  const t = useTranslations("changePassword");
+  const t = useTranslations("auth/change-password");
   useDocumentTitle(t("title"));
   const router = useRouter();
   const { changePassword, logout, setupRequired } = useAuth();

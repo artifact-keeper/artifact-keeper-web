@@ -1,13 +1,13 @@
 // Global test setup that mocks next-intl so component tests that render
 // translated text through useTranslations do not need per-file mocks.
-// Translations resolve from src/i18n/locales/for-tests.cjs (the merged English
+// Translations resolve from src/i18n/for-tests.cjs (the merged English
 // catalog for the test default locale),
 // keeping English assertions in existing tests valid.
 import { vi } from "vitest";
 
 const i18nFixture = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const en = require("./src/i18n/locales/for-tests.cjs") as Record<
+  const en = require("./src/i18n/for-tests.cjs") as Record<
     string,
     Record<string, string>
   >;
@@ -15,6 +15,10 @@ const i18nFixture = vi.hoisted(() => {
 });
 
 vi.mock("next-intl", () => ({
+  // global-error.tsx seeds its own provider; in tests it just passes children
+  // through (the useTranslations mock resolves the English catalog directly).
+  NextIntlClientProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
   useTranslations: (ns: string) => {
     // Resolve a possibly-dotted namespace ("admin.users") as a path into the
     // merged catalog (nested message groups). Falls back to a flat key.

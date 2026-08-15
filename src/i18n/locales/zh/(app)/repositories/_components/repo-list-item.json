@@ -1,0 +1,12 @@
+{
+  "typeLabels": {
+    "local": "本地",
+    "staging": "暂存",
+    "remote": "远程",
+    "virtual": "虚拟"
+  },
+  "artifactMatch": "{count, plural, other {# 个制品匹配}}",
+  "actionsFor": "仓库 {name} 的操作",
+  "edit": "编辑",
+  "delete": "删除"
+}

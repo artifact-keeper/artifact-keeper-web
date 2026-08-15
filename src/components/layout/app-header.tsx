@@ -31,7 +31,7 @@ export function AppHeader() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, isAuthenticated, logout } = useAuth();
-  const t = useTranslations("header");
+  const t = useTranslations("components/layout/app-header");
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Global Cmd+K / Ctrl+K shortcut

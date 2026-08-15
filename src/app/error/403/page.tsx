@@ -7,7 +7,7 @@ import { ErrorPage } from "@/components/common/error-page";
 import { ShieldX, ArrowLeft } from "lucide-react";
 
 export default function ForbiddenPage() {
-  const t = useTranslations("errorPages");
+  const t = useTranslations("error/403");
   useDocumentTitle(t("accessDenied"));
   return (
     <ErrorPage

@@ -77,7 +77,7 @@ function timeAgo(dateStr: string, t: (key: string, values?: Record<string, strin
 }
 
 export default function TelemetryPage() {
-  const t = useTranslations("admin.telemetry");
+  const t = useTranslations("app/admin/telemetry");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [detailCrash, setDetailCrash] = useState<CrashReport | null>(null);

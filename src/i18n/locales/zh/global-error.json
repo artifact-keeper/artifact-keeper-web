@@ -1,0 +1,7 @@
+{
+  "somethingWentWrong": "出现问题",
+  "errorId": "错误 ID：{digest}",
+  "tryAgain": "重试",
+  "globalDescription": "发生严重错误，导致此页面无法加载。您可以重试，或返回首页。",
+  "goToHome": "返回首页"
+}

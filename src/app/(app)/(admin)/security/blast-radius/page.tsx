@@ -69,7 +69,7 @@ function truncateId(id: string): string {
  * so everyone — not just the recorded downloaders — is exposed.
  */
 export function AccessScopeBadge({ scope }: { scope: string }) {
-  const t = useTranslations("admin.blastRadius");
+  const t = useTranslations("app/admin/security/blast-radius");
   if (scope === "public") {
     return (
       <Badge
@@ -110,7 +110,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
  * can reach the artifact, so per-user enumeration is not applicable.
  */
 export function ExposureBadge({ exposure }: { exposure: string }) {
-  const t = useTranslations("admin.blastRadius");
+  const t = useTranslations("app/admin/security/blast-radius");
   if (exposure === "everyone") {
     return (
       <Badge
@@ -150,7 +150,7 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
  * `permission` (direct or group grant), or `role` (role assignment).
  */
 export function ViaBadge({ via }: { via: string }) {
-  const t = useTranslations("admin.blastRadius");
+  const t = useTranslations("app/admin/security/blast-radius");
   const label =
     via === "admin"
       ? t("admin")
@@ -198,7 +198,7 @@ export default function BlastRadiusPage() {
 }
 
 function BlastRadiusContent() {
-  const t = useTranslations("admin.blastRadius");
+  const t = useTranslations("app/admin/security/blast-radius");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();

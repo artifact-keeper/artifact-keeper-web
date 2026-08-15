@@ -55,7 +55,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/sheet")
   return (
     <SheetPortal>
       <SheetOverlay />

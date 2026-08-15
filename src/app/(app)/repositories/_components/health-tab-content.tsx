@@ -54,7 +54,7 @@ const SCORE_COMPONENTS = [
 ];
 
 export function HealthTabContent({ artifact }: HealthTabContentProps) {
-  const t = useTranslations("health");
+  const t = useTranslations("app/repositories/_components/health-tab-content");
   const { data: health, isLoading, error } = useQuery({
     queryKey: ["artifact-health", artifact.id],
     queryFn: () => qualityGatesApi.getArtifactHealth(artifact.id),

@@ -179,7 +179,7 @@ interface PackageDependenciesProps {
 }
 
 export function PackageDependencies({ format, metadata }: PackageDependenciesProps) {
-  const t = useTranslations("packageDependencies");
+  const t = useTranslations("app/repositories/_components/package-dependencies");
   const deps = extractDependencies(format, metadata);
 
   if (deps.length === 0) {

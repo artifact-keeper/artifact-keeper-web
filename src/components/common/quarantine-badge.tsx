@@ -25,7 +25,7 @@ export function QuarantineBadge({
   quarantineUntil,
   className,
 }: QuarantineBadgeProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/quarantine-badge");
   const expiry = formatQuarantineExpiry(quarantineUntil);
 
   const tooltipLines: string[] = [];

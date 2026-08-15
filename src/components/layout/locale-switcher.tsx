@@ -20,7 +20,7 @@ const LOCALE_LABELS: Record<string, string> = {
 
 export function LocaleSwitcher() {
   const locale = useLocale();
-  const t = useTranslations("localeSwitcher");
+  const t = useTranslations("components/layout/locale-switcher");
   const [pendingLocale, setPendingLocale] = useState<string | null>(null);
 
   // Persist the choice and reload. The cookie write + reload live in an

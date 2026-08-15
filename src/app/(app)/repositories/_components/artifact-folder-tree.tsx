@@ -74,7 +74,7 @@ function TreeNodeRow({
   onFileSelect: (artifact: Artifact) => void;
   selectedPath?: string | null;
 }) {
-  const t = useTranslations("artifactTree");
+  const t = useTranslations("app/repositories/_components/artifact-folder-tree");
   const paddingLeft = depth * INDENT_PX + BASE_PAD_PX;
 
   // --- File leaf ---
@@ -137,7 +137,7 @@ function FolderRow({
   // Top-level folders start expanded so the browser isn't a wall of collapsed
   // rows; deeper folders start collapsed for progressive disclosure.
   const [isOpen, setIsOpen] = useState(depth === 0);
-  const t = useTranslations("artifactTree");
+  const t = useTranslations("app/repositories/_components/artifact-folder-tree");
   const paddingLeft = depth * INDENT_PX + BASE_PAD_PX;
 
   return (
@@ -212,7 +212,7 @@ export function ArtifactFolderTree({
   selectedPath,
   emptyMessage,
 }: ArtifactFolderTreeProps) {
-  const t = useTranslations("artifactTree");
+  const t = useTranslations("app/repositories/_components/artifact-folder-tree");
   const resolvedEmpty = emptyMessage ?? t("empty");
   const tree = useMemo(() => buildArtifactTree(artifacts), [artifacts]);
   const totalFiles = useMemo(() => countTreeFiles(tree), [tree]);

@@ -1,0 +1,7 @@
+{
+  "somethingWentWrong": "出现问题",
+  "errorId": "错误 ID：{digest}",
+  "tryAgain": "重试",
+  "rootDescription": "发生了意外的错误。您可以重试，或返回仪表盘。",
+  "goToDashboard": "仪表盘"
+}

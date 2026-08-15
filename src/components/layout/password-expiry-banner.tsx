@@ -17,7 +17,7 @@ function daysUntil(dateString: string): number {
 
 export function PasswordExpiryBanner() {
   const { passwordExpiresAt, isAuthenticated } = useAuth();
-  const t = useTranslations("passwordExpiry");
+  const t = useTranslations("components/layout/password-expiry-banner");
 
   if (!isAuthenticated || !passwordExpiresAt) {
     return null;

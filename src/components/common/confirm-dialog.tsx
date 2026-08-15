@@ -43,7 +43,7 @@ export function ConfirmDialog({
   loading = false,
   onConfirm,
 }: ConfirmDialogProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/confirm-dialog");
   const [typed, setTyped] = useState("");
   const resolvedConfirm = confirmText ?? t("confirm");
   const resolvedCancel = cancelText ?? t("cancel");

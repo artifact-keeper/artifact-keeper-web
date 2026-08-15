@@ -84,7 +84,7 @@ export function StagingDetailContent({
   repoKey,
   standalone = false,
 }: StagingDetailContentProps) {
-  const t = useTranslations("staging");
+  const t = useTranslations("app/staging/_components/staging-detail-content");
   const router = useRouter();
   const { isAuthenticated } = useAuth();
 
@@ -451,7 +451,7 @@ function ArtifactRow({
   onSelect: () => void;
   onToggleExpand: () => void;
 }) {
-  const t = useTranslations("staging");
+  const t = useTranslations("app/staging/_components/staging-detail-content");
   const hasViolations = (artifact.policy_result?.violations?.length ?? 0) > 0;
 
   const statusIcon = {

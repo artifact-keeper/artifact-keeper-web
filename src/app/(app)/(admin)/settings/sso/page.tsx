@@ -75,7 +75,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function OidcTab() {
-  const t = useTranslations("admin.settingsSso");
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<OidcConfig | null>(null);
@@ -611,7 +611,7 @@ function OidcTab() {
 // ---------------------------------------------------------------------------
 
 function LdapTab() {
-  const t = useTranslations("admin.settingsSso");
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<LdapConfig | null>(null);
@@ -1157,7 +1157,7 @@ function LdapTab() {
 // ---------------------------------------------------------------------------
 
 function SamlTab() {
-  const t = useTranslations("admin.settingsSso");
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SamlConfig | null>(null);
@@ -1713,7 +1713,7 @@ function SamlTab() {
 // ---------------------------------------------------------------------------
 
 export default function SsoSettingsPage() {
-  const t = useTranslations("admin.settingsSso");
+  const t = useTranslations("app/admin/settings/sso");
   const { user } = useAuth();
 
   const { data: oidcConfigs } = useQuery({

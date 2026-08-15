@@ -47,7 +47,7 @@ import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
 
 export function RepositoriesContent() {
-  const t = useTranslations("repositories");
+  const t = useTranslations("app/repositories/_components/repositories-content");
   useDocumentTitle(t("title"));
   const router = useRouter();
   const queryClient = useQueryClient();

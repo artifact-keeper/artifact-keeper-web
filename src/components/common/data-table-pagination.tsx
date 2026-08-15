@@ -44,7 +44,7 @@ export function DataTablePagination({
   pageSizeOptions = [10, 20, 50, 100],
   itemLabel = "results",
 }: DataTablePaginationProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/data-table-pagination");
   if (!onPageChange && !onPageSizeChange) return null;
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

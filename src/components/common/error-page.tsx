@@ -29,7 +29,7 @@ export function ErrorPage({
   actionIcon: ActionIcon,
   onAction,
 }: ErrorPageProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/error-page");
   return (
     <div className="flex min-h-svh flex-col items-center justify-center px-6">
       <div className="flex flex-col items-center text-center max-w-md">

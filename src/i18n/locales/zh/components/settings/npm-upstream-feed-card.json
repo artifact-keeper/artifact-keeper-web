@@ -1,0 +1,8 @@
+{
+  "npmFeedTitle": "npm 上游变更推送",
+  "configuredViaEnv": "通过环境变量配置",
+  "npmFeedDescription": "订阅 npm 的复制推送，主动驱逐远程和虚拟 npm 仓库中过期的缓存 packument，而不是等待 packument 缓存 TTL。需要后端 1.7.0+。",
+  "default": "默认",
+  "runtimeStatus": "运行时状态",
+  "runtimeStatusDescription": "消费状态（推送游标、上次轮询、集群领导权）以及界面内的启用/URL 配置需要一个尚未实现的后端管理 API。当推送 URL 可通过 API 配置时，它将与远程仓库上游一样接受相同的 SSRF 验证（仅 http/https）。跟踪"
+}

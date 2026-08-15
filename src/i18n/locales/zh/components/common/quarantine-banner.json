@@ -1,0 +1,6 @@
+{
+  "quarantineBannerRejectedTitle": "此制品已在审核中被拒绝",
+  "quarantineBannerTitle": "此制品已被隔离",
+  "quarantineBannerRejectedDescription": "下载已被阻止。拒绝是最终决定；此制品无法解除。",
+  "quarantineBannerDescription": "下载已被阻止，直到管理员解除隔离。"
+}

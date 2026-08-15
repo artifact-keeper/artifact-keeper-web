@@ -1,0 +1,13 @@
+{
+  "title": "暂存",
+  "searchPlaceholder": "搜索暂存仓库...",
+  "format": "格式",
+  "allFormats": "所有格式",
+  "noRepos": "未找到暂存仓库。",
+  "noReposDetail": "创建暂存仓库以开始提升工作流。",
+  "pageOf": "第 {page} 页，共 {totalPages} 页",
+  "subtitle": "审查制品并将其从暂存提升到发布仓库。",
+  "refresh": "刷新",
+  "selectRepo": "选择一个暂存仓库",
+  "selectRepoDetail": "选择一个仓库以查看制品并提升到发布。"
+}

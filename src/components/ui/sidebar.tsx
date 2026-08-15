@@ -165,7 +165,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/sidebar")
 
   if (collapsible === "none") {
     return (
@@ -261,7 +261,7 @@ function SidebarTrigger({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar()
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/sidebar")
 
   return (
     <Button
@@ -284,7 +284,7 @@ function SidebarTrigger({
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar()
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/sidebar")
 
   return (
     <button

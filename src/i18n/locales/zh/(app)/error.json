@@ -1,0 +1,7 @@
+{
+  "somethingWentWrong": "出现问题",
+  "description": "加载此页面时发生了意外的错误。您可以重试，或返回仪表盘。",
+  "tryAgain": "重试",
+  "dashboard": "仪表盘",
+  "errorId": "错误 ID：{digest}"
+}

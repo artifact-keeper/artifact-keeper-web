@@ -1,0 +1,7 @@
+{
+  "title": "管理错误",
+  "description": "管理面板发生错误。这可能是暂时性问题。请重试，或返回仪表板。",
+  "errorId": "错误 ID",
+  "tryAgain": "重试",
+  "dashboard": "仪表板"
+}

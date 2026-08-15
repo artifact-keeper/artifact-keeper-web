@@ -62,7 +62,7 @@ export function TokenCreateForm({
   repoSelector,
   onRepoSelectorChange,
 }: TokenCreateFormProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/token-create-form");
   const toggleScope = (scope: string) => {
     onScopesChange(
       scopes.includes(scope)

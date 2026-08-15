@@ -1,0 +1,11 @@
+{
+  "name": "名称",
+  "namePlaceholder": "例如：CI/CD 流水线",
+  "expiration": "有效期",
+  "scopes": "权限范围",
+  "repositoryAccess": "仓库访问",
+  "repositoryAccessDescription": "限制此令牌可以访问的仓库。留空表示不受限制。",
+  "cancel": "取消",
+  "creating": "创建中...",
+  "create": "创建"
+}

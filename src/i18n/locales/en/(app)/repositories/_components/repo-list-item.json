@@ -1,0 +1,12 @@
+{
+  "typeLabels": {
+    "local": "Local",
+    "staging": "Staging",
+    "remote": "Remote",
+    "virtual": "Virtual"
+  },
+  "artifactMatch": "{count, plural, one {# artifact match} other {# artifacts match}}",
+  "actionsFor": "Repository actions for {name}",
+  "edit": "Edit",
+  "delete": "Delete"
+}

@@ -18,7 +18,7 @@ interface CopyButtonProps {
 }
 
 export function CopyButton({ value, className, label }: CopyButtonProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/copy-button");
   const [copied, setCopied] = useState(false);
   const resolvedLabel = label ?? t("copy");
 

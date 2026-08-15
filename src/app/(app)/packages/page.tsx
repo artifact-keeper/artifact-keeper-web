@@ -81,7 +81,7 @@ function PackageListItem({
   onClick: () => void;
   viewMode: ViewMode;
 }) {
-  const t = useTranslations("packages");
+  const t = useTranslations("app/packages");
   if (viewMode === "grid") {
     return (
       <div
@@ -184,7 +184,7 @@ function PackageDetailPanel({
   versions: PackageVersion[];
   isLoadingDetail: boolean;
 }) {
-  const t = useTranslations("packages");
+  const t = useTranslations("app/packages");
   const [copiedInstall, setCopiedInstall] = useState(false);
 
   const installCmd = getInstallCommand(
@@ -393,7 +393,7 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 // ---- Main Packages Page ----
 
 export default function PackagesPage() {
-  const t = useTranslations("packages");
+  const t = useTranslations("app/packages");
   useDocumentTitle(t("title"));
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-[50vh]"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
@@ -403,7 +403,7 @@ export default function PackagesPage() {
 }
 
 function PackagesContent() {
-  const t = useTranslations("packages");
+  const t = useTranslations("app/packages");
   const searchParams = useSearchParams();
   const router = useRouter();
   const isMobile = useIsMobile();

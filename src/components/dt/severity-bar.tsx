@@ -10,7 +10,7 @@ interface SeverityBarProps {
 }
 
 export function SeverityBar({ critical, high, medium, low }: SeverityBarProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/dt/severity-bar");
   const total = critical + high + medium + low;
 
   if (total === 0) {

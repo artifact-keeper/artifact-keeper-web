@@ -20,7 +20,7 @@ export function ArtifactListPreview({
   height = "h-32",
   renderTrailing,
 }: ArtifactListPreviewProps) {
-  const t = useTranslations("staging");
+  const t = useTranslations("app/staging/_components/artifact-list-preview");
   return (
     <div className="space-y-2">
       <Label>{t("selectedArtifacts")}</Label>

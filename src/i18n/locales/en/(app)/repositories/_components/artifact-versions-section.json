@@ -1,0 +1,18 @@
+{
+  "downloadFailed": "Could not start download for revision {revision}",
+  "unavailable": "Version history is unavailable for this artifact right now.",
+  "empty": "No version history recorded for this artifact.",
+  "emptyDetail": "History starts with the first re-upload after versioning is enabled; until then the single stored copy is downloadable as usual.",
+  "description": "Every different-bytes upload of this path is kept as an immutable revision. Downloading a revision pins the exact stored bytes via <code>?version=</code>.",
+  "revision": "Revision",
+  "label": "Label",
+  "size": "Size",
+  "sha256": "SHA-256",
+  "uploadedBy": "Uploaded by",
+  "stored": "Stored",
+  "actions": "Actions",
+  "latest": "latest",
+  "unknown": "unknown",
+  "downloadAria": "Download revision {revision}",
+  "downloadTooltip": "Download revision {revision}"
+}

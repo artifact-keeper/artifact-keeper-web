@@ -1,0 +1,7 @@
+{
+  "somethingWentWrong": "Something went wrong",
+  "errorId": "Error ID: {digest}",
+  "tryAgain": "Try again",
+  "rootDescription": "An unexpected error occurred. You can try again, or go back to the dashboard.",
+  "goToDashboard": "Dashboard"
+}

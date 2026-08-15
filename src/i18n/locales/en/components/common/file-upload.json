@@ -1,0 +1,23 @@
+{
+  "etaSeconds": "~{s}s remaining",
+  "etaMinutes": "~{m} min remaining",
+  "etaHours": "~{h}h {m}m remaining",
+  "computingChecksum": "Computing file checksum...",
+  "finalizingUpload": "Finalizing upload...",
+  "uploadPaused": "Upload paused",
+  "chunks": "chunks",
+  "uploadFailed": "Upload failed",
+  "customPath": "Custom path (optional)",
+  "customPathPlaceholder": "e.g. libs/mylib-1.0.jar",
+  "chunkedUpload": "chunked upload",
+  "dropFile": "Drop a file here, or click to browse",
+  "uploadSingleArtifact": "Upload a single artifact file",
+  "maxSize": "max",
+  "resumePrompt": "A previous upload session was found for this file. Uploading will resume from where it left off.",
+  "uploadingProgress": "Uploading...",
+  "pause": "Pause",
+  "resume": "Resume",
+  "cancel": "Cancel",
+  "resumeUpload": "Resume Upload",
+  "upload": "Upload"
+}

@@ -54,7 +54,7 @@ const GENERIC_PROVIDER_NAMES = new Set(["default", "primary", "main", "sso"]);
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const t = useTranslations("login");
+  const t = useTranslations("auth/login");
   const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
   const { config: systemConfig, isLoading: systemConfigLoading } =
     useSystemConfig();
@@ -469,7 +469,7 @@ function LoginContent() {
 // wrap the inner content so /login can be statically generated. The fallback
 // is a brief skeleton matching the eventual loading spinner inside the form.
 export default function LoginPage() {
-  const t = useTranslations("login");
+  const t = useTranslations("auth/login");
   useDocumentTitle(t("title"));
   return (
     <Suspense

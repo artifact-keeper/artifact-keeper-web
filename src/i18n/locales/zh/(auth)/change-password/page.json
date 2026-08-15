@@ -1,0 +1,23 @@
+{
+  "title": "修改密码",
+  "setupTitle": "完成初始设置",
+  "changeDesc": "您的密码是自动生成或已被重置。请设置一个新密码以继续。",
+  "setupDesc": "设置一个安全的管理员密码以解锁 API 并完成首次设置。",
+  "lockedHint": "在完成此步骤之前，所有 API 端点均处于锁定状态。",
+  "currentRequired": "请输入当前密码",
+  "minLength": "密码长度至少为 8 个字符",
+  "confirmRequired": "请确认您的新密码",
+  "mismatch": "两次输入的密码不一致",
+  "changedSuccess": "密码修改成功！",
+  "passwordReuse": "此密码最近使用过，请选择其他密码。",
+  "changeFailed": "修改密码失败。",
+  "currentLabel": "当前密码",
+  "currentPlaceholder": "输入当前密码",
+  "newLabel": "新密码",
+  "newPlaceholder": "输入新密码",
+  "confirmLabel": "确认新密码",
+  "confirmPlaceholder": "确认新密码",
+  "changing": "正在修改密码...",
+  "changePassword": "修改密码",
+  "logoutInstead": "改为退出登录"
+}

@@ -1,0 +1,7 @@
+{
+  "noMetadata": "No metadata available for this package.",
+  "fieldCount": "{count, plural, one {# field} other {# fields}}",
+  "copyJson": "Copy JSON",
+  "copied": "Copied",
+  "additionalFields": "Additional fields"
+}

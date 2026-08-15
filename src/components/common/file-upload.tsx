@@ -68,7 +68,7 @@ function ChunkedProgressDisplay({
   progress: UploadProgress;
   status: UploadStatus;
 }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/file-upload");
   return (
     <div className="space-y-2">
       <Progress value={progress.percentage} className="h-2" />
@@ -116,7 +116,7 @@ export function FileUpload({
   onChunkedComplete,
   maxUploadSizeBytes = 0,
 }: FileUploadProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/file-upload");
   const [file, setFile] = useState<File | null>(null);
   const [customPath, setCustomPath] = useState("");
   const [simpleProgress, setSimpleProgress] = useState(0);

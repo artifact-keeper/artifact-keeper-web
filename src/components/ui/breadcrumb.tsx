@@ -87,7 +87,7 @@ function BreadcrumbEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/breadcrumb")
   return (
     <span
       data-slot="breadcrumb-ellipsis"

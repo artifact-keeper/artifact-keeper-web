@@ -80,7 +80,7 @@ export function PasswordPolicyHint({
   password = "",
   className,
 }: PasswordPolicyHintProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/password-policy-hint");
   const { data: policy } = useQuery({
     queryKey: ["password-policy"],
     queryFn: () => settingsApi.getPasswordPolicy(),

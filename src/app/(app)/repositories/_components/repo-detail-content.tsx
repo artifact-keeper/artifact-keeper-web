@@ -153,8 +153,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const t = useTranslations("repoDetail");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/repositories/_components/repo-detail-content");
+  const tSev = useTranslations("core/severity");
   const { isAuthenticated, user } = useAuth();
   const { config: systemConfig } = useSystemConfig();
 
@@ -1668,7 +1668,7 @@ function MavenGavSection({
   path: string;
   metadata?: Record<string, unknown>;
 }) {
-  const t = useTranslations("repoDetail");
+  const t = useTranslations("app/repositories/_components/repo-detail-content");
   const gav = mavenGavcFromMetadata(metadata) ?? parseMavenGav(path);
   if (!gav) return null;
   const snippet = buildPomDependencySnippet(gav);

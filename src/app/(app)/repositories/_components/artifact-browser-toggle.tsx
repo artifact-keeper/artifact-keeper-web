@@ -75,7 +75,7 @@ export function ArtifactBrowserToggle({
   format,
   className,
 }: ArtifactBrowserToggleProps) {
-  const t = useTranslations("artifactBrowser");
+  const t = useTranslations("app/repositories/_components/artifact-browser-toggle");
   const groupable = supportsGrouping(format);
   const treeable = supportsTree(format);
   if (!groupable && !treeable) return null;

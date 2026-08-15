@@ -22,7 +22,7 @@ export default function AuthError({
     console.error("Auth route error:", error);
   }, [error]);
 
-  const t = useTranslations("authError");
+  const t = useTranslations("auth/error");
 
   return (
     <Card className="w-full">

@@ -136,7 +136,7 @@ export function RepoDialogs({
   availableRepos = [],
   pluginFormats = [],
 }: RepoDialogsProps) {
-  const t = useTranslations("repoDialogs");
+  const t = useTranslations("app/repositories/_components/repo-dialogs");
   // Create form state
   // Private by default: matches the backend default and keeps new
   // repositories from being exposed unintentionally.

@@ -39,7 +39,7 @@ interface RoutingRulesSettingsProps {
  * complete set via a single POST. Deleting the last rule clears all rules.
  */
 export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) {
-  const t = useTranslations("routingRules");
+  const t = useTranslations("app/repositories/_components/routing-rules-settings");
   const queryClient = useQueryClient();
   const queryKey = useMemo(
     () => ["repository", repository.key, "routing-rules"],

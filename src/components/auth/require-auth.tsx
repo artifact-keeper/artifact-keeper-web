@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/auth/require-auth");
   const { isAuthenticated, isLoading, mustChangePassword } = useAuth();
   const router = useRouter();
   const pathname = usePathname();

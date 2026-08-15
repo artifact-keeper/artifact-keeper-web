@@ -201,7 +201,7 @@ const FORMAT_CATEGORIES: { key: string; labelKey: string; formats: string[] }[] 
 // -- page --
 
 export default function SetupPage() {
-  const t = useTranslations("setup");
+  const t = useTranslations("app/setup");
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<CICDPlatform | null>(null);
   const [search, setSearch] = useState("");

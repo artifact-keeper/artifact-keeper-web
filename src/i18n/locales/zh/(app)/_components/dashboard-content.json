@@ -1,0 +1,51 @@
+{
+  "health": {
+    "overall": "总体",
+    "database": "数据库",
+    "storage": "存储",
+    "securityScanner": "安全扫描器",
+    "searchEngine": "搜索引擎",
+    "unknown": "未知"
+  },
+  "stats": {
+    "repositories": "仓库",
+    "artifacts": "制品",
+    "users": "用户",
+    "storageUsed": "已用存储",
+    "local": "本地",
+    "remote": "远程",
+    "failedToLoad": "无法加载管理员统计。"
+  },
+  "cve": {
+    "total": "CVE 总数",
+    "open": "未解决 CVE",
+    "critical": "严重",
+    "fixed": "已修复",
+    "severityBreakdown": "严重级别分布",
+    "openLabel": "未解决",
+    "fixedLabel": "已修复",
+    "acknowledgedLabel": "已确认",
+    "avgFixTime": "平均修复时间",
+    "noData": "暂无 CVE 数据。生成 SBOM 并运行安全扫描以跟踪漏洞。"
+  },
+  "welcomeBack": "欢迎回来，{name}",
+  "title": "仪表盘",
+  "description": "你的 Artifact Keeper 实例概览。",
+  "refresh": "刷新",
+  "systemHealth": "系统健康",
+  "statistics": "统计",
+  "securityOverview": "安全概览",
+  "recentRepositories": "最近仓库",
+  "viewAll": "查看全部",
+  "table": {
+    "name": "名称",
+    "format": "格式",
+    "type": "类型",
+    "storage": "存储"
+  },
+  "empty": {
+    "title": "暂无仓库",
+    "description": "创建你的第一个仓库，开始使用 Artifact Keeper。",
+    "createRepo": "创建仓库"
+  }
+}

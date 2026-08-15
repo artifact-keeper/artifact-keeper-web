@@ -25,7 +25,7 @@ export function StagingListItem({
   artifactCount,
   policyStats,
 }: StagingListItemProps) {
-  const t = useTranslations("staging");
+  const t = useTranslations("app/staging/_components/staging-list-item");
   return (
     <button
       type="button"

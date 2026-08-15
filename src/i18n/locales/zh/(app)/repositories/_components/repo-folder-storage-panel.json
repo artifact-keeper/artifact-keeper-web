@@ -1,0 +1,10 @@
+{
+  "title": "按文件夹存储",
+  "deduplicated": "已去重",
+  "logical": "逻辑",
+  "physical": "物理",
+  "unique": "唯一",
+  "shared": "共享",
+  "dedupRatio": "{ratio}× 去重",
+  "sharedExplanation": "“共享”字节是文件夹与其他文件夹或仓库共有的 blob；回收它们需要最后一个引用路径释放它们。"
+}

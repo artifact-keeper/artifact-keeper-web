@@ -87,7 +87,7 @@ function detailsPreview(details: unknown): string {
 }
 
 export default function AuditLogPage() {
-  const t = useTranslations("admin.audit");
+  const t = useTranslations("app/admin/audit");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

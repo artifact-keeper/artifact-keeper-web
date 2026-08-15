@@ -90,7 +90,7 @@ const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "yellow" | "defau
 // -- page --
 
 export default function PeersPage() {
-  const t = useTranslations("peers");
+  const t = useTranslations("app/protected/peers");
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>("__all__");

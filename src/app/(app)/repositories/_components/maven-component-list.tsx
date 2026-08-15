@@ -62,7 +62,7 @@ export function MavenComponentList({
   onPageSizeChange,
   onFileSelect,
 }: MavenComponentListProps) {
-  const t = useTranslations("mavenComponents");
+  const t = useTranslations("app/repositories/_components/maven-component-list");
   // M7: actionable default — tells the user what to do, not just that it's empty.
   const resolvedEmpty = emptyMessage ?? t("empty");
   if (loading) {
@@ -129,7 +129,7 @@ interface MavenComponentRowProps {
 }
 
 function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) {
-  const t = useTranslations("mavenComponents");
+  const t = useTranslations("app/repositories/_components/maven-component-list");
   const [open, setOpen] = useState(false);
   const fileCount = component.artifact_files.length;
 

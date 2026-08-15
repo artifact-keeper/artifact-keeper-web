@@ -28,7 +28,7 @@ export function HealthBadge({
   size = "md",
   className,
 }: HealthBadgeProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/health-badge");
   const badge = (
     <span
       className={cn(

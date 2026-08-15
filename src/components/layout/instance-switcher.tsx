@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 
 export function InstanceSwitcher() {
   const { instances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses } = useInstance();
-  const t = useTranslations("instanceSwitcher");
+  const t = useTranslations("components/layout/instance-switcher");
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");

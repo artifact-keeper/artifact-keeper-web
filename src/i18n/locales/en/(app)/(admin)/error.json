@@ -1,0 +1,7 @@
+{
+  "title": "Administration Error",
+  "description": "An error occurred in the administration panel. This may be a temporary issue. Try again, or return to the dashboard.",
+  "errorId": "Error ID",
+  "tryAgain": "Try again",
+  "dashboard": "Dashboard"
+}

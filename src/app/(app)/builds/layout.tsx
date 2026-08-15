@@ -1,6 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
-import { loadMessages } from "@/i18n/load-messages";
+import { CORE_ROOTS, loadMessages } from "@/i18n/load-messages";
 
 export default async function BuildsLayout({
   children,
@@ -8,7 +8,11 @@ export default async function BuildsLayout({
   children: React.ReactNode;
 }) {
   const locale = await getLocale();
-  const messages = await loadMessages(locale, ["core", "app", "builds"]);
+  const messages = await loadMessages(locale, [
+    ...CORE_ROOTS,
+    "(app)",
+    "(app)/builds",
+  ]);
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       {children}

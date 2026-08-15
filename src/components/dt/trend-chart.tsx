@@ -32,7 +32,7 @@ export function TrendChart({
   height = 200,
   className,
 }: TrendChartProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/dt/trend-chart");
   if (data.length === 0) {
     return (
       <div

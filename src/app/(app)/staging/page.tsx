@@ -39,7 +39,7 @@ import { StagingListItem } from "./_components/staging-list-item";
 import { StagingDetailPanel } from "./_components/staging-detail-panel";
 
 export default function StagingPage() {
-  const t = useTranslations("staging");
+  const t = useTranslations("app/staging");
   useDocumentTitle(t("title"));
   const router = useRouter();
   const queryClient = useQueryClient();

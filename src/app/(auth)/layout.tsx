@@ -1,7 +1,7 @@
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 import { LocaleSwitcher } from "@/components/layout/locale-switcher";
-import { loadMessages } from "@/i18n/load-messages";
+import { CORE_ROOTS, loadMessages } from "@/i18n/load-messages";
 
 export default async function AuthLayout({
   children,
@@ -9,7 +9,7 @@ export default async function AuthLayout({
   children: React.ReactNode;
 }) {
   const locale = await getLocale();
-  const messages = await loadMessages(locale, ["core", "auth"]);
+  const messages = await loadMessages(locale, [...CORE_ROOTS, "(auth)"]);
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       <div className="relative flex min-h-svh items-center justify-center bg-gradient-to-br from-muted/50 to-muted p-4">

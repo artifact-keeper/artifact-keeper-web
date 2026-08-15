@@ -98,7 +98,7 @@ function HealthCard({
   label: string;
   status: string | undefined;
 }>) {
-  const t = useTranslations("dashboard");
+  const t = useTranslations("app/_components/dashboard-content");
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
       {healthIcon(status)}
@@ -176,7 +176,7 @@ function StatBreakdown({
   local,
   remote,
 }: Readonly<{ local: string | number; remote: string | number }>) {
-  const t = useTranslations("dashboard");
+  const t = useTranslations("app/_components/dashboard-content");
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-6">
@@ -212,8 +212,8 @@ const SEVERITY_TEXT_COLORS: Record<string, string> = {
 };
 
 function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
-  const t = useTranslations("dashboard");
-  const ts = useTranslations("severity");
+  const t = useTranslations("app/_components/dashboard-content");
+  const ts = useTranslations("core/severity");
   const counts = {
     critical: trends.critical_count,
     high: trends.high_count,
@@ -266,7 +266,7 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 export function DashboardContent() {
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
-  const t = useTranslations("dashboard");
+  const t = useTranslations("app/_components/dashboard-content");
 
   const {
     data: health,

@@ -7,7 +7,7 @@ import { DemoBanner } from "@/components/layout/demo-banner";
 import { PasswordExpiryBanner } from "@/components/layout/password-expiry-banner";
 import { EventStreamProvider } from "@/components/layout/event-stream-provider";
 import { SkipNavLink } from "@/components/layout/skip-nav-link";
-import { loadMessages } from "@/i18n/load-messages";
+import { CORE_ROOTS, loadMessages } from "@/i18n/load-messages";
 
 export default async function AppLayout({
   children,
@@ -15,7 +15,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const locale = await getLocale();
-  const messages = await loadMessages(locale, ["core", "app"]);
+  const messages = await loadMessages(locale, [...CORE_ROOTS, "(app)"]);
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
       <SidebarProvider>

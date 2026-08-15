@@ -94,7 +94,7 @@ export function RepoFolderStoragePanel({
   repository,
   isAdmin,
 }: RepoFolderStoragePanelProps) {
-  const t = useTranslations("folderStorage");
+  const t = useTranslations("app/repositories/_components/repo-folder-storage-panel");
   const repoKey = repository.key;
 
   const { data: nodes } = useQuery({

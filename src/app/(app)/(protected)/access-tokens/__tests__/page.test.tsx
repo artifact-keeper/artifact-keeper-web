@@ -12,7 +12,7 @@ import {
 // English message catalog for renderRepoAccess translation assertions.
 const i18nEn = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const en = require(process.cwd() + "/src/i18n/locales/for-tests.cjs") as Record<
+  const en = require(process.cwd() + "/src/i18n/for-tests.cjs") as Record<
     string,
     Record<string, string>
   >;
@@ -1623,7 +1623,7 @@ describe("renderRepoAccess", () => {
   // renderRepoAccess takes a translation function; resolve from en.json so
   // the expected English strings below keep matching rendered output.
   const repoAccessT = (key: string, values?: Record<string, string | number>) => {
-    const ns = i18nEn["accessTokens"] as Record<string, string> | undefined;
+    const ns = i18nEn["app/protected/access-tokens"] as Record<string, string> | undefined;
     let out = ns?.[key] ?? key;
     if (values) {
       for (const [k, v] of Object.entries(values)) {

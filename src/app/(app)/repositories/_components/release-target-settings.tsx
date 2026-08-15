@@ -42,7 +42,7 @@ interface ReleaseTargetSettingsProps {
  * targets are local repositories sharing the staging repo's format.
  */
 export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps) {
-  const t = useTranslations("releaseTarget");
+  const t = useTranslations("app/repositories/_components/release-target-settings");
   const queryClient = useQueryClient();
 
   // Only staging repositories support release-target linking.

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 
 export function DemoBanner() {
-  const t = useTranslations("demoBanner");
+  const t = useTranslations("components/layout/demo-banner");
   const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {

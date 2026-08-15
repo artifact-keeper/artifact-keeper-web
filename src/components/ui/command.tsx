@@ -43,7 +43,7 @@ function CommandDialog({
   className?: string
   showCloseButton?: boolean
 }) {
-  const t = useTranslations("ui")
+  const t = useTranslations("components/ui/command")
   const resolvedTitle = title ?? t("commandPalette")
   const resolvedDescription = description ?? t("commandSearchPlaceholder")
   return (

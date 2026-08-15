@@ -1,0 +1,15 @@
+{
+  "addInstance": "添加实例",
+  "addTitle": "添加 Artifact Keeper 实例",
+  "addDescription": "连接到远程 Artifact Keeper 实例以浏览其仓库与制品。",
+  "invalidUrl": "实例 URL 无效。不允许使用私有 IP、localhost 与非 HTTP 协议。",
+  "addFailed": "添加实例失败。请检查 URL 后重试。",
+  "name": "名称",
+  "productionPlaceholder": "生产环境",
+  "url": "URL",
+  "urlPlaceholder": "https://artifacts.example.com",
+  "apiKey": "API 密钥",
+  "apiKeyPlaceholder": "可选 —— 加密存储于服务器",
+  "cancel": "取消",
+  "adding": "添加中..."
+}

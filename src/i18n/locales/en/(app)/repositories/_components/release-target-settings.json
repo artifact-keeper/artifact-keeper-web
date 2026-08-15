@@ -1,0 +1,16 @@
+{
+  "title": "Release Target",
+  "staging": "Staging",
+  "description": "Link this staging repository to a release repository. Promotions from here default to the linked target, and promotions elsewhere are rejected. The target must be a local repository using the same <format>{format}</format> format.",
+  "notStagingDescription": "Release-target promotion links artifacts from a staging repository to a release repository.",
+  "notStaging": "Release targets are only available for staging repositories. This repository is a {type} repository.",
+  "repoLabel": "Release repository",
+  "selectPlaceholder": "Select a release repository",
+  "noneOption": "No release target (unlink)",
+  "noCandidates": "No eligible release repositories found. Create a local {format} repository to use as a release target.",
+  "saving": "Saving...",
+  "save": "Save release target",
+  "linkRemoved": "Release target link removed",
+  "saved": "Release target saved",
+  "saveFailed": "Failed to save release target"
+}

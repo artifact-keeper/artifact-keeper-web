@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_GIT_SHA: getGitSha(),
   },
   output: "standalone",
+  // loadMessages (src/i18n/load-messages.ts) reads the message catalogs from
+  // disk at runtime, so the standalone build must carry them. The paths mirror
+  // the source tree (dev and the docker standalone both resolve to
+  // <root>/src/i18n/locales).
+  outputFileTracingIncludes: {
+    "/**": ["./src/i18n/locales/**/*.json"],
+  },
   devIndicators: false,
   transpilePackages: ["@artifact-keeper/sdk"],
   // Docker Registry HTTP API v2 requires a trailing-slash on the version-check

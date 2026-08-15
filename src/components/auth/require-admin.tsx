@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/auth/require-admin");
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 

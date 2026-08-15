@@ -1,0 +1,19 @@
+{
+  "description": "PyPI 虚拟仓库默认将本地持有的项目名与上游同名项目隔离（PEP 708，依赖混淆缓解）。声明 <track>tracks</track> 关系可将本地项目的版本与指定的上游 Simple 索引重新合并。",
+  "formAria": "声明 tracks 关系",
+  "projectPlaceholder": "项目名（例如 acme-sdk）",
+  "projectAria": "项目名",
+  "urlPlaceholder": "https://pypi.org/simple/acme-sdk/",
+  "urlAria": "上游 Simple 索引 URL",
+  "add": "添加",
+  "empty": "暂无 tracks 声明。",
+  "emptyDetail": "本地持有的项目名已与上游完全隔离。",
+  "removeAria": "移除 {name} 的 tracks 声明",
+  "confirmTitle": "移除 tracks 声明？",
+  "confirmDescription": "“{name}”将再次与上游隔离。未固定版本的安装将仅解析本地项目的版本。",
+  "confirmRemove": "移除",
+  "declared": "已为“{project}”声明跟踪",
+  "declareFailed": "声明 tracks 关系失败",
+  "removed": "tracks 声明已移除",
+  "removeFailed": "移除 tracks 关系失败"
+}

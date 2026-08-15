@@ -22,7 +22,7 @@ const LABELS_KEY = (key: string) => ["repo-labels", key];
 
 /** Manage a repository's key/value labels (artifact-keeper#... labels API). */
 export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
-  const t = useTranslations("repoLabels");
+  const t = useTranslations("app/repositories/_components/repo-labels-panel");
   const queryClient = useQueryClient();
   const [labelKey, setLabelKey] = useState("");
   const [labelValue, setLabelValue] = useState("");

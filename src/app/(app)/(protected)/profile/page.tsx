@@ -57,7 +57,7 @@ import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 // -- Profile Page --
 
 export default function ProfilePage() {
-  const t = useTranslations("profile");
+  const t = useTranslations("app/protected/profile");
   const { user, refreshUser, changePassword } = useAuth();
 
   // -- General tab state --

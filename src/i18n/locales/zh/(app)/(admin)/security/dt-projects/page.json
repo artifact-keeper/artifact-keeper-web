@@ -1,0 +1,15 @@
+{
+  "title": "DT 项目",
+  "description": "浏览 Dependency-Track 项目及其漏洞指标。",
+  "backToSecurity": "返回安全",
+  "dtUnavailable": "Dependency-Track 不可用",
+  "dtUnavailableDescription": "Dependency-Track 集成当前已断开。在服务恢复之前无法显示项目。",
+  "searchPlaceholder": "搜索项目...",
+  "colName": "名称",
+  "colVersion": "版本",
+  "colLastBomImport": "最近 BOM 导入",
+  "colRiskScore": "风险评分",
+  "never": "从未",
+  "noSearchResults": "没有项目匹配你的搜索。",
+  "noProjects": "未找到 Dependency-Track 项目。"
+}

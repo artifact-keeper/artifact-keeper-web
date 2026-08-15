@@ -30,7 +30,7 @@ export function QuarantineBanner({
   quarantineUntil,
   status,
 }: QuarantineBannerProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/quarantine-banner");
   const expiry = formatQuarantineExpiry(quarantineUntil);
   const rejected = status === "rejected";
 

@@ -1,0 +1,23 @@
+{
+  "etaSeconds": "约剩 {s} 秒",
+  "etaMinutes": "约剩 {m} 分钟",
+  "etaHours": "约剩 {h} 小时 {m} 分钟",
+  "computingChecksum": "正在计算文件校验和...",
+  "finalizingUpload": "正在完成上传...",
+  "uploadPaused": "上传已暂停",
+  "chunks": "个分块",
+  "uploadFailed": "上传失败",
+  "customPath": "自定义路径（可选）",
+  "customPathPlaceholder": "例如：libs/mylib-1.0.jar",
+  "chunkedUpload": "分块上传",
+  "dropFile": "将文件拖放到此处，或点击浏览",
+  "uploadSingleArtifact": "上传单个制品文件",
+  "maxSize": "最大",
+  "resumePrompt": "检测到此文件之前的上传会话。上传将从上次中断处继续。",
+  "uploadingProgress": "上传中...",
+  "pause": "暂停",
+  "resume": "继续",
+  "cancel": "取消",
+  "resumeUpload": "继续上传",
+  "upload": "上传"
+}

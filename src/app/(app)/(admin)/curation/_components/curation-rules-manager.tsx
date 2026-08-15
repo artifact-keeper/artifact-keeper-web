@@ -225,7 +225,7 @@ function numField(v: string): number | undefined {
 
 export function CurationRulesManager() {
   const queryClient = useQueryClient();
-  const t = useTranslations("admin.curationRules");
+  const t = useTranslations("app/admin/curation/_components/curation-rules-manager");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CurationRule | null>(null);

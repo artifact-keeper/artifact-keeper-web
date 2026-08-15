@@ -178,7 +178,7 @@ interface PackageMetadataViewerProps {
 
 export function PackageMetadataViewer({ format, metadata }: PackageMetadataViewerProps) {
   const [copied, setCopied] = useState(false);
-  const t = useTranslations("packageMetadata");
+  const t = useTranslations("app/repositories/_components/package-metadata-viewer");
 
   if (!metadata || Object.keys(metadata).length === 0) {
     return (

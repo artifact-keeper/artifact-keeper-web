@@ -106,7 +106,7 @@ const POLICY_CONFIG_HINTS: Record<string, string> = {
 };
 
 export default function LifecyclePage() {
-  const t = useTranslations("admin.lifecycle");
+  const t = useTranslations("app/admin/lifecycle");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);

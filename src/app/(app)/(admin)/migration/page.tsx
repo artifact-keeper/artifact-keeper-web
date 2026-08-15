@@ -249,7 +249,7 @@ const INITIAL_CONN_FORM: {
 };
 
 export default function MigrationPage() {
-  const t = useTranslations("admin.migration");
+  const t = useTranslations("app/admin/migration");
   const queryClient = useQueryClient();
 
   // -- Connection state --

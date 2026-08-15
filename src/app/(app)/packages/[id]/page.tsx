@@ -126,7 +126,7 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 // ---- Main Page ----
 
 export default function PackageDetailPage() {
-  const t = useTranslations("packageDetail");
+  const t = useTranslations("app/packages/detail");
   const params = useParams();
   const router = useRouter();
   const packageId = params.id as string;

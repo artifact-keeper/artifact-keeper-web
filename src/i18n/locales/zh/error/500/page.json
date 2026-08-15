@@ -1,0 +1,6 @@
+{
+  "serverError": "服务器错误",
+  "somethingWentWrong": "出现问题",
+  "serverErrorDescription": "发生了意外的服务器错误。请尝试刷新页面或稍后再试。如果问题持续存在，请联系支持。",
+  "refresh": "刷新"
+}

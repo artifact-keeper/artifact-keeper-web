@@ -1,11 +1,11 @@
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
-import { loadMessages } from "@/i18n/load-messages";
+import { CORE_ROOTS, loadMessages } from "@/i18n/load-messages";
 
 /**
- * Repositories area (list + [format]/[key] detail) provides its own message
- * groups so the repositories/package-format namespaces are only sent to
- * clients that actually render them.
+ * Repositories area (list + [key] detail) loads its own message directory so
+ * the repositories messages are only sent to clients that actually render
+ * them.
  */
 export default async function RepositoriesLayout({
   children,
@@ -14,10 +14,9 @@ export default async function RepositoriesLayout({
 }) {
   const locale = await getLocale();
   const messages = await loadMessages(locale, [
-    "core",
-    "app",
-    "guides",
-    "repositories",
+    ...CORE_ROOTS,
+    "(app)",
+    "(app)/repositories",
   ]);
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>

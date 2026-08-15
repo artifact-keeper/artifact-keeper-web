@@ -28,7 +28,7 @@ interface RepoListItemProps {
 }
 
 export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel }: RepoListItemProps) {
-  const t = useTranslations("repositories");
+  const t = useTranslations("app/repositories/_components/repo-list-item");
   // #672: the row's primary action is a real <button> that is a SIBLING of the
   // actions dropdown trigger — never an ancestor — so no interactive element
   // nests inside another and the row's accessible name stays clean (it no

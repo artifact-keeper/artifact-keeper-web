@@ -51,7 +51,7 @@ import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
 
 function DateCell({ value }: { value?: string | null }) {
-  const t = useTranslations("accessTokens");
+  const t = useTranslations("app/protected/access-tokens");
   if (!value) return <span className="text-sm text-muted-foreground">{t("never")}</span>;
   return (
     <span className="text-sm text-muted-foreground">
@@ -121,7 +121,7 @@ export function renderRepoAccess(
 }
 
 export default function AccessTokensPage() {
-  const t = useTranslations("accessTokens");
+  const t = useTranslations("app/protected/access-tokens");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const availableScopes = SCOPES.filter(

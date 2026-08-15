@@ -8,7 +8,7 @@ interface RiskGaugeProps {
 }
 
 export function RiskGauge({ score, className }: RiskGaugeProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/dt/risk-gauge");
   const clamped = Math.min(score, 100);
   const ratio = clamped / 100;
 

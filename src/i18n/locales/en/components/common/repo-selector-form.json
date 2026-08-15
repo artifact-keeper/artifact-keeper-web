@@ -1,0 +1,14 @@
+{
+  "previewError": "Failed to preview repository selector",
+  "formats": "Formats",
+  "formatsDescription": "Restrict access to repositories of specific types.",
+  "namePattern": "Name Pattern",
+  "namePatternDescription": "Use * as a wildcard. For example, \"prod-*\" matches all repos starting with \"prod-\".",
+  "labels": "Labels",
+  "labelsDescription": "Match repositories that have all specified label key-value pairs.",
+  "labelKeyPlaceholder": "key (e.g., env)",
+  "labelValuePlaceholder": "value (e.g., production)",
+  "checking": "Checking...",
+  "previewMatchedRepos": "Preview Matched Repos",
+  "matchedCount": "{count, plural, one {# repository matched} other {# repositories matched}}"
+}

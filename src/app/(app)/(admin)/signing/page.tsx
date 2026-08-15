@@ -52,7 +52,7 @@ const emptyForm: CreateSigningKeyRequest = {
 };
 
 export default function SigningPage() {
-  const t = useTranslations("admin.signing");
+  const t = useTranslations("app/admin/signing");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();

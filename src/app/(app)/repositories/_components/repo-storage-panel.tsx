@@ -73,7 +73,7 @@ function Metric({
  * panel falls back to the repository's coarse `storage_used_bytes`.
  */
 export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps) {
-  const t = useTranslations("storage");
+  const t = useTranslations("app/repositories/_components/repo-storage-panel");
   const repoKey = repository.key;
 
   const {

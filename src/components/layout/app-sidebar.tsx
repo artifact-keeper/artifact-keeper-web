@@ -142,7 +142,7 @@ function NavGroup({
   items: NavItem[];
   pathname: string;
 }) {
-  const t = useTranslations("sidebar");
+  const t = useTranslations("components/layout/app-sidebar");
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{t(`groups.${labelKey}`)}</SidebarGroupLabel>

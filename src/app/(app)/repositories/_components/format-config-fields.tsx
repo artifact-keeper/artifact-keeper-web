@@ -209,7 +209,7 @@ export function RpmTrustedKeyField({
   onRemove,
   removePending = false,
 }: RpmTrustedKeyFieldProps) {
-  const t = useTranslations("formatConfig");
+  const t = useTranslations("app/repositories/_components/format-config-fields");
   const id = `${idPrefix}-rpm-gpg-key`;
   return (
     <div className="space-y-2">
@@ -268,7 +268,7 @@ export function DebianConfigFields({
   onChange,
   idPrefix,
 }: DebianConfigFieldsProps) {
-  const t = useTranslations("formatConfig");
+  const t = useTranslations("app/repositories/_components/format-config-fields");
   const set = (patch: Partial<DebianConfigValue>) =>
     onChange({ ...value, ...patch });
   const fid = (name: string) => `${idPrefix}-debian-${name}`;
@@ -378,7 +378,7 @@ export function NpmScopePolicyFields({
   onChange,
   idPrefix,
 }: NpmScopePolicyFieldsProps) {
-  const t = useTranslations("formatConfig");
+  const t = useTranslations("app/repositories/_components/format-config-fields");
   const set = (patch: Partial<NpmScopePolicyValue>) =>
     onChange({ ...value, ...patch });
   const scopesId = `${idPrefix}-npm-scopes`;

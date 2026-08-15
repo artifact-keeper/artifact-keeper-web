@@ -28,7 +28,7 @@ const TRACKS_QUERY_KEY = (key: string) => ["pypi-tracks", key];
  * re-unions that project with a named upstream Simple index.
  */
 export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
-  const t = useTranslations("pypiTracks");
+  const t = useTranslations("app/repositories/_components/pypi-tracks-panel");
   const queryClient = useQueryClient();
   const [project, setProject] = useState("");
   const [tracksUrl, setTracksUrl] = useState("");

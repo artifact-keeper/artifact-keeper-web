@@ -35,7 +35,7 @@ interface RepoSelectorFormProps {
 }
 
 export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/repo-selector-form");
   const [labelKey, setLabelKey] = useState("");
   const [labelValue, setLabelValue] = useState("");
   const [previewResults, setPreviewResults] = useState<MatchedRepository[] | null>(null);

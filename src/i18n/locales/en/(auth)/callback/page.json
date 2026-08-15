@@ -1,0 +1,19 @@
+{
+  "signingIn": "Signing In",
+  "ssoLoginFailed": "SSO Login Failed",
+  "backToLogin": "Back to Login",
+  "completingSignIn": "Completing sign-in...",
+  "loading": "Loading...",
+  "errorAccessDenied": "Access was denied by the identity provider.",
+  "errorInvalidRequest": "The authentication request was invalid.",
+  "errorServerError": "The identity provider encountered an error.",
+  "errorTemporarilyUnavailable": "The identity provider is temporarily unavailable.",
+  "errorExpired": "The authentication session has expired. Please try again.",
+  "errorInvalidCode": "The authentication code is invalid or has expired.",
+  "errorGeneric": "Authentication failed. Please try again.",
+  "errorNoCode": "Authentication failed. No authorization code received from the identity provider.",
+  "errorInvalidState": "SSO session expired. Please try again.",
+  "errorProviderError": "Identity provider returned an error.",
+  "errorUserDisabled": "Your account has been disabled.",
+  "errorFailed": "Failed to complete sign-in. Please try again."
+}

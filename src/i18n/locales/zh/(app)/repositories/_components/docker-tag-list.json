@@ -1,0 +1,18 @@
+{
+  "loading": "正在加载镜像标签…",
+  "empty": "未找到镜像标签。推送带标签的镜像即可在此显示，或切换到平面视图以检查原始 blob。",
+  "tableAria": "镜像标签",
+  "caption": "此仓库中的 Docker 镜像标签",
+  "tag": "标签",
+  "digest": "摘要",
+  "size": "大小",
+  "lastPushed": "上次推送",
+  "scan": "扫描",
+  "actions": "操作",
+  "viewManifest": "查看 {image}:{tag} 的 manifest",
+  "digestAria": "摘要 {digest}",
+  "scanAria": "扫描 {image}:{tag}",
+  "multiArch": "多架构",
+  "notScanned": "未扫描",
+  "itemLabel": "个标签"
+}

@@ -126,8 +126,8 @@ function FindingTriageRow({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
-  const t = useTranslations("admin.dtProjectDetail");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/admin/security/dt-projects/detail");
+  const tSev = useTranslations("core/severity");
   const queryClient = useQueryClient();
   const currentState = finding.analysis?.state ?? "NOT_SET";
 
@@ -343,8 +343,8 @@ function FindingTriageRow({
 }
 
 export default function DtProjectDetailPage() {
-  const t = useTranslations("admin.dtProjectDetail");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/admin/security/dt-projects/detail");
+  const tSev = useTranslations("core/severity");
   useDocumentTitle(t("title"));
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();

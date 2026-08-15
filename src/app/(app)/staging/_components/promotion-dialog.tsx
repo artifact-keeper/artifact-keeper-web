@@ -56,7 +56,7 @@ export function PromotionDialog({
   selectedArtifacts,
   onSuccess,
 }: PromotionDialogProps) {
-  const t = useTranslations("promotion");
+  const t = useTranslations("app/staging/_components/promotion-dialog");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.is_admin ?? false;

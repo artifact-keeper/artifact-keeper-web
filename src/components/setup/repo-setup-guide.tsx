@@ -892,7 +892,7 @@ function CodeBlock({ code }: { code: string }) {
 // -- StepsList component (numbered step list with code blocks) --
 
 export function StepsList({ steps }: { steps: SetupStep[] }) {
-  const t = useTranslations("setupGuide");
+  const t = useTranslations("components/setup/repo-setup-guide");
   return (
     <div className="space-y-6">
       {steps.map((step, i) => (
@@ -923,7 +923,7 @@ export function StepsList({ steps }: { steps: SetupStep[] }) {
  *  tabs (JVM/npm/PyPI) or a flat step list. Used by the Setup page and the
  *  per-repo Setup tab (#560). */
 export function RepoSetupGuide({ repo }: { repo: Repository }) {
-  const t = useTranslations("setupGuide");
+  const t = useTranslations("components/setup/repo-setup-guide");
   const content = getRepoSetupContent(repo);
 
   if (content.kind === "variants") {

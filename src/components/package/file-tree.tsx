@@ -88,7 +88,7 @@ function TreeNodeRow({
   onFileSelect?: (node: TreeNode) => void;
   selectedPath?: string | null;
 }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-tree");
   const [isOpen, setIsOpen] = useState(false);
   const isFolder = isFolderLike(node);
 
@@ -216,7 +216,7 @@ export function FileTree({
   onFileSelect?: (node: TreeNode) => void;
   selectedPath?: string | null;
 }) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/package/file-tree");
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["tree-children", repositoryKey, rootPath ?? "/"],
     queryFn: () =>

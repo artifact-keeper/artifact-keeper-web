@@ -39,7 +39,7 @@ export function RejectionDialog({
   selectedArtifacts,
   onSuccess,
 }: RejectionDialogProps) {
-  const t = useTranslations("rejection");
+  const t = useTranslations("app/staging/_components/rejection-dialog");
   const queryClient = useQueryClient();
 
   const [reason, setReason] = useState("");

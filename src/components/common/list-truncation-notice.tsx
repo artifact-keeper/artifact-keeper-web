@@ -19,7 +19,7 @@ export function ListTruncationNotice({
   total,
   className,
 }: ListTruncationNoticeProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/list-truncation-notice");
   if (total <= shown) return null;
   return (
     <p role="status" className={cn("text-sm text-muted-foreground", className)}>

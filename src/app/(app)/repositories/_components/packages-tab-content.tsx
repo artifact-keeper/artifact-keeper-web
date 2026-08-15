@@ -55,7 +55,7 @@ export function PackagesTabContent({
   repositoryKey,
   repositoryFormat,
 }: PackagesTabContentProps) {
-  const t = useTranslations("packagesTab");
+  const t = useTranslations("app/repositories/_components/packages-tab-content");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -236,7 +236,7 @@ function PackageDetailView({
   repositoryFormat: string;
   onBack: () => void;
 }) {
-  const t = useTranslations("packagesTab");
+  const t = useTranslations("app/repositories/_components/packages-tab-content");
   const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
   const installCmd = getInstallCommand(pkg.name, pkg.version, repositoryFormat);
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;

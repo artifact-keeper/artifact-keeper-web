@@ -130,7 +130,7 @@ interface NotificationsTabContentProps {
 
 export function NotificationsTabContent({ repositoryId }: NotificationsTabContentProps) {
   const queryClient = useQueryClient();
-  const t = useTranslations("notifications");
+  const t = useTranslations("app/repositories/_components/notifications-tab-content");
   const [createOpen, setCreateOpen] = useState(false);
   const [webhookToDelete, setWebhookToDelete] = useState<string | null>(null);
   const [actingWebhookId, setActingWebhookId] = useState<string | null>(null);
@@ -498,7 +498,7 @@ function WebhookCard({
   isDeleting,
   isTesting,
 }: WebhookCardProps) {
-  const t = useTranslations("notifications");
+  const t = useTranslations("app/repositories/_components/notifications-tab-content");
   return (
     <div
       className="rounded-lg border bg-card p-4 space-y-3"

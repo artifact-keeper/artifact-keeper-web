@@ -122,8 +122,8 @@ function resolveDtProjectUuid(
 
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
-  const t = useTranslations("securityTab");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/repositories/_components/security-tab-content");
+  const tSev = useTranslations("core/severity");
   // Proxy-cached remote artifacts can't be scanned (artifact-keeper#2292);
   // used below to give honest guidance instead of "run a scan".
   const analyzable = isArtifactAnalyzable(artifact);
@@ -726,7 +726,7 @@ function DtIntegrationStatusBar({
   url: string | null;
   projectLinked: boolean;
 }) {
-  const t = useTranslations("securityTab");
+  const t = useTranslations("app/repositories/_components/security-tab-content");
   const connected = enabled && healthy;
 
   return (
@@ -763,8 +763,8 @@ function DtIntegrationStatusBar({
  * Metrics summary cards for a Dependency-Track project.
  */
 function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
-  const t = useTranslations("securityTab");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/repositories/_components/security-tab-content");
+  const tSev = useTranslations("core/severity");
   const severityCounts = [
     { label: tSev("critical"), count: metrics.critical, color: SEVERITY_COLORS.critical, badgeColor: SEVERITY_BADGE.critical },
     { label: tSev("high"), count: metrics.high, color: SEVERITY_COLORS.high, badgeColor: SEVERITY_BADGE.high },

@@ -1,0 +1,44 @@
+{
+  "title": "Packages",
+  "searchPlaceholder": "Search packages...",
+  "format": "Format",
+  "allFormats": "All formats",
+  "repository": "Repository",
+  "allRepos": "All repos",
+  "sort": {
+    "downloads": "Downloads",
+    "name": "Name",
+    "updated": "Updated"
+  },
+  "total": "{count} total",
+  "noPackages": "No packages found",
+  "itemDownloads": "{count} downloads",
+  "latest": "Latest: v{version}",
+  "homepage": "Homepage",
+  "viewDetails": "View Details",
+  "tabs": {
+    "overview": "Overview",
+    "versions": "Versions"
+  },
+  "install": "Install",
+  "details": "Details",
+  "noVersions": "No version information available",
+  "table": {
+    "version": "Version",
+    "size": "Size",
+    "downloads": "Downloads",
+    "date": "Date"
+  },
+  "meta": {
+    "format": "Format",
+    "repository": "Repository",
+    "size": "Size",
+    "downloads": "Downloads",
+    "license": "License",
+    "author": "Author",
+    "created": "Created",
+    "updated": "Updated"
+  },
+  "selectPackage": "Select a package",
+  "selectPackageDetail": "Choose a package from the list to view details."
+}

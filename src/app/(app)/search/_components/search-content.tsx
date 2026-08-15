@@ -146,7 +146,7 @@ const FORMAT_OPTIONS = [
 // ---- Main Content ----
 
 export function SearchContent() {
-  const t = useTranslations("search");
+  const t = useTranslations("app/search/_components/search-content");
   useDocumentTitle(t("docTitle"));
   const searchParams = useSearchParams();
   const router = useRouter();

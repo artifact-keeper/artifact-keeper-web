@@ -1,0 +1,18 @@
+{
+  "title": "扫描结果",
+  "status": "状态",
+  "type": "类型",
+  "findings": "发现",
+  "completed": "完成时间",
+  "critCount": "{count} 个严重",
+  "highCount": "{count} 个高",
+  "viewFindings": "查看发现",
+  "scanCount": "{count, plural, other {# 次扫描}}",
+  "loadFailed": "无法加载扫描结果",
+  "loadFailedDetail": "无法加载此制品的扫描结果。",
+  "noScans": "尚未对此制品运行过安全扫描。",
+  "noScansDetail": "从制品操作菜单触发扫描以填充此区域。",
+  "cannotScan": "此制品无法扫描。",
+  "cannotScanDetail": "SBOM 与扫描仅适用于托管在此注册表中的制品，不适用于代理缓存的远程制品。",
+  "noResults": "无扫描结果"
+}

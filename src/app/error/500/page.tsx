@@ -7,7 +7,7 @@ import { ErrorPage } from "@/components/common/error-page";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function ServerErrorPage() {
-  const t = useTranslations("errorPages");
+  const t = useTranslations("error/500");
   useDocumentTitle(t("serverError"));
   return (
     <ErrorPage

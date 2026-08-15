@@ -1,0 +1,33 @@
+{
+  "repoNotFound": "Staging repository not found",
+  "backToStaging": "Back to Staging",
+  "repoTypeStaging": "Staging",
+  "used": "{bytes} used",
+  "title": "Staging",
+  "openInNewTab": "Open in new tab",
+  "tabArtifacts": "Artifacts",
+  "tabHistory": "Promotion History",
+  "searchPlaceholder": "Search staging repos...",
+  "reject": "Reject ({count})",
+  "promote": "Promote ({count})",
+  "noArtifacts": "No artifacts in this staging repository.",
+  "selectAll": "Select all",
+  "table": {
+    "name": "Name",
+    "version": "Version",
+    "size": "Size",
+    "policyStatus": "Policy Status",
+    "created": "Created"
+  },
+  "showing": "Showing {from}-{to} of {total}",
+  "previous": "Previous",
+  "next": "Next",
+  "selectAria": "Select {name}",
+  "policyStatus": {
+    "passing": "Passing",
+    "failing": "Failing",
+    "warning": "Warning",
+    "pending": "Pending"
+  },
+  "policyViolations": "Policy Violations ({count})"
+}

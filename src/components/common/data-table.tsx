@@ -57,7 +57,7 @@ export function DataTable<T>({
   onRowClick,
   rowKey,
 }: DataTableProps<T>) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/data-table");
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const resolvedEmptyMessage = emptyMessage ?? t("noDataFound");

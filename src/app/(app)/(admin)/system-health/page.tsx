@@ -47,7 +47,7 @@ function GradeDistributionBar({
 }: {
   distribution: Record<string, number>;
 }) {
-  const t = useTranslations("admin.systemHealth");
+  const t = useTranslations("app/admin/system-health");
   const grades = ["A", "B", "C", "D", "F"];
   const total = grades.reduce((sum, g) => sum + (distribution[g] ?? 0), 0);
 
@@ -117,7 +117,7 @@ function OverallHealthScore({
   score: number;
   grade: string;
 }) {
-  const t = useTranslations("admin.systemHealth");
+  const t = useTranslations("app/admin/system-health");
   return (
     <div className="flex items-center gap-5">
       <div className="relative flex size-28 items-center justify-center">
@@ -179,7 +179,7 @@ function scoreToStrokeClass(score: number): string {
 // -- Main page --
 
 export default function HealthDashboardPage() {
-  const t = useTranslations("admin.systemHealth");
+  const t = useTranslations("app/admin/system-health");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 

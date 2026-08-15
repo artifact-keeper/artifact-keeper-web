@@ -120,7 +120,7 @@ function UploadSizeSetting({
   unavailable: boolean;
 }) {
   const queryClient = useQueryClient();
-  const t = useTranslations("admin.settings");
+  const t = useTranslations("app/admin/settings");
   const initial = bytesToUploadSize(currentBytes ?? 0);
   const [value, setValue] = useState(initial.value);
   const [unit, setUnit] = useState<UploadSizeUnit>(initial.unit);
@@ -222,7 +222,7 @@ function UploadSizeSetting({
 // -- SMTP settings tab --
 
 function SmtpSettingsTab() {
-  const t = useTranslations("admin.settings");
+  const t = useTranslations("app/admin/settings");
   const [testRecipient, setTestRecipient] = useState("");
 
   const testMutation = useMutation({
@@ -308,7 +308,7 @@ function SmtpSettingsTab() {
 // -- page --
 
 export default function SettingsPage() {
-  const t = useTranslations("admin.settings");
+  const t = useTranslations("app/admin/settings");
   const { user } = useAuth();
   const { data: health } = useQuery({
     queryKey: ["health"],

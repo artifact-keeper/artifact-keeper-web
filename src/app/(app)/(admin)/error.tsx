@@ -13,7 +13,7 @@ export default function AdminError({
   error: Error & { digest?: string };
   reset: () => void;
 }>) {
-  const t = useTranslations("admin.error");
+  const t = useTranslations("app/admin/error");
   useEffect(() => {
     console.error("Admin route error:", error);
   }, [error]);

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  * by the (app) group layout.
  */
 export function SkipNavLink({ className }: { className?: string }) {
-  const t = useTranslations("skipNav");
+  const t = useTranslations("components/layout/skip-nav-link");
   return (
     <a
       href="#main-content"

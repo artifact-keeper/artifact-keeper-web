@@ -147,7 +147,7 @@ function BuildDetailDialog({
   onOpenChange: (open: boolean) => void;
   onCompare: () => void;
 }) {
-  const t = useTranslations("builds");
+  const t = useTranslations("app/builds");
   if (!build) return null;
 
   return (
@@ -335,7 +335,7 @@ function BuildDiffDialog({
   onOpenChange: (open: boolean) => void;
   isLoading: boolean;
 }) {
-  const t = useTranslations("builds");
+  const t = useTranslations("app/builds");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -470,7 +470,7 @@ function BuildDiffDialog({
 // ---- Main Builds Page ----
 
 export default function BuildsPage() {
-  const t = useTranslations("builds");
+  const t = useTranslations("app/builds");
   useDocumentTitle(t("title"));
   // Filters
   const [search, setSearch] = useState("");

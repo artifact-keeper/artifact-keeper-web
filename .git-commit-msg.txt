@@ -1,0 +1,42 @@
+feat(i18n): complete localization - path-based catalogs, per-component files, directory-root loading
+
+The locale tree is now pure JSON mirroring the source tree and is loaded
+directly from disk by route directory - no groups, no aggregators, no
+namespace lists to maintain.
+
+Catalogs
+- src/i18n/locales/{en,zh}/ holds ONLY flat JSON, mirroring src/app
+  (one page.json per page.tsx at the route-group path) and src/components /
+  app _components/ (one *.json per component at its mirrored path).
+- A file's namespace is its locale-relative path with route-group parens
+  dropped: (app)/(admin)/migration/page.json -> "app/admin/migration",
+  (app)/repositories/_components/repo-detail-content.json ->
+  "app/repositories/_components/repo-detail-content".
+- The merged core/ui.json + core/common.json are split into per-component
+  files; shell/setup components moved to components/layout|setup; the flat
+  repositories/staging sub-namespaces (repoDetail, securityTab, ...) renamed
+  to mirror their component paths.
+
+Loading
+- loadMessages(locale, roots) runs server-side and reads the JSON with
+  node:fs, loading every message file under the given locale-relative roots.
+  CORE_ROOTS (shared components + core/severity + root specials + error pages)
+  is loaded globally; each route layout composes it with its own route
+  directory. Child-route directories (route groups, and the named sub-routes
+  under (app)) are excluded because they own their messages via their own
+  layout/provider. Nested providers replace (not merge) messages, so each
+  provider includes all of its ancestors' roots.
+- next.config.ts adds outputFileTracingIncludes so the catalogs ship in the
+  standalone build; dev re-scans on each request, production parses once per
+  process. Adding a translation file = adding a JSON, nothing else.
+
+Coverage
+- not-found, root error, (app)/admin/(auth) error boundaries, global-error
+  (its own global-error.json via a self-seeded provider, rendered outside the
+  provider tree) and the layout metadata title/description are all translated.
+- scripts/check-i18n.mjs now also fails if a message file is loaded by no
+  route root (coverage guard) or if locales/ contains anything but JSON.
+- vitest global next-intl mock provides useTranslations + NextIntlClientProvider
+  (global-error tests); a redundant per-file mock was removed.
+
+CHANGELOG entries added under [Unreleased] (Added/Changed/Fixed).

@@ -76,7 +76,7 @@ export function DockerTagList({
   scanPending = false,
   emptyMessage,
 }: DockerTagListProps) {
-  const t = useTranslations("dockerTags");
+  const t = useTranslations("app/repositories/_components/docker-tag-list");
   // Human label for the server's scan rollup status; `undefined`/`null` means
   // the tag's manifest has never been scanned.
   const scanStatusLabel = (status: string | null | undefined): string =>

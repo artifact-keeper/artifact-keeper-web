@@ -28,7 +28,7 @@ export function TokenCreatedAlert({
   token,
   onDone,
 }: TokenCreatedAlertProps) {
-  const t = useTranslations("common");
+  const t = useTranslations("components/common/token-created-alert");
   return (
     <>
       <DialogHeader>

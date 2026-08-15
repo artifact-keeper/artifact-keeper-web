@@ -135,7 +135,7 @@ const STATUS_COLORS: Record<string, "green" | "red" | "default"> = {
 // -- page --
 
 export default function PluginsPage() {
-  const t = useTranslations("plugins");
+  const t = useTranslations("app/protected/plugins");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   // Plugin configuration read/write is admin-only on the backend

@@ -1,0 +1,19 @@
+{
+  "noData": "No health data available",
+  "noDataDetail": "Health scores are computed after quality checks complete.",
+  "grade": "Grade",
+  "overallHealth": "Overall Health",
+  "checksPassed": "{passed}/{total} checks passed",
+  "issues": "{count, plural, one {# issue} other {# issues}}",
+  "criticalCount": "({count} critical)",
+  "scoreBreakdown": "Score Breakdown",
+  "weight": "({weight} weight)",
+  "na": "N/A",
+  "lastEvaluated": "Last evaluated: {date}",
+  "components": {
+    "security": "Security",
+    "quality": "Quality",
+    "license": "License",
+    "metadata": "Metadata"
+  }
+}

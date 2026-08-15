@@ -36,7 +36,7 @@ interface VirtualMembersPanelProps {
 }
 
 export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
-  const t = useTranslations("virtualMembers");
+  const t = useTranslations("app/repositories/_components/virtual-members-panel");
   const queryClient = useQueryClient();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);

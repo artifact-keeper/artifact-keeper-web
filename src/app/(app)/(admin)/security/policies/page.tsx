@@ -112,8 +112,8 @@ function PolicyFormFields({
   repos?: Repository[];
   reposLoading?: boolean;
 }) {
-  const t = useTranslations("admin.securityPolicies");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/admin/security/policies");
+  const tSev = useTranslations("core/severity");
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -224,8 +224,8 @@ function PolicyFormFields({
 }
 
 export default function SecurityPoliciesPage() {
-  const t = useTranslations("admin.securityPolicies");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/admin/security/policies");
+  const tSev = useTranslations("core/severity");
   const queryClient = useQueryClient();
 
   // -- modal state --

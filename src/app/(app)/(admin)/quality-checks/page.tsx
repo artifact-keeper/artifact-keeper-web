@@ -40,8 +40,8 @@ function severityVariant(sev: string): "destructive" | "secondary" | "outline" {
 }
 
 export default function QualityChecksPage() {
-  const t = useTranslations("admin.qualityChecks");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/admin/quality-checks");
+  const tSev = useTranslations("core/severity");
   useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();

@@ -1,0 +1,11 @@
+{
+  "name": "Name",
+  "namePlaceholder": "e.g., CI/CD Pipeline",
+  "expiration": "Expiration",
+  "scopes": "Scopes",
+  "repositoryAccess": "Repository Access",
+  "repositoryAccessDescription": "Restrict which repositories this token can access. Leave empty for unrestricted access.",
+  "cancel": "Cancel",
+  "creating": "Creating...",
+  "create": "Create"
+}

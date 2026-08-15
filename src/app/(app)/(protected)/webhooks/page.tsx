@@ -110,7 +110,7 @@ const EVENT_BADGE_CLASSES: Record<string, string> = {
 // -- page --
 
 export default function WebhooksPage() {
-  const t = useTranslations("webhooks");
+  const t = useTranslations("app/protected/webhooks");
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);

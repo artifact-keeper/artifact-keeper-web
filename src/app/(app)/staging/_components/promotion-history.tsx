@@ -57,7 +57,7 @@ const STATUS_OPTIONS: Array<{
 ];
 
 export function PromotionHistory({ repoKey }: PromotionHistoryProps) {
-  const t = useTranslations("promotionHistory");
+  const t = useTranslations("app/staging/_components/promotion-history");
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("__all__");
   const pageSize = 20;
@@ -191,7 +191,7 @@ const STATUS_LABEL_KEY: Record<PromotionHistoryStatus, string> = {
 };
 
 function PromotionHistoryItem({ entry }: { entry: PromotionHistoryEntry }) {
-  const t = useTranslations("promotionHistory");
+  const t = useTranslations("app/staging/_components/promotion-history");
   const [expanded, setExpanded] = useState(false);
   const hasViolations = (entry.policy_result?.violations?.length ?? 0) > 0;
 

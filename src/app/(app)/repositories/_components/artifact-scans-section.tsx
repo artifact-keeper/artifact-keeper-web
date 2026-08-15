@@ -47,7 +47,7 @@ export function ArtifactScansSection({
    */
   analyzable?: boolean;
 }) {
-  const t = useTranslations("artifactScans");
+  const t = useTranslations("app/repositories/_components/artifact-scans-section");
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["security", "artifact-scans", artifactId],
     queryFn: () => securityApi.listArtifactScans(artifactId),

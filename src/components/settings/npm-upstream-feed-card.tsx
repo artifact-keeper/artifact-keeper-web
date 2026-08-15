@@ -54,7 +54,7 @@ export const NPM_UPSTREAM_FEED_ENV_VARS: EnvVarDoc[] = [
 ];
 
 export function NpmUpstreamFeedCard() {
-  const t = useTranslations("common");
+  const t = useTranslations("components/settings/npm-upstream-feed-card");
   return (
     <Card>
       <CardHeader>

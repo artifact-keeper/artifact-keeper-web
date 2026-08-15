@@ -99,7 +99,7 @@ function renderRepoAccess(
 }
 
 export default function ServiceAccountsPage() {
-  const t = useTranslations("admin.serviceAccounts");
+  const t = useTranslations("app/admin/service-accounts");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 

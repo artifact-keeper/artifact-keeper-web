@@ -1,0 +1,10 @@
+{
+  "title": "Per-folder storage",
+  "deduplicated": "Deduplicated",
+  "logical": "Logical",
+  "physical": "Physical",
+  "unique": "Unique",
+  "shared": "Shared",
+  "dedupRatio": "{ratio}× deduplication",
+  "sharedExplanation": "“Shared” bytes are blobs a folder has in common with other folders or repositories; reclaiming them requires the last referencing path to release them."
+}

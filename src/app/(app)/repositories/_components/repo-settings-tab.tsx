@@ -162,8 +162,8 @@ interface RepoSettingsTabProps {
 
 export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const queryClient = useQueryClient();
-  const t = useTranslations("repoSettings");
-  const tSev = useTranslations("severity");
+  const t = useTranslations("app/repositories/_components/repo-settings-tab");
+  const tSev = useTranslations("core/severity");
 
   // Format a TTL in seconds as a short human-readable hint ("24 hours",
   // "1 day 6 hours", "30 minutes") — a helper line under the TTL input so
@@ -1607,7 +1607,7 @@ function CleanupPolicyRow({
   executePending,
   deletePending,
 }: CleanupPolicyRowProps) {
-  const t = useTranslations("repoSettings");
+  const t = useTranslations("app/repositories/_components/repo-settings-tab");
   const typeLabel =
     POLICY_TYPE_LABELS[policy.policy_type as PolicyType] ?? policy.policy_type;
 
