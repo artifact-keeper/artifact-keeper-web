@@ -549,6 +549,7 @@ export default function ServiceAccountsPage() {
                 {t("cancel")}
               </Button>
               <Button
+                id="create-service-account-submit"
                 type="submit"
                 disabled={createMutation.isPending || !createName}
               >

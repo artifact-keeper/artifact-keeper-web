@@ -156,8 +156,9 @@ test.describe.serial('Staging Repository Creation', () => {
     const repoEntry = page.getByText('e2e-staging-test').first();
     await expect(repoEntry).toBeVisible({ timeout: 10000 });
 
-    // Verify the "Staging" type label (i18n typeLabels) is visible near it.
-    const stagingLabel = page.getByText('Staging', { exact: true }).first();
+    // Verify the staging type is present via the stable data-type attribute
+    // (the visible label is translated, so text matching is fragile).
+    const stagingLabel = page.locator('[data-type="staging"]').first();
     const hasStagingLabel = await stagingLabel.isVisible({ timeout: 5000 }).catch(() => false);
     expect(hasStagingLabel).toBeTruthy();
   });
