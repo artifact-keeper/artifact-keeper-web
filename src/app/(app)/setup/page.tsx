@@ -423,15 +423,19 @@ export default function SetupPage() {
         }}
       >
         <DialogContent className="sm:max-w-4xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>{t("platformIntegrationTitle", { name: t(selectedPlatform?.nameKey ?? "") })}</DialogTitle>
-            <DialogDescription>
-              {t("platformIntegrationDescription", { name: t(selectedPlatform?.nameKey ?? "") })}
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[60vh] pr-4">
-            {selectedPlatform && <StepsList steps={selectedPlatform.steps} />}
-          </ScrollArea>
+          {selectedPlatform && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{t("platformIntegrationTitle", { name: t(selectedPlatform.nameKey) })}</DialogTitle>
+                <DialogDescription>
+                  {t("platformIntegrationDescription", { name: t(selectedPlatform.nameKey) })}
+                </DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="max-h-[60vh] pr-4">
+                <StepsList steps={selectedPlatform.steps} />
+              </ScrollArea>
+            </>
+          )}
           <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
