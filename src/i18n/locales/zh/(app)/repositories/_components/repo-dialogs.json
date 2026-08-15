@@ -10,6 +10,12 @@
   "formatLabel": "格式",
   "customPlugin": "自定义（插件：{name}）",
   "typeLabel": "类型",
+  "typeLabels": {
+    "local": "本地",
+    "staging": "暂存",
+    "remote": "远程",
+    "virtual": "虚拟"
+  },
   "stagingHint": "暂存仓库在提升到发布仓库前持有制品以供审查。请在创建后配置提升规则。",
   "upstreamUrlLabel": "上游 URL",
   "upstreamUrlHint": "要代理请求的上游注册表 URL。",

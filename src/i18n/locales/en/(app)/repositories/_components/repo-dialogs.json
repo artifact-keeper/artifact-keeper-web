@@ -10,6 +10,12 @@
   "formatLabel": "Format",
   "customPlugin": "Custom (plugin: {name})",
   "typeLabel": "Type",
+  "typeLabels": {
+    "local": "Local",
+    "staging": "Staging",
+    "remote": "Remote",
+    "virtual": "Virtual"
+  },
   "stagingHint": "Staging repos hold artifacts for review before promotion to a release repository. Configure promotion rules after creation.",
   "upstreamUrlLabel": "Upstream URL",
   "upstreamUrlHint": "The upstream registry URL to proxy requests to.",

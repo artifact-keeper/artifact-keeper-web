@@ -490,7 +490,7 @@ export function RepoDialogs({
                   <SelectContent>
                     {TYPE_OPTIONS.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
-                        {o.label}
+                        {t(`typeLabels.${o.value}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
