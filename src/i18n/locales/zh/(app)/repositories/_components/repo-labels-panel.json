@@ -1,0 +1,15 @@
+{
+  "description": "用于整理与筛选仓库的键/值标签。",
+  "addAria": "添加标签",
+  "keyPlaceholder": "键（例如 team）",
+  "keyAria": "标签键",
+  "valuePlaceholder": "值（例如 platform）",
+  "valueAria": "标签值",
+  "add": "添加",
+  "empty": "暂无标签。",
+  "saved": "标签“{key}”已保存",
+  "removeAria": "移除标签 {key}",
+  "removed": "标签已移除",
+  "saveFailed": "保存标签失败",
+  "removeFailed": "移除标签失败"
+}

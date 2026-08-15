@@ -24,7 +24,10 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
+  --color-header: var(--header);
+  --color-header-border: var(--header-border);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -63,6 +66,7 @@
   --accent: oklch(0.85 0.06 55);
   --accent-foreground: oklch(0.25 0.06 265);
   --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.98 0.02 30);
   --border: oklch(0.84 0.04 70);
   --input: oklch(0.86 0.035 72);
   --ring: oklch(0.5 0.14 260);
@@ -79,6 +83,8 @@
   --sidebar-accent-foreground: oklch(0.25 0.06 265);
   --sidebar-border: oklch(0.84 0.04 70);
   --sidebar-ring: oklch(0.5 0.14 260);
+  --header: oklch(0.93 0.025 75);
+  --header-border: oklch(0.84 0.04 70);
 }
 
 .dark {
@@ -97,6 +103,7 @@
   --accent: oklch(0.45 0.14 260);
   --accent-foreground: oklch(0.82 0.07 240);
   --destructive: oklch(0.6 0.18 30);
+  --destructive-foreground: oklch(0.98 0.02 30);
   --border: oklch(0.3 0.06 270 / 40%);
   --input: oklch(0.3 0.06 270 / 50%);
   --ring: oklch(0.55 0.12 260);
@@ -113,6 +120,48 @@
   --sidebar-accent-foreground: oklch(0.82 0.07 240);
   --sidebar-border: oklch(0.3 0.06 270 / 40%);
   --sidebar-ring: oklch(0.55 0.12 260);
+  --header: oklch(0.16 0.03 270);
+  --header-border: oklch(0.3 0.06 270 / 40%);
+}
+
+/* Brand theme — the default. White / navy: a light-blue tinted page
+   background, navy #023795 primary, medium-blue #4690d2 secondary, white
+   header. Applied via the "brand" next-themes theme (class on <html>). */
+.brand {
+  --background: #f3f8fe;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #023795;
+  --primary-foreground: #ffffff;
+  --secondary: #4690d2;
+  --secondary-foreground: #ffffff;
+  --muted: #edf3fb;
+  --muted-foreground: #5b6b84;
+  --accent: #e8f0fb;
+  --accent-foreground: #023795;
+  --destructive: #d92d20;
+  --destructive-foreground: #ffffff;
+  --border: #d7e2f3;
+  --input: #c2d2e8;
+  --ring: #4690d2;
+  --chart-1: #023795;
+  --chart-2: #4690d2;
+  --chart-3: #7fb0e6;
+  --chart-4: #0a5cc8;
+  --chart-5: #b7d4f2;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #023795;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f0fb;
+  --sidebar-accent-foreground: #023795;
+  --sidebar-border: #d7e2f3;
+  --sidebar-ring: #4690d2;
+  --header: #ffffff;
+  --header-border: #d7e2f3;
 }
 
 @layer base {
@@ -121,5 +170,16 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  .dark body {
+    background-image: none;
+  }
+  .brand body {
+    /* Soft depth over the brand theme's light-blue page background: a faint
+       white fade at the top plus a subtle brand-blue glow in the top-right. */
+    background-image:
+      linear-gradient(180deg, rgb(255 255 255 / 0.6) 0%, rgb(255 255 255 / 0) 340px),
+      radial-gradient(1100px 520px at 88% -8%, rgb(70 144 210 / 0.12), transparent 60%);
+    background-attachment: fixed;
   }
 }

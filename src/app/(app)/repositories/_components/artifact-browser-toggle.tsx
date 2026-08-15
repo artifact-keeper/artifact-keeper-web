@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { List, Boxes, FolderTree } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export function ArtifactBrowserToggle({
   format,
   className,
 }: ArtifactBrowserToggleProps) {
+  const t = useTranslations("app/repositories/_components/artifact-browser-toggle");
   const groupable = supportsGrouping(format);
   const treeable = supportsTree(format);
   if (!groupable && !treeable) return null;
@@ -83,15 +85,15 @@ export function ArtifactBrowserToggle({
   const altMode: ArtifactViewMode = groupable ? "grouped" : "tree";
   const altLabel = groupable
     ? DOCKER_FAMILY_FORMATS.has(format)
-      ? "Group by tag"
-      : "Group by component"
-    : "Folder tree view";
+      ? t("groupByTag")
+      : t("groupByComponent")
+    : t("folderTree");
   const AltIcon = groupable ? Boxes : FolderTree;
 
   return (
     <div
       role="group"
-      aria-label="Artifact view mode"
+      aria-label={t("viewModeAria")}
       className={cn(
         "inline-flex items-center rounded-md border bg-background p-0.5",
         className,
@@ -104,12 +106,12 @@ export function ArtifactBrowserToggle({
         size="sm"
         className="h-8 px-3 text-xs"
         aria-pressed={value === "flat"}
-        aria-label="Flat list view"
+        aria-label={t("flatAria")}
         data-testid="toggle-flat"
         onClick={() => onChange("flat")}
       >
         <List className="size-3.5" aria-hidden="true" />
-        Flat
+        {t("flat")}
       </Button>
       <Button
         type="button"
@@ -122,7 +124,7 @@ export function ArtifactBrowserToggle({
         onClick={() => onChange(altMode)}
       >
         <AltIcon className="size-3.5" aria-hidden="true" />
-        {groupable ? "Grouped" : "Tree"}
+        {groupable ? t("grouped") : t("tree")}
       </Button>
     </div>
   );

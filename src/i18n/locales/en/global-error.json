@@ -1,0 +1,7 @@
+{
+  "somethingWentWrong": "Something went wrong",
+  "errorId": "Error ID: {digest}",
+  "tryAgain": "Try again",
+  "globalDescription": "A critical error prevented this page from loading. You can try again, or go back to the home page.",
+  "goToHome": "Go to home page"
+}

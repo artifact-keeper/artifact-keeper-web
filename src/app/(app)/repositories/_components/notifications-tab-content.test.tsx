@@ -4,6 +4,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import enMessages from "../../../../../src/i18n/for-tests.cjs";
+
+const en = enMessages as unknown as Record<string, Record<string, string>>;
+
+// next-intl is mocked globally (vitest.next-intl.setup.ts) for all tests.
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -348,8 +353,12 @@ describe("NotificationsTabContent", () => {
     await userEvent.click(screen.getByTestId("add-webhook-button"));
 
     for (const event of WEBHOOK_EVENTS) {
-      expect(screen.getByText(event.label)).toBeInTheDocument();
-      expect(screen.getByText(event.description)).toBeInTheDocument();
+      expect(
+        screen.getByText(en["app/repositories/_components/notifications-tab-content"][event.labelKey])
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(en["app/repositories/_components/notifications-tab-content"][event.descriptionKey])
+      ).toBeInTheDocument();
     }
   });
 

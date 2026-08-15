@@ -1,0 +1,16 @@
+{
+  "title": "发布目标",
+  "staging": "暂存",
+  "description": "将此暂存仓库链接到发布仓库。从此处的提升默认前往链接的目标，提升到其他仓库将被拒绝。目标必须是使用相同 <format>{format}</format> 格式的本地仓库。",
+  "notStagingDescription": "发布目标提升将制品从暂存仓库链接到发布仓库。",
+  "notStaging": "发布目标仅适用于暂存仓库。此仓库是 {type} 仓库。",
+  "repoLabel": "发布仓库",
+  "selectPlaceholder": "选择发布仓库",
+  "noneOption": "无发布目标（取消链接）",
+  "noCandidates": "未找到符合条件的发布仓库。创建一个本地 {format} 仓库用作发布目标。",
+  "saving": "保存中...",
+  "save": "保存发布目标",
+  "linkRemoved": "发布目标链接已移除",
+  "saved": "发布目标已保存",
+  "saveFailed": "保存发布目标失败"
+}

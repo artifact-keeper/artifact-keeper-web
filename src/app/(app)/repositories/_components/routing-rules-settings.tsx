@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Loader2, Plus, Trash2, Route, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ interface RoutingRulesSettingsProps {
  * complete set via a single POST. Deleting the last rule clears all rules.
  */
 export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) {
+  const t = useTranslations("app/repositories/_components/routing-rules-settings");
   const queryClient = useQueryClient();
   const queryKey = useMemo(
     () => ["repository", repository.key, "routing-rules"],
@@ -96,9 +98,9 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     onSuccess: (resp) => {
       setRules(resp.rules);
       queryClient.invalidateQueries({ queryKey });
-      toast.success("Routing rules saved");
+      toast.success(t("saved"));
     },
-    onError: mutationErrorToast("Failed to save routing rules"),
+    onError: mutationErrorToast(t("saveFailed")),
   });
 
   const clearMutation = useMutation({
@@ -106,9 +108,9 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     onSuccess: () => {
       setRules([]);
       queryClient.invalidateQueries({ queryKey });
-      toast.success("Routing rules cleared");
+      toast.success(t("cleared"));
     },
-    onError: mutationErrorToast("Failed to clear routing rules"),
+    onError: mutationErrorToast(t("clearFailed")),
   });
 
   const isBusy = saveMutation.isPending || clearMutation.isPending;
@@ -117,7 +119,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     const pattern = draft.path_pattern.trim();
     const rewrite = draft.rewrite_to.trim();
     if (!pattern || !rewrite) {
-      setAddError("Both pattern and rewrite target are required.");
+      setAddError(t("bothRequired"));
       return;
     }
     // The pattern is a regex evaluated by the backend; reject an invalid one
@@ -126,7 +128,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
     try {
       new RegExp(pattern);
     } catch {
-      setAddError("Path pattern is not a valid regular expression.");
+      setAddError(t("invalidPattern"));
       return;
     }
     setAddError(null);
@@ -136,7 +138,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
         setRules(resp.rules);
         setDraft({ path_pattern: "", rewrite_to: "" });
         queryClient.invalidateQueries({ queryKey });
-        toast.success("Routing rule added");
+        toast.success(t("added"));
       },
     });
   };
@@ -152,7 +154,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
       onSuccess: (resp) => {
         setRules(resp.rules);
         queryClient.invalidateQueries({ queryKey });
-        toast.success("Routing rule removed");
+        toast.success(t("removed"));
       },
     });
   };
@@ -175,15 +177,14 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
           id="settings-routing-rules-heading"
           className="text-base font-semibold"
         >
-          Routing Rules
+          {t("title")}
         </h3>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
-        Rewrite request paths before they are forwarded upstream. Each rule is a
-        regex pattern and a rewrite template. Reference capture groups with{" "}
-        <code className="font-mono">$1</code>,{" "}
-        <code className="font-mono">$2</code>, and so on. Rules are evaluated in
-        order; the first match wins.
+        {t.rich("description", {
+          code1: (chunks) => <code className="font-mono">{chunks}</code>,
+          code2: (chunks) => <code className="font-mono">{chunks}</code>,
+        })}
       </p>
 
       {isLoading ? (
@@ -196,17 +197,16 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
           {rules.length === 0 ? (
             <div className="rounded-md border border-dashed p-6 text-center">
               <p className="text-sm text-muted-foreground">
-                No routing rules configured. Requests are forwarded upstream
-                unchanged.
+                {t("empty")}
               </p>
             </div>
           ) : (
-            <Table aria-label="Routing rules">
+            <Table aria-label={t("tableAria")}>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">#</TableHead>
-                  <TableHead>Path pattern</TableHead>
-                  <TableHead>Rewrite to</TableHead>
+                  <TableHead>{t("pathPattern")}</TableHead>
+                  <TableHead>{t("rewriteTo")}</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -218,7 +218,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                     </TableCell>
                     <TableCell>
                       <Input
-                        aria-label={`Rule ${index + 1} path pattern`}
+                        aria-label={t("rulePathAria", { number: index + 1 })}
                         value={rule.path_pattern}
                         onChange={(e) =>
                           handleEditField(index, "path_pattern", e.target.value)
@@ -228,7 +228,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                     </TableCell>
                     <TableCell>
                       <Input
-                        aria-label={`Rule ${index + 1} rewrite to`}
+                        aria-label={t("ruleRewriteAria", { number: index + 1 })}
                         value={rule.rewrite_to}
                         onChange={(e) =>
                           handleEditField(index, "rewrite_to", e.target.value)
@@ -243,7 +243,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                         className="text-destructive hover:text-destructive"
                         onClick={() => handleRemove(index)}
                         disabled={isBusy}
-                        aria-label={`Remove rule ${index + 1}`}
+                        aria-label={t("removeAria", { number: index + 1 })}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -265,10 +265,10 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                 {saveMutation.isPending ? (
                   <>
                     <Loader2 className="size-4 animate-spin" />
-                    Saving...
+                    {t("saving")}
                   </>
                 ) : (
-                  "Save changes"
+                  t("saveChanges")
                 )}
               </Button>
               <Button
@@ -277,18 +277,18 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
                 onClick={() => setRules(data?.rules ?? [])}
                 disabled={isBusy}
               >
-                Discard
+                {t("discard")}
               </Button>
             </div>
           )}
 
           {/* Add a new rule */}
           <div className="rounded-md border p-4 space-y-3">
-            <p className="text-sm font-medium">Add a rule</p>
+            <p className="text-sm font-medium">{t("addRule")}</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr]">
               <div className="space-y-1.5">
                 <Label htmlFor="routing-rule-pattern" className="text-xs">
-                  Path pattern
+                  {t("pathPattern")}
                 </Label>
                 <Input
                   id="routing-rule-pattern"
@@ -308,7 +308,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="routing-rule-rewrite" className="text-xs">
-                  Rewrite to
+                  {t("rewriteTo")}
                 </Label>
                 <Input
                   id="routing-rule-rewrite"
@@ -340,7 +340,7 @@ export function RoutingRulesSettings({ repository }: RoutingRulesSettingsProps) 
               ) : (
                 <Plus className="size-4" />
               )}
-              Add rule
+              {t("addRuleBtn")}
             </Button>
           </div>
         </div>

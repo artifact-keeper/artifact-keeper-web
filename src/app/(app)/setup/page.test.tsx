@@ -473,7 +473,7 @@ describe("SetupPage - CI/CD platforms", () => {
     expect(dialog.textContent ?? "").toMatch(/setup|configure|workflow/i);
   });
 
-  it("closes the CI/CD dialog when dismissed", async () => {
+  it("closes the CI/CD dialog when dismissed and reopens cleanly", async () => {
     const user = userEvent.setup();
     await renderPageWithRepos([makeRepo({ format: "maven" })]);
 
@@ -487,6 +487,14 @@ describe("SetupPage - CI/CD platforms", () => {
 
     // Dialog should no longer be open
     expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Reopening must not throw MISSING_MESSAGE. The dialog header derives its
+    // title from the selected platform, which is null while the close
+    // animation keeps the content mounted in a real browser — the header must
+    // be guarded so `t("")` never resolves the namespace as a key.
+    await user.click(ghaCard!);
+    expect(await screen.findByText(/GitHub Actions Integration/i)).toBeTruthy();
+    expect(screen.queryByRole("dialog")).not.toBeNull();
   });
 });
 

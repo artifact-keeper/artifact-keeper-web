@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { ShieldAlert, AlertTriangle, Clock } from "lucide-react";
 
 import { securityApi } from "@/lib/api/security";
@@ -46,6 +47,7 @@ export function ArtifactScansSection({
    */
   analyzable?: boolean;
 }) {
+  const t = useTranslations("app/repositories/_components/artifact-scans-section");
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["security", "artifact-scans", artifactId],
     queryFn: () => securityApi.listArtifactScans(artifactId),
@@ -57,7 +59,7 @@ export function ArtifactScansSection({
   const columns: DataTableColumn<ScanResult>[] = [
     {
       id: "status",
-      header: "Status",
+      header: t("status"),
       accessor: (s) => s.status,
       cell: (s) => (
         <Badge
@@ -70,13 +72,13 @@ export function ArtifactScansSection({
     },
     {
       id: "scan_type",
-      header: "Type",
+      header: t("type"),
       accessor: (s) => s.scan_type,
       cell: (s) => <span className="text-sm">{s.scan_type}</span>,
     },
     {
       id: "findings",
-      header: "Findings",
+      header: t("findings"),
       accessor: (s) => s.findings_count,
       sortable: true,
       cell: (s) => (
@@ -84,12 +86,12 @@ export function ArtifactScansSection({
           <span className="font-medium">{s.findings_count}</span>
           {s.critical_count > 0 && (
             <Badge className={`${SEVERITY_BADGE.critical} border text-xs`}>
-              {s.critical_count} crit
+              {t("critCount", { count: s.critical_count })}
             </Badge>
           )}
           {s.high_count > 0 && (
             <Badge className={`${SEVERITY_BADGE.high} border text-xs`}>
-              {s.high_count} high
+              {t("highCount", { count: s.high_count })}
             </Badge>
           )}
         </div>
@@ -97,7 +99,7 @@ export function ArtifactScansSection({
     },
     {
       id: "completed_at",
-      header: "Completed",
+      header: t("completed"),
       accessor: (s) => s.completed_at ?? s.created_at,
       sortable: true,
       cell: (s) => (
@@ -114,7 +116,7 @@ export function ArtifactScansSection({
           href={`/security/scans/${s.id}`}
           className="text-xs text-blue-600 hover:underline dark:text-blue-400"
         >
-          View findings
+          {t("viewFindings")}
         </Link>
       ),
     },
@@ -124,10 +126,10 @@ export function ArtifactScansSection({
     <div className="space-y-4" data-testid="artifact-scans-section">
       <div className="flex items-center gap-3">
         <ShieldAlert className="size-5 text-muted-foreground" />
-        <h3 className="text-sm font-medium">Scan Results</h3>
+        <h3 className="text-sm font-medium">{t("title")}</h3>
         {scans.length > 0 && (
           <Badge variant="secondary" className="text-xs">
-            {scans.length} scan{scans.length === 1 ? "" : "s"}
+            {t("scanCount", { count: scans.length })}
           </Badge>
         )}
       </div>
@@ -137,12 +139,12 @@ export function ArtifactScansSection({
           <AlertTriangle className="size-5 text-red-600 dark:text-red-500 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-red-800 dark:text-red-400">
-              Could not load scan results
+              {t("loadFailed")}
             </p>
             <p className="text-xs text-red-700 dark:text-red-500 mt-1">
               {error instanceof Error
                 ? error.message
-                : "Unable to load scan results for this artifact."}
+                : t("loadFailedDetail")}
             </p>
           </div>
         </div>
@@ -152,14 +154,10 @@ export function ArtifactScansSection({
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Clock className="size-10 text-muted-foreground/50 mb-3" />
           <p className="text-sm text-muted-foreground">
-            {analyzable
-              ? "No security scans have been run against this artifact yet."
-              : "This artifact cannot be scanned."}
+            {analyzable ? t("noScans") : t("cannotScan")}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {analyzable
-              ? "Trigger a scan from the artifact actions menu to populate this section."
-              : "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."}
+            {analyzable ? t("noScansDetail") : t("cannotScanDetail")}
           </p>
         </div>
       ) : (
@@ -170,7 +168,7 @@ export function ArtifactScansSection({
           pageSize={scans.length}
           total={scans.length}
           onPageChange={() => {}}
-          emptyMessage="No scan results"
+          emptyMessage={t("noResults")}
           rowKey={(s) => s.id}
         />
       )}

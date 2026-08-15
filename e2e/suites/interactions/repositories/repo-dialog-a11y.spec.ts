@@ -107,7 +107,7 @@ test.describe.serial('Repository Dialog Accessibility', () => {
     // trigger's label. The anchored regex asserts the clean name (previously
     // this ended in "... Repository actions for E2E A11y Remote").
     const rowAction = page.getByRole('button', {
-      name: /^e2e-a11y-remote\s+E2E A11y Remote\s+npm\s*·\s*remote\s*·\s*0 B$/,
+      name: /^e2e-a11y-remote\s+E2E A11y Remote\s+npm\s*·\s*Remote\s*·\s*0 B$/,
     });
     await expect(rowAction).toBeVisible();
 

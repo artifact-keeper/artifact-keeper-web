@@ -1,11 +1,14 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 interface RiskGaugeProps {
   score: number; // 0-100+
   className?: string;
 }
 
 export function RiskGauge({ score, className }: RiskGaugeProps) {
+  const t = useTranslations("components/dt/risk-gauge");
   const clamped = Math.min(score, 100);
   const ratio = clamped / 100;
 
@@ -81,7 +84,7 @@ export function RiskGauge({ score, className }: RiskGaugeProps) {
           className="fill-muted-foreground"
           style={{ fontSize: 12 }}
         >
-          Risk
+          {t("risk")}
         </text>
       </svg>
     </div>

@@ -1,0 +1,19 @@
+{
+  "signingIn": "正在登录",
+  "ssoLoginFailed": "SSO 登录失败",
+  "backToLogin": "返回登录",
+  "completingSignIn": "正在完成登录...",
+  "loading": "加载中...",
+  "errorAccessDenied": "身份提供方拒绝了访问。",
+  "errorInvalidRequest": "认证请求无效。",
+  "errorServerError": "身份提供方遇到错误。",
+  "errorTemporarilyUnavailable": "身份提供方暂时不可用。",
+  "errorExpired": "认证会话已过期。请重试。",
+  "errorInvalidCode": "认证码无效或已过期。",
+  "errorGeneric": "认证失败。请重试。",
+  "errorNoCode": "认证失败。未从身份提供方收到授权码。",
+  "errorInvalidState": "SSO 会话已过期。请重试。",
+  "errorProviderError": "身份提供方返回了错误。",
+  "errorUserDisabled": "您的账户已被禁用。",
+  "errorFailed": "完成登录失败。请重试。"
+}

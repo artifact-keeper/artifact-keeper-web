@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { ShieldAlert, RefreshCw, Home } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export default function AdminError({
   error: Error & { digest?: string };
   reset: () => void;
 }>) {
+  const t = useTranslations("app/admin/error");
   useEffect(() => {
     console.error("Admin route error:", error);
   }, [error]);
@@ -23,26 +25,25 @@ export default function AdminError({
           <ShieldAlert className="size-8 text-destructive" />
         </div>
         <h2 className="text-xl font-semibold tracking-tight">
-          Administration Error
+          {t("title")}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          An error occurred in the administration panel. This may be a temporary
-          issue. Try again, or return to the dashboard.
+          {t("description")}
         </p>
         {error.digest && (
           <p className="mt-2 text-xs text-muted-foreground font-mono">
-            Error ID: {error.digest}
+            {t("errorId")}: {error.digest}
           </p>
         )}
         <div className="mt-6 flex items-center gap-3">
           <Button onClick={reset} variant="default" size="sm">
             <RefreshCw className="mr-2 size-4" />
-            Try again
+            {t("tryAgain")}
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href="/">
               <Home className="mr-2 size-4" />
-              Dashboard
+              {t("dashboard")}
             </Link>
           </Button>
         </div>

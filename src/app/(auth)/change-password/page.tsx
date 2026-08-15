@@ -2,19 +2,16 @@
 
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
 import { Lock, Shield, Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
-import {
-  toUserMessage,
-  isPasswordReuseError,
-  PASSWORD_REUSE_MESSAGE,
-} from "@/lib/error-utils";
+import { toUserMessage, isPasswordReuseError } from "@/lib/error-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,24 +31,28 @@ import {
 } from "@/components/ui/form";
 import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
 
-const changePasswordSchema = z
-  .object({
-    currentPassword: z.string().min(1, "Current password is required"),
-    newPassword: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(1, "Please confirm your new password"),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
+type ChangePasswordValues = z.infer<ReturnType<typeof buildSchema>>;
 
-type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
+function buildSchema(t: (key: string) => string) {
+  return z
+    .object({
+      currentPassword: z.string().min(1, t("currentRequired")),
+      newPassword: z.string().min(8, t("minLength")),
+      confirmPassword: z.string().min(1, t("confirmRequired")),
+    })
+    .refine((data) => data.newPassword === data.confirmPassword, {
+      message: t("mismatch"),
+      path: ["confirmPassword"],
+    });
+}
 
 export default function ChangePasswordPage() {
-  useDocumentTitle("Change Password");
+  const t = useTranslations("auth/change-password");
+  useDocumentTitle(t("title"));
   const router = useRouter();
   const { changePassword, logout, setupRequired } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const changePasswordSchema = useMemo(() => buildSchema(t), [t]);
 
   const form = useForm<ChangePasswordValues>({
     resolver: zodResolver(changePasswordSchema),
@@ -66,14 +67,15 @@ export default function ChangePasswordPage() {
     setIsLoading(true);
     try {
       await changePassword(values.currentPassword, values.newPassword);
-      toast.success("Password changed successfully!");
+      toast.success(t("changedSuccess"));
       router.push("/");
     } catch (err) {
       if (isPasswordReuseError(err)) {
-        form.setError("newPassword", { message: PASSWORD_REUSE_MESSAGE });
-        toast.error(PASSWORD_REUSE_MESSAGE);
+        const reuse = t("passwordReuse");
+        form.setError("newPassword", { message: reuse });
+        toast.error(reuse);
       } else {
-        toast.error(toUserMessage(err, "Failed to change password."));
+        toast.error(toUserMessage(err, t("changeFailed")));
       }
     } finally {
       setIsLoading(false);
@@ -95,16 +97,14 @@ export default function ChangePasswordPage() {
             <Lock className="size-7 text-amber-600 dark:text-amber-400" />
           )}
         </div>
-        <CardTitle className="text-xl">{setupRequired ? "Complete Setup" : "Change Password"}</CardTitle>
+        <CardTitle className="text-xl">{setupRequired ? t("setupTitle") : t("title")}</CardTitle>
         <CardDescription>
-          {setupRequired
-            ? "Set a secure admin password to unlock the API and complete first-time setup."
-            : "Your password was auto-generated or has been reset. Please set a new password to continue."}
+          {setupRequired ? t("setupDesc") : t("changeDesc")}
         </CardDescription>
         {setupRequired && (
           <div className="mt-3 flex items-start gap-2 rounded-lg bg-blue-50 px-3 py-2 text-left text-xs text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            <span>All API endpoints are locked until this step is completed.</span>
+            <span>{t("lockedHint")}</span>
           </div>
         )}
       </CardHeader>
@@ -116,11 +116,11 @@ export default function ChangePasswordPage() {
               name="currentPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Current Password</FormLabel>
+                  <FormLabel>{t("currentLabel")}</FormLabel>
                   <FormControl>
                     <Input
                       type="password"
-                      placeholder="Enter current password"
+                      placeholder={t("currentPlaceholder")}
                       autoComplete="current-password"
                       disabled={isLoading}
                       {...field}
@@ -135,11 +135,11 @@ export default function ChangePasswordPage() {
               name="newPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>New Password</FormLabel>
+                  <FormLabel>{t("newLabel")}</FormLabel>
                   <FormControl>
                     <Input
                       type="password"
-                      placeholder="Enter new password"
+                      placeholder={t("newPlaceholder")}
                       autoComplete="new-password"
                       disabled={isLoading}
                       {...field}
@@ -155,11 +155,11 @@ export default function ChangePasswordPage() {
               name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm New Password</FormLabel>
+                  <FormLabel>{t("confirmLabel")}</FormLabel>
                   <FormControl>
                     <Input
                       type="password"
-                      placeholder="Confirm new password"
+                      placeholder={t("confirmPlaceholder")}
                       autoComplete="new-password"
                       disabled={isLoading}
                       {...field}
@@ -178,10 +178,10 @@ export default function ChangePasswordPage() {
               {isLoading ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Changing password...
+                  {t("changing")}
                 </>
               ) : (
-                "Change Password"
+                t("changePassword")
               )}
             </Button>
             <Button
@@ -191,7 +191,7 @@ export default function ChangePasswordPage() {
               onClick={handleLogout}
               disabled={isLoading}
             >
-              Logout instead
+              {t("logoutInstead")}
             </Button>
           </form>
         </Form>

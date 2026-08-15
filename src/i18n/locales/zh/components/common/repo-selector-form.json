@@ -1,0 +1,14 @@
+{
+  "previewError": "预览仓库选择器失败",
+  "formats": "格式",
+  "formatsDescription": "将访问限制为特定类型的仓库。",
+  "namePattern": "名称模式",
+  "namePatternDescription": "使用 * 作为通配符。例如，\"prod-*\" 匹配所有以 \"prod-\" 开头的仓库。",
+  "labels": "标签",
+  "labelsDescription": "匹配具有所有指定标签键值对的仓库。",
+  "labelKeyPlaceholder": "键（例如：env）",
+  "labelValuePlaceholder": "值（例如：production）",
+  "checking": "检查中...",
+  "previewMatchedRepos": "预览匹配的仓库",
+  "matchedCount": "匹配 {count, plural, one {# 个仓库} other {# 个仓库}}"
+}

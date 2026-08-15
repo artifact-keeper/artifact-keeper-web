@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +39,7 @@ export function RejectionDialog({
   selectedArtifacts,
   onSuccess,
 }: RejectionDialogProps) {
+  const t = useTranslations("app/staging/_components/rejection-dialog");
   const queryClient = useQueryClient();
 
   const [reason, setReason] = useState("");
@@ -59,9 +61,7 @@ export function RejectionDialog({
     },
     onSuccess: (results) => {
       const count = results.length;
-      toast.success(
-        `Successfully rejected ${count} artifact${count !== 1 ? "s" : ""}`
-      );
+      toast.success(t("rejected", { count }));
       queryClient.invalidateQueries({
         queryKey: ["staging-artifacts", sourceRepoKey],
       });
@@ -73,12 +73,12 @@ export function RejectionDialog({
       setNotes("");
       onSuccess?.();
     },
-    onError: mutationErrorToast("Rejection failed"),
+    onError: mutationErrorToast(t("rejectFailed")),
   });
 
   const handleReject = () => {
     if (!reason.trim()) {
-      toast.error("Please provide a reason for rejection");
+      toast.error(t("reasonRequired"));
       return;
     }
     rejectMutation.mutate();
@@ -90,12 +90,10 @@ export function RejectionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <XCircle className="size-5 text-red-500" />
-            Reject Artifacts
+            {t("title")}
           </DialogTitle>
           <DialogDescription>
-            Reject {selectedArtifacts.length} artifact
-            {selectedArtifacts.length !== 1 ? "s" : ""} from staging. This
-            action will mark them as rejected and prevent promotion.
+            {t("description", { count: selectedArtifacts.length })}
           </DialogDescription>
         </DialogHeader>
 
@@ -105,11 +103,11 @@ export function RejectionDialog({
           {/* Reason (required) */}
           <div className="space-y-2">
             <Label htmlFor="reject-reason">
-              Reason <span className="text-red-500">*</span>
+              {t("reason")} <span className="text-red-500">*</span>
             </Label>
             <Textarea
               id="reject-reason"
-              placeholder="Provide a reason for rejecting these artifacts..."
+              placeholder={t("reasonPlaceholder")}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
@@ -118,10 +116,10 @@ export function RejectionDialog({
 
           {/* Notes (optional) */}
           <div className="space-y-2">
-            <Label htmlFor="reject-notes">Notes (optional)</Label>
+            <Label htmlFor="reject-notes">{t("notes")}</Label>
             <Textarea
               id="reject-notes"
-              placeholder="Add any additional notes..."
+              placeholder={t("notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -131,14 +129,14 @@ export function RejectionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             variant="destructive"
             onClick={handleReject}
             disabled={rejectMutation.isPending || !reason.trim()}
           >
-            {rejectMutation.isPending ? "Rejecting..." : "Reject Artifact"}
+            {rejectMutation.isPending ? t("rejecting") : t("reject")}
           </Button>
         </DialogFooter>
       </DialogContent>

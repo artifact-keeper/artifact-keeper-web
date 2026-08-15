@@ -1,0 +1,41 @@
+{
+  "title": "Repositories",
+  "toast": {
+    "created": "Repository created",
+    "createdStaging": "Configure promotion rules to start promoting artifacts.",
+    "goToStaging": "Go to Staging",
+    "updated": "Repository updated",
+    "deleted": "Repository deleted",
+    "createFailed": "Failed to create repository",
+    "updateFailed": "Failed to update repository",
+    "deleteFailed": "Failed to delete repository",
+    "upstreamAuthUpdated": "Upstream authentication updated",
+    "upstreamAuthFailed": "Failed to update upstream authentication"
+  },
+  "searchPlaceholder": "Search...",
+  "filterByFormat": "Filter by format",
+  "format": "Format",
+  "allFormats": "All formats",
+  "filterByType": "Filter by type",
+  "type": "Type",
+  "allTypes": "All types",
+  "typeLabels": {
+    "local": "Local",
+    "staging": "Staging",
+    "remote": "Remote",
+    "virtual": "Virtual"
+  },
+  "loadFailed": "Couldn't load repositories",
+  "loadFailedDetail": "The server could not be reached. Your repositories are safe.",
+  "retry": "Retry",
+  "noRepos": "No repositories found.",
+  "pageOf": "Page {page} of {totalPages}",
+  "previousPage": "Previous page",
+  "nextPage": "Next page",
+  "subtitle": "Manage artifact repositories across all formats.",
+  "refreshAria": "Refresh repositories",
+  "refresh": "Refresh",
+  "create": "Create Repository",
+  "selectRepo": "Select a repository",
+  "selectRepoDetail": "Choose a repository from the list to view its contents."
+}

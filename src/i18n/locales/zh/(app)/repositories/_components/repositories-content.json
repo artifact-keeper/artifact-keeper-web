@@ -1,0 +1,41 @@
+{
+  "title": "仓库",
+  "toast": {
+    "created": "仓库已创建",
+    "createdStaging": "配置提升规则以开始提升制品。",
+    "goToStaging": "前往暂存",
+    "updated": "仓库已更新",
+    "deleted": "仓库已删除",
+    "createFailed": "创建仓库失败",
+    "updateFailed": "更新仓库失败",
+    "deleteFailed": "删除仓库失败",
+    "upstreamAuthUpdated": "上游认证已更新",
+    "upstreamAuthFailed": "更新上游认证失败"
+  },
+  "searchPlaceholder": "搜索...",
+  "filterByFormat": "按格式筛选",
+  "format": "格式",
+  "allFormats": "所有格式",
+  "filterByType": "按类型筛选",
+  "type": "类型",
+  "allTypes": "所有类型",
+  "typeLabels": {
+    "local": "本地",
+    "staging": "暂存",
+    "remote": "远程",
+    "virtual": "虚拟"
+  },
+  "loadFailed": "无法加载仓库",
+  "loadFailedDetail": "无法连接到服务器。你的仓库是安全的。",
+  "retry": "重试",
+  "noRepos": "未找到仓库。",
+  "pageOf": "第 {page} 页，共 {totalPages} 页",
+  "previousPage": "上一页",
+  "nextPage": "下一页",
+  "subtitle": "管理所有格式的制品仓库。",
+  "refreshAria": "刷新仓库",
+  "refresh": "刷新",
+  "create": "创建仓库",
+  "selectRepo": "选择一个仓库",
+  "selectRepoDetail": "从列表中选择一个仓库以查看其内容。"
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   HeartPulse,
   ShieldCheck,
@@ -46,13 +47,14 @@ function GradeDistributionBar({
 }: {
   distribution: Record<string, number>;
 }) {
+  const t = useTranslations("app/admin/system-health");
   const grades = ["A", "B", "C", "D", "F"];
   const total = grades.reduce((sum, g) => sum + (distribution[g] ?? 0), 0);
 
   if (total === 0) {
     return (
       <div className="text-sm text-muted-foreground text-center py-4">
-        No artifacts evaluated yet.
+        {t("noEvaluated")}
       </div>
     );
   }
@@ -70,7 +72,11 @@ function GradeDistributionBar({
               key={grade}
               className={`${GRADE_BAR_COLORS[grade]} flex items-center justify-center text-white text-xs font-bold transition-all`}
               style={{ width: `${pct}%`, minWidth: pct > 0 ? "24px" : "0" }}
-              title={`Grade ${grade}: ${count} repositories (${pct.toFixed(1)}%)`}
+              title={t("gradeTitle", {
+                grade,
+                count,
+                pct: pct.toFixed(1),
+              })}
             >
               {pct >= 8 ? grade : ""}
             </div>
@@ -88,7 +94,7 @@ function GradeDistributionBar({
                 className={`size-3 rounded-sm ${GRADE_BAR_COLORS[grade]}`}
               />
               <span className="text-sm text-muted-foreground">
-                Grade{" "}
+                {t("gradeLegend")}{" "}
                 <span className={`font-semibold ${GRADE_TEXT_COLORS[grade]}`}>
                   {grade}
                 </span>
@@ -111,6 +117,7 @@ function OverallHealthScore({
   score: number;
   grade: string;
 }) {
+  const t = useTranslations("app/admin/system-health");
   return (
     <div className="flex items-center gap-5">
       <div className="relative flex size-28 items-center justify-center">
@@ -144,7 +151,7 @@ function OverallHealthScore({
       <div className="space-y-1">
         <HealthBadge grade={grade} score={score} size="lg" />
         <p className="text-sm text-muted-foreground mt-1">
-          Average health score across all repositories
+          {t("averageScore")}
         </p>
       </div>
     </div>
@@ -172,6 +179,7 @@ function scoreToStrokeClass(score: number): string {
 // -- Main page --
 
 export default function HealthDashboardPage() {
+  const t = useTranslations("app/admin/system-health");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -184,9 +192,9 @@ export default function HealthDashboardPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Health Dashboard" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -224,7 +232,7 @@ export default function HealthDashboardPage() {
   const columns: DataTableColumn<RepoHealth>[] = [
     {
       id: "repository_key",
-      header: "Repository",
+      header: t("colRepository"),
       accessor: (r) => r.repository_key,
       sortable: true,
       cell: (r) => (
@@ -233,7 +241,7 @@ export default function HealthDashboardPage() {
     },
     {
       id: "grade",
-      header: "Grade",
+      header: t("colGrade"),
       accessor: (r) => r.health_score,
       sortable: true,
       cell: (r) => (
@@ -242,7 +250,7 @@ export default function HealthDashboardPage() {
     },
     {
       id: "health_score",
-      header: "Score",
+      header: t("colScore"),
       accessor: (r) => r.health_score,
       sortable: true,
       cell: (r) => (
@@ -253,35 +261,35 @@ export default function HealthDashboardPage() {
     },
     {
       id: "security",
-      header: "Security",
+      header: t("colSecurity"),
       accessor: (r) => r.avg_security_score ?? 0,
       sortable: true,
       cell: (r) => <OptionalScore value={r.avg_security_score} />,
     },
     {
       id: "quality",
-      header: "Quality",
+      header: t("colQuality"),
       accessor: (r) => r.avg_quality_score ?? 0,
       sortable: true,
       cell: (r) => <OptionalScore value={r.avg_quality_score} />,
     },
     {
       id: "license",
-      header: "License",
+      header: t("colLicense"),
       accessor: (r) => r.avg_license_score ?? 0,
       sortable: true,
       cell: (r) => <OptionalScore value={r.avg_license_score} />,
     },
     {
       id: "metadata",
-      header: "Metadata",
+      header: t("colMetadata"),
       accessor: (r) => r.avg_metadata_score ?? 0,
       sortable: true,
       cell: (r) => <OptionalScore value={r.avg_metadata_score} />,
     },
     {
       id: "artifacts",
-      header: "Artifacts",
+      header: t("colArtifacts"),
       accessor: (r) => r.artifacts_evaluated,
       sortable: true,
       cell: (r) => (
@@ -292,7 +300,7 @@ export default function HealthDashboardPage() {
     },
     {
       id: "passing",
-      header: "Passing",
+      header: t("colPassing"),
       accessor: (r) => r.artifacts_passing,
       sortable: true,
       cell: (r) => (
@@ -308,7 +316,7 @@ export default function HealthDashboardPage() {
     },
     {
       id: "failing",
-      header: "Failing",
+      header: t("colFailing"),
       accessor: (r) => r.artifacts_failing,
       sortable: true,
       cell: (r) =>
@@ -325,8 +333,8 @@ export default function HealthDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Health Dashboard"
-        description="Monitor artifact health scores, quality metrics, and grade distribution across all repositories."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             variant="outline"
@@ -369,32 +377,32 @@ export default function HealthDashboardPage() {
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-2 xl:grid-cols-3">
               <StatCard
                 icon={Package}
-                label="Artifacts Evaluated"
+                label={t("statArtifactsEvaluated")}
                 value={dashboard.total_artifacts_evaluated}
                 color="blue"
               />
               <StatCard
                 icon={HeartPulse}
-                label="Repositories"
+                label={t("statRepositories")}
                 value={dashboard.total_repositories}
                 color="green"
               />
               <StatCard
                 icon={ShieldCheck}
-                label="Grade A Repos"
+                label={t("statGradeA")}
                 value={dashboard.repos_grade_a}
                 color="green"
               />
               <StatCard
                 icon={AlertTriangle}
-                label="Below Threshold"
+                label={t("statBelowThreshold")}
                 value={reposBelowThreshold}
-                description="Grade D or F"
+                description={t("belowThresholdDesc")}
                 color={reposBelowThreshold > 0 ? "red" : "green"}
               />
               <StatCard
                 icon={AlertCircle}
-                label="Failing Artifacts"
+                label={t("statFailingArtifacts")}
                 value={totalCriticalIssues}
                 color={totalCriticalIssues > 0 ? "red" : "green"}
               />
@@ -405,7 +413,7 @@ export default function HealthDashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Grade Distribution
+                {t("gradeDistributionTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -416,13 +424,13 @@ export default function HealthDashboardPage() {
           {/* Repository Health Table */}
           <div>
             <h2 className="text-lg font-semibold tracking-tight mb-4">
-              Repository Health Scores
+              {t("repoHealthScores")}
             </h2>
             <DataTable
               columns={columns}
               data={dashboard.repositories ?? []}
               loading={false}
-              emptyMessage="No repositories have been evaluated yet. Health scores are computed after artifact scans complete."
+              emptyMessage={t("empty")}
               rowKey={(r) => r.repository_id}
             />
           </div>

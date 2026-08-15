@@ -316,7 +316,7 @@ test.describe('SSO claim mapping & absolute ACS URL (#541)', () => {
     // Read path: open the edit dialog and confirm the switch renders ON.
     await page.goto('/settings/sso');
     await page.getByRole('tablist').getByRole('tab', { name: /saml/i }).click();
-    await page.getByRole('button', { name: `Edit SAML provider ${name}` }).click();
+    await page.getByRole('button', { name: `Edit ${name}` }).click();
 
     let dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -341,7 +341,7 @@ test.describe('SSO claim mapping & absolute ACS URL (#541)', () => {
     // And the reopened edit dialog reflects the persisted OFF state.
     await page.reload();
     await page.getByRole('tablist').getByRole('tab', { name: /saml/i }).click();
-    await page.getByRole('button', { name: `Edit SAML provider ${name}` }).click();
+    await page.getByRole('button', { name: `Edit ${name}` }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel(/use absolute acs url/i)).toHaveAttribute(

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Activity,
@@ -76,6 +77,7 @@ function formatTime(dateStr: string): string {
 }
 
 export default function MonitoringPage() {
+  const t = useTranslations("app/admin/monitoring");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [serviceFilter, setServiceFilter] = useState<string>("__all__");
@@ -103,22 +105,22 @@ export default function MonitoringPage() {
   const checkMutation = useMutation({
     mutationFn: () => monitoringApi.triggerCheck(),
     onSuccess: () => {
-      toast.success("Health check completed");
+      toast.success(t("toastCheckCompleted"));
       queryClient.invalidateQueries({ queryKey: ["monitoring-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["monitoring-log"] });
     },
-    onError: mutationErrorToast("Health check failed"),
+    onError: mutationErrorToast(t("toastCheckFailed")),
   });
 
   const suppressMutation = useMutation({
     mutationFn: (req: { service_name: string; until: string }) =>
       monitoringApi.suppressAlert(req),
     onSuccess: () => {
-      toast.success("Alert suppressed");
+      toast.success(t("toastAlertSuppressed"));
       queryClient.invalidateQueries({ queryKey: ["monitoring-alerts"] });
       setSuppressTarget(null);
     },
-    onError: mutationErrorToast("Failed to suppress alert"),
+    onError: mutationErrorToast(t("toastSuppressFailed")),
   });
 
   function handleSuppress() {
@@ -134,9 +136,9 @@ export default function MonitoringPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Monitoring" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -162,8 +164,8 @@ export default function MonitoringPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Service Monitoring"
-        description="Real-time health monitoring for all infrastructure services."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             size="sm"
@@ -175,7 +177,7 @@ export default function MonitoringPage() {
             ) : (
               <RefreshCw className="size-4 mr-1.5" />
             )}
-            Run Health Check
+            {t("runHealthCheck")}
           </Button>
         }
       />
@@ -217,12 +219,12 @@ export default function MonitoringPage() {
                           {isSuppressed ? (
                             <span className="flex items-center gap-1">
                               <BellOff className="size-3" />
-                              Suppressed
+                              {t("suppressed")}
                             </span>
                           ) : alert.consecutive_failures > 0 ? (
-                            `${alert.consecutive_failures} failures`
+                            t("failuresCount", { count: alert.consecutive_failures })
                           ) : (
-                            "OK"
+                            t("ok")
                           )}
                         </div>
                       </div>
@@ -232,7 +234,7 @@ export default function MonitoringPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSuppressTarget(alert)}
-                        aria-label={`Suppress alerts for ${alert.service_name}`}
+                        aria-label={t("suppressAria", { name: alert.service_name })}
                       >
                         <BellOff className="size-4" />
                       </Button>
@@ -247,18 +249,18 @@ export default function MonitoringPage() {
           <div className="flex gap-2">
             <Badge variant="outline" className="gap-1">
               <Wifi className="size-3" />
-              {healthyCount} healthy
+              {t("healthyCount", { count: healthyCount })}
             </Badge>
             {unhealthyCount > 0 && (
               <Badge variant="destructive" className="gap-1">
                 <WifiOff className="size-3" />
-                {unhealthyCount} unhealthy
+                {t("unhealthyCount", { count: unhealthyCount })}
               </Badge>
             )}
             {suppressedCount > 0 && (
               <Badge variant="secondary" className="gap-1">
                 <BellOff className="size-3" />
-                {suppressedCount} suppressed
+                {t("suppressedCount", { count: suppressedCount })}
               </Badge>
             )}
           </div>
@@ -266,12 +268,12 @@ export default function MonitoringPage() {
       ) : (
         <EmptyState
           icon={Activity}
-          title="No alert data"
-          description="Run a health check to start monitoring services."
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
           action={
             <Button size="sm" onClick={() => checkMutation.mutate()}>
               <RefreshCw className="size-4 mr-1.5" />
-              Run Health Check
+              {t("runHealthCheck")}
             </Button>
           }
         />
@@ -282,17 +284,17 @@ export default function MonitoringPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Health Log</CardTitle>
+              <CardTitle className="text-base">{t("healthLogTitle")}</CardTitle>
               <CardDescription>
-                Recent health check results across all services.
+                {t("healthLogDescription")}
               </CardDescription>
             </div>
             <Select value={serviceFilter} onValueChange={setServiceFilter}>
               <SelectTrigger className="w-44">
-                <SelectValue placeholder="Filter by service" />
+                <SelectValue placeholder={t("filterByService")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All Services</SelectItem>
+                <SelectItem value="__all__">{t("allServices")}</SelectItem>
                 {serviceNames.map((name) => (
                   <SelectItem key={name} value={name}>
                     {name}
@@ -313,22 +315,22 @@ export default function MonitoringPage() {
             <div className="px-6 pb-4">
               <EmptyState
                 icon={Clock}
-                title="No health log entries"
-                description="Health checks are recorded every 60 seconds."
+                title={t("noLogTitle")}
+                description={t("noLogDescription")}
               />
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Previous</TableHead>
-                  <TableHead>Message</TableHead>
+                  <TableHead>{t("colService")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead>{t("colPrevious")}</TableHead>
+                  <TableHead>{t("colMessage")}</TableHead>
                   <TableHead className="text-right">
-                    Response Time
+                    {t("colResponseTime")}
                   </TableHead>
-                  <TableHead>Checked At</TableHead>
+                  <TableHead>{t("colCheckedAt")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -372,14 +374,16 @@ export default function MonitoringPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Suppress Alerts</DialogTitle>
+            <DialogTitle>{t("suppressDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Suppress alerts for <strong>{suppressTarget?.service_name}</strong>{" "}
-              to prevent notification spam during maintenance.
+              {t.rich("suppressDialogDescription", {
+                strong: (chunks) => <strong>{chunks}</strong>,
+                service: suppressTarget?.service_name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="suppress-hours">Suppress for (hours)</Label>
+            <Label htmlFor="suppress-hours">{t("suppressHoursLabel")}</Label>
             <Input
               id="suppress-hours"
               type="number"
@@ -394,7 +398,7 @@ export default function MonitoringPage() {
               variant="outline"
               onClick={() => setSuppressTarget(null)}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleSuppress}
@@ -403,7 +407,7 @@ export default function MonitoringPage() {
               {suppressMutation.isPending && (
                 <Loader2 className="size-4 mr-1.5 animate-spin" />
               )}
-              Suppress
+              {t("suppress")}
             </Button>
           </DialogFooter>
         </DialogContent>

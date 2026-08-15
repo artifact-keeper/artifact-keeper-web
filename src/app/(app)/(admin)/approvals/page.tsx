@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   CheckCircle2,
   XCircle,
@@ -52,10 +53,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 // -- helpers --
 
 function PolicySummary({ request }: { request: ApprovalRequest }) {
+  const t = useTranslations("app/admin/approvals");
   const result = request.policy_result;
   if (!result) {
     return (
-      <span className="text-sm text-muted-foreground">No policy data</span>
+      <span className="text-sm text-muted-foreground">{t("noPolicyData")}</span>
     );
   }
 
@@ -66,7 +68,7 @@ function PolicySummary({ request }: { request: ApprovalRequest }) {
       <div className="flex items-center gap-1.5">
         <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
         <span className="text-sm text-emerald-700 dark:text-emerald-400">
-          Passed
+          {t("policyPassed")}
         </span>
       </div>
     );
@@ -76,20 +78,27 @@ function PolicySummary({ request }: { request: ApprovalRequest }) {
     <div className="flex items-center gap-1.5">
       <ShieldAlert className="size-3.5 text-red-600 dark:text-red-400" />
       <span className="text-sm text-red-700 dark:text-red-400">
-        {violationCount} violation{violationCount !== 1 ? "s" : ""}
+        {t("violationCount", { count: violationCount })}
       </span>
     </div>
   );
 }
 
+const STATUS_LABELS: Record<ApprovalRequest["status"], string> = {
+  pending: "statusPending",
+  approved: "statusApproved",
+  rejected: "statusRejected",
+};
+
 function ApprovalStatusBadge({ status }: { status: ApprovalRequest["status"] }) {
+  const t = useTranslations("app/admin/approvals");
   const colors = APPROVAL_STATUS_COLORS[status];
   return (
     <Badge
       variant="outline"
       className={`border font-medium capitalize ${colors}`}
     >
-      {status}
+      {t(STATUS_LABELS[status])}
     </Badge>
   );
 }
@@ -97,6 +106,7 @@ function ApprovalStatusBadge({ status }: { status: ApprovalRequest["status"] }) 
 // -- page --
 
 export default function ApprovalsPage() {
+  const t = useTranslations("app/admin/approvals");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -162,22 +172,22 @@ export default function ApprovalsPage() {
     mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
       approvalsApi.approve(id, notes),
     onSuccess: () => {
-      toast.success("Approval request approved");
+      toast.success(t("toastApproved"));
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       resetActionDialog();
     },
-    onError: mutationErrorToast("Failed to approve request"),
+    onError: mutationErrorToast(t("toastApproveFailed")),
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
       approvalsApi.reject(id, notes),
     onSuccess: () => {
-      toast.success("Approval request rejected");
+      toast.success(t("toastRejected"));
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
       resetActionDialog();
     },
-    onError: mutationErrorToast("Failed to reject request"),
+    onError: mutationErrorToast(t("toastRejectFailed")),
   });
 
   const isActioning = approveMutation.isPending || rejectMutation.isPending;
@@ -200,9 +210,9 @@ export default function ApprovalsPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Approval Queue" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -212,7 +222,7 @@ export default function ApprovalsPage() {
 
   const artifactColumn: DataTableColumn<ApprovalRequest> = {
     id: "artifact",
-    header: "Artifact",
+    header: t("colArtifact"),
     accessor: (r) => r.artifact_id,
     cell: (r) => (
       <span className="text-sm font-medium font-mono truncate max-w-[200px] block">
@@ -223,7 +233,7 @@ export default function ApprovalsPage() {
 
   const promotionPathColumn: DataTableColumn<ApprovalRequest> = {
     id: "promotion_path",
-    header: "Promotion Path",
+    header: t("colPromotionPath"),
     accessor: (r) => r.source_repository,
     cell: (r) => (
       <div className="flex items-center gap-1.5 text-sm">
@@ -241,7 +251,7 @@ export default function ApprovalsPage() {
     promotionPathColumn,
     {
       id: "requested_by",
-      header: "Requested By",
+      header: t("colRequestedBy"),
       accessor: (r) => r.requested_by,
       sortable: true,
       cell: (r) => (
@@ -250,7 +260,7 @@ export default function ApprovalsPage() {
     },
     {
       id: "requested_at",
-      header: "Requested",
+      header: t("colRequested"),
       accessor: (r) => r.requested_at,
       sortable: true,
       cell: (r) => (
@@ -261,12 +271,12 @@ export default function ApprovalsPage() {
     },
     {
       id: "policy",
-      header: "Policy",
+      header: t("colPolicy"),
       cell: (r) => <PolicySummary request={r} />,
     },
     {
       id: "actions",
-      header: "Actions",
+      header: t("colActions"),
       cell: (r) => (
         <div className="flex items-center gap-2">
           <Button
@@ -279,7 +289,7 @@ export default function ApprovalsPage() {
             }}
           >
             <CheckCircle2 className="size-3.5 mr-1" />
-            Approve
+            {t("approve")}
           </Button>
           <Button
             size="sm"
@@ -291,7 +301,7 @@ export default function ApprovalsPage() {
             }}
           >
             <XCircle className="size-3.5 mr-1" />
-            Reject
+            {t("reject")}
           </Button>
         </div>
       ),
@@ -305,14 +315,14 @@ export default function ApprovalsPage() {
     promotionPathColumn,
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       accessor: (r) => r.status,
       sortable: true,
       cell: (r) => <ApprovalStatusBadge status={r.status} />,
     },
     {
       id: "requested_by",
-      header: "Requested By",
+      header: t("colRequestedBy"),
       accessor: (r) => r.requested_by,
       sortable: true,
       cell: (r) => (
@@ -321,7 +331,7 @@ export default function ApprovalsPage() {
     },
     {
       id: "reviewed_by",
-      header: "Reviewed By",
+      header: t("colReviewedBy"),
       accessor: (r) => r.reviewed_by ?? "",
       sortable: true,
       cell: (r) => (
@@ -332,7 +342,7 @@ export default function ApprovalsPage() {
     },
     {
       id: "reviewed_at",
-      header: "Reviewed",
+      header: t("colReviewed"),
       accessor: (r) => r.reviewed_at ?? "",
       sortable: true,
       cell: (r) => (
@@ -343,7 +353,7 @@ export default function ApprovalsPage() {
     },
     {
       id: "review_notes",
-      header: "Notes",
+      header: t("colNotes"),
       cell: (r) => (
         <span className="text-sm text-muted-foreground truncate max-w-[200px] block">
           {r.review_notes || "-"}
@@ -355,13 +365,13 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Approval Queue"
-        description="Review and manage pending artifact promotion approval requests."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             variant="outline"
             size="icon"
-            aria-label="Refresh approvals"
+            aria-label={t("refreshAria")}
             onClick={() =>
               queryClient.invalidateQueries({ queryKey: ["approvals"] })
             }
@@ -382,19 +392,19 @@ export default function ApprovalsPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <StatCard
             icon={Clock}
-            label="Pending Requests"
+            label={t("statPending")}
             value={pendingTotal}
             color={pendingTotal > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={CheckCircle2}
-            label="Approved"
+            label={t("statApproved")}
             value={historyData?.items?.filter((i) => i.status === "approved").length ?? 0}
             color="green"
           />
           <StatCard
             icon={XCircle}
-            label="Rejected"
+            label={t("statRejected")}
             value={historyData?.items?.filter((i) => i.status === "rejected").length ?? 0}
             color="red"
           />
@@ -408,7 +418,7 @@ export default function ApprovalsPage() {
       >
         <TabsList>
           <TabsTrigger value="pending">
-            Pending
+            {t("tabPending")}
             {pendingTotal > 0 && (
               <Badge
                 variant="secondary"
@@ -418,7 +428,7 @@ export default function ApprovalsPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="history">{t("tabHistory")}</TabsTrigger>
         </TabsList>
 
         {/* Pending Tab */}
@@ -432,8 +442,8 @@ export default function ApprovalsPage() {
           ) : pendingItems.length === 0 ? (
             <EmptyState
               icon={Inbox}
-              title="No pending approvals"
-              description="All promotion requests have been reviewed. New requests will appear here when artifacts are submitted for promotion."
+              title={t("emptyPendingTitle")}
+              description={t("emptyPendingDescription")}
             />
           ) : (
             <DataTable
@@ -444,7 +454,7 @@ export default function ApprovalsPage() {
               pageSize={perPage}
               onPageChange={setPendingPage}
               rowKey={(r) => r.id}
-              emptyMessage="No pending approval requests."
+              emptyMessage={t("emptyPendingMessage")}
             />
           )}
         </TabsContent>
@@ -453,7 +463,7 @@ export default function ApprovalsPage() {
         <TabsContent value="history" className="mt-6 space-y-4">
           <div className="flex items-center gap-3">
             <Label className="text-sm text-muted-foreground">
-              Filter by status
+              {t("filterByStatus")}
             </Label>
             <Select
               value={historyStatus}
@@ -466,9 +476,9 @@ export default function ApprovalsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="__all__">{t("filterAll")}</SelectItem>
+                <SelectItem value="approved">{t("filterApproved")}</SelectItem>
+                <SelectItem value="rejected">{t("filterRejected")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -482,8 +492,8 @@ export default function ApprovalsPage() {
           ) : historyItems.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
-              title="No approval history"
-              description="Completed approval reviews will appear here once requests have been approved or rejected."
+              title={t("emptyHistoryTitle")}
+              description={t("emptyHistoryDescription")}
             />
           ) : (
             <DataTable
@@ -494,7 +504,7 @@ export default function ApprovalsPage() {
               pageSize={perPage}
               onPageChange={setHistoryPage}
               rowKey={(r) => r.id}
-              emptyMessage="No approval history found."
+              emptyMessage={t("emptyHistoryMessage")}
             />
           )}
         </TabsContent>
@@ -511,13 +521,13 @@ export default function ApprovalsPage() {
           <DialogHeader>
             <DialogTitle>
               {actionDialog?.type === "approve"
-                ? "Approve Promotion"
-                : "Reject Promotion"}
+                ? t("dialogApproveTitle")
+                : t("dialogRejectTitle")}
             </DialogTitle>
             <DialogDescription>
               {actionDialog?.type === "approve"
-                ? "This will approve the artifact promotion from the source to the target repository."
-                : "This will reject the artifact promotion request. The artifact will remain in the source repository."}
+                ? t("dialogApproveDescription")
+                : t("dialogRejectDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -525,39 +535,39 @@ export default function ApprovalsPage() {
             <div className="space-y-4">
               <div className="rounded-md border p-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Artifact</span>
+                  <span className="text-muted-foreground">{t("dialogArtifact")}</span>
                   <span className="font-mono text-xs">
                     {actionDialog.request.artifact_id}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">From</span>
+                  <span className="text-muted-foreground">{t("dialogFrom")}</span>
                   <span className="font-medium">
                     {actionDialog.request.source_repository}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">To</span>
+                  <span className="text-muted-foreground">{t("dialogTo")}</span>
                   <span className="font-medium">
                     {actionDialog.request.target_repository}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Requested by</span>
+                  <span className="text-muted-foreground">{t("dialogRequestedBy")}</span>
                   <span>{actionDialog.request.requested_by}</span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="action-notes">Notes (optional)</Label>
+                <Label htmlFor="action-notes">{t("notesLabel")}</Label>
                 <Textarea
                   id="action-notes"
                   value={actionNotes}
                   onChange={(e) => setActionNotes(e.target.value)}
                   placeholder={
                     actionDialog.type === "approve"
-                      ? "Add any notes about this approval..."
-                      : "Provide a reason for rejection..."
+                      ? t("notesPlaceholderApprove")
+                      : t("notesPlaceholderReject")
                   }
                   rows={3}
                 />
@@ -571,7 +581,7 @@ export default function ApprovalsPage() {
               onClick={resetActionDialog}
               disabled={isActioning}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               variant={actionDialog?.type === "approve" ? "default" : "destructive"}
@@ -581,7 +591,7 @@ export default function ApprovalsPage() {
               {isActioning && (
                 <Loader2 className="size-4 mr-1 animate-spin" />
               )}
-              {actionDialog?.type === "approve" ? "Approve" : "Reject"}
+              {actionDialog?.type === "approve" ? t("approve") : t("reject")}
             </Button>
           </DialogFooter>
         </DialogContent>

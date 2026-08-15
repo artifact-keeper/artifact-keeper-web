@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 /**
@@ -7,6 +10,7 @@ import { cn } from "@/lib/utils";
  * by the (app) group layout.
  */
 export function SkipNavLink({ className }: { className?: string }) {
+  const t = useTranslations("components/layout/skip-nav-link");
   return (
     <a
       href="#main-content"
@@ -18,7 +22,7 @@ export function SkipNavLink({ className }: { className?: string }) {
         className
       )}
     >
-      Skip to main content
+      {t("skipToContent")}
     </a>
   );
 }

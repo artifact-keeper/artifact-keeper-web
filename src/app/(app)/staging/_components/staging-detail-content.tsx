@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   Search,
@@ -58,7 +59,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-import { POLICY_STATUS_LABELS } from "../_lib/constants";
 import { PromotionDialog } from "./promotion-dialog";
 import { RejectionDialog } from "./rejection-dialog";
 import { PromotionHistory } from "./promotion-history";
@@ -84,6 +84,7 @@ export function StagingDetailContent({
   repoKey,
   standalone = false,
 }: StagingDetailContentProps) {
+  const t = useTranslations("app/staging/_components/staging-detail-content");
   const router = useRouter();
   const { isAuthenticated } = useAuth();
 
@@ -182,13 +183,13 @@ export function StagingDetailContent({
   if (!repository) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-        <p className="text-lg font-medium">Staging repository not found</p>
+        <p className="text-lg font-medium">{t("repoNotFound")}</p>
         <Button
           variant="outline"
           className="mt-4"
           onClick={() => router.push("/staging")}
         >
-          Back to Staging
+          {t("backToStaging")}
         </Button>
       </div>
     );
@@ -207,10 +208,10 @@ export function StagingDetailContent({
           variant="outline"
           className="text-xs font-normal bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800"
         >
-          staging
+          {t("repoTypeStaging")}
         </Badge>
         <span className="text-sm text-muted-foreground ml-2">
-          {formatBytes(repository.storage_used_bytes)} used
+          {t("used", { bytes: formatBytes(repository.storage_used_bytes) })}
         </span>
       </div>
       {repository.description && (
@@ -229,7 +230,7 @@ export function StagingDetailContent({
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbLink href="/staging">Staging</BreadcrumbLink>
+                <BreadcrumbLink href="/staging">{t("title")}</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
@@ -270,7 +271,7 @@ export function StagingDetailContent({
                   </a>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open in new tab</TooltipContent>
+              <TooltipContent>{t("openInNewTab")}</TooltipContent>
             </Tooltip>
           </div>
           {repoMetaBadges}
@@ -280,8 +281,8 @@ export function StagingDetailContent({
       {/* Tabs */}
       <Tabs defaultValue="artifacts">
         <TabsList variant="line">
-          <TabsTrigger value="artifacts">Artifacts</TabsTrigger>
-          <TabsTrigger value="history">Promotion History</TabsTrigger>
+          <TabsTrigger value="artifacts">{t("tabArtifacts")}</TabsTrigger>
+          <TabsTrigger value="history">{t("tabHistory")}</TabsTrigger>
         </TabsList>
 
         {/* --- Artifacts Tab --- */}
@@ -291,7 +292,7 @@ export function StagingDetailContent({
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search artifacts..."
+                placeholder={t("searchPlaceholder")}
                 className="pl-8"
                 value={searchQuery}
                 onChange={(e) => {
@@ -308,14 +309,14 @@ export function StagingDetailContent({
                   disabled={selectedIds.size === 0}
                 >
                   <XCircle className="size-4" />
-                  Reject ({selectedIds.size})
+                  {t("reject", { count: selectedIds.size })}
                 </Button>
                 <Button
                   onClick={() => setPromotionOpen(true)}
                   disabled={selectedIds.size === 0}
                 >
                   <ArrowUpRight className="size-4" />
-                  Promote ({selectedIds.size})
+                  {t("promote", { count: selectedIds.size })}
                 </Button>
               </div>
             )}
@@ -332,7 +333,7 @@ export function StagingDetailContent({
           ) : artifacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground border rounded-md">
               <Package className="size-8 mb-2 opacity-50" />
-              <p className="text-sm">No artifacts in this staging repository.</p>
+              <p className="text-sm">{t("noArtifacts")}</p>
             </div>
           ) : (
             <div className="rounded-md border">
@@ -348,15 +349,15 @@ export function StagingDetailContent({
                           }
                         }}
                         onCheckedChange={handleSelectAll}
-                        aria-label="Select all"
+                        aria-label={t("selectAll")}
                       />
                     </TableHead>
                     <TableHead className="w-[30px]" />
-                    <TableHead>Name</TableHead>
-                    <TableHead>Version</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Policy Status</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>{t("table.name")}</TableHead>
+                    <TableHead>{t("table.version")}</TableHead>
+                    <TableHead>{t("table.size")}</TableHead>
+                    <TableHead>{t("table.policyStatus")}</TableHead>
+                    <TableHead>{t("table.created")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -379,8 +380,11 @@ export function StagingDetailContent({
           {totalPages > 1 && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">
-                Showing {(page - 1) * pageSize + 1}-
-                {Math.min(page * pageSize, total)} of {total}
+                {t("showing", {
+                  from: (page - 1) * pageSize + 1,
+                  to: Math.min(page * pageSize, total),
+                  total,
+                })}
               </span>
               <div className="flex gap-1">
                 <Button
@@ -389,7 +393,7 @@ export function StagingDetailContent({
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                 >
-                  Previous
+                  {t("previous")}
                 </Button>
                 <Button
                   variant="outline"
@@ -397,7 +401,7 @@ export function StagingDetailContent({
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t("next")}
                 </Button>
               </div>
             </div>
@@ -447,6 +451,7 @@ function ArtifactRow({
   onSelect: () => void;
   onToggleExpand: () => void;
 }) {
+  const t = useTranslations("app/staging/_components/staging-detail-content");
   const hasViolations = (artifact.policy_result?.violations?.length ?? 0) > 0;
 
   const statusIcon = {
@@ -464,7 +469,7 @@ function ArtifactRow({
             <Checkbox
               checked={selected}
               onCheckedChange={onSelect}
-              aria-label={`Select ${artifact.name}`}
+              aria-label={t("selectAria", { name: artifact.name })}
               onClick={(e) => e.stopPropagation()}
             />
           </TableCell>
@@ -505,7 +510,7 @@ function ArtifactRow({
             >
               {statusIcon[artifact.policy_status ?? "pending"]}
               <span className="ml-1">
-                {POLICY_STATUS_LABELS[artifact.policy_status ?? "pending"]}
+                {t(`policyStatus.${artifact.policy_status ?? "pending"}`)}
               </span>
             </Badge>
           </TableCell>
@@ -523,7 +528,7 @@ function ArtifactRow({
               <TableCell colSpan={7} className="p-0">
                 <div className="px-4 py-3 ml-[70px] space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
-                    Policy Violations ({artifact.policy_result?.violations.length})
+                    {t("policyViolations", { count: artifact.policy_result?.violations?.length ?? 0 })}
                   </p>
                   <div className="space-y-1">
                     {artifact.policy_result?.violations.map(

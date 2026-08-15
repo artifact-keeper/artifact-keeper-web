@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -76,21 +77,21 @@ const SEVERITY_BADGE: Record<string, string> = {
   low: "text-blue-600 bg-blue-100 dark:bg-blue-950/40",
 };
 
-const STATUS_CONFIG: Record<string, { icon: typeof ShieldAlert; color: string; label: string }> = {
-  open: { icon: ShieldAlert, color: "text-red-500", label: "Open" },
-  fixed: { icon: ShieldCheck, color: "text-green-500", label: "Fixed" },
-  acknowledged: { icon: Eye, color: "text-yellow-500", label: "Acknowledged" },
-  false_positive: { icon: XCircle, color: "text-muted-foreground", label: "False Positive" },
+const STATUS_CONFIG: Record<string, { icon: typeof ShieldAlert; color: string; labelKey: string }> = {
+  open: { icon: ShieldAlert, color: "text-red-500", labelKey: "statusOpen" },
+  fixed: { icon: ShieldCheck, color: "text-green-500", labelKey: "statusFixed" },
+  acknowledged: { icon: Eye, color: "text-yellow-500", labelKey: "statusAcknowledged" },
+  false_positive: { icon: XCircle, color: "text-muted-foreground", labelKey: "statusFalsePositive" },
 };
 
 /** DT analysis states for triage dropdown */
 const DT_ANALYSIS_STATES = [
-  { state: "NOT_AFFECTED", label: "Not Affected", icon: XCircle, color: "text-muted-foreground" },
-  { state: "EXPLOITABLE", label: "Exploitable", icon: ShieldAlert, color: "text-red-500" },
-  { state: "IN_TRIAGE", label: "In Triage", icon: Eye, color: "text-yellow-500" },
-  { state: "RESOLVED", label: "Resolved", icon: CheckCircle2, color: "text-green-500" },
-  { state: "FALSE_POSITIVE", label: "False Positive", icon: XCircle, color: "text-muted-foreground" },
-  { state: "NOT_SET", label: "Not Set", icon: AlertTriangle, color: "text-muted-foreground" },
+  { state: "NOT_AFFECTED", labelKey: "analysisNotAffected", icon: XCircle, color: "text-muted-foreground" },
+  { state: "EXPLOITABLE", labelKey: "analysisExploitable", icon: ShieldAlert, color: "text-red-500" },
+  { state: "IN_TRIAGE", labelKey: "analysisInTriage", icon: Eye, color: "text-yellow-500" },
+  { state: "RESOLVED", labelKey: "analysisResolved", icon: CheckCircle2, color: "text-green-500" },
+  { state: "FALSE_POSITIVE", labelKey: "analysisFalsePositive", icon: XCircle, color: "text-muted-foreground" },
+  { state: "NOT_SET", labelKey: "analysisNotSet", icon: AlertTriangle, color: "text-muted-foreground" },
 ] as const;
 
 /**
@@ -121,6 +122,8 @@ function resolveDtProjectUuid(
 
 export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const queryClient = useQueryClient();
+  const t = useTranslations("app/repositories/_components/security-tab-content");
+  const tSev = useTranslations("core/severity");
   // Proxy-cached remote artifacts can't be scanned (artifact-keeper#2292);
   // used below to give honest guidance instead of "run a scan".
   const analyzable = isArtifactAnalyzable(artifact);
@@ -141,9 +144,9 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       sbomApi.updateCveStatus(cveId, { status, reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cve-history", artifact.id] });
-      toast.success("CVE status updated");
+      toast.success(t("cveStatusUpdated"));
     },
-    onError: mutationErrorToast("Failed to update CVE status"),
+    onError: mutationErrorToast(t("cveStatusUpdateFailed")),
   });
 
   // -------------------------------------------------------------------------
@@ -198,9 +201,9 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dt-project-findings", dtProjectUuid] });
       queryClient.invalidateQueries({ queryKey: ["dt-project-metrics", dtProjectUuid] });
-      toast.success("Dependency-Track analysis updated");
+      toast.success(t("dtAnalysisUpdated"));
     },
-    onError: mutationErrorToast("Failed to update analysis"),
+    onError: mutationErrorToast(t("dtAnalysisFailed")),
   });
 
   // -------------------------------------------------------------------------
@@ -251,25 +254,25 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const columns: DataTableColumn<CveHistoryEntry>[] = [
     {
       id: "cve_id",
-      header: "Advisory",
+      header: t("colAdvisory"),
       accessor: (c) => c.cve_id,
       sortable: true,
       cell: (c) => <VulnIdLink id={c.cve_id} />,
     },
     {
       id: "severity",
-      header: "Severity",
+      header: t("colSeverity"),
       accessor: (c) => SEVERITY_ORDER[c.severity?.toLowerCase() ?? "low"] ?? 3,
       sortable: true,
       cell: (c) => (
         <Badge variant="outline" className={`text-xs uppercase ${SEVERITY_BADGE[c.severity?.toLowerCase() ?? ""] ?? ""}`}>
-          {c.severity ?? "Unknown"}
+          {c.severity ? tSev(c.severity.toLowerCase()) : t("unknownSeverity")}
         </Badge>
       ),
     },
     {
       id: "component",
-      header: "Component",
+      header: t("colComponent"),
       accessor: (c) => c.affected_component ?? "",
       cell: (c) => (
         <div className="max-w-[180px]">
@@ -282,7 +285,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       accessor: (c) => c.status,
       cell: (c) => {
         const config = STATUS_CONFIG[c.status] ?? STATUS_CONFIG.open;
@@ -290,14 +293,14 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
         return (
           <div className="flex items-center gap-1.5">
             <Icon className={`size-3.5 ${config.color}`} />
-            <span className="text-xs capitalize">{config.label}</span>
+            <span className="text-xs capitalize">{t(config.labelKey)}</span>
           </div>
         );
       },
     },
     {
       id: "cvss",
-      header: "CVSS",
+      header: t("colCvss"),
       accessor: (c) => c.cvss_score ?? 0,
       sortable: true,
       cell: (c) =>
@@ -309,7 +312,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
     {
       id: "detected",
-      header: "Detected",
+      header: t("colDetected"),
       accessor: (c) => c.first_detected_at,
       sortable: true,
       cell: (c) => (
@@ -335,28 +338,28 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
               disabled={c.status === "acknowledged"}
             >
               <Eye className="size-4 mr-2 text-yellow-500" />
-              Acknowledge
+              {t("acknowledge")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => updateStatusMutation.mutate({ cveId: c.id, status: "false_positive", reason: "Marked as false positive" })}
               disabled={c.status === "false_positive"}
             >
               <XCircle className="size-4 mr-2 text-muted-foreground" />
-              False Positive
+              {t("markFalsePositive")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => updateStatusMutation.mutate({ cveId: c.id, status: "fixed" })}
               disabled={c.status === "fixed"}
             >
               <CheckCircle2 className="size-4 mr-2 text-green-500" />
-              Mark Fixed
+              {t("markFixed")}
             </DropdownMenuItem>
             {c.status !== "open" && (
               <DropdownMenuItem
                 onClick={() => updateStatusMutation.mutate({ cveId: c.id, status: "open" })}
               >
                 <ShieldAlert className="size-4 mr-2 text-red-500" />
-                Reopen
+                {t("reopen")}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
@@ -372,7 +375,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   const dtFindingsColumns: DataTableColumn<DtFinding>[] = [
     {
       id: "vulnId",
-      header: "Advisory",
+      header: t("colAdvisory"),
       accessor: (f) => f.vulnerability.vulnId,
       sortable: true,
       cell: (f) => (
@@ -384,21 +387,21 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
     {
       id: "severity",
-      header: "Severity",
+      header: t("colSeverity"),
       accessor: (f) => SEVERITY_ORDER[f.vulnerability.severity?.toLowerCase() ?? "low"] ?? 3,
       sortable: true,
       cell: (f) => {
         const sev = f.vulnerability.severity?.toLowerCase() ?? "";
         return (
           <Badge variant="outline" className={`text-xs uppercase ${SEVERITY_BADGE[sev] ?? ""}`}>
-            {f.vulnerability.severity ?? "Unknown"}
+            {f.vulnerability.severity ? tSev(f.vulnerability.severity.toLowerCase()) : t("unknownSeverity")}
           </Badge>
         );
       },
     },
     {
       id: "component",
-      header: "Component",
+      header: t("colComponent"),
       accessor: (f) => f.component.name,
       cell: (f) => (
         <div className="max-w-[180px]">
@@ -411,7 +414,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
     {
       id: "cvss",
-      header: "CVSS",
+      header: t("colCvss"),
       accessor: (f) => f.vulnerability.cvssV3BaseScore ?? 0,
       sortable: true,
       cell: (f) =>
@@ -423,19 +426,19 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
     },
     {
       id: "analysisState",
-      header: "Analysis",
+      header: t("colAnalysis"),
       accessor: (f) => f.analysis?.state ?? "NOT_SET",
       cell: (f) => {
         const state = f.analysis?.state ?? "NOT_SET";
         const matched = DT_ANALYSIS_STATES.find((s) => s.state === state);
-        const label = matched?.label ?? state;
+        const label = matched ? t(matched.labelKey) : state;
         const color = matched?.color ?? "text-muted-foreground";
         return <span className={`text-xs ${color}`}>{label}</span>;
       },
     },
     {
       id: "cwe",
-      header: "CWE",
+      header: t("colCwe"),
       accessor: (f) => f.vulnerability.cwe?.cweId ?? 0,
       cell: (f) =>
         f.vulnerability.cwe ? (
@@ -457,7 +460,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {DT_ANALYSIS_STATES.map(({ state, label, icon: StateIcon, color }) => (
+            {DT_ANALYSIS_STATES.map(({ state, labelKey, icon: StateIcon, color }) => (
               <DropdownMenuItem
                 key={state}
                 onClick={() =>
@@ -470,7 +473,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
                 disabled={f.analysis?.state === state}
               >
                 <StateIcon className={`size-4 mr-2 ${color}`} />
-                {label}
+                {t(labelKey)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -516,10 +519,10 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center gap-3">
         <ShieldAlert className="size-5 text-muted-foreground" />
-        <h3 className="text-sm font-medium">Security Vulnerabilities</h3>
+        <h3 className="text-sm font-medium">{t("title")}</h3>
         {total > 0 && (
           <Badge variant="secondary" className="text-xs">
-            {total} total
+            {t("totalCount", { count: total })}
           </Badge>
         )}
       </div>
@@ -528,12 +531,10 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <ShieldCheck className="size-12 text-green-500/50 mb-4" />
           <p className="text-sm text-muted-foreground">
-            No vulnerabilities detected for this artifact.
+            {t("noVulns")}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {analyzable
-              ? "Generate an SBOM and run a security scan to check for CVEs."
-              : "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."}
+            {analyzable ? t("scanHint") : t("notAnalyzableHint")}
           </p>
         </div>
       ) : (
@@ -550,7 +551,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
                     key={sev}
                     className={`${SEVERITY_COLORS[sev]} transition-all`}
                     style={{ width: `${pct}%` }}
-                    title={`${sev}: ${count}`}
+                    title={`${tSev(sev)}: ${count}`}
                   />
                 );
               })}
@@ -559,7 +560,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
               {(["critical", "high", "medium", "low"] as const).map((sev) => (
                 <div key={sev} className="flex items-center gap-1.5 text-xs">
                   <div className={`size-2.5 rounded-full ${SEVERITY_COLORS[sev]}`} />
-                  <span className="capitalize">{sev}</span>
+                  <span>{tSev(sev)}</span>
                   <span className="font-medium">{breakdown.severity[sev]}</span>
                 </div>
               ))}
@@ -575,7 +576,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
                 <div key={key} className="flex items-center gap-2 rounded-lg border bg-card p-3">
                   <Icon className={`size-4 ${config.color}`} />
                   <div>
-                    <p className="text-xs text-muted-foreground">{config.label}</p>
+                    <p className="text-xs text-muted-foreground">{t(config.labelKey)}</p>
                     <p className="text-lg font-semibold">{count}</p>
                   </div>
                 </div>
@@ -591,7 +592,7 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
             pageSize={10}
             total={sortedCves.length}
             onPageChange={setPage}
-            emptyMessage="No CVEs found"
+            emptyMessage={t("noCves")}
             rowKey={(c) => c.id}
           />
         </>
@@ -615,10 +616,10 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
             {/* DT section header */}
             <div className="flex items-center gap-3">
               <Activity className="size-5 text-muted-foreground" />
-              <h3 className="text-sm font-medium">Dependency-Track Findings</h3>
+              <h3 className="text-sm font-medium">{t("dtTitle")}</h3>
               {dtEnabled && dtFindings && dtFindings.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
-                  {dtFindings.length} findings
+                  {t("dtFindingsCount", { count: dtFindings.length })}
                 </Badge>
               )}
             </div>
@@ -629,11 +630,10 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
                 <AlertTriangle className="size-5 text-yellow-600 dark:text-yellow-500 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
-                    Dependency-Track is unavailable
+                    {t("dtUnavailable")}
                   </p>
                   <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
-                    Real-time vulnerability scanning, findings, and triage are temporarily offline.
-                    The service will reconnect automatically when the container recovers.
+                    {t("dtUnavailableHint")}
                   </p>
                 </div>
               </div>
@@ -644,10 +644,12 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <Activity className="size-10 text-muted-foreground/50 mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  No Dependency-Track project linked to this artifact.
+                  {t("noProjectLinked")}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Set a <code className="text-xs">dt_project_uuid</code> in the artifact metadata or ensure a matching project exists in Dependency-Track.
+                  {t.rich("noProjectLinkedHint", {
+                    code: (chunks) => <code className="text-xs">{chunks}</code>,
+                  })}
                 </p>
               </div>
             )}
@@ -676,14 +678,14 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
                     pageSize={10}
                     total={sortedDtFindings.length}
                     onPageChange={setDtFindingsPage}
-                    emptyMessage="No Dependency-Track findings"
+                    emptyMessage={t("noDtFindings")}
                     rowKey={(f) => `${f.component.uuid}-${f.vulnerability.uuid}`}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <ShieldCheck className="size-10 text-green-500/50 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      No findings reported by Dependency-Track for this project.
+                      {t("noDtFindingsForProject")}
                     </p>
                   </div>
                 )}
@@ -703,10 +705,14 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 /**
  * Status bar showing whether the Dependency-Track integration is connected.
  */
-function dtConnectionLabel(connected: boolean, enabled: boolean): string {
-  if (connected) return "Connected";
-  if (!enabled) return "Disabled";
-  return "Unhealthy";
+function dtConnectionLabel(
+  connected: boolean,
+  enabled: boolean,
+  t: (key: string) => string
+): string {
+  if (connected) return t("dtConnected");
+  if (!enabled) return t("dtDisabled");
+  return t("dtUnhealthy");
 }
 
 function DtIntegrationStatusBar({
@@ -720,6 +726,7 @@ function DtIntegrationStatusBar({
   url: string | null;
   projectLinked: boolean;
 }) {
+  const t = useTranslations("app/repositories/_components/security-tab-content");
   const connected = enabled && healthy;
 
   return (
@@ -731,16 +738,16 @@ function DtIntegrationStatusBar({
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Dependency-Track</span>
+          <span className="text-sm font-medium">{t("dtName")}</span>
           <Badge
             variant="outline"
             className={`text-xs ${connected ? "text-green-600 bg-green-100 dark:bg-green-950/40" : "text-red-600 bg-red-100 dark:bg-red-950/40"}`}
           >
-            {dtConnectionLabel(connected, enabled)}
+            {dtConnectionLabel(connected, enabled, t)}
           </Badge>
           {projectLinked && (
             <Badge variant="outline" className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-950/40">
-              Project Linked
+              {t("projectLinked")}
             </Badge>
           )}
         </div>
@@ -756,11 +763,13 @@ function DtIntegrationStatusBar({
  * Metrics summary cards for a Dependency-Track project.
  */
 function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
+  const t = useTranslations("app/repositories/_components/security-tab-content");
+  const tSev = useTranslations("core/severity");
   const severityCounts = [
-    { label: "Critical", count: metrics.critical, color: SEVERITY_COLORS.critical, badgeColor: SEVERITY_BADGE.critical },
-    { label: "High", count: metrics.high, color: SEVERITY_COLORS.high, badgeColor: SEVERITY_BADGE.high },
-    { label: "Medium", count: metrics.medium, color: SEVERITY_COLORS.medium, badgeColor: SEVERITY_BADGE.medium },
-    { label: "Low", count: metrics.low, color: SEVERITY_COLORS.low, badgeColor: SEVERITY_BADGE.low },
+    { label: tSev("critical"), count: metrics.critical, color: SEVERITY_COLORS.critical, badgeColor: SEVERITY_BADGE.critical },
+    { label: tSev("high"), count: metrics.high, color: SEVERITY_COLORS.high, badgeColor: SEVERITY_BADGE.high },
+    { label: tSev("medium"), count: metrics.medium, color: SEVERITY_COLORS.medium, badgeColor: SEVERITY_BADGE.medium },
+    { label: tSev("low"), count: metrics.low, color: SEVERITY_COLORS.low, badgeColor: SEVERITY_BADGE.low },
   ];
 
   const totalViolations = metrics.policyViolationsTotal;
@@ -801,7 +810,7 @@ function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
         <div className="flex items-center gap-2 rounded-lg border bg-card p-3">
           <AlertTriangle className="size-4 text-yellow-500" />
           <div>
-            <p className="text-xs text-muted-foreground">Policy Violations</p>
+            <p className="text-xs text-muted-foreground">{t("policyViolations")}</p>
             <p className="text-lg font-semibold">{totalViolations}</p>
           </div>
         </div>
@@ -810,13 +819,13 @@ function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
       {/* Audit progress */}
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span>
-          Audited: {metrics.findingsAudited} / {metrics.findingsTotal}
+          {t("audited")}: {metrics.findingsAudited} / {metrics.findingsTotal}
         </span>
         <span>
-          Suppressed: {metrics.suppressions}
+          {t("suppressed")}: {metrics.suppressions}
         </span>
         <span>
-          Risk Score: {metrics.inheritedRiskScore.toFixed(0)}
+          {t("riskScore")}: {metrics.inheritedRiskScore.toFixed(0)}
         </span>
       </div>
     </div>

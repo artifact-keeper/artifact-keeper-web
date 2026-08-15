@@ -48,6 +48,7 @@ import {
   Hourglass,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
@@ -65,98 +66,104 @@ import {
 } from "@/components/ui/sidebar";
 
 interface NavItem {
+  /** Translation key under `sidebar.nav`. */
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
 const overviewItems: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
+  { title: "dashboard", href: "/", icon: LayoutDashboard },
 ];
 
 const artifactItems: NavItem[] = [
-  { title: "Repositories", href: "/repositories", icon: Database },
-  { title: "Packages", href: "/packages", icon: Boxes },
-  { title: "Builds", href: "/builds", icon: Hammer },
-  { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
-  { title: "Setup Guide", href: "/setup", icon: BookOpen },
+  { title: "repositories", href: "/repositories", icon: Database },
+  { title: "packages", href: "/packages", icon: Boxes },
+  { title: "builds", href: "/builds", icon: Hammer },
+  { title: "staging", href: "/staging", icon: GitPullRequestArrow },
+  { title: "setupGuide", href: "/setup", icon: BookOpen },
 ];
 
 const integrationItems: NavItem[] = [
-  { title: "Peers", href: "/peers", icon: Globe },
-  { title: "Replication", href: "/replication", icon: RefreshCw },
-  { title: "Sync Policies", href: "/sync-policies", icon: Workflow },
-  { title: "Plugins", href: "/plugins", icon: Puzzle },
-  { title: "Format Handlers", href: "/format-handlers", icon: Blocks },
-  { title: "Webhooks", href: "/webhooks", icon: Webhook },
-  { title: "Access Tokens", href: "/access-tokens", icon: Key },
-  { title: "Migration", href: "/migration", icon: ArrowRightLeft },
+  { title: "peers", href: "/peers", icon: Globe },
+  { title: "replication", href: "/replication", icon: RefreshCw },
+  { title: "syncPolicies", href: "/sync-policies", icon: Workflow },
+  { title: "plugins", href: "/plugins", icon: Puzzle },
+  { title: "formatHandlers", href: "/format-handlers", icon: Blocks },
+  { title: "webhooks", href: "/webhooks", icon: Webhook },
+  { title: "accessTokens", href: "/access-tokens", icon: Key },
+  { title: "migration", href: "/migration", icon: ArrowRightLeft },
 ];
 
 const securityItems: NavItem[] = [
-  { title: "Dashboard", href: "/security", icon: Shield },
-  { title: "Scan Results", href: "/security/scans", icon: Search },
-  { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
-  { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
-  { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
-  { title: "Quality Checks", href: "/quality-checks", icon: ListChecks },
-  { title: "Policies", href: "/security/policies", icon: FileCheck },
-  { title: "License Policies", href: "/license-policies", icon: Scale },
-  { title: "Curation", href: "/curation", icon: PackageCheck },
-  { title: "Age Gate", href: "/age-gate", icon: Hourglass },
-  { title: "Signing", href: "/signing", icon: FileSignature },
-  { title: "Permissions", href: "/permissions", icon: Lock },
+  { title: "securityDashboard", href: "/security", icon: Shield },
+  { title: "scanResults", href: "/security/scans", icon: Search },
+  { title: "blastRadius", href: "/security/blast-radius", icon: Crosshair },
+  { title: "dtProjects", href: "/security/dt-projects", icon: FolderSearch },
+  { title: "qualityGates", href: "/quality-gates", icon: ShieldCheck },
+  { title: "qualityChecks", href: "/quality-checks", icon: ListChecks },
+  { title: "policies", href: "/security/policies", icon: FileCheck },
+  { title: "licensePolicies", href: "/license-policies", icon: Scale },
+  { title: "curation", href: "/curation", icon: PackageCheck },
+  { title: "ageGate", href: "/age-gate", icon: Hourglass },
+  { title: "signing", href: "/signing", icon: FileSignature },
+  { title: "permissions", href: "/permissions", icon: Lock },
 ];
 
 const operationsItems: NavItem[] = [
-  { title: "Analytics", href: "/analytics", icon: BarChart3 },
-  { title: "Downloads", href: "/downloads", icon: Network },
-  { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
-  { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
-  { title: "Health", href: "/system-health", icon: HeartPulse },
-  { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
-  { title: "Monitoring", href: "/monitoring", icon: Activity },
-  { title: "Telemetry", href: "/telemetry", icon: Radio },
+  { title: "analytics", href: "/analytics", icon: BarChart3 },
+  { title: "downloads", href: "/downloads", icon: Network },
+  { title: "approvals", href: "/approvals", icon: ClipboardCheck },
+  { title: "promotionRules", href: "/promotion-rules", icon: Filter },
+  { title: "health", href: "/system-health", icon: HeartPulse },
+  { title: "lifecycle", href: "/lifecycle", icon: Recycle },
+  { title: "monitoring", href: "/monitoring", icon: Activity },
+  { title: "telemetry", href: "/telemetry", icon: Radio },
 ];
 
 const adminItems: NavItem[] = [
-  { title: "Users", href: "/users", icon: Users },
-  { title: "Groups", href: "/groups", icon: UsersRound },
-  { title: "Service Accounts", href: "/service-accounts", icon: Bot },
-  { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
-  { title: "Audit Log", href: "/audit", icon: ScrollText },
-  { title: "Backups", href: "/backups", icon: HardDrive },
-  { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
-  { title: "Settings", href: "/settings", icon: Settings },
+  { title: "users", href: "/users", icon: Users },
+  { title: "groups", href: "/groups", icon: UsersRound },
+  { title: "serviceAccounts", href: "/service-accounts", icon: Bot },
+  { title: "rateLimits", href: "/rate-limits", icon: Gauge },
+  { title: "auditLog", href: "/audit", icon: ScrollText },
+  { title: "backups", href: "/backups", icon: HardDrive },
+  { title: "ssoProviders", href: "/settings/sso", icon: KeyRound },
+  { title: "settings", href: "/settings", icon: Settings },
 ];
 
 function NavGroup({
-  label,
+  labelKey,
   items,
   pathname,
 }: {
-  label: string;
+  /** Translation key under `sidebar.groups`. */
+  labelKey: string;
   items: NavItem[];
   pathname: string;
 }) {
+  const t = useTranslations("components/layout/app-sidebar");
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupLabel>{t(`groups.${labelKey}`)}</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => (
-          <SidebarMenuItem key={item.href}>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === item.href}
-              tooltip={item.title}
-            >
-              <Link href={item.href}>
-                <item.icon className="size-4" />
-                <span>{item.title}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
+        {items.map((item) => {
+          const label = t(`nav.${item.title}`);
+          return (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === item.href}
+                tooltip={label}
+              >
+                <Link href={item.href}>
+                  <item.icon className="size-4" />
+                  <span>{label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          );
+        })}
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -230,11 +237,11 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="pb-4">
-        <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
-        <NavGroup label="Artifacts" items={artifactItems} pathname={pathname} />
+        <NavGroup labelKey="overview" items={overviewItems} pathname={pathname} />
+        <NavGroup labelKey="artifacts" items={artifactItems} pathname={pathname} />
         {isAuthenticated && (
           <NavGroup
-            label="Integration"
+            labelKey="integration"
             items={visibleIntegrationItems}
             pathname={pathname}
           />
@@ -242,17 +249,17 @@ export function AppSidebar() {
         {isAdmin && (
           <>
             <NavGroup
-              label="Security"
+              labelKey="security"
               items={visibleSecurityItems}
               pathname={pathname}
             />
             <NavGroup
-              label="Operations"
+              labelKey="operations"
               items={operationsItems}
               pathname={pathname}
             />
             <NavGroup
-              label="Administration"
+              labelKey="administration"
               items={adminItems}
               pathname={pathname}
             />

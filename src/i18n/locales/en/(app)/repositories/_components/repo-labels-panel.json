@@ -1,0 +1,15 @@
+{
+  "description": "Key/value labels for organizing and filtering repositories.",
+  "addAria": "Add a label",
+  "keyPlaceholder": "key (e.g. team)",
+  "keyAria": "Label key",
+  "valuePlaceholder": "value (e.g. platform)",
+  "valueAria": "Label value",
+  "add": "Add",
+  "empty": "No labels yet.",
+  "saved": "Label \"{key}\" saved",
+  "removeAria": "Remove label {key}",
+  "removed": "Label removed",
+  "saveFailed": "Failed to save label",
+  "removeFailed": "Failed to remove label"
+}

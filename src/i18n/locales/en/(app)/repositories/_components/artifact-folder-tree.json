@@ -1,0 +1,8 @@
+{
+  "fileAria": "File {path}",
+  "folderAria": "Folder {path}",
+  "fileCount": "{count, plural, one {# file} other {# files}}",
+  "empty": "No artifacts in this repository.",
+  "folderTree": "Folder tree",
+  "treeAria": "Repository folder tree"
+}

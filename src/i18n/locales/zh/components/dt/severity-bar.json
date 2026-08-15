@@ -1,0 +1,7 @@
+{
+  "noVulnerabilities": "无漏洞",
+  "critical": "严重",
+  "high": "高危",
+  "medium": "中危",
+  "low": "低危"
+}

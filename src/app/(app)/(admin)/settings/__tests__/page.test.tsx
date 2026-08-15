@@ -345,7 +345,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
-    expect(inputs.find((i) => i.value === "S3")).toBeDefined();
+    expect(inputs.find((i) => i.value === "S3 (AWS)")).toBeDefined();
     expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
     // Max Upload Size is now an editable number input (#189). 1 GiB shows
     // as the value "1" with the unit selector set to GB.
@@ -367,7 +367,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
-    expect(inputs.find((i) => i.value === "Local Filesystem")).toBeDefined();
+    expect(inputs.find((i) => i.value === "Local filesystem")).toBeDefined();
     // 0 bytes means "no limit" (#189): the editable number input is empty
     // with the "No limit" placeholder.
     const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
@@ -459,7 +459,7 @@ describe("SettingsPage", () => {
     // rather than falling back to the buggy placeholder strings (#334/#347).
     expect(unavailableInputs.length).toBe(4);
     // Critically: the buggy placeholders must NOT appear on error.
-    expect(inputs.find((i) => i.value === "Local Filesystem")).toBeUndefined();
+    expect(inputs.find((i) => i.value === "Local filesystem")).toBeUndefined();
     expect(inputs.find((i) => i.value === "/data/artifacts")).toBeUndefined();
   });
 

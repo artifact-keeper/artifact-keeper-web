@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { FileQuestion, ArrowLeft, Home } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export default function NotFound() {
+  const t = useTranslations("not-found");
   return (
     <div className="flex min-h-svh flex-col items-center justify-center px-6">
       <div className="flex flex-col items-center text-center max-w-md">
@@ -14,11 +16,10 @@ export default function NotFound() {
           404
         </h1>
         <h2 className="mt-4 text-xl font-semibold tracking-tight">
-          Page Not Found
+          {t("title")}
         </h2>
         <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-          The page you are looking for does not exist or has been moved to a
-          different location.
+          {t("description")}
         </p>
         <div className="mt-8 flex items-center gap-3">
           <Link
@@ -26,7 +27,7 @@ export default function NotFound() {
             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
           >
             <Home className="size-4" />
-            Go to Dashboard
+            {t("goToDashboard")}
           </Link>
           <button
             onClick={() => {
@@ -35,7 +36,7 @@ export default function NotFound() {
             className="inline-flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2.5 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />
-            Go Back
+            {t("goBack")}
           </button>
         </div>
       </div>

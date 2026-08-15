@@ -3,6 +3,7 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Pencil,
@@ -100,6 +101,7 @@ const EMPTY_CREATE: CreateUserForm = {
 // -- page --
 
 export default function UsersPage() {
+  const t = useTranslations("app/admin/users");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 
@@ -165,10 +167,10 @@ export default function UsersPage() {
         setPasswordUsername(data.user.username);
         setPasswordOpen(true);
       } else {
-        toast.success("User created successfully");
+        toast.success(t("toastCreated"));
       }
     },
-    onError: mutationErrorToast("Failed to create user"),
+    onError: mutationErrorToast(t("toastCreateFailed")),
   });
 
   const updateMutation = useMutation({
@@ -185,12 +187,12 @@ export default function UsersPage() {
       return data;
     },
     onSuccess: () => {
-      toast.success("User updated successfully");
+      toast.success(t("toastUpdated"));
       invalidateGroup(queryClient, "users");
       setEditOpen(false);
       setSelectedUser(null);
     },
-    onError: mutationErrorToast("Failed to update user"),
+    onError: mutationErrorToast(t("toastUpdateFailed")),
   });
 
   const toggleStatusMutation = useMutation({
@@ -201,10 +203,10 @@ export default function UsersPage() {
       }));
     },
     onSuccess: (_, vars) => {
-      toast.success(`User ${vars.is_active ? "enabled" : "disabled"} successfully`);
+      toast.success(vars.is_active ? t("toastEnabled") : t("toastDisabled"));
       invalidateGroup(queryClient, "users");
     },
-    onError: mutationErrorToast("Failed to update user status"),
+    onError: mutationErrorToast(t("toastStatusUpdateFailed")),
   });
 
   const resetPasswordMutation = useMutation({
@@ -217,11 +219,11 @@ export default function UsersPage() {
     onSuccess: (data, userId) => {
       const u = users?.find((x) => x.id === userId);
       setGeneratedPassword(data.temporary_password);
-      setPasswordUsername(u?.username ?? "User");
+      setPasswordUsername(u?.username ?? t("user"));
       setPasswordOpen(true);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: mutationErrorToast("Failed to reset password"),
+    onError: mutationErrorToast(t("toastResetPasswordFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -229,12 +231,12 @@ export default function UsersPage() {
       await unwrap(sdkDeleteUser({ path: { id } }));
     },
     onSuccess: () => {
-      toast.success("User deleted successfully");
+      toast.success(t("toastDeleted"));
       invalidateGroup(queryClient, "users");
       setDeleteOpen(false);
       setSelectedUser(null);
     },
-    onError: mutationErrorToast("Failed to delete user"),
+    onError: mutationErrorToast(t("toastDeleteFailed")),
   });
 
   // -- user tokens query (for the selected user) --
@@ -252,13 +254,13 @@ export default function UsersPage() {
       await adminApi.revokeUserToken(userId, tokenId);
     },
     onSuccess: () => {
-      toast.success("Token revoked");
+      toast.success(t("toastTokenRevoked"));
       queryClient.invalidateQueries({
         queryKey: ["admin-user-tokens", selectedUser?.id],
       });
       setRevokeTokenId(null);
     },
-    onError: mutationErrorToast("Failed to revoke token"),
+    onError: mutationErrorToast(t("toastTokenRevokeFailed")),
   });
 
   // -- handlers --
@@ -281,24 +283,24 @@ export default function UsersPage() {
   const handleDelete = useCallback(
     (u: User) => {
       if (isSelf(u)) {
-        toast.error("You cannot delete your own account");
+        toast.error(t("cannotDeleteSelf"));
         return;
       }
       setSelectedUser(u);
       setDeleteOpen(true);
     },
-    [isSelf]
+    [isSelf, t]
   );
 
   const handleResetPassword = useCallback(
     (u: User) => {
       if (isSelf(u)) {
-        toast.error("You cannot reset your own password from here");
+        toast.error(t("cannotResetSelfPassword"));
         return;
       }
       resetPasswordMutation.mutate(u.id);
     },
-    [isSelf, resetPasswordMutation]
+    [isSelf, resetPasswordMutation, t]
   );
 
   const handleViewTokens = useCallback((u: User) => {
@@ -309,7 +311,7 @@ export default function UsersPage() {
   const handleToggleStatus = useCallback(
     (u: User) => {
       if (isSelf(u)) {
-        toast.error("You cannot disable your own account");
+        toast.error(t("cannotDisableSelf"));
         return;
       }
       toggleStatusMutation.mutate({
@@ -317,21 +319,21 @@ export default function UsersPage() {
         is_active: !(u.is_active ?? true),
       });
     },
-    [isSelf, toggleStatusMutation]
+    [isSelf, toggleStatusMutation, t]
   );
 
   const copyPassword = useCallback(() => {
     if (generatedPassword) {
       navigator.clipboard.writeText(generatedPassword);
-      toast.success("Password copied to clipboard");
+      toast.success(t("toastPasswordCopied"));
     }
-  }, [generatedPassword]);
+  }, [generatedPassword, t]);
 
   // -- columns --
   const columns: DataTableColumn<User>[] = [
     {
       id: "username",
-      header: "Username",
+      header: t("colUsername"),
       accessor: (u) => u.username,
       sortable: true,
       cell: (u) => (
@@ -340,7 +342,7 @@ export default function UsersPage() {
           {u.is_admin && (
             <Badge variant="secondary" className="text-xs">
               <ShieldCheck className="size-3 mr-1" />
-              Admin
+              {t("admin")}
             </Badge>
           )}
         </div>
@@ -348,14 +350,14 @@ export default function UsersPage() {
     },
     {
       id: "email",
-      header: "Email",
+      header: t("colEmail"),
       accessor: (u) => u.email,
       sortable: true,
       cell: (u) => <span className="text-sm text-muted-foreground">{u.email}</span>,
     },
     {
       id: "display_name",
-      header: "Display Name",
+      header: t("colDisplayName"),
       accessor: (u) => u.display_name ?? "",
       sortable: true,
       cell: (u) => (
@@ -364,18 +366,18 @@ export default function UsersPage() {
     },
     {
       id: "status",
-      header: "Status",
-      accessor: (u) => (u.is_active !== false ? "Active" : "Inactive"),
+      header: t("colStatus"),
+      accessor: (u) => (u.is_active !== false ? t("active") : t("inactive")),
       cell: (u) => (
         <StatusBadge
-          status={u.is_active !== false ? "Active" : "Inactive"}
+          status={u.is_active !== false ? t("active") : t("inactive")}
           color={u.is_active !== false ? "green" : "red"}
         />
       ),
     },
     {
       id: "auth_source",
-      header: "Auth Source",
+      header: t("colAuthSource"),
       accessor: (u) => getAuthProviderLabel(u.auth_provider),
       sortable: true,
       cell: (u) => <AuthSourceBadge provider={u.auth_provider} />,
@@ -390,40 +392,40 @@ export default function UsersPage() {
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" aria-label={`View tokens for ${u.username}`} onClick={() => handleViewTokens(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label={t("viewTokensAria", { name: u.username })} onClick={() => handleViewTokens(u)}>
                 <Key className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>View Tokens</TooltipContent>
+            <TooltipContent>{t("viewTokens")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" aria-label={`Edit user ${u.username}`} onClick={() => handleEdit(u)}>
+              <Button variant="ghost" size="icon-xs" aria-label={t("editAria", { name: u.username })} onClick={() => handleEdit(u)}>
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t("edit")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Reset password for ${u.username}`}
+                aria-label={t("resetPasswordAria", { name: u.username })}
                 onClick={() => handleResetPassword(u)}
                 disabled={isSelf(u)}
               >
                 <KeyRound className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Reset Password</TooltipContent>
+            <TooltipContent>{t("resetPassword")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`${u.is_active !== false ? "Disable" : "Enable"} user ${u.username}`}
+                aria-label={t(u.is_active !== false ? "disableAria" : "enableAria", { name: u.username })}
                 onClick={() => handleToggleStatus(u)}
                 disabled={isSelf(u)}
               >
@@ -435,7 +437,7 @@ export default function UsersPage() {
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {u.is_active !== false ? "Disable" : "Enable"}
+              {u.is_active !== false ? t("disable") : t("enable")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -443,7 +445,7 @@ export default function UsersPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Delete user ${u.username}`}
+                aria-label={t("deleteAria", { name: u.username })}
                 className="text-destructive hover:text-destructive"
                 onClick={() => handleDelete(u)}
                 disabled={isSelf(u)}
@@ -451,7 +453,7 @@ export default function UsersPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("delete")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -462,11 +464,11 @@ export default function UsersPage() {
   if (!currentUser?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Users" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to view this page.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -476,12 +478,12 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Users"
-        description="Manage user accounts, roles, and access."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
-            Create User
+            {t("createUser")}
           </Button>
         }
       />
@@ -489,12 +491,12 @@ export default function UsersPage() {
       {!isLoading && totalUsers === 0 ? (
         <EmptyState
           icon={Users}
-          title="No users yet"
-          description="Create your first user to get started."
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create User
+              {t("createUser")}
             </Button>
           }
         />
@@ -512,7 +514,7 @@ export default function UsersPage() {
           }}
           pageSizeOptions={[20, 50, 100]}
           loading={isLoading}
-          emptyMessage="No users found."
+          emptyMessage={t("emptyMessage")}
           rowKey={(u) => u.id}
         />
       )}
@@ -527,10 +529,9 @@ export default function UsersPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t("createUser")}</DialogTitle>
             <DialogDescription>
-              Add a new user account. A temporary password will be generated if
-              auto-generate is enabled.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -541,10 +542,10 @@ export default function UsersPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="create-username">Username</Label>
+              <Label htmlFor="create-username">{t("usernameLabel")}</Label>
               <Input
                 id="create-username"
-                placeholder="jdoe"
+                placeholder={t("usernamePlaceholder")}
                 value={createForm.username}
                 onChange={(e) =>
                   setCreateForm((f) => ({ ...f, username: e.target.value }))
@@ -553,11 +554,11 @@ export default function UsersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-email">Email</Label>
+              <Label htmlFor="create-email">{t("emailLabel")}</Label>
               <Input
                 id="create-email"
                 type="email"
-                placeholder="jdoe@example.com"
+                placeholder={t("emailPlaceholder")}
                 value={createForm.email}
                 onChange={(e) =>
                   setCreateForm((f) => ({ ...f, email: e.target.value }))
@@ -566,10 +567,10 @@ export default function UsersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-display">Display Name</Label>
+              <Label htmlFor="create-display">{t("displayNameLabel")}</Label>
               <Input
                 id="create-display"
-                placeholder="John Doe"
+                placeholder={t("displayNamePlaceholder")}
                 value={createForm.display_name}
                 onChange={(e) =>
                   setCreateForm((f) => ({ ...f, display_name: e.target.value }))
@@ -578,13 +579,13 @@ export default function UsersPage() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="create-password">Password</Label>
+                <Label htmlFor="create-password">{t("passwordLabel")}</Label>
                 <div className="flex items-center gap-2">
                   <Label
                     htmlFor="auto-generate"
                     className="text-xs text-muted-foreground"
                   >
-                    Auto-generate
+                    {t("autoGenerate")}
                   </Label>
                   <Switch
                     id="auto-generate"
@@ -605,7 +606,7 @@ export default function UsersPage() {
                     <Input
                       id="create-password"
                       type="text"
-                      placeholder="Enter password"
+                      placeholder={t("passwordPlaceholder")}
                       value={createForm.password}
                       onChange={(e) =>
                         setCreateForm((f) => ({ ...f, password: e.target.value }))
@@ -623,7 +624,7 @@ export default function UsersPage() {
                         }))
                       }
                     >
-                      Generate
+                      {t("generate")}
                     </Button>
                   </div>
                   <PasswordPolicyHint password={createForm.password} />
@@ -638,7 +639,7 @@ export default function UsersPage() {
                   setCreateForm((f) => ({ ...f, is_admin: v }))
                 }
               />
-              <Label htmlFor="create-admin">Administrator</Label>
+              <Label htmlFor="create-admin">{t("administrator")}</Label>
             </div>
             <DialogFooter>
               <Button
@@ -652,7 +653,7 @@ export default function UsersPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create User"}
+                {createMutation.isPending ? t("creating") : t("createUser")}
               </Button>
             </DialogFooter>
           </form>
@@ -669,9 +670,9 @@ export default function UsersPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit User: {selectedUser?.username}</DialogTitle>
+            <DialogTitle>{t("editDialogTitle", { name: selectedUser?.username ?? "" })}</DialogTitle>
             <DialogDescription>
-              Update user details and access level.
+              {t("editDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -684,13 +685,13 @@ export default function UsersPage() {
             }}
           >
             <div className="space-y-2">
-              <Label>Auth Source</Label>
+              <Label>{t("authSourceLabel")}</Label>
               <div data-testid="edit-auth-source">
                 <AuthSourceBadge provider={selectedUser?.auth_provider} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-email">Email</Label>
+              <Label htmlFor="edit-email">{t("emailLabel")}</Label>
               <Input
                 id="edit-email"
                 type="email"
@@ -702,7 +703,7 @@ export default function UsersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-display">Display Name</Label>
+              <Label htmlFor="edit-display">{t("displayNameLabel")}</Label>
               <Input
                 id="edit-display"
                 value={editForm.display_name}
@@ -720,7 +721,7 @@ export default function UsersPage() {
                 }
                 disabled={selectedUser ? isSelf(selectedUser) : false}
               />
-              <Label htmlFor="edit-admin">Administrator</Label>
+              <Label htmlFor="edit-admin">{t("administrator")}</Label>
             </div>
             <div className="flex items-center gap-3">
               <Switch
@@ -731,7 +732,7 @@ export default function UsersPage() {
                 }
                 disabled={selectedUser ? isSelf(selectedUser) : false}
               />
-              <Label htmlFor="edit-active">Active</Label>
+              <Label htmlFor="edit-active">{t("active")}</Label>
             </div>
             <DialogFooter>
               <Button
@@ -745,7 +746,7 @@ export default function UsersPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateMutation.isPending ? t("saving") : t("saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -765,33 +766,33 @@ export default function UsersPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Temporary Password</DialogTitle>
+            <DialogTitle>{t("tempPasswordTitle")}</DialogTitle>
             <DialogDescription>
-              This password will only be shown once. Save it and share it securely.
+              {t("tempPasswordDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Alert>
-              <AlertTitle>Save this password!</AlertTitle>
+              <AlertTitle>{t("savePasswordTitle")}</AlertTitle>
               <AlertDescription>
-                The user will be required to change this password on next login.
+                {t("savePasswordDescription")}
               </AlertDescription>
             </Alert>
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Username</p>
+              <p className="text-sm text-muted-foreground">{t("usernameLabel")}</p>
               <code className="block rounded bg-muted px-3 py-2 text-sm font-mono">
                 {passwordUsername}
               </code>
             </div>
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Temporary Password</p>
+              <p className="text-sm text-muted-foreground">{t("temporaryPassword")}</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 rounded bg-muted px-3 py-2 text-sm font-mono break-all">
                   {generatedPassword}
                 </code>
                 <Button variant="outline" size="sm" onClick={copyPassword}>
                   <Copy className="size-3.5 mr-1" />
-                  Copy
+                  {t("copy")}
                 </Button>
               </div>
             </div>
@@ -804,7 +805,7 @@ export default function UsersPage() {
                 setPasswordUsername(null);
               }}
             >
-              Done
+              {t("done")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -817,10 +818,10 @@ export default function UsersPage() {
           setDeleteOpen(o);
           if (!o) setSelectedUser(null);
         }}
-        title="Delete User"
-        description={`Deleting "${selectedUser?.username}" will permanently remove their account and revoke all access. This cannot be undone.`}
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: selectedUser?.username ?? "" })}
         typeToConfirm={selectedUser?.username}
-        confirmText="Delete User"
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {
@@ -842,22 +843,22 @@ export default function UsersPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              API Tokens: {selectedUser?.username}
+              {t("tokensTitle", { name: selectedUser?.username ?? "" })}
             </DialogTitle>
             <DialogDescription>
-              View and revoke API tokens for this user.
+              {t("tokensDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {tokensLoading ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                Loading tokens...
+                {t("loadingTokens")}
               </p>
             ) : (userTokens ?? []).length === 0 ? (
               <EmptyState
                 icon={Key}
-                title="No tokens"
-                description="This user has no API tokens."
+                title={t("noTokensTitle")}
+                description={t("noTokensDescription")}
               />
             ) : (
               <div className="divide-y">
@@ -884,22 +885,22 @@ export default function UsersPage() {
                       </div>
                       <div className="flex gap-4 text-xs text-muted-foreground">
                         <span>
-                          Created{" "}
+                          {t("createdLabel")}{" "}
                           {token.created_at
                             ? new Date(token.created_at).toLocaleDateString()
-                            : "N/A"}
+                            : t("na")}
                         </span>
                         {token.expires_at && (
                           <span>
-                            Expires{" "}
+                            {t("expiresLabel")}{" "}
                             {new Date(token.expires_at).toLocaleDateString()}
                           </span>
                         )}
                         <span>
-                          Last used{" "}
+                          {t("lastUsedLabel")}{" "}
                           {token.last_used_at
                             ? new Date(token.last_used_at).toLocaleDateString()
-                            : "Never"}
+                            : t("never")}
                         </span>
                       </div>
                     </div>
@@ -910,7 +911,7 @@ export default function UsersPage() {
                       onClick={() => setRevokeTokenId(token.id)}
                     >
                       <Trash2 className="size-3.5 mr-1" />
-                      Revoke
+                      {t("revoke")}
                     </Button>
                   </div>
                 ))}
@@ -926,7 +927,7 @@ export default function UsersPage() {
                 setRevokeTokenId(null);
               }}
             >
-              Close
+              {t("close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -938,9 +939,9 @@ export default function UsersPage() {
         onOpenChange={(o) => {
           if (!o) setRevokeTokenId(null);
         }}
-        title="Revoke Token"
-        description="This will permanently invalidate this API token. Any applications using it will lose access immediately."
-        confirmText="Revoke Token"
+        title={t("revokeTokenTitle")}
+        description={t("revokeTokenDescription")}
+        confirmText={t("revokeTokenConfirm")}
         danger
         loading={revokeTokenMutation.isPending}
         onConfirm={() => {

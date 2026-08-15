@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Radio,
@@ -66,16 +67,17 @@ const SEVERITY_COLORS: Record<string, string> = {
   info: "text-blue-500",
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, values?: Record<string, string | number>) => string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return "< 1h ago";
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 1) return t("lessThanHourAgo");
+  if (hours < 24) return t("hoursAgo", { hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("daysAgo", { days });
 }
 
 export default function TelemetryPage() {
+  const t = useTranslations("app/admin/telemetry");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [detailCrash, setDetailCrash] = useState<CrashReport | null>(null);
@@ -102,31 +104,31 @@ export default function TelemetryPage() {
   const updateSettingsMutation = useMutation({
     mutationFn: (s: TelemetrySettings) => telemetryApi.updateSettings(s),
     onSuccess: () => {
-      toast.success("Settings updated");
+      toast.success(t("settingsUpdated"));
       queryClient.invalidateQueries({ queryKey: ["telemetry-settings"] });
     },
-    onError: mutationErrorToast("Failed to update settings"),
+    onError: mutationErrorToast(t("settingsUpdateFailed")),
   });
 
   const submitMutation = useMutation({
     mutationFn: (ids: string[]) => telemetryApi.submitCrashes(ids),
     onSuccess: (result) => {
-      toast.success(`${result.marked_submitted} crash report(s) submitted`);
+      toast.success(t("crashesSubmitted", { count: result.marked_submitted }));
       queryClient.invalidateQueries({ queryKey: ["telemetry-crashes"] });
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
     },
-    onError: mutationErrorToast("Failed to submit crash reports"),
+    onError: mutationErrorToast(t("submitFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => telemetryApi.deleteCrash(id),
     onSuccess: () => {
-      toast.success("Crash report deleted");
+      toast.success(t("deleted"));
       queryClient.invalidateQueries({ queryKey: ["telemetry-crashes"] });
       queryClient.invalidateQueries({ queryKey: ["telemetry-pending"] });
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete crash report"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   function handleToggle(field: keyof TelemetrySettings, value: boolean) {
@@ -142,9 +144,9 @@ export default function TelemetryPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Telemetry" />
+        <PageHeader title={t("accessTitle")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -157,8 +159,8 @@ export default function TelemetryPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Telemetry & Crash Reporting"
-        description="Opt-in crash reporting with privacy-first PII scrubbing."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             variant="outline"
@@ -169,7 +171,7 @@ export default function TelemetryPage() {
             }}
           >
             <RefreshCw className="size-4 mr-1.5" />
-            Refresh
+            {t("refresh")}
           </Button>
         }
       />
@@ -178,25 +180,25 @@ export default function TelemetryPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           icon={Radio}
-          label="Telemetry"
-          value={settings?.enabled ? "Enabled" : "Disabled"}
+          label={t("statTelemetry")}
+          value={settings?.enabled ? t("enabled") : t("disabled")}
           color={settings?.enabled ? "green" : "default"}
         />
         <StatCard
           icon={Bug}
-          label="Total Crashes"
+          label={t("statTotalCrashes")}
           value={totalCrashes}
           color={totalCrashes > 0 ? "red" : "green"}
         />
         <StatCard
           icon={Send}
-          label="Pending Submit"
+          label={t("statPending")}
           value={pendingCount}
           color={pendingCount > 0 ? "yellow" : "green"}
         />
         <StatCard
           icon={Shield}
-          label="Scrub Level"
+          label={t("statScrubLevel")}
           value={settings?.scrub_level ?? "..."}
           color="blue"
         />
@@ -205,9 +207,9 @@ export default function TelemetryPage() {
       {/* Settings Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Telemetry Settings</CardTitle>
+          <CardTitle className="text-base">{t("settingsTitle")}</CardTitle>
           <CardDescription>
-            Control what data is collected and how it is handled.
+            {t("settingsDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -222,10 +224,10 @@ export default function TelemetryPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="telemetry-enabled" className="text-sm font-medium">
-                    Enable Telemetry
+                    {t("enableTelemetry")}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Collect and report crash data to improve the system.
+                    {t("enableTelemetryHint")}
                   </p>
                 </div>
                 <Switch
@@ -238,10 +240,10 @@ export default function TelemetryPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="telemetry-review-before-send" className="text-sm font-medium">
-                    Review Before Send
+                    {t("reviewBeforeSend")}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Queue reports for admin approval before submission.
+                    {t("reviewBeforeSendHint")}
                   </p>
                 </div>
                 <Switch
@@ -255,9 +257,9 @@ export default function TelemetryPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="telemetry-include-logs" className="text-sm font-medium">Include Logs</Label>
+                  <Label htmlFor="telemetry-include-logs" className="text-sm font-medium">{t("includeLogs")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    Attach recent log lines to crash reports.
+                    {t("includeLogsHint")}
                   </p>
                 </div>
                 <Switch
@@ -270,10 +272,10 @@ export default function TelemetryPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">
-                    PII Scrub Level
+                    {t("scrubLevel")}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    How aggressively to strip personal data from reports.
+                    {t("scrubLevelHint")}
                   </p>
                 </div>
                 <Select
@@ -284,9 +286,9 @@ export default function TelemetryPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="minimal">Minimal</SelectItem>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="aggressive">Aggressive</SelectItem>
+                    <SelectItem value="minimal">{t("scrubMinimal")}</SelectItem>
+                    <SelectItem value="standard">{t("scrubStandard")}</SelectItem>
+                    <SelectItem value="aggressive">{t("scrubAggressive")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -300,11 +302,11 @@ export default function TelemetryPage() {
         <Alert>
           <AlertTriangle className="size-4" />
           <AlertTitle>
-            {pendingCount} pending crash report{pendingCount > 1 ? "s" : ""}
+            {t("pendingCount", { count: pendingCount })}
           </AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>
-              Review and submit these reports to help improve the system.
+              {t("pendingHint")}
             </span>
             <Button
               size="sm"
@@ -318,7 +320,7 @@ export default function TelemetryPage() {
               ) : (
                 <Send className="size-4 mr-1.5" />
               )}
-              Submit All
+              {t("submitAll")}
             </Button>
           </AlertDescription>
         </Alert>
@@ -327,7 +329,7 @@ export default function TelemetryPage() {
       {/* Crash Reports Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Crash Reports</CardTitle>
+          <CardTitle className="text-base">{t("crashTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
           {crashesLoading ? (
@@ -340,21 +342,21 @@ export default function TelemetryPage() {
             <div className="px-6 pb-4">
               <EmptyState
                 icon={Bug}
-                title="No crash reports"
-                description="No crashes have been recorded. That's good news."
+                title={t("noCrashesTitle")}
+                description={t("noCrashesDescription")}
               />
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Error</TableHead>
-                  <TableHead>Component</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
-                  <TableHead>Last Seen</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colError")}</TableHead>
+                  <TableHead>{t("colComponent")}</TableHead>
+                  <TableHead>{t("colSeverity")}</TableHead>
+                  <TableHead className="text-right">{t("colCount")}</TableHead>
+                  <TableHead>{t("colLastSeen")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -387,13 +389,13 @@ export default function TelemetryPage() {
                       {crash.occurrence_count}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {timeAgo(crash.last_seen_at)}
+                      {timeAgo(crash.last_seen_at, t)}
                     </TableCell>
                     <TableCell>
                       {crash.submitted ? (
-                        <Badge variant="secondary">Submitted</Badge>
+                        <Badge variant="secondary">{t("submitted")}</Badge>
                       ) : (
-                        <Badge>Pending</Badge>
+                        <Badge>{t("pending")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -405,7 +407,7 @@ export default function TelemetryPage() {
                             onClick={() =>
                               submitMutation.mutate([crash.id])
                             }
-                            aria-label={`Submit ${crash.error_type} crash report`}
+                            aria-label={t("submitAria", { error: crash.error_type })}
                           >
                             <Send className="size-4" />
                           </Button>
@@ -414,7 +416,7 @@ export default function TelemetryPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(crash)}
-                          aria-label={`Delete ${crash.error_type} crash report`}
+                          aria-label={t("deleteAria", { error: crash.error_type })}
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
@@ -447,34 +449,34 @@ export default function TelemetryPage() {
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="text-muted-foreground">Component:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailComponent")}:</span>{" "}
                   {detailCrash.component}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Severity:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailSeverity")}:</span>{" "}
                   <span className={SEVERITY_COLORS[detailCrash.severity] ?? ""}>
                     {detailCrash.severity}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Version:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailVersion")}:</span>{" "}
                   {detailCrash.app_version}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Occurrences:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailOccurrences")}:</span>{" "}
                   {detailCrash.occurrence_count}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">First seen:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailFirstSeen")}:</span>{" "}
                   {new Date(detailCrash.first_seen_at).toLocaleString()}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Last seen:</span>{" "}
+                  <span className="text-muted-foreground">{t("detailLastSeen")}:</span>{" "}
                   {new Date(detailCrash.last_seen_at).toLocaleString()}
                 </div>
                 {detailCrash.os_info && (
                   <div className="col-span-2">
-                    <span className="text-muted-foreground">OS:</span>{" "}
+                    <span className="text-muted-foreground">{t("detailOs")}:</span>{" "}
                     {detailCrash.os_info}
                   </div>
                 )}
@@ -482,7 +484,7 @@ export default function TelemetryPage() {
               {detailCrash.stack_trace && (
                 <div>
                   <Label className="text-xs text-muted-foreground">
-                    Stack Trace
+                    {t("stackTrace")}
                   </Label>
                   <pre className="mt-1 rounded-md bg-muted p-3 text-xs overflow-x-auto max-h-64 overflow-y-auto">
                     {detailCrash.stack_trace}
@@ -491,7 +493,7 @@ export default function TelemetryPage() {
               )}
               <div>
                 <Label className="text-xs text-muted-foreground">
-                  Signature
+                  {t("signature")}
                 </Label>
                 <code className="block mt-1 text-xs font-mono text-muted-foreground break-all">
                   {detailCrash.error_signature}
@@ -506,8 +508,8 @@ export default function TelemetryPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Crash Report"
-        description="This will permanently delete this crash report."
+        title={t("deleteTitle")}
+        description={t("deleteDescription")}
         danger
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

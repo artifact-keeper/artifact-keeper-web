@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Package, CheckCircle, XCircle, AlertTriangle, Clock } from "lucide-react";
 import type { Repository } from "@/types";
 import { formatBytes, cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function StagingListItem({
   artifactCount,
   policyStats,
 }: StagingListItemProps) {
+  const t = useTranslations("app/staging/_components/staging-list-item");
   return (
     <button
       type="button"
@@ -54,7 +56,7 @@ export function StagingListItem({
               <>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-[11px] text-muted-foreground">
-                  {artifactCount} artifact{artifactCount !== 1 ? "s" : ""}
+                  {t("artifactCount", { count: artifactCount })}
                 </span>
               </>
             )}

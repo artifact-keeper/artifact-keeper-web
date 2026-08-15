@@ -401,10 +401,10 @@ describe("DashboardContent", () => {
       "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
     });
     render(<DashboardContent />);
-    expect(screen.getByText("critical")).toBeInTheDocument();
-    expect(screen.getByText("high")).toBeInTheDocument();
-    expect(screen.getByText("medium")).toBeInTheDocument();
-    expect(screen.getByText("low")).toBeInTheDocument();
+    expect(screen.getByText("Critical")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Medium")).toBeInTheDocument();
+    expect(screen.getByText("Low")).toBeInTheDocument();
     expect(screen.getByText("7d")).toBeInTheDocument();
   });
 

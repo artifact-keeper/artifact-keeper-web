@@ -5,6 +5,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useState, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Hourglass, RefreshCw, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,24 +52,46 @@ const STATUS_TRIGGER_CLASS: Record<string, string> = {
   rejected: "text-destructive",
 };
 
+/** Message-key lookup for the raw AgeGateStatus values. */
+const STATUS_LABEL_KEYS: Record<AgeGateStatus, string> = {
+  pending: "statusPending",
+  approved: "statusApproved",
+  rejected: "statusRejected",
+};
+
 /** How far a held release fell short of its repository's minimum age. */
-function formatAge(review: AgeGateReview, minAgeDays: number | undefined): string {
-  const age = review.ageDaysAtRequest === null ? "—" : `${review.ageDaysAtRequest}d old`;
+function formatAge(
+  review: AgeGateReview,
+  minAgeDays: number | undefined,
+  t: (key: string, values?: Record<string, string | number | Date>) => string
+): string {
+  const age =
+    review.ageDaysAtRequest === null
+      ? "—"
+      : t("ageDaysOld", { days: review.ageDaysAtRequest });
   if (minAgeDays === undefined) return age;
-  return `${age} (min ${minAgeDays}d)`;
+  return `${age} ${t("minAgeSuffix", { min: minAgeDays })}`;
 }
 
 /** "pending", "pending or approved", "pending, approved or rejected". */
-function joinStatuses(statuses: readonly AgeGateStatus[]): string {
+function joinStatuses(
+  statuses: readonly AgeGateStatus[],
+  t: (key: string) => string
+): string {
   if (statuses.length <= 1) return statuses[0] ?? "";
-  return `${statuses.slice(0, -1).join(", ")} or ${statuses[statuses.length - 1]}`;
+  return `${statuses
+    .slice(0, -1)
+    .join(t("joinSeparator"))} ${t("or")} ${statuses[statuses.length - 1]}`;
 }
 
 /** Past-tense verb for a completed transition, used in toasts. */
-function transitionVerb(target: AgeGateStatus): string {
-  if (target === "approved") return "Approved";
-  if (target === "rejected") return "Rejected";
-  return "Returned to pending";
+function transitionVerb(
+  target: AgeGateStatus,
+  t: (key: string) => string
+): string {
+  if (target === "approved") return t("verbApproved");
+  if (target === "rejected") return t("verbRejected");
+  return t("verbReturned");
 }
 
 /**
@@ -86,20 +109,26 @@ function needsReopen(from: string, to: AgeGateStatus): boolean {
  * What a transition will do, said plainly enough that an admin can tell a
  * first decision from a reversal before they commit to it.
  */
-function describeTransition(from: string, to: AgeGateStatus): string {
+function describeTransition(
+  from: string,
+  to: AgeGateStatus,
+  t: (key: string, values?: Record<string, string | number | Date>) => string
+): string {
   if (from === "pending") {
-    return to === "approved"
-      ? "This releases the version to any client that requests it. The review can be reopened later to withhold it again."
-      : "The version stays withheld and clients requesting it keep getting the gate response.";
+    return to === "approved" ? t("describeApprove") : t("describeReject");
   }
   if (to === "pending") {
-    return `This reverses the recorded ${from} decision and puts the version back behind the gate until someone decides it again.`;
+    return t("describeReturn", { from: t(STATUS_LABEL_KEYS[from as AgeGateStatus] ?? "statusPending") });
   }
-  return `This reverses the recorded ${from} decision and marks the review ${to} instead, in a single step.`;
+  return t("describeChange", {
+    from: t(STATUS_LABEL_KEYS[from as AgeGateStatus] ?? "statusPending"),
+    to: t(STATUS_LABEL_KEYS[to] ?? "statusPending"),
+  });
 }
 
 export default function AgeGatePage() {
-  useDocumentTitle("Age Gate Review Queue");
+  const t = useTranslations("app/admin/age-gate");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -194,17 +223,17 @@ export default function AgeGatePage() {
       invalidate();
       closeDialog();
       toast.success(
-        `${transitionVerb(target)} ${review.packageName}@${review.packageVersion}`,
+        `${transitionVerb(target, t)} ${review.packageName}@${review.packageVersion}`,
       );
     },
-    onError: mutationErrorToast("Age gate review failed"),
+    onError: mutationErrorToast(t("toastFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <Hourglass className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">The age gate review queue requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -214,24 +243,24 @@ export default function AgeGatePage() {
       <div className="flex items-center gap-2">
         <Hourglass className="size-6" />
         <div>
-          <h1 className="text-xl font-semibold">Age Gate Review Queue</h1>
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Review upstream releases held back for being younger than a repository&apos;s minimum age.
+            {t("description")}
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
         <fieldset className="flex flex-wrap items-center gap-4">
-          <legend className="sr-only">Filter by status</legend>
+          <legend className="sr-only">{t("filterByStatus")}</legend>
           {AGE_GATE_STATUSES.map((s) => (
             <label key={s} className="flex items-center gap-2 text-sm capitalize">
               <Checkbox
                 checked={statuses.includes(s)}
                 onCheckedChange={(checked) => toggleStatus(s, checked === true)}
-                aria-label={`Show ${s}`}
+                aria-label={t("showStatus", { status: t(STATUS_LABEL_KEYS[s]) })}
               />
-              {s}
+              {t(STATUS_LABEL_KEYS[s])}
             </label>
           ))}
         </fieldset>
@@ -244,7 +273,7 @@ export default function AgeGatePage() {
           onClick={() => refetch()}
         >
           <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-          Refresh
+          {t("refresh")}
         </Button>
       </div>
 
@@ -252,16 +281,14 @@ export default function AgeGatePage() {
         <Alert>
           <AlertTriangle className="size-4" />
           <AlertDescription>
-            This server does not support reopening a decided review, so approved and rejected
-            reviews cannot be changed here. Reviews that are still pending can be approved or
-            rejected as usual.
+            {t("reopenUnsupported")}
           </AlertDescription>
         </Alert>
       )}
 
       {statuses.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Select at least one status to list reviews.
+          {t("selectStatusPrompt")}
         </div>
       )}
 
@@ -275,11 +302,11 @@ export default function AgeGatePage() {
       {statuses.length > 0 && !isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load the age gate queue</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -287,8 +314,8 @@ export default function AgeGatePage() {
       {statuses.length > 0 && !isLoading && !isError && rows.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
           {statuses.length === AGE_GATE_STATUSES.length
-            ? "No releases in the age gate queue."
-            : `No ${joinStatuses(statuses)} releases in the age gate queue.`}
+            ? t("noReleases")
+            : t("noReleasesFor", { statuses: joinStatuses(statuses, t) })}
         </div>
       )}
 
@@ -297,13 +324,13 @@ export default function AgeGatePage() {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
               <tr>
-                <th className="px-3 py-2 font-medium">Package</th>
-                <th className="px-3 py-2 font-medium">Version</th>
-                <th className="px-3 py-2 font-medium">Repository</th>
-                <th className="px-3 py-2 font-medium">Age at request</th>
-                <th className="px-3 py-2 font-medium">Requested</th>
-                <th className="px-3 py-2 font-medium">Decision</th>
-                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">{t("colPackage")}</th>
+                <th className="px-3 py-2 font-medium">{t("colVersion")}</th>
+                <th className="px-3 py-2 font-medium">{t("colRepository")}</th>
+                <th className="px-3 py-2 font-medium">{t("colAge")}</th>
+                <th className="px-3 py-2 font-medium">{t("colRequested")}</th>
+                <th className="px-3 py-2 font-medium">{t("colDecision")}</th>
+                <th className="px-3 py-2 font-medium">{t("colStatus")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -316,13 +343,13 @@ export default function AgeGatePage() {
                         repository's age gate policy is configured (#701). */}
                     <Link
                       href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=settings`}
-                      title={`Age gate settings for ${r.repositoryKey}`}
+                      title={t("ageGateSettings", { repo: r.repositoryKey })}
                     >
                       <Badge variant="outline">{r.repositoryKey}</Badge>
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {formatAge(r, repoConfigs?.[r.repositoryKey]?.minAgeDays)}
+                    {formatAge(r, repoConfigs?.[r.repositoryKey]?.minAgeDays, t)}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{formatDate(r.requestedAt)}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -333,16 +360,16 @@ export default function AgeGatePage() {
                       <div className="max-w-xs space-y-0.5">
                         {(r.reviewedBy || r.reviewedAt) && (
                           <div>
-                            {r.reviewedBy ? reviewerName(r.reviewedBy) : "Unknown reviewer"}
+                            {r.reviewedBy ? reviewerName(r.reviewedBy) : t("unknownReviewer")}
                             {r.reviewedAt && (
-                              <span title={r.reviewedAt}> on {formatDate(r.reviewedAt)}</span>
+                              <span title={r.reviewedAt}> {t("reviewedOn", { date: formatDate(r.reviewedAt) })}</span>
                             )}
                           </div>
                         )}
                         {r.reviewReason && <div className="italic">&ldquo;{r.reviewReason}&rdquo;</div>}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground/60">Not yet decided</span>
+                      <span className="text-muted-foreground/60">{t("notDecided")}</span>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -356,7 +383,7 @@ export default function AgeGatePage() {
                     >
                       <SelectTrigger
                         className={`w-36 capitalize ${STATUS_TRIGGER_CLASS[r.status] ?? ""}`}
-                        aria-label={`Status for ${r.packageName}`}
+                        aria-label={t("statusFor", { name: r.packageName })}
                       >
                         <SelectValue />
                       </SelectTrigger>
@@ -371,7 +398,7 @@ export default function AgeGatePage() {
                             // rather than offered and then failed.
                             disabled={!reopenSupported && needsReopen(r.status, s)}
                           >
-                            {s}
+                            {t(STATUS_LABEL_KEYS[s])}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -390,14 +417,14 @@ export default function AgeGatePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {transition?.target === "approved" && "Approve "}
-              {transition?.target === "rejected" && "Reject "}
-              {transition?.target === "pending" && "Return "}
+              {transition?.target === "approved" && `${t("verbApprove")} `}
+              {transition?.target === "rejected" && `${t("verbReject")} `}
+              {transition?.target === "pending" && `${t("verbReturn")} `}
               {transition?.review.packageName}@{transition?.review.packageVersion}
-              {transition?.target === "pending" && " to pending"}
+              {transition?.target === "pending" && ` ${t("toPending")}`}
             </DialogTitle>
             <DialogDescription>
-              {transition ? describeTransition(transition.review.status, transition.target) : null}
+              {transition ? describeTransition(transition.review.status, transition.target, t) : null}
             </DialogDescription>
           </DialogHeader>
 
@@ -405,30 +432,30 @@ export default function AgeGatePage() {
             <Alert variant="destructive">
               <AlertTriangle className="size-4" />
               <AlertDescription>
-                Confirm you mean to release {transition.review.packageName}@
-                {transition.review.packageVersion} into the estate.
+                {t("confirmRelease", {
+                  name: transition.review.packageName,
+                  version: transition.review.packageVersion,
+                })}
               </AlertDescription>
             </Alert>
           )}
 
           <div className="space-y-1 py-2">
             <Textarea
-              placeholder={reasonRequired ? "Reason (required)" : "Reason (optional)"}
+              placeholder={reasonRequired ? t("reasonRequired") : t("reasonOptional")}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              aria-label="Reason"
+              aria-label={t("reasonLabel")}
               aria-describedby="age-gate-reason-help"
               aria-invalid={reasonMissing}
             />
             <p id="age-gate-reason-help" className="text-xs text-muted-foreground">
-              {reasonRequired
-                ? "Required. Reversing a recorded decision needs a reason for the audit log."
-                : "Recorded in the audit log with this decision."}
+              {reasonRequired ? t("reasonHelpRequired") : t("reasonHelpOptional")}
             </p>
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={closeDialog}>Cancel</Button>
+            <Button variant="ghost" onClick={closeDialog}>{t("cancel")}</Button>
             <Button
               variant={transition?.target === "rejected" ? "destructive" : "default"}
               disabled={changeStatusMutation.isPending || reasonMissing}
@@ -442,7 +469,7 @@ export default function AgeGatePage() {
               }
             >
               {changeStatusMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Confirm
+              {t("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

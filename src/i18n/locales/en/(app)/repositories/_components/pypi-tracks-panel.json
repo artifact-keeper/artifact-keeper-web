@@ -1,0 +1,19 @@
+{
+  "description": "PyPI virtual repositories isolate locally-owned project names from the same name upstream by default (PEP 708, dependency-confusion mitigation). Declare a <track>tracks</track> relationship to re-union a local project's versions with a named upstream Simple index.",
+  "formAria": "Declare a tracks relationship",
+  "projectPlaceholder": "Project name (e.g. acme-sdk)",
+  "projectAria": "Project name",
+  "urlPlaceholder": "https://pypi.org/simple/acme-sdk/",
+  "urlAria": "Upstream Simple index URL",
+  "add": "Add",
+  "empty": "No tracks declarations.",
+  "emptyDetail": "Locally-owned project names are fully isolated from upstream.",
+  "removeAria": "Remove tracks declaration for {name}",
+  "confirmTitle": "Remove tracks declaration?",
+  "confirmDescription": "\"{name}\" will be isolated from upstream again. Unpinned installs will resolve only the local project's versions.",
+  "confirmRemove": "Remove",
+  "declared": "Tracking declared for \"{project}\"",
+  "declareFailed": "Failed to declare tracks relationship",
+  "removed": "Tracks declaration removed",
+  "removeFailed": "Failed to remove tracks relationship"
+}

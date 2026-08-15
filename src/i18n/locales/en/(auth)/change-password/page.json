@@ -1,0 +1,23 @@
+{
+  "title": "Change Password",
+  "setupTitle": "Complete Setup",
+  "changeDesc": "Your password was auto-generated or has been reset. Please set a new password to continue.",
+  "setupDesc": "Set a secure admin password to unlock the API and complete first-time setup.",
+  "lockedHint": "All API endpoints are locked until this step is completed.",
+  "currentRequired": "Current password is required",
+  "minLength": "Password must be at least 8 characters",
+  "confirmRequired": "Please confirm your new password",
+  "mismatch": "Passwords do not match",
+  "changedSuccess": "Password changed successfully!",
+  "passwordReuse": "This password was used recently. Please choose a different password.",
+  "changeFailed": "Failed to change password.",
+  "currentLabel": "Current Password",
+  "currentPlaceholder": "Enter current password",
+  "newLabel": "New Password",
+  "newPlaceholder": "Enter new password",
+  "confirmLabel": "Confirm New Password",
+  "confirmPlaceholder": "Confirm new password",
+  "changing": "Changing password...",
+  "changePassword": "Change Password",
+  "logoutInstead": "Logout instead"
+}

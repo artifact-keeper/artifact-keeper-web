@@ -124,8 +124,8 @@ test.describe('Repository Detail Page', () => {
     await page.goto(`/repositories/${repoKey}`);
     await page.waitForLoadState('domcontentloaded');
 
-    // Click Upload tab
-    await page.locator('[role="tablist"]').getByText(/upload/i).click();
+    // Click Upload tab (stable data-testid, not the translated label text)
+    await page.getByTestId('repo-tab-upload').click();
     await page.waitForTimeout(1000);
 
     // Should show a dropzone or file input area

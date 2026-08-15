@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { ShieldCheck, PlayCircle, EyeOff, Eye, AlertCircle, RotateCcw, Loader2, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,7 +40,9 @@ function severityVariant(sev: string): "destructive" | "secondary" | "outline" {
 }
 
 export default function QualityChecksPage() {
-  useDocumentTitle("Quality Checks");
+  const t = useTranslations("app/admin/quality-checks");
+  const tSev = useTranslations("core/severity");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -66,9 +69,9 @@ export default function QualityChecksPage() {
     mutationFn: () => qualityChecksApi.trigger({}),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: CHECKS_KEY });
-      toast.success(res.message || `Queued ${res.queued} artifact(s)`);
+      toast.success(res.message || t("queuedArtifacts", { count: res.queued }));
     },
-    onError: mutationErrorToast("Failed to trigger checks"),
+    onError: mutationErrorToast(t("toast.triggerFailed")),
   });
 
   const suppressMutation = useMutation({
@@ -78,25 +81,25 @@ export default function QualityChecksPage() {
       invalidateIssues();
       setSuppressTarget(null);
       setReason("");
-      toast.success("Issue suppressed");
+      toast.success(t("toast.issueSuppressed"));
     },
-    onError: mutationErrorToast("Failed to suppress issue"),
+    onError: mutationErrorToast(t("toast.suppressFailed")),
   });
 
   const unsuppressMutation = useMutation({
     mutationFn: (id: string) => qualityChecksApi.unsuppressIssue(id),
     onSuccess: () => {
       invalidateIssues();
-      toast.success("Issue un-suppressed");
+      toast.success(t("toast.issueUnsuppressed"));
     },
-    onError: mutationErrorToast("Failed to un-suppress issue"),
+    onError: mutationErrorToast(t("toast.unsuppressFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <ShieldCheck className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Quality checks require administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -110,15 +113,15 @@ export default function QualityChecksPage() {
         <div className="flex items-center gap-2">
           <ListChecks className="size-6" />
           <div>
-            <h1 className="text-xl font-semibold">Quality Checks</h1>
+            <h1 className="text-xl font-semibold">{t("title")}</h1>
             <p className="text-sm text-muted-foreground">
-              Artifact quality-check results and their findings.
+              {t("description")}
             </p>
           </div>
         </div>
         <Button onClick={() => triggerMutation.mutate()} disabled={triggerMutation.isPending}>
           {triggerMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
-          Run checks
+          {t("runChecks")}
         </Button>
       </div>
 
@@ -132,11 +135,11 @@ export default function QualityChecksPage() {
       {!isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load quality checks</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("couldNotLoad")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -144,8 +147,8 @@ export default function QualityChecksPage() {
       {!isLoading && !isError && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center text-muted-foreground">
           <ListChecks className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No quality-check results yet.</p>
-          <p className="text-xs">Run checks to evaluate your artifacts.</p>
+          <p className="text-sm">{t("emptyTitle")}</p>
+          <p className="text-xs">{t("emptyHint")}</p>
         </div>
       )}
 
@@ -156,20 +159,20 @@ export default function QualityChecksPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate font-medium capitalize">{c.check_type}</span>
-                  {c.passed === true && <Badge variant="secondary">passed</Badge>}
-                  {c.passed === false && <Badge variant="destructive">failed</Badge>}
-                  {c.score != null && <span className="text-xs text-muted-foreground">score {c.score}</span>}
+                  {c.passed === true && <Badge variant="secondary">{t("passed")}</Badge>}
+                  {c.passed === false && <Badge variant="destructive">{t("failed")}</Badge>}
+                  {c.score != null && <span className="text-xs text-muted-foreground">{t("score", { score: c.score })}</span>}
                 </div>
                 <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>{c.issues_count} issue{c.issues_count === 1 ? "" : "s"}</span>
-                  {c.critical_count > 0 && <Badge variant="destructive">{c.critical_count} critical</Badge>}
-                  {c.high_count > 0 && <Badge variant="destructive">{c.high_count} high</Badge>}
-                  {c.medium_count > 0 && <Badge variant="secondary">{c.medium_count} medium</Badge>}
+                  <span>{t("issuesCount", { count: c.issues_count })}</span>
+                  {c.critical_count > 0 && <Badge variant="destructive">{t("criticalCount", { count: c.critical_count })}</Badge>}
+                  {c.high_count > 0 && <Badge variant="destructive">{t("highCount", { count: c.high_count })}</Badge>}
+                  {c.medium_count > 0 && <Badge variant="secondary">{t("mediumCount", { count: c.medium_count })}</Badge>}
                   {c.error_message && <span className="truncate max-w-[16rem] text-destructive">· {c.error_message}</span>}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" aria-label={`View issues for ${c.check_type}`} onClick={() => setSelected(c)} disabled={c.issues_count === 0}>
-                View issues
+              <Button variant="ghost" size="sm" aria-label={t("viewIssuesAria", { checkType: c.check_type })} onClick={() => setSelected(c)} disabled={c.issues_count === 0}>
+                {t("viewIssues")}
               </Button>
             </li>
           ))}
@@ -180,13 +183,13 @@ export default function QualityChecksPage() {
       <Dialog open={selected !== null} onOpenChange={(o) => !o && setSelected(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="capitalize">{selected?.check_type} issues</DialogTitle>
-            <DialogDescription>Suppress findings that are accepted or false positives.</DialogDescription>
+            <DialogTitle className="capitalize">{t("issuesTitle", { checkType: selected?.check_type ?? "" })}</DialogTitle>
+            <DialogDescription>{t("issuesDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
             {issuesLoading && <Skeleton className="h-16 w-full" />}
             {!issuesLoading && (issues?.length ?? 0) === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">No issues.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">{t("noIssues")}</p>
             )}
             {!issuesLoading &&
               (issues ?? []).map((iss) => (
@@ -194,20 +197,20 @@ export default function QualityChecksPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Badge variant={severityVariant(iss.severity)} className="capitalize">{iss.severity}</Badge>
+                        <Badge variant={severityVariant(iss.severity)} className="capitalize">{tSev(iss.severity.toLowerCase())}</Badge>
                         <span className="truncate text-sm font-medium">{iss.title}</span>
-                        {iss.is_suppressed && <Badge variant="outline">suppressed</Badge>}
+                        {iss.is_suppressed && <Badge variant="outline">{t("suppressed")}</Badge>}
                       </div>
                       {iss.description && <p className="mt-1 text-xs text-muted-foreground">{iss.description}</p>}
                       {iss.location && <p className="mt-0.5 font-mono text-xs text-muted-foreground">{iss.location}</p>}
                     </div>
                     {iss.is_suppressed ? (
-                      <Button variant="ghost" size="sm" aria-label={`Un-suppress ${iss.title}`} onClick={() => unsuppressMutation.mutate(iss.id)}>
-                        <Eye className="size-4" /> Restore
+                      <Button variant="ghost" size="sm" aria-label={t("restoreAria", { title: iss.title })} onClick={() => unsuppressMutation.mutate(iss.id)}>
+                        <Eye className="size-4" /> {t("restore")}
                       </Button>
                     ) : (
-                      <Button variant="ghost" size="sm" aria-label={`Suppress ${iss.title}`} onClick={() => { setSuppressTarget(iss); setReason(""); }}>
-                        <EyeOff className="size-4" /> Suppress
+                      <Button variant="ghost" size="sm" aria-label={t("suppressAria", { title: iss.title })} onClick={() => { setSuppressTarget(iss); setReason(""); }}>
+                        <EyeOff className="size-4" /> {t("suppress")}
                       </Button>
                     )}
                   </div>
@@ -221,18 +224,18 @@ export default function QualityChecksPage() {
       <Dialog open={suppressTarget !== null} onOpenChange={(o) => { if (!o) { setSuppressTarget(null); setReason(""); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Suppress issue</DialogTitle>
-            <DialogDescription>A reason is recorded for the audit trail.</DialogDescription>
+            <DialogTitle>{t("suppressTitle")}</DialogTitle>
+            <DialogDescription>{t("suppressDescription")}</DialogDescription>
           </DialogHeader>
           <div className="py-2">
-            <Label htmlFor="qc-reason" className="sr-only">Reason</Label>
-            <Input id="qc-reason" aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Accepted risk / false positive" />
+            <Label htmlFor="qc-reason" className="sr-only">{t("reason")}</Label>
+            <Input id="qc-reason" aria-label={t("reason")} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("reasonPlaceholder")} />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setSuppressTarget(null); setReason(""); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setSuppressTarget(null); setReason(""); }}>{t("cancel")}</Button>
             <Button disabled={!canSuppress} onClick={() => suppressTarget && suppressMutation.mutate({ id: suppressTarget.id, reason: reason.trim() })}>
               {suppressMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Suppress
+              {t("suppress")}
             </Button>
           </DialogFooter>
         </DialogContent>

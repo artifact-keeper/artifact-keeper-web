@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 import { peersApi } from "@/lib/api/replication";
 import type { PeerInstance } from "@/lib/api/replication";
@@ -63,17 +64,20 @@ function cachePercent(peer: PeerInstance): number {
   );
 }
 
-function relativeTime(dateStr: string): string {
+function relativeTime(
+  dateStr: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 60) return t("secondsAgo", { s: diffSec });
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t("minutesAgo", { m: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return t("hoursAgo", { h: diffHr });
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+  return t("daysAgo", { d: diffDay });
 }
 
 const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "yellow" | "default"> = {
@@ -86,6 +90,7 @@ const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "yellow" | "defau
 // -- page --
 
 export default function PeersPage() {
+  const t = useTranslations("app/protected/peers");
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
@@ -122,9 +127,9 @@ export default function PeersPage() {
       queryClient.invalidateQueries({ queryKey: ["peers"] });
       setCreateOpen(false);
       setForm({ name: "", endpoint_url: "", region: "", api_key: "" });
-      toast.success("Peer registered successfully");
+      toast.success(t("registered"));
     },
-    onError: mutationErrorToast("Failed to register peer"),
+    onError: mutationErrorToast(t("registeredError")),
   });
 
   const unregisterMutation = useMutation({
@@ -132,25 +137,25 @@ export default function PeersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["peers"] });
       setDeleteId(null);
-      toast.success("Peer unregistered");
+      toast.success(t("unregistered"));
     },
-    onError: mutationErrorToast("Failed to unregister peer"),
+    onError: mutationErrorToast(t("unregisteredError")),
   });
 
   const syncMutation = useMutation({
     mutationFn: (id: string) => peersApi.triggerSync(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["peers"] });
-      toast.success("Sync triggered");
+      toast.success(t("syncTriggered"));
     },
-    onError: mutationErrorToast("Failed to trigger sync"),
+    onError: mutationErrorToast(t("syncTriggeredError")),
   });
 
   // -- columns --
   const columns: DataTableColumn<PeerInstance>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (p) => p.name,
       sortable: true,
       cell: (p) => (
@@ -159,7 +164,7 @@ export default function PeersPage() {
           <span className="font-medium text-sm">{p.name}</span>
           {p.is_local && (
             <span className="text-[10px] font-medium bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-              LOCAL
+              {t("local")}
             </span>
           )}
         </div>
@@ -167,7 +172,7 @@ export default function PeersPage() {
     },
     {
       id: "endpoint",
-      header: "Endpoint",
+      header: t("colEndpoint"),
       accessor: (p) => p.endpoint_url,
       cell: (p) =>
         isSafeUrl(p.endpoint_url) ? (
@@ -187,17 +192,17 @@ export default function PeersPage() {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (p) => (
         <StatusBadge
-          status={p.status}
+          status={t(`status_${p.status}`)}
           color={STATUS_COLORS[p.status] ?? "default"}
         />
       ),
     },
     {
       id: "region",
-      header: "Region",
+      header: t("colRegion"),
       accessor: (p) => p.region ?? "",
       cell: (p) => (
         <span className="text-sm text-muted-foreground">
@@ -207,7 +212,7 @@ export default function PeersPage() {
     },
     {
       id: "cache",
-      header: "Cache Usage",
+      header: t("colCacheUsage"),
       cell: (p) => {
         const pct = cachePercent(p);
         return (
@@ -225,11 +230,11 @@ export default function PeersPage() {
     },
     {
       id: "heartbeat",
-      header: "Last Heartbeat",
+      header: t("colLastHeartbeat"),
       accessor: (p) => p.last_heartbeat_at ?? "",
       cell: (p) => (
         <span className="text-sm text-muted-foreground">
-          {p.last_heartbeat_at ? relativeTime(p.last_heartbeat_at) : "Never"}
+          {p.last_heartbeat_at ? relativeTime(p.last_heartbeat_at, t) : t("never")}
         </span>
       ),
     },
@@ -254,7 +259,7 @@ export default function PeersPage() {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Sync ${p.name}`}
+                    aria-label={t("syncAria", { name: p.name })}
                     onClick={() => syncMutation.mutate(p.id)}
                     disabled={syncDisabled}
                   >
@@ -264,10 +269,10 @@ export default function PeersPage() {
               </TooltipTrigger>
               <TooltipContent>
                 {p.is_local
-                  ? "The local peer cannot sync with itself"
+                  ? t("localCannotSync")
                   : p.status === "offline"
-                    ? "Offline peers cannot be synced"
-                    : "Trigger Sync"}
+                    ? t("offlineCannotSync")
+                    : t("triggerSync")}
               </TooltipContent>
             </Tooltip>
             <Tooltip>
@@ -280,7 +285,7 @@ export default function PeersPage() {
                     variant="ghost"
                     size="icon-xs"
                     className="text-destructive hover:text-destructive"
-                    aria-label={`Unregister ${p.name}`}
+                    aria-label={t("unregisterAria", { name: p.name })}
                     onClick={() => setDeleteId(p.id)}
                     disabled={p.is_local}
                   >
@@ -290,8 +295,8 @@ export default function PeersPage() {
               </TooltipTrigger>
               <TooltipContent>
                 {p.is_local
-                  ? "The local peer cannot be unregistered"
-                  : "Unregister"}
+                  ? t("localCannotUnregister")
+                  : t("unregister")}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -303,8 +308,8 @@ export default function PeersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Peers"
-        description="Manage peer instances in the mesh network"
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -321,11 +326,11 @@ export default function PeersPage() {
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh</TooltipContent>
+              <TooltipContent>{t("refresh")}</TooltipContent>
             </Tooltip>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Register Peer
+              {t("registerPeer")}
             </Button>
           </div>
         }
@@ -336,7 +341,7 @@ export default function PeersPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total Peers</p>
+              <p className="text-sm text-muted-foreground">{t("statTotalPeers")}</p>
               <p className="text-2xl font-semibold">{peers.length}</p>
             </div>
             <Server className="size-8 text-muted-foreground/30" />
@@ -345,7 +350,7 @@ export default function PeersPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Online</p>
+              <p className="text-sm text-muted-foreground">{t("statOnline")}</p>
               <p className="text-2xl font-semibold text-emerald-600">
                 {onlineCount}
               </p>
@@ -356,7 +361,7 @@ export default function PeersPage() {
         <Card className="py-4">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Syncing</p>
+              <p className="text-sm text-muted-foreground">{t("statSyncing")}</p>
               <p className="text-2xl font-semibold text-blue-600">
                 {syncingCount}
               </p>
@@ -370,14 +375,14 @@ export default function PeersPage() {
       <div className="flex items-center gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter by status" />
+            <SelectValue placeholder={t("filterByStatus")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All statuses</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="offline">Offline</SelectItem>
-            <SelectItem value="syncing">Syncing</SelectItem>
-            <SelectItem value="degraded">Degraded</SelectItem>
+            <SelectItem value="__all__">{t("allStatuses")}</SelectItem>
+            <SelectItem value="online">{t("statusOnline")}</SelectItem>
+            <SelectItem value="offline">{t("statusOffline")}</SelectItem>
+            <SelectItem value="syncing">{t("statusSyncing")}</SelectItem>
+            <SelectItem value="degraded">{t("statusDegraded")}</SelectItem>
           </SelectContent>
         </Select>
         {statusFilter !== "__all__" && (
@@ -386,7 +391,7 @@ export default function PeersPage() {
             size="sm"
             onClick={() => setStatusFilter("__all__")}
           >
-            Clear filter
+            {t("clearFilter")}
           </Button>
         )}
       </div>
@@ -395,12 +400,12 @@ export default function PeersPage() {
       {peers.length === 0 && !isLoading ? (
         <EmptyState
           icon={Server}
-          title="No peers"
-          description="Register a peer instance to enable mesh replication."
+          title={t("noPeers")}
+          description={t("noPeersDescription")}
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Register Peer
+              {t("registerPeer")}
             </Button>
           }
         />
@@ -410,7 +415,7 @@ export default function PeersPage() {
           data={peers}
           loading={isLoading}
           rowKey={(p) => p.id}
-          emptyMessage="No peers found."
+          emptyMessage={t("noPeersFound")}
         />
       )}
       <ListTruncationNotice shown={peers.length} total={data?.total ?? 0} />
@@ -426,9 +431,9 @@ export default function PeersPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Register Peer</DialogTitle>
+            <DialogTitle>{t("registerDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Add a new peer instance to the mesh network.
+              {t("registerDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -444,19 +449,19 @@ export default function PeersPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="peer-name">Name</Label>
+              <Label htmlFor="peer-name">{t("name")}</Label>
               <Input
                 id="peer-name"
                 value={form.name}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
                 }
-                placeholder="peer-us-west-1"
+                placeholder={t("namePlaceholder")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="peer-url">Endpoint URL</Label>
+              <Label htmlFor="peer-url">{t("endpointUrl")}</Label>
               <Input
                 id="peer-url"
                 type="url"
@@ -464,15 +469,15 @@ export default function PeersPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, endpoint_url: e.target.value }))
                 }
-                placeholder="https://peer.example.com:8080"
+                placeholder={t("endpointPlaceholder")}
                 required
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="peer-region">
-                Region{" "}
+                {t("region")}{" "}
                 <span className="text-muted-foreground font-normal">
-                  (optional)
+                  ({t("optional")})
                 </span>
               </Label>
               <Input
@@ -485,7 +490,7 @@ export default function PeersPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="peer-api-key">API Key</Label>
+              <Label htmlFor="peer-api-key">{t("apiKey")}</Label>
               <Input
                 id="peer-api-key"
                 type="password"
@@ -493,7 +498,7 @@ export default function PeersPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, api_key: e.target.value }))
                 }
-                placeholder="Enter API key for authentication"
+                placeholder={t("apiKeyPlaceholder")}
                 required
               />
             </div>
@@ -503,10 +508,10 @@ export default function PeersPage() {
                 type="button"
                 onClick={() => setCreateOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={registerMutation.isPending}>
-                {registerMutation.isPending ? "Registering..." : "Register"}
+                {registerMutation.isPending ? t("registering") : t("register")}
               </Button>
             </DialogFooter>
           </form>
@@ -519,9 +524,9 @@ export default function PeersPage() {
         onOpenChange={(o) => {
           if (!o) setDeleteId(null);
         }}
-        title="Unregister Peer"
-        description="This will permanently remove this peer from the mesh network. Cached artifacts will no longer be served from this peer."
-        confirmText="Unregister"
+        title={t("unregisterTitle")}
+        description={t("unregisterDescription")}
+        confirmText={t("unregister")}
         danger
         loading={unregisterMutation.isPending}
         onConfirm={() => {

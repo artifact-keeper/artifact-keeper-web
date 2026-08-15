@@ -6,6 +6,7 @@ import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Copy,
   Check,
@@ -125,6 +126,7 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 // ---- Main Page ----
 
 export default function PackageDetailPage() {
+  const t = useTranslations("app/packages/detail");
   const params = useParams();
   const router = useRouter();
   const packageId = params.id as string;
@@ -140,7 +142,7 @@ export default function PackageDetailPage() {
     enabled: !!packageId,
   });
 
-  useDocumentTitle(pkg?.name ?? "Package Details");
+  useDocumentTitle(pkg?.name ?? t("title"));
 
   // Fetch versions
   const { data: versions, isLoading: versionsLoading } = useQuery({
@@ -183,12 +185,12 @@ export default function PackageDetailPage() {
           className="gap-1.5 mb-6"
         >
           <ArrowLeft className="size-4" />
-          Back
+          {t("back")}
         </Button>
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Package className="size-12 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">
-            Package not found
+            {t("notFound")}
           </p>
         </div>
       </div>
@@ -215,13 +217,13 @@ export default function PackageDetailPage() {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/">Home</Link>
+              <Link href="/">{t("home")}</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/packages">Packages</Link>
+              <Link href="/packages">{t("packages")}</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -239,7 +241,7 @@ export default function PackageDetailPage() {
         className="gap-1.5"
       >
         <ArrowLeft className="size-4" />
-        Back
+        {t("back")}
       </Button>
 
       {/* Header */}
@@ -251,7 +253,7 @@ export default function PackageDetailPage() {
           </div>
           {pkg.version && (
             <p className="text-sm text-muted-foreground mt-1">
-              Latest: v{pkg.version}
+              {t("latest", { version: pkg.version })}
             </p>
           )}
           {pkg.description && (
@@ -269,7 +271,7 @@ export default function PackageDetailPage() {
               className="gap-1.5"
             >
               <ExternalLink className="size-3.5" />
-              Homepage
+              {t("homepage")}
             </a>
           </Button>
         ) : homepageUrl ? (
@@ -280,44 +282,44 @@ export default function PackageDetailPage() {
       {/* Tabs */}
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
           <TabsTrigger value="versions">
-            Versions
+            {t("versions")}
             {sortedVersions.length > 0 ? ` (${sortedVersions.length})` : ""}
           </TabsTrigger>
-          <TabsTrigger value="files">Files</TabsTrigger>
+          <TabsTrigger value="files">{t("files")}</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6 pt-4">
           {/* Install command */}
           <div>
-            <h3 className="text-sm font-medium mb-2">Install</h3>
+            <h3 className="text-sm font-medium mb-2">{t("install")}</h3>
             <InstallCommandBlock command={installCmd} />
           </div>
 
           {/* Metadata grid */}
           <div>
-            <h3 className="text-sm font-medium mb-2">Details</h3>
+            <h3 className="text-sm font-medium mb-2">{t("details")}</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MetadataItem label="Format" value={pkg.format} />
-              <MetadataItem label="Repository" value={pkg.repository_key} />
-              {license && <MetadataItem label="License" value={license} />}
-              {author && <MetadataItem label="Author" value={author} />}
+              <MetadataItem label={t("format")} value={pkg.format} />
+              <MetadataItem label={t("repository")} value={pkg.repository_key} />
+              {license && <MetadataItem label={t("license")} value={license} />}
+              {author && <MetadataItem label={t("author")} value={author} />}
               <MetadataItem
-                label="Size"
+                label={t("size")}
                 value={formatBytes(pkg.size_bytes)}
               />
               <MetadataItem
-                label="Downloads"
+                label={t("downloads")}
                 value={formatNumber(pkg.download_count)}
               />
               <MetadataItem
-                label="Created"
+                label={t("created")}
                 value={formatDate(pkg.created_at)}
               />
               <MetadataItem
-                label="Updated"
+                label={t("updated")}
                 value={formatDate(pkg.updated_at)}
               />
             </div>
@@ -325,7 +327,7 @@ export default function PackageDetailPage() {
 
           {homepageUrl && (
             <div>
-              <h3 className="text-sm font-medium mb-2">Links</h3>
+              <h3 className="text-sm font-medium mb-2">{t("links")}</h3>
               {isSafeUrl(homepageUrl) ? (
                 <a
                   href={homepageUrl}
@@ -356,18 +358,18 @@ export default function PackageDetailPage() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Tag className="size-8 text-muted-foreground/40 mb-2" />
               <p className="text-sm text-muted-foreground">
-                No version information available
+                {t("noVersions")}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Version</TableHead>
-                  <TableHead className="text-right">Size</TableHead>
-                  <TableHead className="text-right">Downloads</TableHead>
-                  <TableHead>Published</TableHead>
-                  <TableHead>Install Command</TableHead>
+                  <TableHead>{t("version")}</TableHead>
+                  <TableHead className="text-right">{t("size")}</TableHead>
+                  <TableHead className="text-right">{t("downloads")}</TableHead>
+                  <TableHead>{t("published")}</TableHead>
+                  <TableHead>{t("installCommand")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>

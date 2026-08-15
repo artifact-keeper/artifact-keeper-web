@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   FileSignature,
   Plus,
@@ -51,7 +52,8 @@ const emptyForm: CreateSigningKeyRequest = {
 };
 
 export default function SigningPage() {
-  useDocumentTitle("Signing Keys");
+  const t = useTranslations("app/admin/signing");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -76,9 +78,9 @@ export default function SigningPage() {
       invalidate();
       setCreateOpen(false);
       setForm(emptyForm);
-      toast.success(`Signing key "${key.name}" created`);
+      toast.success(t("created", { name: key.name }));
     },
-    onError: mutationErrorToast("Failed to create signing key"),
+    onError: mutationErrorToast(t("createFailed")),
   });
 
   const rotateMutation = useMutation({
@@ -86,9 +88,9 @@ export default function SigningPage() {
     onSuccess: () => {
       invalidate();
       setRotateTarget(null);
-      toast.success("Signing key rotated");
+      toast.success(t("rotated"));
     },
-    onError: mutationErrorToast("Failed to rotate signing key"),
+    onError: mutationErrorToast(t("rotateFailed")),
   });
 
   const revokeMutation = useMutation({
@@ -96,9 +98,9 @@ export default function SigningPage() {
     onSuccess: () => {
       invalidate();
       setRevokeTarget(null);
-      toast.success("Signing key revoked");
+      toast.success(t("revoked"));
     },
-    onError: mutationErrorToast("Failed to revoke signing key"),
+    onError: mutationErrorToast(t("revokeFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -106,16 +108,16 @@ export default function SigningPage() {
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
-      toast.success("Signing key deleted");
+      toast.success(t("deleted"));
     },
-    onError: mutationErrorToast("Failed to delete signing key"),
+    onError: mutationErrorToast(t("deleteFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <FileSignature className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Signing key management requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -138,15 +140,15 @@ export default function SigningPage() {
         <div className="flex items-center gap-2">
           <FileSignature className="size-6" />
           <div>
-            <h1 className="text-xl font-semibold">Signing Keys</h1>
+            <h1 className="text-xl font-semibold">{t("title")}</h1>
             <p className="text-sm text-muted-foreground">
-              GPG and RSA keys used to sign Debian, RPM, Alpine, and Conda artifacts.
+              {t("description")}
             </p>
           </div>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
-          New Key
+          {t("newKey")}
         </Button>
       </div>
 
@@ -160,9 +162,9 @@ export default function SigningPage() {
       {!isLoading && isError && isForbiddenError(error) && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">You don&apos;t have permission to manage signing keys</p>
+          <p className="text-sm font-medium">{t("noPermission")}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Signing-key management is restricted to administrators.
+            {t("noPermissionHint")}
           </p>
         </div>
       )}
@@ -170,11 +172,11 @@ export default function SigningPage() {
       {!isLoading && isError && !isForbiddenError(error) && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load signing keys</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -182,8 +184,8 @@ export default function SigningPage() {
       {!isLoading && !isError && (keys?.length ?? 0) === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center text-muted-foreground">
           <FileSignature className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No signing keys yet.</p>
-          <p className="text-xs">Create one to start signing artifacts.</p>
+          <p className="text-sm">{t("noKeys")}</p>
+          <p className="text-xs">{t("noKeysHint")}</p>
         </div>
       )}
 
@@ -196,9 +198,9 @@ export default function SigningPage() {
                   <span className="truncate font-medium">{key.name}</span>
                   <Badge variant="outline" className="uppercase">{key.key_type}</Badge>
                   {key.is_active ? (
-                    <Badge variant="secondary">active</Badge>
+                    <Badge variant="secondary">{t("active")}</Badge>
                   ) : (
-                    <Badge variant="destructive">revoked</Badge>
+                    <Badge variant="destructive">{t("revokedLabel")}</Badge>
                   )}
                 </div>
                 <p className="truncate font-mono text-xs text-muted-foreground">
@@ -206,18 +208,18 @@ export default function SigningPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" aria-label={`View public key for ${key.name}`} onClick={() => setViewKey(key)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("viewAria", { name: key.name })} onClick={() => setViewKey(key)}>
                   <Eye className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={`Rotate ${key.name}`} onClick={() => setRotateTarget(key)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("rotateAria", { name: key.name })} onClick={() => setRotateTarget(key)}>
                   <RotateCcw className="size-4" />
                 </Button>
                 {key.is_active && (
-                  <Button variant="ghost" size="icon-sm" aria-label={`Revoke ${key.name}`} onClick={() => setRevokeTarget(key)}>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("revokeAria", { name: key.name })} onClick={() => setRevokeTarget(key)}>
                     <Ban className="size-4 text-amber-500" />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon-sm" aria-label={`Delete ${key.name}`} onClick={() => setDeleteTarget(key)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("deleteAria", { name: key.name })} onClick={() => setDeleteTarget(key)}>
                   <Trash2 className="size-4 text-destructive" />
                 </Button>
               </div>
@@ -231,14 +233,14 @@ export default function SigningPage() {
         <DialogContent>
           <form onSubmit={submitCreate}>
             <DialogHeader>
-              <DialogTitle>New signing key</DialogTitle>
+              <DialogTitle>{t("createTitle")}</DialogTitle>
               <DialogDescription>
-                Generate a key pair. The private key never leaves the server.
+                {t("createDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-1.5">
-                <Label htmlFor="key-name">Name</Label>
+                <Label htmlFor="key-name">{t("nameLabel")}</Label>
                 <Input
                   id="key-name"
                   value={form.name}
@@ -247,7 +249,7 @@ export default function SigningPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="key-type">Type</Label>
+                <Label htmlFor="key-type">{t("typeLabel")}</Label>
                 <Select
                   value={form.key_type}
                   onValueChange={(v) => setForm((f) => ({ ...f, key_type: v }))}
@@ -263,7 +265,7 @@ export default function SigningPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="uid-name">UID name (optional)</Label>
+                  <Label htmlFor="uid-name">{t("uidNameLabel")}</Label>
                   <Input
                     id="uid-name"
                     value={form.uid_name ?? ""}
@@ -271,7 +273,7 @@ export default function SigningPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="uid-email">UID email (optional)</Label>
+                  <Label htmlFor="uid-email">{t("uidEmailLabel")}</Label>
                   <Input
                     id="uid-email"
                     type="email"
@@ -283,11 +285,11 @@ export default function SigningPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={!canCreate}>
                 {createMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                Create
+                {t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -298,8 +300,8 @@ export default function SigningPage() {
       <Dialog open={viewKey !== null} onOpenChange={(o) => !o && setViewKey(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Public key — {viewKey?.name}</DialogTitle>
-            <DialogDescription>Distribute this to verify signed artifacts.</DialogDescription>
+            <DialogTitle>{t("viewTitle", { name: viewKey?.name ?? "" })}</DialogTitle>
+            <DialogDescription>{t("viewDescription")}</DialogDescription>
           </DialogHeader>
           <div className="relative">
             <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs">
@@ -315,9 +317,9 @@ export default function SigningPage() {
       <ConfirmDialog
         open={rotateTarget !== null}
         onOpenChange={(o) => !o && setRotateTarget(null)}
-        title="Rotate signing key?"
-        description={`A new key replaces "${rotateTarget?.name ?? ""}". Artifacts already signed stay valid; new signatures use the new key.`}
-        confirmText="Rotate"
+        title={t("rotateTitle")}
+        description={t("rotateDescription", { name: rotateTarget?.name ?? "" })}
+        confirmText={t("rotateConfirm")}
         loading={rotateMutation.isPending}
         onConfirm={() => rotateTarget && rotateMutation.mutate(rotateTarget.id)}
       />
@@ -325,9 +327,9 @@ export default function SigningPage() {
       <ConfirmDialog
         open={revokeTarget !== null}
         onOpenChange={(o) => !o && setRevokeTarget(null)}
-        title="Revoke signing key?"
-        description={`"${revokeTarget?.name ?? ""}" will be marked revoked and can no longer sign artifacts.`}
-        confirmText="Revoke"
+        title={t("revokeTitle")}
+        description={t("revokeDescription", { name: revokeTarget?.name ?? "" })}
+        confirmText={t("revokeConfirm")}
         danger
         loading={revokeMutation.isPending}
         onConfirm={() => revokeTarget && revokeMutation.mutate(revokeTarget.id)}
@@ -336,9 +338,9 @@ export default function SigningPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete signing key?"
-        description={`"${deleteTarget?.name ?? ""}" will be permanently deleted. This cannot be undone.`}
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: deleteTarget?.name ?? "" })}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

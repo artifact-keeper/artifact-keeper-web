@@ -1,0 +1,10 @@
+{
+  "viewModeAria": "Artifact view mode",
+  "flatAria": "Flat list view",
+  "flat": "Flat",
+  "grouped": "Grouped",
+  "tree": "Tree",
+  "groupByTag": "Group by tag",
+  "groupByComponent": "Group by component",
+  "folderTree": "Folder tree view"
+}

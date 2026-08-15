@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Globe, Check, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { useInstance } from "@/providers/instance-provider";
 import { isValidInstanceUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import { Label } from "@/components/ui/label";
 
 export function InstanceSwitcher() {
   const { instances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses } = useInstance();
+  const t = useTranslations("components/layout/instance-switcher");
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -37,7 +39,7 @@ export function InstanceSwitcher() {
     if (!name.trim() || !url.trim()) return;
     const trimmedUrl = url.trim().replace(/\/$/, "");
     if (!isValidInstanceUrl(trimmedUrl)) {
-      toast.error("Invalid instance URL. Private IPs, localhost, and non-HTTP protocols are not allowed.");
+      toast.error(t("invalidUrl"));
       return;
     }
     setAdding(true);
@@ -52,7 +54,7 @@ export function InstanceSwitcher() {
       setUrl("");
       setApiKey("");
     } catch {
-      toast.error("Failed to add instance. Check the URL and try again.");
+      toast.error(t("addFailed"));
     } finally {
       setAdding(false);
     }
@@ -103,7 +105,7 @@ export function InstanceSwitcher() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setAddOpen(true)}>
             <Plus className="size-4 mr-2" />
-            Add Instance
+            {t("addInstance")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -111,36 +113,36 @@ export function InstanceSwitcher() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Artifact Keeper Instance</DialogTitle>
+            <DialogTitle>{t("addTitle")}</DialogTitle>
             <DialogDescription>
-              Connect to a remote Artifact Keeper instance to browse its repositories and artifacts.
+              {t("addDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="inst-name">Name</Label>
+              <Label htmlFor="inst-name">{t("name")}</Label>
               <Input
                 id="inst-name"
-                placeholder="Production"
+                placeholder={t("productionPlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inst-url">URL</Label>
+              <Label htmlFor="inst-url">{t("url")}</Label>
               <Input
                 id="inst-url"
-                placeholder="https://artifacts.example.com"
+                placeholder={t("urlPlaceholder")}
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inst-key">API Key</Label>
+              <Label htmlFor="inst-key">{t("apiKey")}</Label>
               <Input
                 id="inst-key"
-                placeholder="Optional -- stored encrypted on server"
+                placeholder={t("apiKeyPlaceholder")}
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -149,10 +151,10 @@ export function InstanceSwitcher() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button onClick={handleAdd} disabled={!name.trim() || !url.trim() || adding}>
-              {adding ? "Adding..." : "Add Instance"}
+              {adding ? t("adding") : t("addInstance")}
             </Button>
           </DialogFooter>
         </DialogContent>

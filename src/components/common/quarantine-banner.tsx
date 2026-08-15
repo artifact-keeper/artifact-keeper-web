@@ -1,4 +1,5 @@
 import { ShieldAlert } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { formatQuarantineExpiry } from "@/lib/quarantine";
 
@@ -29,6 +30,7 @@ export function QuarantineBanner({
   quarantineUntil,
   status,
 }: QuarantineBannerProps) {
+  const t = useTranslations("components/common/quarantine-banner");
   const expiry = formatQuarantineExpiry(quarantineUntil);
   const rejected = status === "rejected";
 
@@ -39,8 +41,8 @@ export function QuarantineBanner({
       <ShieldAlert className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
       <AlertTitle className="font-semibold">
         {rejected
-          ? "This artifact was rejected in review"
-          : "This artifact is quarantined"}
+          ? t("quarantineBannerRejectedTitle")
+          : t("quarantineBannerTitle")}
       </AlertTitle>
       <AlertDescription>
         <div className="space-y-1">
@@ -48,8 +50,8 @@ export function QuarantineBanner({
               what is happening instead of trailing off into an empty box. */}
           <p>
             {rejected
-              ? "Downloads are blocked. A rejection is final; the artifact cannot be released."
-              : "Downloads are blocked until the quarantine is lifted by an administrator."}
+              ? t("quarantineBannerRejectedDescription")
+              : t("quarantineBannerDescription")}
           </p>
           {reason && <p>{reason}</p>}
           {expiry && (
@@ -62,3 +64,4 @@ export function QuarantineBanner({
     </Alert>
   );
 }
+

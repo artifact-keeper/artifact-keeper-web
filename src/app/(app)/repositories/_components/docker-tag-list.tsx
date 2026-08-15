@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Container, Shield } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,14 +41,6 @@ interface DockerTagListProps {
 }
 
 /**
- * Human label for the server's scan rollup status; `undefined`/`null` means
- * the tag's manifest has never been scanned.
- */
-function scanStatusLabel(status: string | null | undefined): string {
-  return status ?? "not scanned";
-}
-
-/**
  * Renders Docker repository tags grouped server-side (issue #330).
  *
  * Uses `GET /api/v1/repositories/:key/artifacts?group_by=docker_tag`
@@ -81,9 +74,15 @@ export function DockerTagList({
   onTagClick,
   onScan,
   scanPending = false,
-  // M7: actionable default — tells users how to add a tag, not just that there isn't one.
-  emptyMessage = "No image tags found. Push an image (`docker push <registry>/<image>:<tag>`) to see it here, or switch to Flat view to inspect raw blobs.",
+  emptyMessage,
 }: DockerTagListProps) {
+  const t = useTranslations("app/repositories/_components/docker-tag-list");
+  // Human label for the server's scan rollup status; `undefined`/`null` means
+  // the tag's manifest has never been scanned.
+  const scanStatusLabel = (status: string | null | undefined): string =>
+    status ?? t("notScanned");
+  // M7: actionable default — tells users how to add a tag, not just that there isn't one.
+  const resolvedEmpty = emptyMessage ?? t("empty");
   if (loading) {
     return (
       // M3: announce loading to AT so SR users hear "Loading image tags" instead
@@ -95,7 +94,7 @@ export function DockerTagList({
         className="space-y-2"
         data-testid="docker-tag-list-loading"
       >
-        <span className="sr-only">Loading image tags…</span>
+        <span className="sr-only">{t("loading")}</span>
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -109,7 +108,7 @@ export function DockerTagList({
         className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground"
         data-testid="docker-tag-list-empty"
       >
-        {emptyMessage}
+        {resolvedEmpty}
       </div>
     );
   }
@@ -127,39 +126,39 @@ export function DockerTagList({
           so SR users hear "Image tags table" instead of "table with 6
           columns" with no name.
         */}
-        <table className="w-full text-sm" aria-label="Image tags">
+        <table className="w-full text-sm" aria-label={t("tableAria")}>
           <caption className="sr-only">
-            Docker image tags in this repository
+            {t("caption")}
           </caption>
           <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
             <tr>
               <th scope="col" className="px-3 py-2 font-medium">
-                Tag
+                {t("tag")}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Digest
+                {t("digest")}
               </th>
               <th scope="col" className="px-3 py-2 font-medium text-right">
-                Size
+                {t("size")}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Last pushed
+                {t("lastPushed")}
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
-                Scan
+                {t("scan")}
               </th>
               <th scope="col" className="px-3 py-2">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("actions")}</span>
               </th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {tags.map((t) => (
+            {tags.map((tag) => (
               <tr
-                key={`${t.image}:${t.tag}`}
+                key={`${tag.image}:${tag.tag}`}
                 className="hover:bg-muted/30"
                 data-testid="docker-tag-row"
-                data-tag={`${t.image}:${t.tag}`}
+                data-tag={`${tag.image}:${tag.tag}`}
               >
                 <td className="px-3 py-2">
                   {/*
@@ -171,21 +170,21 @@ export function DockerTagList({
                   <button
                     type="button"
                     className="flex items-center gap-2 text-left text-primary hover:underline"
-                    aria-label={`View ${t.image}:${t.tag} manifest`}
-                    onClick={() => onTagClick?.(t)}
+                    aria-label={t("viewManifest", { image: tag.image, tag: tag.tag })}
+                    onClick={() => onTagClick?.(tag)}
                   >
                     <Container className="size-4 text-muted-foreground" aria-hidden="true" />
                     <div className="flex flex-col">
                       <span className="flex items-center gap-1.5 font-medium">
-                        {t.tag}
-                        {t.is_index && (
+                        {tag.tag}
+                        {tag.is_index && (
                           <Badge variant="outline" className="font-normal">
-                            multi-arch
+                            {t("multiArch")}
                           </Badge>
                         )}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {t.image}
+                        {tag.image}
                       </span>
                     </div>
                   </button>
@@ -199,23 +198,23 @@ export function DockerTagList({
                     */}
                     <code
                       className="font-mono text-xs text-muted-foreground"
-                      aria-label={`Digest ${t.manifest_digest}`}
-                      title={t.manifest_digest}
+                      aria-label={t("digestAria", { digest: tag.manifest_digest })}
+                      title={tag.manifest_digest}
                     >
-                      {truncateDigest(t.manifest_digest)}
+                      {truncateDigest(tag.manifest_digest)}
                     </code>
-                    <CopyButton value={t.manifest_digest} />
+                    <CopyButton value={tag.manifest_digest} />
                   </div>
                 </td>
                 <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                  {formatBytes(t.total_size_bytes)}
+                  {formatBytes(tag.total_size_bytes)}
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">
-                  {new Date(t.last_pushed_at).toLocaleDateString()}
+                  {new Date(tag.last_pushed_at).toLocaleDateString()}
                 </td>
                 <td className="px-3 py-2">
                   <Badge variant="outline" className="font-normal">
-                    {scanStatusLabel(t.scan_status)}
+                    {scanStatusLabel(tag.scan_status)}
                   </Badge>
                 </td>
                 <td className="px-3 py-2">
@@ -226,14 +225,14 @@ export function DockerTagList({
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            onClick={() => onScan(t)}
+                            onClick={() => onScan(tag)}
                             disabled={scanPending}
-                            aria-label={`Scan ${t.image}:${t.tag}`}
+                            aria-label={t("scanAria", { image: tag.image, tag: tag.tag })}
                           >
                             <Shield className="size-3.5" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Scan</TooltipContent>
+                        <TooltipContent>{t("scan")}</TooltipContent>
                       </Tooltip>
                     )}
                   </div>
@@ -252,7 +251,7 @@ export function DockerTagList({
           pageSize={pageSize}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
-          itemLabel="tags"
+          itemLabel={t("itemLabel")}
         />
       )}
     </div>

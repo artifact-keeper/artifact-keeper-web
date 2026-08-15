@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, X, FileWarning, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { treeApi } from "@/lib/api/tree";
@@ -42,16 +43,20 @@ function TruncationBanner({
   totalBytes: number;
   downloadUrl: string;
 }) {
+  const t = useTranslations("components/package/file-viewer");
   return (
     <div className="flex items-center gap-2 px-4 py-2 text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-b">
       <span>
-        Showing first {formatBytes(shownBytes)} of {formatBytes(totalBytes)}
+        {t("showingFirst", {
+          shown: formatBytes(shownBytes),
+          total: formatBytes(totalBytes),
+        })}
       </span>
       <a
         href={downloadUrl}
         className="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300"
       >
-        Download full file
+        {t("downloadFullFile")}
       </a>
     </div>
   );
@@ -184,6 +189,7 @@ function ImageRenderer({ downloadUrl, fileName }: { downloadUrl: string; fileNam
 // ---- PdfRenderer ----
 
 function PdfRenderer({ downloadUrl }: { downloadUrl: string }) {
+  const t = useTranslations("components/package/file-viewer");
   return (
     <div className="flex-1 p-4">
       <object
@@ -192,11 +198,11 @@ function PdfRenderer({ downloadUrl }: { downloadUrl: string }) {
         className="w-full h-[70vh]"
       >
         <p className="text-sm text-muted-foreground text-center py-8">
-          Unable to display PDF inline.{" "}
+          {t("pdfInlineUnavailable")}{" "}
           <a href={downloadUrl} className="underline underline-offset-2">
-            Download the file
+            {t("downloadFile")}
           </a>{" "}
-          to view it.
+          {t("toViewIt")}
         </p>
       </object>
     </div>
@@ -212,6 +218,7 @@ function BinaryRenderer({
   data: ArrayBuffer;
   downloadUrl: string;
 }) {
+  const t = useTranslations("components/package/file-viewer");
   const hex = useMemo(() => hexDump(data, 256), [data]);
 
   return (
@@ -220,7 +227,7 @@ function BinaryRenderer({
         <div className="flex items-center gap-3 text-muted-foreground">
           <FileWarning className="size-5" />
           <span className="text-sm">
-            Binary file ({formatBytes(data.byteLength)})
+            {t("binaryFile", { size: formatBytes(data.byteLength) })}
           </span>
         </div>
         <pre className="text-xs font-mono bg-muted/50 rounded-md p-3 overflow-x-auto leading-relaxed">
@@ -229,7 +236,7 @@ function BinaryRenderer({
         <Button variant="outline" size="sm" asChild>
           <a href={downloadUrl}>
             <Download />
-            Download
+            {t("download")}
           </a>
         </Button>
       </div>
@@ -246,6 +253,7 @@ export function FileViewer({
   fileSize,
   onClose,
 }: FileViewerProps) {
+  const t = useTranslations("components/package/file-viewer");
   const downloadUrl = `/api/v1/repositories/${repositoryKey}/download/${filePath}`;
 
   const category = useMemo(
@@ -299,7 +307,7 @@ export function FileViewer({
           </span>
         )}
         <Button variant="ghost" size="icon-xs" asChild>
-          <a href={downloadUrl} aria-label={`Download ${fileName}`}>
+          <a href={downloadUrl} aria-label={t("downloadAria", { name: fileName })}>
             <Download className="size-3.5" />
           </a>
         </Button>
@@ -307,7 +315,7 @@ export function FileViewer({
           variant="ghost"
           size="icon-xs"
           onClick={onClose}
-          aria-label="Close file viewer"
+          aria-label={t("closeFileViewer")}
         >
           <X className="size-3.5" />
         </Button>
@@ -317,7 +325,7 @@ export function FileViewer({
       {isLoading && (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 py-12">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Loading file...</span>
+          <span className="text-sm text-muted-foreground">{t("loadingFile")}</span>
         </div>
       )}
 
@@ -325,7 +333,7 @@ export function FileViewer({
         <div className="flex flex-col items-center justify-center flex-1 gap-3 py-12">
           <FileWarning className="size-6 text-destructive" />
           <span className="text-sm text-muted-foreground">
-            Failed to load file content
+            {t("failedToLoadFile")}
           </span>
         </div>
       )}

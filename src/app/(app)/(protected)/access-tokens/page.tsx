@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 import { profileApi } from "@/lib/api/profile";
 import { mutationErrorToast } from "@/lib/error-utils";
@@ -50,7 +51,8 @@ import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
 
 function DateCell({ value }: { value?: string | null }) {
-  if (!value) return <span className="text-sm text-muted-foreground">Never</span>;
+  const t = useTranslations("app/protected/access-tokens");
+  if (!value) return <span className="text-sm text-muted-foreground">{t("never")}</span>;
   return (
     <span className="text-sm text-muted-foreground">
       {new Date(value).toLocaleDateString()}
@@ -78,38 +80,48 @@ function TokenPrefix({ prefix }: { prefix: string }) {
   );
 }
 
-export function renderRepoAccess(token: AccessToken) {
+export function renderRepoAccess(
+  token: AccessToken,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
   if (token.repo_selector) {
     const parts: string[] = [];
     if (token.repo_selector.match_formats?.length) {
-      parts.push(`${token.repo_selector.match_formats.length} format(s)`);
+      parts.push(
+        `${token.repo_selector.match_formats.length} ${t("formatCount", {
+          count: token.repo_selector.match_formats.length,
+        })}`
+      );
     }
     if (token.repo_selector.match_pattern) {
       parts.push(token.repo_selector.match_pattern);
     }
     const labelCount = Object.keys(token.repo_selector.match_labels ?? {}).length;
     if (labelCount > 0) {
-      parts.push(`${labelCount} label(s)`);
+      parts.push(`${labelCount} ${t("labelCount", { count: labelCount })}`);
     }
     return (
       <Badge variant="secondary" className="text-xs">
-        {parts.join(", ") || "Selector"}
+        {parts.join(", ") || t("selector")}
       </Badge>
     );
   }
   if (token.repository_ids && token.repository_ids.length > 0) {
     return (
       <Badge variant="secondary" className="text-xs">
-        {token.repository_ids.length} repo(s)
+        {token.repository_ids.length} {t("repoCount", {
+          count: token.repository_ids.length,
+        })}
       </Badge>
     );
   }
   return (
-    <span className="text-xs text-muted-foreground">All repos</span>
+    <span className="text-xs text-muted-foreground">{t("allRepos")}</span>
   );
 }
 
 export default function AccessTokensPage() {
+  const t = useTranslations("app/protected/access-tokens");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const availableScopes = SCOPES.filter(
@@ -155,9 +167,9 @@ export default function AccessTokensPage() {
       setKeyName("");
       setKeyScopes(["read:artifacts"]);
       setKeyExpiry("90");
-      toast.success("API key created");
+      toast.success(t("apiKeyCreated"));
     },
-    onError: mutationErrorToast("Failed to create API key"),
+    onError: mutationErrorToast(t("apiKeyCreatedError")),
   });
 
   const revokeKeyMutation = useMutation({
@@ -165,9 +177,9 @@ export default function AccessTokensPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile", "api-keys"] });
       setRevokeKeyId(null);
-      toast.success("API key revoked");
+      toast.success(t("apiKeyRevoked"));
     },
-    onError: mutationErrorToast("Failed to revoke API key"),
+    onError: mutationErrorToast(t("apiKeyRevokedError")),
   });
 
   const createTokenMutation = useMutation({
@@ -182,9 +194,9 @@ export default function AccessTokensPage() {
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
       setTokenRepoSelector({});
-      toast.success("Access token created");
+      toast.success(t("tokenCreated"));
     },
-    onError: mutationErrorToast("Failed to create access token"),
+    onError: mutationErrorToast(t("tokenCreatedError")),
   });
 
   const revokeTokenMutation = useMutation({
@@ -194,16 +206,16 @@ export default function AccessTokensPage() {
         queryKey: ["profile", "access-tokens"],
       });
       setRevokeTokenId(null);
-      toast.success("Access token revoked");
+      toast.success(t("tokenRevoked"));
     },
-    onError: mutationErrorToast("Failed to revoke access token"),
+    onError: mutationErrorToast(t("tokenRevokedError")),
   });
 
   // Column definitions
   const keyColumns: DataTableColumn<ApiKey>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (k) => k.name,
       sortable: true,
       cell: (k) => (
@@ -213,11 +225,11 @@ export default function AccessTokensPage() {
         </div>
       ),
     },
-    { id: "prefix", header: "Key Prefix", cell: (k) => <TokenPrefix prefix={k.key_prefix} /> },
-    { id: "scopes", header: "Scopes", cell: (k) => <ScopeBadges scopes={k.scopes} /> },
-    { id: "expires", header: "Expires", accessor: (k) => k.expires_at ?? "", cell: (k) => <DateCell value={k.expires_at} /> },
-    { id: "last_used", header: "Last Used", accessor: (k) => k.last_used_at ?? "", cell: (k) => <DateCell value={k.last_used_at} /> },
-    { id: "created", header: "Created", accessor: (k) => k.created_at, sortable: true, cell: (k) => <DateCell value={k.created_at} /> },
+    { id: "prefix", header: t("colKeyPrefix"), cell: (k) => <TokenPrefix prefix={k.key_prefix} /> },
+    { id: "scopes", header: t("colScopes"), cell: (k) => <ScopeBadges scopes={k.scopes} /> },
+    { id: "expires", header: t("colExpires"), accessor: (k) => k.expires_at ?? "", cell: (k) => <DateCell value={k.expires_at} /> },
+    { id: "last_used", header: t("colLastUsed"), accessor: (k) => k.last_used_at ?? "", cell: (k) => <DateCell value={k.last_used_at} /> },
+    { id: "created", header: t("colCreated"), accessor: (k) => k.created_at, sortable: true, cell: (k) => <DateCell value={k.created_at} /> },
     {
       id: "actions",
       header: "",
@@ -234,7 +246,7 @@ export default function AccessTokensPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Revoke</TooltipContent>
+            <TooltipContent>{t("revoke")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -244,26 +256,26 @@ export default function AccessTokensPage() {
   const tokenColumns: DataTableColumn<AccessToken>[] = [
     {
       id: "name",
-      header: "Name",
-      accessor: (t) => t.name,
+      header: t("colName"),
+      accessor: (tok) => tok.name,
       sortable: true,
-      cell: (t) => (
+      cell: (tok) => (
         <div className="flex items-center gap-2">
           <Shield className="size-3.5 text-muted-foreground" />
-          <span className="font-medium text-sm">{t.name}</span>
+          <span className="font-medium text-sm">{tok.name}</span>
         </div>
       ),
     },
-    { id: "prefix", header: "Token Prefix", cell: (t) => <TokenPrefix prefix={t.token_prefix} /> },
-    { id: "scopes", header: "Scopes", cell: (t) => <ScopeBadges scopes={t.scopes} /> },
-    { id: "repo_access", header: "Repo Access", cell: renderRepoAccess },
-    { id: "expires", header: "Expires", accessor: (t) => t.expires_at ?? "", cell: (t) => <DateCell value={t.expires_at} /> },
-    { id: "last_used", header: "Last Used", accessor: (t) => t.last_used_at ?? "", cell: (t) => <DateCell value={t.last_used_at} /> },
-    { id: "created", header: "Created", accessor: (t) => t.created_at, sortable: true, cell: (t) => <DateCell value={t.created_at} /> },
+    { id: "prefix", header: t("colTokenPrefix"), cell: (tok) => <TokenPrefix prefix={tok.token_prefix} /> },
+    { id: "scopes", header: t("colScopes"), cell: (tok) => <ScopeBadges scopes={tok.scopes} /> },
+    { id: "repo_access", header: t("colRepoAccess"), cell: (row) => renderRepoAccess(row, t) },
+    { id: "expires", header: t("colExpires"), accessor: (tok) => tok.expires_at ?? "", cell: (tok) => <DateCell value={tok.expires_at} /> },
+    { id: "last_used", header: t("colLastUsed"), accessor: (tok) => tok.last_used_at ?? "", cell: (tok) => <DateCell value={tok.last_used_at} /> },
+    { id: "created", header: t("colCreated"), accessor: (tok) => tok.created_at, sortable: true, cell: (tok) => <DateCell value={tok.created_at} /> },
     {
       id: "actions",
       header: "",
-      cell: (t) => (
+      cell: (tok) => (
         <div className="flex justify-end">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -271,12 +283,12 @@ export default function AccessTokensPage() {
                 variant="ghost"
                 size="icon-xs"
                 className="text-destructive hover:text-destructive"
-                onClick={() => setRevokeTokenId(t.id)}
+                onClick={() => setRevokeTokenId(tok.id)}
               >
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Revoke</TooltipContent>
+            <TooltipContent>{t("revoke")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -286,19 +298,19 @@ export default function AccessTokensPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Access Tokens"
-        description="Manage API keys and personal access tokens for programmatic access to the registry."
+        title={t("title")}
+        description={t("description")}
       />
 
       <Tabs defaultValue="api-keys">
         <TabsList>
           <TabsTrigger value="api-keys">
             <Key className="size-4" />
-            API Keys
+            {t("tabApiKeys")}
           </TabsTrigger>
           <TabsTrigger value="access-tokens">
             <Shield className="size-4" />
-            Access Tokens
+            {t("tabAccessTokens")}
           </TabsTrigger>
         </TabsList>
 
@@ -306,22 +318,22 @@ export default function AccessTokensPage() {
         <TabsContent value="api-keys" className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">API Keys</h2>
+              <h2 className="text-lg font-semibold">{t("tabApiKeys")}</h2>
               <p className="text-sm text-muted-foreground">
-                Use API keys for programmatic access to the registry API.
+                {t("apiKeysDescription")}
               </p>
             </div>
             <Button onClick={() => setCreateKeyOpen(true)}>
               <Plus className="size-4" />
-              Create API Key
+              {t("createApiKey")}
             </Button>
           </div>
 
           {apiKeys.length === 0 && !keysLoading ? (
             <EmptyState
               icon={Key}
-              title="No API keys"
-              description="Create an API key for programmatic access to the registry."
+              title={t("noApiKeys")}
+              description={t("noApiKeysDescription")}
             />
           ) : (
             <DataTable
@@ -329,7 +341,7 @@ export default function AccessTokensPage() {
               data={apiKeys}
               loading={keysLoading}
               rowKey={(k) => k.id}
-              emptyMessage="No API keys found."
+              emptyMessage={t("noApiKeysFound")}
             />
           )}
         </TabsContent>
@@ -338,30 +350,30 @@ export default function AccessTokensPage() {
         <TabsContent value="access-tokens" className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">Access Tokens</h2>
+              <h2 className="text-lg font-semibold">{t("tabAccessTokens")}</h2>
               <p className="text-sm text-muted-foreground">
-                Personal access tokens for CLI and CI/CD authentication. Tokens can be scoped to specific repositories.
+                {t("accessTokensDescription")}
               </p>
             </div>
             <Button onClick={() => setCreateTokenOpen(true)}>
               <Plus className="size-4" />
-              Create Token
+              {t("createToken")}
             </Button>
           </div>
 
           {accessTokens.length === 0 && !tokensLoading ? (
             <EmptyState
               icon={Shield}
-              title="No access tokens"
-              description="Create a personal access token for CLI or CI/CD authentication."
+              title={t("noAccessTokens")}
+              description={t("noAccessTokensDescription")}
             />
           ) : (
             <DataTable
               columns={tokenColumns}
               data={accessTokens}
               loading={tokensLoading}
-              rowKey={(t) => t.id}
-              emptyMessage="No access tokens found."
+              rowKey={(tok) => tok.id}
+              emptyMessage={t("noAccessTokensFound")}
             />
           )}
         </TabsContent>
@@ -383,8 +395,8 @@ export default function AccessTokensPage() {
         <DialogContent className="sm:max-w-md">
           {newlyCreatedKey ? (
             <TokenCreatedAlert
-              title="API Key Created"
-              description="Copy your API key now. You will not be able to see it again."
+              title={t("apiKeyCreatedTitle")}
+              description={t("apiKeyCreatedDescription")}
               token={newlyCreatedKey}
               onDone={() => {
                 setCreateKeyOpen(false);
@@ -393,11 +405,11 @@ export default function AccessTokensPage() {
             />
           ) : (
             <TokenCreateForm
-              title="Create API Key"
-              description="Generate a new API key for programmatic access."
+              title={t("createApiKey")}
+              description={t("createApiKeyDescription")}
               name={keyName}
               onNameChange={setKeyName}
-              namePlaceholder="e.g., CI/CD Pipeline"
+              namePlaceholder={t("apiKeyNamePlaceholder")}
               expiry={keyExpiry}
               onExpiryChange={setKeyExpiry}
               scopes={keyScopes}
@@ -413,7 +425,7 @@ export default function AccessTokensPage() {
                 })
               }
               onCancel={() => setCreateKeyOpen(false)}
-              submitLabel="Create Key"
+              submitLabel={t("createKeySubmit")}
             />
           )}
         </DialogContent>
@@ -436,8 +448,8 @@ export default function AccessTokensPage() {
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           {newlyCreatedToken ? (
             <TokenCreatedAlert
-              title="Access Token Created"
-              description="Copy your access token now. You will not be able to see it again."
+              title={t("tokenCreatedTitle")}
+              description={t("tokenCreatedDescription")}
               token={newlyCreatedToken}
               onDone={() => {
                 setCreateTokenOpen(false);
@@ -446,11 +458,11 @@ export default function AccessTokensPage() {
             />
           ) : (
             <TokenCreateForm
-              title="Create Access Token"
-              description="Generate a personal access token for CLI or CI/CD authentication."
+              title={t("createToken")}
+              description={t("createTokenDescription")}
               name={tokenName}
               onNameChange={setTokenName}
-              namePlaceholder="e.g., Local Development"
+              namePlaceholder={t("tokenNamePlaceholder")}
               expiry={tokenExpiry}
               onExpiryChange={setTokenExpiry}
               scopes={tokenScopes}
@@ -471,7 +483,7 @@ export default function AccessTokensPage() {
                 });
               }}
               onCancel={() => setCreateTokenOpen(false)}
-              submitLabel="Create Token"
+              submitLabel={t("createToken")}
               showRepoSelector
               repoSelector={tokenRepoSelector}
               onRepoSelectorChange={setTokenRepoSelector}
@@ -486,9 +498,9 @@ export default function AccessTokensPage() {
         onOpenChange={(o) => {
           if (!o) setRevokeKeyId(null);
         }}
-        title="Revoke API Key"
-        description="This will permanently invalidate this API key. Any applications using it will lose access immediately."
-        confirmText="Revoke Key"
+        title={t("revokeKeyTitle")}
+        description={t("revokeKeyDescription")}
+        confirmText={t("revokeKeyConfirm")}
         danger
         loading={revokeKeyMutation.isPending}
         onConfirm={() => {
@@ -502,9 +514,9 @@ export default function AccessTokensPage() {
         onOpenChange={(o) => {
           if (!o) setRevokeTokenId(null);
         }}
-        title="Revoke Access Token"
-        description="This will permanently invalidate this access token. Any sessions using it will be terminated."
-        confirmText="Revoke Token"
+        title={t("revokeTokenTitle")}
+        description={t("revokeTokenDescription")}
+        confirmText={t("revokeTokenConfirm")}
         danger
         loading={revokeTokenMutation.isPending}
         onConfirm={() => {

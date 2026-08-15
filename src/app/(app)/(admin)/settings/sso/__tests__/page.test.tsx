@@ -305,7 +305,7 @@ describe("SSO OIDC update preserves attribute_mapping (regression #406)", () => 
 
     // Open the edit dialog via its aria-label.
     const editBtn = screen.getByRole("button", {
-      name: /Edit OIDC provider Corporate IdP/i,
+      name: /Edit Corporate IdP/i,
     });
     await user.click(editBtn);
 
@@ -367,7 +367,7 @@ describe("SSO SAML update preserves attribute_mapping (regression #406 sibling)"
 
     // Open the SAML edit dialog via its aria-label.
     const editBtn = screen.getByRole("button", {
-      name: /Edit SAML provider Corporate SAML IdP/i,
+      name: /Edit Corporate SAML IdP/i,
     });
     await user.click(editBtn);
 
@@ -416,7 +416,7 @@ describe("SSO OIDC claim keys match backend (#516)", () => {
     });
 
     await user.click(
-      screen.getByRole("button", { name: /Edit OIDC provider Corporate IdP/i }),
+      screen.getByRole("button", { name: /Edit Corporate IdP/i }),
     );
     await waitFor(() => {
       expect(screen.getByText("Edit OIDC Provider")).toBeTruthy();
@@ -462,7 +462,7 @@ describe("SSO OIDC map_groups_to_groups toggle (#534)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit OIDC provider Corporate IdP/i,
+        name: /Edit Corporate IdP/i,
       }),
     );
     await waitFor(() => {
@@ -501,7 +501,7 @@ describe("SSO SAML use_absolute_acs_url toggle (#521)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit SAML provider Corporate SAML IdP/i,
+        name: /Edit Corporate SAML IdP/i,
       }),
     );
     await waitFor(() => {
@@ -609,7 +609,7 @@ describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit SAML provider Group Mapped SAML IdP/i,
+        name: /Edit Group Mapped SAML IdP/i,
       }),
     );
     await waitFor(() => {
@@ -636,7 +636,7 @@ describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit SAML provider Group Mapped SAML IdP/i,
+        name: /Edit Group Mapped SAML IdP/i,
       }),
     );
     await waitFor(() => {
@@ -671,7 +671,7 @@ describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit SAML provider Corporate SAML IdP/i,
+        name: /Edit Corporate SAML IdP/i,
       }),
     );
     await waitFor(() => {
@@ -709,7 +709,7 @@ describe("SSO SAML map_groups_to_groups toggle (#588)", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: /Edit SAML provider Corporate SAML IdP/i,
+        name: /Edit Corporate SAML IdP/i,
       }),
     );
     await waitFor(() => {
@@ -749,7 +749,7 @@ describe("SSO OIDC allow_legacy_rsa_keys toggle", () => {
     });
 
     const editBtn = screen.getByRole("button", {
-      name: /Edit OIDC provider Corporate IdP/i,
+      name: /Edit Corporate IdP/i,
     });
     await user.click(editBtn);
 
@@ -787,7 +787,7 @@ describe("SSO OIDC allow_legacy_rsa_keys toggle", () => {
     });
 
     const editBtn = screen.getByRole("button", {
-      name: /Edit OIDC provider Corporate IdP/i,
+      name: /Edit Corporate IdP/i,
     });
     await user.click(editBtn);
 
@@ -829,7 +829,7 @@ describe("SSO OIDC allow_legacy_rsa_keys toggle", () => {
     });
 
     const editBtn = screen.getByRole("button", {
-      name: /Edit OIDC provider Corporate IdP/i,
+      name: /Edit Corporate IdP/i,
     });
     await user.click(editBtn);
 

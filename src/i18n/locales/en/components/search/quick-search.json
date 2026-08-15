@@ -1,0 +1,11 @@
+{
+  "quickSearch": "Quick Search",
+  "quickSearchDescription": "Search for repositories, packages, and artifacts",
+  "quickSearchPlaceholder": "Search repositories, packages, artifacts...",
+  "noResultsFor": "No results found for \"{query}\"",
+  "typeAtLeast": "Type at least 2 characters to search...",
+  "repositories": "Repositories",
+  "packages": "Packages",
+  "artifacts": "Artifacts",
+  "searchMore": "Search for more results..."
+}

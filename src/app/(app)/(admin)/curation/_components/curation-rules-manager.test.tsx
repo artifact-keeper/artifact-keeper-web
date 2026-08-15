@@ -266,9 +266,9 @@ describe("CurationRulesManager", () => {
     // repository-scoped rule resolves its repo key
     expect(screen.getByText("staging-npm")).toBeInTheDocument();
     // global-scoped rule shows "global"
-    expect(screen.getByText("global")).toBeInTheDocument();
+    expect(screen.getByText("Global")).toBeInTheDocument();
     // block action + disabled badge
-    expect(screen.getByText("block")).toBeInTheDocument();
+    expect(screen.getByText("Block")).toBeInTheDocument();
     expect(screen.getByText("disabled")).toBeInTheDocument();
   });
 
@@ -486,7 +486,7 @@ describe("CurationRulesManager", () => {
     reposData = REPOS;
     render(<CurationRulesManager />);
     await user.click(
-      screen.getByRole("button", { name: /Edit publisher_trust rule/i }),
+      screen.getByRole("button", { name: /Edit Publisher trust rule/i }),
     );
     expect(
       (screen.getByLabelText(/Trusted publishers/i) as HTMLTextAreaElement)

@@ -1,0 +1,10 @@
+{
+  "viewModeAria": "制品视图模式",
+  "flatAria": "平面列表视图",
+  "flat": "平面",
+  "grouped": "分组",
+  "tree": "树",
+  "groupByTag": "按标签分组",
+  "groupByComponent": "按组件分组",
+  "folderTree": "文件夹树视图"
+}

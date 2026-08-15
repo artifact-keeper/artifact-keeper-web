@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,14 @@ const STATUS_COLORS: Record<string, string> = {
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  completed: "statusCompleted",
+  running: "statusRunning",
+  pending: "statusPending",
+  failed: "statusFailed",
+  error: "statusError",
+};
+
 const SEVERITY_PILL: Record<string, string> = {
   critical:
     "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
@@ -93,6 +102,7 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export default function SecurityScansPage() {
+  const t = useTranslations("app/admin/security/scans");
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -166,29 +176,29 @@ export default function SecurityScansPage() {
       setSelectedRepoId(undefined);
       setSelectedArtifactId(undefined);
       setScanMode("repo");
-      toast.success(`Scan queued for ${res.artifacts_queued} artifact(s).`);
+      toast.success(t("scanQueued", { count: res.artifacts_queued }));
     },
-    onError: mutationErrorToast("Failed to trigger scan"),
+    onError: mutationErrorToast(t("triggerScanFailed")),
   });
 
   // -- table columns --
   const columns: DataTableColumn<ScanResult>[] = [
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       accessor: (r) => r.status,
       cell: (r) => (
         <Badge
           variant="outline"
           className={`border font-medium capitalize text-xs ${STATUS_COLORS[r.status] ?? ""}`}
         >
-          {r.status}
+          {t(STATUS_LABELS[r.status] ?? r.status)}
         </Badge>
       ),
     },
     {
       id: "scan_type",
-      header: "Scanner",
+      header: t("colScanner"),
       accessor: (r) => r.scan_type,
       cell: (r) => (
         <Badge variant="secondary" className="text-xs font-normal">
@@ -198,7 +208,7 @@ export default function SecurityScansPage() {
     },
     {
       id: "artifact",
-      header: "Artifact",
+      header: t("colArtifact"),
       cell: (r) =>
         r.artifact_name ? (
           <span className="text-sm">
@@ -215,7 +225,7 @@ export default function SecurityScansPage() {
     },
     {
       id: "findings",
-      header: "Findings",
+      header: t("colFindings"),
       accessor: (r) => r.findings_count,
       sortable: true,
       cell: (r) => {
@@ -225,7 +235,7 @@ export default function SecurityScansPage() {
               variant="outline"
               className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800 text-xs font-medium"
             >
-              Scan Failed
+              {t("scanFailed")}
             </Badge>
           );
         }
@@ -240,7 +250,7 @@ export default function SecurityScansPage() {
               variant="outline"
               className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-xs font-medium"
             >
-              Clean
+              {t("clean")}
             </Badge>
           );
         }
@@ -260,7 +270,7 @@ export default function SecurityScansPage() {
     },
     {
       id: "started_at",
-      header: "Started",
+      header: t("colStarted"),
       accessor: (r) => r.started_at ?? "",
       sortable: true,
       cell: (r) => (
@@ -271,7 +281,7 @@ export default function SecurityScansPage() {
     },
     {
       id: "duration",
-      header: "Duration",
+      header: t("colDuration"),
       cell: (r) => (
         <span className="text-sm text-muted-foreground">
           {formatDuration(r.started_at, r.completed_at)}
@@ -290,7 +300,7 @@ export default function SecurityScansPage() {
             router.push(`/security/scans/${r.id}`);
           }}
         >
-          View
+          {t("view")}
         </Button>
       ),
     },
@@ -299,8 +309,8 @@ export default function SecurityScansPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Scan Results"
-        description="View and manage security scan results across all repositories."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -318,7 +328,7 @@ export default function SecurityScansPage() {
             </Button>
             <Button onClick={() => setTriggerOpen(true)}>
               <Zap className="size-4" />
-              Trigger Scan
+              {t("triggerScan")}
             </Button>
           </div>
         }
@@ -334,14 +344,14 @@ export default function SecurityScansPage() {
           }}
         >
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={t("statusPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All statuses</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="running">Running</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="__all__">{t("allStatuses")}</SelectItem>
+            <SelectItem value="completed">{t("completed")}</SelectItem>
+            <SelectItem value="running">{t("running")}</SelectItem>
+            <SelectItem value="pending">{t("pending")}</SelectItem>
+            <SelectItem value="failed">{t("failed")}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -354,7 +364,7 @@ export default function SecurityScansPage() {
               setPage(1);
             }}
           >
-            Clear filters
+            {t("clearFilters")}
           </Button>
         )}
       </div>
@@ -372,7 +382,7 @@ export default function SecurityScansPage() {
           setPage(1);
         }}
         loading={isLoading}
-        emptyMessage="No scan results found."
+        emptyMessage={t("noScans")}
         rowKey={(r) => r.id}
         onRowClick={(r) => router.push(`/security/scans/${r.id}`)}
       />
@@ -391,17 +401,17 @@ export default function SecurityScansPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Trigger Security Scan</DialogTitle>
+            <DialogTitle>{t("triggerScanTitle")}</DialogTitle>
             <DialogDescription>
               {scanMode === "repo"
-                ? "Select a repository to scan all its artifacts for vulnerabilities."
-                : "Select a specific artifact to scan for vulnerabilities."}
+                ? t("triggerScanRepoDescription")
+                : t("triggerScanArtifactDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {/* Scan Mode Toggle */}
             <div className="space-y-2">
-              <Label>Scan Mode</Label>
+              <Label>{t("scanMode")}</Label>
               <div className="flex rounded-lg border p-1 gap-1">
                 <button
                   type="button"
@@ -415,7 +425,7 @@ export default function SecurityScansPage() {
                     setSelectedArtifactId(undefined);
                   }}
                 >
-                  Entire Repository
+                  {t("entireRepository")}
                 </button>
                 <button
                   type="button"
@@ -428,13 +438,13 @@ export default function SecurityScansPage() {
                     setScanMode("artifact");
                   }}
                 >
-                  Specific Artifact
+                  {t("specificArtifact")}
                 </button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Repository</Label>
+              <Label>{t("repository")}</Label>
               <Select
                 value={selectedRepoId ?? ""}
                 onValueChange={(v) => {
@@ -443,7 +453,7 @@ export default function SecurityScansPage() {
                 }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a repository..." />
+                  <SelectValue placeholder={t("selectRepositoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {(repos ?? []).map((r) => {
@@ -455,7 +465,7 @@ export default function SecurityScansPage() {
                         disabled={!enabled}
                       >
                         {r.name || r.key} ({r.format})
-                        {!enabled && " -- scanning disabled"}
+                        {!enabled && t("scanningDisabled")}
                       </SelectItem>
                     );
                   })}
@@ -466,7 +476,7 @@ export default function SecurityScansPage() {
             {/* Artifact selector (only in artifact mode) */}
             {scanMode === "artifact" && selectedRepoId && (
               <div className="space-y-2">
-                <Label>Artifact</Label>
+                <Label>{t("artifact")}</Label>
                 <Select
                   value={selectedArtifactId ?? ""}
                   onValueChange={(v) => setSelectedArtifactId(v || undefined)}
@@ -475,8 +485,8 @@ export default function SecurityScansPage() {
                     <SelectValue
                       placeholder={
                         artifactsLoading
-                          ? "Loading artifacts..."
-                          : "Select an artifact..."
+                          ? t("loadingArtifacts")
+                          : t("selectArtifactPlaceholder")
                       }
                     />
                   </SelectTrigger>
@@ -489,7 +499,7 @@ export default function SecurityScansPage() {
                     {!artifactsLoading &&
                       (artifactsList?.items ?? []).length === 0 && (
                         <SelectItem value="__none__" disabled>
-                          No artifacts found
+                          {t("noArtifactsFound")}
                         </SelectItem>
                       )}
                   </SelectContent>
@@ -511,7 +521,7 @@ export default function SecurityScansPage() {
                 setScanMode("repo");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               disabled={
@@ -530,7 +540,7 @@ export default function SecurityScansPage() {
                 }
               }}
             >
-              {triggerScanMutation.isPending ? "Starting..." : "Start Scan"}
+              {triggerScanMutation.isPending ? t("starting") : t("startScan")}
             </Button>
           </DialogFooter>
         </DialogContent>

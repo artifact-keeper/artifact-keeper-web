@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
 import { toast } from "sonner";
 
@@ -121,30 +122,6 @@ const CACHE_TTL_MAX_SECONDS = 30 * 24 * 60 * 60; // 2,592,000
 const AGE_GATE_MIN_DAYS = 0;
 const AGE_GATE_MAX_DAYS = 3650;
 
-/**
- * Format a TTL in seconds as a short human-readable hint
- * ("24 hours", "1 day 6 hours", "30 minutes"). Used as a helper line under
- * the TTL input so operators don't have to compute "is 86400 a sensible
- * number?" in their head.
- */
-function formatTtlHint(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "";
-  const day = 24 * 60 * 60;
-  const hour = 60 * 60;
-  const minute = 60;
-  const days = Math.floor(seconds / day);
-  const hours = Math.floor((seconds % day) / hour);
-  const minutes = Math.floor((seconds % hour) / minute);
-  const secs = seconds % minute;
-
-  const parts: string[] = [];
-  if (days) parts.push(`${days} day${days === 1 ? "" : "s"}`);
-  if (hours) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
-  if (minutes) parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
-  if (secs && parts.length === 0) parts.push(`${secs} second${secs === 1 ? "" : "s"}`);
-  return parts.join(" ");
-}
-
 export interface UpdateRepositoryFields {
   key?: string;
   name?: string;
@@ -185,6 +162,30 @@ interface RepoSettingsTabProps {
 
 export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const queryClient = useQueryClient();
+  const t = useTranslations("app/repositories/_components/repo-settings-tab");
+  const tSev = useTranslations("core/severity");
+
+  // Format a TTL in seconds as a short human-readable hint ("24 hours",
+  // "1 day 6 hours", "30 minutes") — a helper line under the TTL input so
+  // operators don't have to compute "is 86400 a sensible number?".
+  const formatTtlHint = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds <= 0) return "";
+    const day = 24 * 60 * 60;
+    const hour = 60 * 60;
+    const minute = 60;
+    const days = Math.floor(seconds / day);
+    const hours = Math.floor((seconds % day) / hour);
+    const minutes = Math.floor((seconds % hour) / minute);
+    const secs = seconds % minute;
+
+    const parts: string[] = [];
+    if (days) parts.push(t("ttlDay", { count: days }));
+    if (hours) parts.push(t("ttlHour", { count: hours }));
+    if (minutes) parts.push(t("ttlMinute", { count: minutes }));
+    if (secs && parts.length === 0)
+      parts.push(t("ttlSecond", { count: secs }));
+    return parts.join(" ");
+  };
 
   // Installed format handlers — resolves the custom layout name when the
   // repo is backed by a WASM plugin (#592).
@@ -368,9 +369,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       setRpmClear(false);
       setDebianOverrides({});
       setNpmOverrides({});
-      toast.success("Repository settings saved");
+      toast.success(t("settingsSaved"));
     },
-    onError: mutationErrorToast("Failed to save repository settings"),
+    onError: mutationErrorToast(t("settingsSaveFailed")),
   });
 
   // -- Cache TTL mutation (#448, separate endpoint from `update`) --
@@ -380,9 +381,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cache-ttl", repository.key] });
       setCacheTtlOverride(undefined);
-      toast.success("Cache TTL saved");
+      toast.success(t("cacheTtlSaved"));
     },
-    onError: mutationErrorToast("Failed to save cache TTL"),
+    onError: mutationErrorToast(t("cacheTtlSaveFailed")),
   });
 
   const handleSave = useCallback(async () => {
@@ -479,9 +480,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       queryClient.invalidateQueries({
         queryKey: ["lifecycle-policies", repository.id],
       });
-      toast.success("Cleanup policy deleted");
+      toast.success(t("policyDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete cleanup policy"),
+    onError: mutationErrorToast(t("policyDeleteFailed")),
   });
 
   const executePolicyMutation = useMutation({
@@ -492,20 +493,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       });
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       toast.success(
-        `Policy executed: ${result.artifacts_removed} artifact(s) removed, ${formatBytes(result.bytes_freed)} freed`
+        t("policyExecuted", {
+          count: result.artifacts_removed,
+          freed: formatBytes(result.bytes_freed),
+        })
       );
     },
-    onError: mutationErrorToast("Failed to execute cleanup policy"),
+    onError: mutationErrorToast(t("policyExecuteFailed")),
   });
 
   const previewPolicyMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.preview(id),
     onSuccess: (result) => {
       toast.info(
-        `Preview: ${result.artifacts_matched} artifact(s) would be removed (${formatBytes(result.bytes_freed)})`
+        t("policyPreview", {
+          count: result.artifacts_matched,
+          freed: formatBytes(result.bytes_freed),
+        })
       );
     },
-    onError: mutationErrorToast("Failed to preview cleanup policy"),
+    onError: mutationErrorToast(t("policyPreviewFailed")),
   });
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
@@ -556,12 +563,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       setAgeOverrides({});
       toast.success(
-        ageEnabled
-          ? "Package age policy enabled"
-          : "Package age policy disabled"
+        ageEnabled ? t("agePolicyEnabled") : t("agePolicyDisabled")
       );
     },
-    onError: mutationErrorToast("Failed to save package age policy"),
+    onError: mutationErrorToast(t("agePolicySaveFailed")),
   });
 
   // -- Effective upload size limit (#189). Read-only here; configured by an
@@ -615,9 +620,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       // edits so the form re-baselines against what was actually persisted.
       queryClient.setQueryData(["scan-config", repository.key], updated);
       setScanOverrides({});
-      toast.success("Scanning & enforcement settings saved");
+      toast.success(t("scanSettingsSaved"));
     },
-    onError: mutationErrorToast("Failed to save scanning settings"),
+    onError: mutationErrorToast(t("scanSettingsSaveFailed")),
   });
 
   const handleSaveScanConfig = useCallback(() => {
@@ -681,10 +686,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       setAgeGateEnabledOverride(undefined);
       setAgeGateDaysOverride(undefined);
       toast.success(
-        updated.enabled ? "Age gate enabled" : "Age gate settings saved"
+        updated.enabled ? t("ageGateEnabled") : t("ageGateSettingsSaved")
       );
     },
-    onError: mutationErrorToast("Failed to save age gate settings"),
+    onError: mutationErrorToast(t("ageGateSaveFailed")),
   });
 
   const handleSaveAgeGate = useCallback(() => {
@@ -707,11 +712,11 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {/* -- General Settings Section -- */}
       <section aria-labelledby="settings-general-heading">
         <h3 id="settings-general-heading" className="text-base font-semibold mb-4">
-          General
+          {t("general")}
         </h3>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="settings-key">Repository Key</Label>
+            <Label htmlFor="settings-key">{t("repoKeyLabel")}</Label>
             <Input
               id="settings-key"
               value={form.key}
@@ -725,14 +730,13 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             />
             {keyChanged && (
               <p className="text-sm text-yellow-600 dark:text-yellow-500">
-                Changing the key will update all URLs for this repository. Existing
-                client configurations will need to be updated.
+                {t("keyChangedWarning")}
               </p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="settings-name">Name</Label>
+            <Label htmlFor="settings-name">{t("nameLabel")}</Label>
             <Input
               id="settings-name"
               value={form.name}
@@ -744,23 +748,23 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="settings-description">Description</Label>
+            <Label htmlFor="settings-description">{t("descriptionLabel")}</Label>
             <Textarea
               id="settings-description"
               value={form.description}
               onChange={(e) =>
                 setOverrides((o) => ({ ...o, description: e.target.value }))
               }
-              placeholder="Describe the purpose of this repository..."
+              placeholder={t("descriptionPlaceholder")}
               rows={3}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="settings-visibility">Public Access</Label>
+              <Label htmlFor="settings-visibility">{t("publicAccess")}</Label>
               <p className="text-xs text-muted-foreground">
-                Public repositories allow unauthenticated read access.
+                {t("publicAccessHint")}
               </p>
             </div>
             <Switch
@@ -779,42 +783,40 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {/* -- Storage Section -- */}
       <section aria-labelledby="settings-storage-heading">
         <h3 id="settings-storage-heading" className="text-base font-semibold mb-4">
-          Storage
+          {t("storage")}
         </h3>
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground">
-            Currently using{" "}
-            <span className="font-medium text-foreground">
-              {formatBytes(repository.storage_used_bytes)}
-            </span>
+            {t.rich("currentlyUsing", {
+              used: formatBytes(repository.storage_used_bytes),
+              strong: (chunks) => (
+                <span className="font-medium text-foreground">{chunks}</span>
+              ),
+            })}
             {repository.quota_bytes ? (
-              <>
-                {" "}of{" "}
-                <span className="font-medium text-foreground">
-                  {formatBytes(repository.quota_bytes)}
-                </span>
-                {" "}quota
-                {" "}
-                <span className="text-xs">
-                  ({Math.round(
-                    (repository.storage_used_bytes / repository.quota_bytes) * 100
-                  )}% used)
-                </span>
-              </>
+              t.rich("ofQuota", {
+                quota: formatBytes(repository.quota_bytes),
+                percent: Math.round(
+                  (repository.storage_used_bytes / repository.quota_bytes) * 100
+                ),
+                strong: (chunks) => (
+                  <span className="font-medium text-foreground">{chunks}</span>
+                ),
+              })
             ) : (
-              <> (no quota set)</>
+              t("noQuotaSet")
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="settings-quota">Storage Quota</Label>
+            <Label htmlFor="settings-quota">{t("storageQuotaLabel")}</Label>
             <div className="flex gap-2">
               <Input
                 id="settings-quota"
                 type="number"
                 min="0"
                 step="any"
-                placeholder="No limit"
+                placeholder={t("noLimitPlaceholder")}
                 value={quotaValue}
                 onChange={(e) =>
                   setQuotaOverrides((o) => ({ ...o, value: e.target.value }))
@@ -837,28 +839,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               </Select>
             </div>
             <p className="text-xs text-muted-foreground">
-              Maximum storage for this repository. Leave empty for no limit.
+              {t("quotaHint")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label>Upload Size Limit</Label>
+            <Label>{t("uploadSizeLimit")}</Label>
             <Input
               value={
                 maxUploadBytes == null
-                  ? "Loading..."
+                  ? t("loading")
                   : maxUploadBytes === 0
-                    ? "No limit"
+                    ? t("noLimit")
                     : formatBytes(maxUploadBytes)
               }
               disabled
               className="bg-muted/50"
-              aria-label="Upload size limit"
+              aria-label={t("uploadSizeLimitAria")}
             />
             <p className="text-xs text-muted-foreground">
-              Maximum size for a single artifact upload. This limit is set
-              instance-wide by an administrator on the Settings page and applies
-              to every repository.
+              {t("uploadSizeHint")}
             </p>
           </div>
         </div>
@@ -875,23 +875,19 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 id="settings-versioning-heading"
                 className="text-base font-semibold"
               >
-                Artifact Versioning
+                {t("versioning")}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Keep an immutable revision history for artifacts in this
-                repository. Re-uploading a path with different content appends
-                a new revision instead of overwriting; prior revisions stay
-                downloadable from the artifact&apos;s Versions tab.
+                {t("versioningHint")}
               </p>
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="settings-versioning-enabled">
-                  Enable versioning
+                  {t("enableVersioning")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Applies to future uploads. Turning this off stops recording
-                  new revisions; existing history remains addressable.
+                  {t("versioningToggleHint")}
                 </p>
               </div>
               <Switch
@@ -914,7 +910,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <section aria-labelledby="settings-rpm-heading">
             <div className="mb-4">
               <h3 id="settings-rpm-heading" className="text-base font-semibold">
-                RPM Curation Trust
+                {t("rpmTrustTitle")}
               </h3>
             </div>
             <RpmTrustedKeyField
@@ -933,7 +929,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             {rpmClear && (
               <div className="mt-2 flex items-center justify-between rounded border border-destructive/40 bg-destructive/5 p-2">
                 <p className="text-xs text-destructive">
-                  Trusted key will be removed when you save.
+                  {t("rpmWillRemove")}
                 </p>
                 <Button
                   type="button"
@@ -941,7 +937,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   size="sm"
                   onClick={() => setRpmClear(false)}
                 >
-                  Undo
+                  {t("undo")}
                 </Button>
               </div>
             )}
@@ -959,11 +955,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 id="settings-debian-heading"
                 className="text-base font-semibold"
               >
-                Debian / APT Configuration
+                {t("debianConfigTitle")}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Proxy distro/component/architecture filters and Release-file
-                metadata.
+                {t("debianHint")}
               </p>
             </div>
             <DebianConfigFields
@@ -982,11 +977,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <section aria-labelledby="settings-npm-heading">
             <div className="mb-4">
               <h3 id="settings-npm-heading" className="text-base font-semibold">
-                npm Scope Policy
+                {t("npmScopeTitle")}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Restrict which npm scopes and names resolve through this
-                repository.
+                {t("npmHint")}
               </p>
             </div>
             <NpmScopePolicyFields
@@ -1003,21 +997,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       <section aria-labelledby="settings-age-heading">
         <div className="mb-4">
           <h3 id="settings-age-heading" className="text-base font-semibold">
-            Package Age Policy
+            {t("agePolicy")}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Hold freshly published packages in quarantine for a cooldown period
-            after their release. New releases pulled from upstream are not served
-            until the window passes, giving time to flag a compromised release
-            before it reaches clients.
+            {t("agePolicyHint")}
           </p>
         </div>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="settings-age-enabled">Enable age policy</Label>
+              <Label htmlFor="settings-age-enabled">{t("enableAgePolicy")}</Label>
               <p className="text-xs text-muted-foreground">
-                Quarantine packages released within the cooldown window.
+                {t("enableAgePolicyHint")}
               </p>
             </div>
             <Switch
@@ -1028,7 +1019,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="settings-age-duration">Cooldown period</Label>
+            <Label htmlFor="settings-age-duration">{t("cooldownPeriod")}</Label>
             <div className="flex gap-2">
               <Input
                 id="settings-age-duration"
@@ -1051,8 +1042,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hours">Hours</SelectItem>
-                  <SelectItem value="days">Days</SelectItem>
+                  <SelectItem value="hours">{t("hours")}</SelectItem>
+                  <SelectItem value="days">{t("days")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1060,12 +1051,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 stays associated with the input via aria-describedby. */}
             <p id="settings-age-error" role="alert" className="text-sm text-destructive empty:hidden">
               {ageInvalid
-                ? `Enter a cooldown period of at least one ${ageUnit === "days" ? "day" : "hour"}.`
+                ? t("ageInvalid", {
+                    unit:
+                      ageUnit === "days" ? t("day") : t("hour"),
+                  })
                 : ""}
             </p>
             {!ageInvalid && (
               <p id="settings-age-hint" className="text-xs text-muted-foreground">
-                Packages released less than this long ago are quarantined.
+                {t("ageHint")}
               </p>
             )}
           </div>
@@ -1078,10 +1072,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               {ageMutation.isPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Saving...
+                  {t("saving")}
                 </>
               ) : (
-                "Save Age Policy"
+                t("saveAgePolicy")
               )}
             </Button>
           </div>
@@ -1099,12 +1093,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 id="settings-age-gate-heading"
                 className="text-base font-semibold"
               >
-                Age Gate
+                {t("ageGate")}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Withhold upstream releases younger than a minimum age until
-                they mature or an admin approves them from the age gate review
-                queue.
+                {t("ageGateHint")}
               </p>
             </div>
 
@@ -1118,11 +1110,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-age-gate-enabled">
-                      Enable age gate
+                      {t("enableAgeGate")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Queue too-new releases for admin review instead of
-                      serving them to clients.
+                      {t("enableAgeGateHint")}
                     </p>
                   </div>
                   <Switch
@@ -1134,7 +1125,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="settings-age-gate-days">
-                    Minimum age (days)
+                    {t("minAgeDays")}
                   </Label>
                   <Input
                     id="settings-age-gate-days"
@@ -1158,14 +1149,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     className="text-sm text-destructive empty:hidden"
                   >
                     {ageGateDaysOverride !== undefined && !ageGateDaysValid
-                      ? `Must be a whole number between ${AGE_GATE_MIN_DAYS} and ${AGE_GATE_MAX_DAYS.toLocaleString()}.`
+                      ? t("ageGateInvalid", {
+                          min: AGE_GATE_MIN_DAYS,
+                          max: AGE_GATE_MAX_DAYS.toLocaleString(),
+                        })
                       : ""}
                   </p>
                   {ageGateDaysValid && (
                     <p className="text-xs text-muted-foreground">
-                      Releases published fewer than this many days ago are
-                      withheld. 0 disables the age delay but keeps admin
-                      rejections enforced.
+                      {t("ageGateValidHint")}
                     </p>
                   )}
                 </div>
@@ -1182,10 +1174,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     {ageGateMutation.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Saving...
+                        {t("saving")}
                       </>
                     ) : (
-                      "Save Age Gate Settings"
+                      t("saveAgeGateSettings")
                     )}
                   </Button>
                 </div>
@@ -1220,18 +1212,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         <>
           <section aria-labelledby="settings-cache-heading">
             <h3 id="settings-cache-heading" className="text-base font-semibold mb-4">
-              Proxy Cache
+              {t("proxyCache")}
             </h3>
             <div className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                How long the proxy keeps cached upstream artifacts before
-                re-validating against upstream. Applies repository-wide; per-
-                artifact eviction is available from the artifact details
-                dialog.
+                {t("proxyCacheHint")}
               </p>
 
               <div className="space-y-2">
-                <Label htmlFor="settings-cache-ttl">Cache TTL (seconds)</Label>
+                <Label htmlFor="settings-cache-ttl">{t("cacheTtlLabel")}</Label>
                 {cacheTtlLoading ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
@@ -1251,8 +1240,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     />
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">
-                        Range: {CACHE_TTL_MIN_SECONDS}s to{" "}
-                        {CACHE_TTL_MAX_SECONDS.toLocaleString()}s (30 days)
+                        {t("cacheRange", {
+                          min: CACHE_TTL_MIN_SECONDS,
+                          max: CACHE_TTL_MAX_SECONDS.toLocaleString(),
+                        })}
                       </span>
                       {parsedCacheTtl != null && cacheTtlIsValid && (
                         <span className="text-muted-foreground">
@@ -1269,7 +1260,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                       className="text-sm text-destructive empty:hidden"
                     >
                       {cacheTtlOverride !== undefined && !cacheTtlIsValid
-                        ? `Must be a whole number between ${CACHE_TTL_MIN_SECONDS} and ${CACHE_TTL_MAX_SECONDS.toLocaleString()}.`
+                        ? t("cacheInvalid", {
+                            min: CACHE_TTL_MIN_SECONDS,
+                            max: CACHE_TTL_MAX_SECONDS.toLocaleString(),
+                          })
                         : ""}
                     </p>
                   </>
@@ -1291,13 +1285,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 id="settings-scan-heading"
                 className="text-base font-semibold"
               >
-                Scanning &amp; enforcement
+                {t("scanningEnforcement")}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Vulnerability scanning and inline scan-and-block for this
-                repository. When blocking is on, artifacts that violate the
-                policy are actively prevented from being downloaded rather than
-                only flagged after the fact.
+                {t("scanningHint")}
               </p>
             </div>
 
@@ -1313,10 +1304,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-scan-enabled">
-                      Enable scanning
+                      {t("enableScanning")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Turn vulnerability scanning on for this repository.
+                      {t("enableScanningHint")}
                     </p>
                   </div>
                   <Switch
@@ -1330,10 +1321,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-scan-on-upload">
-                      Scan on upload
+                      {t("scanOnUpload")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Scan artifacts as they are published to this repository.
+                      {t("scanOnUploadHint")}
                     </p>
                   </div>
                   <Switch
@@ -1348,11 +1339,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-scan-on-proxy">
-                      Scan on proxy download
+                      {t("scanOnProxy")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Scan upstream artifacts inline as they are proxied
-                      through this repository.
+                      {t("scanOnProxyHint")}
                     </p>
                   </div>
                   <Switch
@@ -1367,11 +1357,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="settings-scan-block">
-                      Block on policy violation
+                      {t("blockOnViolation")}
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Actively block downloads of artifacts that violate the
-                      severity policy, instead of only recording a finding.
+                      {t("blockOnViolationHint")}
                     </p>
                   </div>
                   <Switch
@@ -1387,7 +1376,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 {/* Severity threshold */}
                 <div className="space-y-2">
                   <Label htmlFor="settings-scan-severity">
-                    Severity threshold
+                    {t("severityThreshold")}
                   </Label>
                   <Select
                     value={scanForm.severity_threshold}
@@ -1399,21 +1388,20 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     <SelectTrigger
                       id="settings-scan-severity"
                       className="w-40"
-                      aria-label="Severity threshold"
+                      aria-label={t("severityAria")}
                     >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {SEVERITY_THRESHOLDS.map((level) => (
                         <SelectItem key={level} value={level}>
-                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                          {tSev(level)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Findings at or above this severity count as a policy
-                    violation.
+                    {t("severityHint")}
                   </p>
                 </div>
 
@@ -1422,12 +1410,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label htmlFor="settings-scan-fail-closed">
-                        Fail closed on proxy downloads
+                        {t("failClosed")}
                       </Label>
                       <p className="text-xs text-muted-foreground">
                         {scanForm.proxy_scan_action === "fail_closed"
-                          ? "Fail closed: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is blocked. Security first — a proxy outage can interrupt availability."
-                          : "Fail open: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is served anyway. Availability first — an unscanned artifact can slip through."}
+                          ? t("failClosedHint")
+                          : t("failOpenHint")}
                       </p>
                     </div>
                     <Switch
@@ -1446,8 +1434,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   </div>
                   {(!scanForm.scan_enabled || !scanForm.scan_on_proxy) && (
                     <p className="text-xs text-muted-foreground">
-                      Enable scanning and &ldquo;Scan on proxy download&rdquo;
-                      to choose the fail-open / fail-closed behavior.
+                      {t("failClosedDisabledHint")}
                     </p>
                   )}
                 </div>
@@ -1460,10 +1447,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     {scanConfigMutation.isPending ? (
                       <>
                         <Loader2 className="size-4 animate-spin" />
-                        Saving...
+                        {t("saving")}
                       </>
                     ) : (
-                      "Save Scanning Settings"
+                      t("saveScanSettings")
                     )}
                   </Button>
                 </div>
@@ -1480,10 +1467,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 id="settings-cleanup-heading" className="text-base font-semibold">
-              Cleanup Policies
+              {t("cleanupPolicies")}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Lifecycle policies that automatically remove old or unused artifacts.
+              {t("cleanupPoliciesHint")}
             </p>
           </div>
         </div>
@@ -1496,11 +1483,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         ) : !policies || policies.length === 0 ? (
           <div className="rounded-md border border-dashed p-6 text-center">
             <p className="text-sm text-muted-foreground">
-              No cleanup policies configured for this repository.
+              {t("noPolicies")}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Cleanup policies can be created from the Lifecycle section in
-              the administration panel.
+              {t("noPoliciesHint")}
             </p>
           </div>
         ) : (
@@ -1526,29 +1512,29 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {/* -- Read-only Info Section -- */}
       <section aria-labelledby="settings-info-heading">
         <h3 id="settings-info-heading" className="text-base font-semibold mb-4">
-          Repository Info
+          {t("repoInfo")}
         </h3>
         <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Format</dt>
+          <dt className="text-muted-foreground">{t("infoFormat")}</dt>
           <dd className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
               {repoFormatLabel(repository, formatHandlers).toUpperCase()}
             </Badge>
             {isPluginBackedRepo(repository) && (
               <span className="text-xs text-muted-foreground">
-                Custom layout provided by a WASM plugin (generic family)
+                {t("pluginGenericHint")}
               </span>
             )}
           </dd>
-          <dt className="text-muted-foreground">Type</dt>
+          <dt className="text-muted-foreground">{t("infoType")}</dt>
           <dd className="capitalize">{repository.repo_type}</dd>
-          <dt className="text-muted-foreground">Created</dt>
+          <dt className="text-muted-foreground">{t("infoCreated")}</dt>
           <dd>{new Date(repository.created_at).toLocaleDateString()}</dd>
-          <dt className="text-muted-foreground">Last Updated</dt>
+          <dt className="text-muted-foreground">{t("infoLastUpdated")}</dt>
           <dd>{new Date(repository.updated_at).toLocaleDateString()}</dd>
           {repository.upstream_url && (
             <>
-              <dt className="text-muted-foreground">Upstream URL</dt>
+              <dt className="text-muted-foreground">{t("infoUpstreamUrl")}</dt>
               <dd className="font-mono text-xs break-all">
                 {repository.upstream_url}
               </dd>
@@ -1562,7 +1548,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         <div className="sticky bottom-0 bg-background border-t pt-4 pb-2 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertTriangle className="size-4 text-yellow-500" />
-            <span>You have unsaved changes</span>
+            <span>{t("unsavedChanges")}</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -1572,7 +1558,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 saveMutation.isPending || setCacheTtlMutation.isPending
               }
             >
-              Discard
+              {t("discard")}
             </Button>
             <Button
               onClick={handleSave}
@@ -1587,10 +1573,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               {saveMutation.isPending || setCacheTtlMutation.isPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Saving...
+                  {t("saving")}
                 </>
               ) : (
-                "Save Changes"
+                t("saveChanges")
               )}
             </Button>
           </div>
@@ -1621,6 +1607,7 @@ function CleanupPolicyRow({
   executePending,
   deletePending,
 }: CleanupPolicyRowProps) {
+  const t = useTranslations("app/repositories/_components/repo-settings-tab");
   const typeLabel =
     POLICY_TYPE_LABELS[policy.policy_type as PolicyType] ?? policy.policy_type;
 
@@ -1637,13 +1624,13 @@ function CleanupPolicyRow({
               variant={policy.enabled ? "default" : "secondary"}
               className="text-xs font-normal"
             >
-              {policy.enabled ? "Active" : "Disabled"}
+              {policy.enabled ? t("policyActive") : t("policyDisabled")}
             </Badge>
             {policy.last_run_at && (
               <span className="text-xs text-muted-foreground">
-                Last run: {new Date(policy.last_run_at).toLocaleDateString()}
+                {t("lastRun", { date: new Date(policy.last_run_at).toLocaleDateString() })}
                 {policy.last_run_items_removed != null &&
-                  ` (${policy.last_run_items_removed} removed)`}
+                  t("lastRunRemoved", { count: policy.last_run_items_removed })}
               </span>
             )}
           </div>
@@ -1657,12 +1644,12 @@ function CleanupPolicyRow({
               size="icon-xs"
               onClick={onPreview}
               disabled={previewPending}
-              aria-label={`Preview policy ${policy.name}`}
+              aria-label={t("previewAria", { name: policy.name })}
             >
               <Eye className="size-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Preview (dry run)</TooltipContent>
+          <TooltipContent>{t("previewDryRun")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1671,12 +1658,12 @@ function CleanupPolicyRow({
               size="icon-xs"
               onClick={onExecute}
               disabled={executePending}
-              aria-label={`Execute policy ${policy.name}`}
+              aria-label={t("executeAria", { name: policy.name })}
             >
               <Play className="size-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Execute now</TooltipContent>
+          <TooltipContent>{t("executeNow")}</TooltipContent>
         </Tooltip>
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -1687,29 +1674,28 @@ function CleanupPolicyRow({
                   size="icon-xs"
                   className="text-destructive hover:text-destructive"
                   disabled={deletePending}
-                  aria-label={`Delete policy ${policy.name}`}
+                  aria-label={t("deleteAria", { name: policy.name })}
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete policy</TooltipContent>
+              <TooltipContent>{t("deletePolicy")}</TooltipContent>
             </Tooltip>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Cleanup Policy</AlertDialogTitle>
+              <AlertDialogTitle>{t("deletePolicyTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete the &quot;{policy.name}&quot; policy?
-                This will not affect any previously cleaned artifacts.
+                {t("deletePolicyDescription", { name: policy.name })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={onDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete
+                {t("delete")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

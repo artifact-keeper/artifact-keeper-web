@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronRight, Download, FileIcon, Package as PackageIcon } from "lucide-react";
 
 import {
@@ -53,8 +54,7 @@ interface MavenComponentListProps {
 export function MavenComponentList({
   components,
   loading = false,
-  // M7: actionable default — tells the user what to do, not just that it's empty.
-  emptyMessage = "No Maven components found. Switch to Flat to see raw files, or push an artifact with valid GAV coordinates.",
+  emptyMessage,
   total,
   page = 1,
   pageSize = 20,
@@ -62,6 +62,9 @@ export function MavenComponentList({
   onPageSizeChange,
   onFileSelect,
 }: MavenComponentListProps) {
+  const t = useTranslations("app/repositories/_components/maven-component-list");
+  // M7: actionable default — tells the user what to do, not just that it's empty.
+  const resolvedEmpty = emptyMessage ?? t("empty");
   if (loading) {
     return (
       // M3: announce loading to AT — without aria-live, SR users get silence
@@ -73,7 +76,7 @@ export function MavenComponentList({
         className="space-y-2"
         data-testid="maven-component-list-loading"
       >
-        <span className="sr-only">Loading Maven components…</span>
+        <span className="sr-only">{t("loading")}</span>
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -87,7 +90,7 @@ export function MavenComponentList({
         className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground"
         data-testid="maven-component-list-empty"
       >
-        {emptyMessage}
+        {resolvedEmpty}
       </div>
     );
   }
@@ -113,7 +116,7 @@ export function MavenComponentList({
           pageSize={pageSize}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
-          itemLabel="components"
+          itemLabel={t("itemLabel")}
         />
       )}
     </div>
@@ -126,6 +129,7 @@ interface MavenComponentRowProps {
 }
 
 function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) {
+  const t = useTranslations("app/repositories/_components/maven-component-list");
   const [open, setOpen] = useState(false);
   const fileCount = component.artifact_files.length;
 
@@ -179,15 +183,15 @@ function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) 
                 same data — the layout reorders via flex/grid.
               */}
               <span className="text-xs text-muted-foreground">
-                {fileCount} {fileCount === 1 ? "file" : "files"}
+                {t("files", { count: fileCount })}
                 <span className="mx-1.5" aria-hidden="true">·</span>
                 {formatBytes(component.size_bytes)}
                 <span className="mx-1.5" aria-hidden="true">·</span>
-                {component.download_count.toLocaleString()} downloads
+                {t("downloads", { count: component.download_count.toLocaleString() })}
               </span>
             </div>
             <Badge variant="outline" className="font-normal" aria-hidden="true">
-              {fileCount} {fileCount === 1 ? "file" : "files"}
+              {t("files", { count: fileCount })}
             </Badge>
           </Button>
         </CollapsibleTrigger>
@@ -247,7 +251,7 @@ function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) 
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                     )}
                     onClick={() => onFileSelect?.(filePath, filename)}
-                    aria-label={`Open details for ${filename}`}
+                    aria-label={t("openAria", { filename })}
                   >
                     <FileIcon className="size-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate font-mono">{filename}</span>

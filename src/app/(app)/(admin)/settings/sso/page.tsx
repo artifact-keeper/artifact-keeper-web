@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   Pencil,
@@ -74,6 +75,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function OidcTab() {
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<OidcConfig | null>(null);
@@ -102,10 +104,10 @@ function OidcTab() {
     mutationFn: ssoApi.createOidc,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("OIDC provider created successfully");
+      toast.success(t("oidcCreated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to create OIDC provider"),
+    onError: mutationErrorToast(t("oidcCreatedError")),
   });
 
   const updateMutation = useMutation({
@@ -113,20 +115,20 @@ function OidcTab() {
       ssoApi.updateOidc(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("OIDC provider updated successfully");
+      toast.success(t("oidcUpdated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to update OIDC provider"),
+    onError: mutationErrorToast(t("oidcUpdatedError")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: ssoApi.deleteOidc,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("OIDC provider deleted");
+      toast.success(t("oidcDeleted"));
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete OIDC provider"),
+    onError: mutationErrorToast(t("oidcDeletedError")),
   });
 
   const toggleMutation = useMutation({
@@ -134,9 +136,9 @@ function OidcTab() {
       enabled ? ssoApi.disableOidc(id) : ssoApi.enableOidc(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("OIDC provider status updated");
+      toast.success(t("oidcStatusUpdated"));
     },
-    onError: mutationErrorToast("Failed to toggle OIDC provider"),
+    onError: mutationErrorToast(t("oidcStatusUpdateError")),
   });
 
   function resetForm() {
@@ -291,14 +293,14 @@ function OidcTab() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle className="text-base">OIDC Providers</CardTitle>
+            <CardTitle className="text-base">{t("oidcProviders")}</CardTitle>
             <CardDescription>
-              OpenID Connect providers for federated authentication.
+              {t("oidcProvidersDescription")}
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
             <Plus className="size-4 mr-1.5" />
-            Add Provider
+            {t("addProvider")}
           </Button>
         </CardHeader>
         <CardContent>
@@ -306,11 +308,11 @@ function OidcTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Issuer URL</TableHead>
-                  <TableHead>Client ID</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colIssuerUrl")}</TableHead>
+                  <TableHead>{t("colClientId")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -325,7 +327,7 @@ function OidcTab() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        status={config.is_enabled ? "Active" : "Disabled"}
+                        status={config.is_enabled ? t("active") : t("disabled")}
                         color={config.is_enabled ? "green" : "default"}
                       />
                     </TableCell>
@@ -335,7 +337,10 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} OIDC provider ${config.name}`}
+                          aria-label={t("toggleAria", {
+                            action: config.is_enabled ? t("disable") : t("enable"),
+                            name: config.name,
+                          })}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -353,7 +358,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`Edit OIDC provider ${config.name}`}
+                          aria-label={t("editAria", { name: config.name })}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -362,7 +367,7 @@ function OidcTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
-                          aria-label={`Delete OIDC provider ${config.name}`}
+                          aria-label={t("deleteAria", { name: config.name })}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -377,11 +382,11 @@ function OidcTab() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Globe className="size-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">
-                No OIDC providers configured.
+                {t("noOidcProviders")}
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={openCreate}>
                 <Plus className="size-4 mr-1.5" />
-                Add OIDC Provider
+                {t("addOidcProvider")}
               </Button>
             </div>
           )}
@@ -393,65 +398,65 @@ function OidcTab() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editTarget ? "Edit OIDC Provider" : "Add OIDC Provider"}
+              {editTarget ? t("editOidcProvider") : t("addOidcProvider")}
             </DialogTitle>
             <DialogDescription>
               {editTarget
-                ? "Update the OpenID Connect provider configuration."
-                : "Configure a new OpenID Connect provider for SSO."}
+                ? t("editOidcProviderDescription")
+                : t("addOidcProviderDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="oidc-name">Name</Label>
+              <Label htmlFor="oidc-name">{t("name")}</Label>
               <Input
                 id="oidc-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Google Workspace"
+                placeholder={t("oidcNamePlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="oidc-issuer">Issuer URL</Label>
+              <Label htmlFor="oidc-issuer">{t("issuerUrl")}</Label>
               <Input
                 id="oidc-issuer"
                 value={issuerUrl}
                 onChange={(e) => setIssuerUrl(e.target.value)}
-                placeholder="https://accounts.google.com"
+                placeholder={t("oidcIssuerPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="oidc-client-id">Client ID</Label>
+              <Label htmlFor="oidc-client-id">{t("clientId")}</Label>
               <Input
                 id="oidc-client-id"
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                placeholder="your-client-id"
+                placeholder={t("oidcClientIdPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="oidc-client-secret">Client Secret</Label>
+              <Label htmlFor="oidc-client-secret">{t("clientSecret")}</Label>
               <Input
                 id="oidc-client-secret"
                 type="password"
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
                 placeholder={
-                  editTarget ? "Leave blank to keep existing" : "your-client-secret"
+                  editTarget ? t("keepExistingPlaceholder") : t("oidcClientSecretPlaceholder")
                 }
                 aria-required={!editTarget}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="oidc-scopes">Scopes</Label>
+              <Label htmlFor="oidc-scopes">{t("scopes")}</Label>
               <Input
                 id="oidc-scopes"
                 value={scopes}
@@ -459,15 +464,15 @@ function OidcTab() {
                 placeholder="openid profile email"
               />
               <p className="text-xs text-muted-foreground">
-                Space-separated list of OAuth scopes to request.
+                {t("scopesHint")}
               </p>
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="oidc-auto-create-users">Auto Create Users</Label>
+                <Label htmlFor="oidc-auto-create-users">{t("autoCreateUsers")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Automatically create user accounts on first login.
+                  {t("autoCreateUsersHint")}
                 </p>
               </div>
               <Switch
@@ -480,13 +485,10 @@ function OidcTab() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="oidc-map-groups-to-groups">
-                  Map OIDC groups to local groups
+                  {t("mapGroupsToGroups")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Reflect values from the OIDC groups claim into Artifact Keeper
-                  group memberships on login. Matching groups are auto-created
-                  for this provider; operator-managed groups are left unchanged.
-                  Off keeps the legacy role-mapping behavior.
+                  {t("mapGroupsToGroupsOidcHint")}
                 </p>
               </div>
               <Switch
@@ -499,14 +501,12 @@ function OidcTab() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="oidc-allow-legacy-rsa-keys">
-                  Allow legacy RSA keys (&lt; 2048-bit)
+                  {t("allowLegacyRsaKeys")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Accept ID tokens signed with RSA keys shorter than 2048 bits via a
-                  restricted RS256/384/512 PKCS#1 v1.5 fallback. Only enable for legacy
-                  IdPs such as Lark AnyCross.{" "}
+                  {t("allowLegacyRsaKeysHint")}{" "}
                   <span className="text-amber-600 dark:text-amber-400 font-medium">
-                    Below the OWASP ASVS 4.0 baseline.
+                    {t("owaspWarning")}
                   </span>
                 </p>
               </div>
@@ -520,10 +520,10 @@ function OidcTab() {
             <Separator />
 
             <div>
-              <p className="text-sm font-medium mb-3">Attribute Mapping</p>
+              <p className="text-sm font-medium mb-3">{t("attributeMapping")}</p>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="oidc-claim-username">Username Claim</Label>
+                  <Label htmlFor="oidc-claim-username">{t("usernameClaim")}</Label>
                   <Input
                     id="oidc-claim-username"
                     value={usernameClaim}
@@ -532,7 +532,7 @@ function OidcTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oidc-claim-email">Email Claim</Label>
+                  <Label htmlFor="oidc-claim-email">{t("emailClaim")}</Label>
                   <Input
                     id="oidc-claim-email"
                     value={emailClaim}
@@ -541,7 +541,7 @@ function OidcTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oidc-claim-display">Display Name Claim</Label>
+                  <Label htmlFor="oidc-claim-display">{t("displayNameClaim")}</Label>
                   <Input
                     id="oidc-claim-display"
                     value={displayNameClaim}
@@ -550,7 +550,7 @@ function OidcTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oidc-claim-groups">Groups Claim</Label>
+                  <Label htmlFor="oidc-claim-groups">{t("groupsClaim")}</Label>
                   <Input
                     id="oidc-claim-groups"
                     value={groupsClaim}
@@ -559,7 +559,7 @@ function OidcTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="oidc-admin-group">Admin Group</Label>
+                  <Label htmlFor="oidc-admin-group">{t("adminGroup")}</Label>
                   <Input
                     id="oidc-admin-group"
                     value={adminGroup}
@@ -567,7 +567,7 @@ function OidcTab() {
                     placeholder="artifact-keeper-admins"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Users in this group will be granted admin privileges.
+                    {t("adminGroupHint")}
                   </p>
                 </div>
               </div>
@@ -576,14 +576,14 @@ function OidcTab() {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={!name || !issuerUrl || !clientId || (!editTarget && !clientSecret) || isSaving}
             >
               {isSaving && <Loader2 className="size-4 animate-spin mr-1.5" />}
-              {editTarget ? "Save Changes" : "Create Provider"}
+              {editTarget ? t("saveChanges") : t("createProvider")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -593,9 +593,11 @@ function OidcTab() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete OIDC Provider"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? Users will no longer be able to sign in with this provider.`}
-        confirmText="Delete"
+        title={t("deleteOidcProvider")}
+        description={t("deleteProviderDescription", {
+          name: deleteTarget?.name ?? "",
+        })}
+        confirmText={t("delete")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
@@ -609,6 +611,7 @@ function OidcTab() {
 // ---------------------------------------------------------------------------
 
 function LdapTab() {
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<LdapConfig | null>(null);
@@ -640,10 +643,10 @@ function LdapTab() {
     mutationFn: ssoApi.createLdap,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("LDAP provider created successfully");
+      toast.success(t("ldapCreated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to create LDAP provider"),
+    onError: mutationErrorToast(t("ldapCreatedError")),
   });
 
   const updateMutation = useMutation({
@@ -651,20 +654,20 @@ function LdapTab() {
       ssoApi.updateLdap(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("LDAP provider updated successfully");
+      toast.success(t("ldapUpdated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to update LDAP provider"),
+    onError: mutationErrorToast(t("ldapUpdatedError")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: ssoApi.deleteLdap,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("LDAP provider deleted");
+      toast.success(t("ldapDeleted"));
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete LDAP provider"),
+    onError: mutationErrorToast(t("ldapDeletedError")),
   });
 
   const toggleMutation = useMutation({
@@ -672,9 +675,9 @@ function LdapTab() {
       enabled ? ssoApi.disableLdap(id) : ssoApi.enableLdap(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("LDAP provider status updated");
+      toast.success(t("ldapStatusUpdated"));
     },
-    onError: mutationErrorToast("Failed to toggle LDAP provider"),
+    onError: mutationErrorToast(t("ldapStatusUpdateError")),
   });
 
   const testMutation = useMutation({
@@ -683,15 +686,17 @@ function LdapTab() {
     onSuccess: (result) => {
       if (result.success) {
         toast.success(
-          `Connection successful${result.response_time_ms ? ` (${result.response_time_ms}ms)` : ""}`
+          result.response_time_ms
+            ? t("ldapConnectionSuccessMs", { ms: result.response_time_ms })
+            : t("ldapConnectionSuccess")
         );
       } else {
-        toast.error(`Connection failed: ${result.message}`);
+        toast.error(t("ldapConnectionFailed", { message: result.message }));
       }
       setTestingId(null);
     },
     onError: (err: unknown) => {
-      toast.error(toUserMessage(err, "Failed to test LDAP connection"));
+      toast.error(toUserMessage(err, t("ldapTestError")));
       setTestingId(null);
     },
   });
@@ -808,14 +813,14 @@ function LdapTab() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle className="text-base">LDAP Providers</CardTitle>
+            <CardTitle className="text-base">{t("ldapProviders")}</CardTitle>
             <CardDescription>
-              LDAP / Active Directory servers for directory-based authentication.
+              {t("ldapProvidersDescription")}
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
             <Plus className="size-4 mr-1.5" />
-            Add Provider
+            {t("addProvider")}
           </Button>
         </CardHeader>
         <CardContent>
@@ -823,11 +828,11 @@ function LdapTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Server URL</TableHead>
-                  <TableHead>User Base DN</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colServerUrl")}</TableHead>
+                  <TableHead>{t("colUserBaseDn")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -842,7 +847,7 @@ function LdapTab() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        status={config.is_enabled ? "Active" : "Disabled"}
+                        status={config.is_enabled ? t("active") : t("disabled")}
                         color={config.is_enabled ? "green" : "default"}
                       />
                     </TableCell>
@@ -852,7 +857,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`Test LDAP connection ${config.name}`}
+                          aria-label={t("testLdapAria", { name: config.name })}
                           disabled={testingId === config.id}
                           onClick={() => testMutation.mutate(config.id)}
                         >
@@ -866,7 +871,10 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} LDAP provider ${config.name}`}
+                          aria-label={t("toggleAria", {
+                            action: config.is_enabled ? t("disable") : t("enable"),
+                            name: config.name,
+                          })}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -884,7 +892,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`Edit LDAP provider ${config.name}`}
+                          aria-label={t("editAria", { name: config.name })}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -893,7 +901,7 @@ function LdapTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
-                          aria-label={`Delete LDAP provider ${config.name}`}
+                          aria-label={t("deleteAria", { name: config.name })}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -908,11 +916,11 @@ function LdapTab() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Server className="size-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">
-                No LDAP providers configured.
+                {t("noLdapProviders")}
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={openCreate}>
                 <Plus className="size-4 mr-1.5" />
-                Add LDAP Provider
+                {t("addLdapProvider")}
               </Button>
             </div>
           )}
@@ -924,74 +932,74 @@ function LdapTab() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editTarget ? "Edit LDAP Provider" : "Add LDAP Provider"}
+              {editTarget ? t("editLdapProvider") : t("addLdapProvider")}
             </DialogTitle>
             <DialogDescription>
               {editTarget
-                ? "Update the LDAP directory server configuration."
-                : "Configure a new LDAP directory server for SSO."}
+                ? t("editLdapProviderDescription")
+                : t("addLdapProviderDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="ldap-name">Name</Label>
+              <Label htmlFor="ldap-name">{t("name")}</Label>
               <Input
                 id="ldap-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Corporate LDAP"
+                placeholder={t("ldapNamePlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-server">Server URL</Label>
+              <Label htmlFor="ldap-server">{t("serverUrl")}</Label>
               <Input
                 id="ldap-server"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="ldap://ldap.example.com:389"
+                placeholder={t("ldapServerPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-bind-dn">Bind DN</Label>
+              <Label htmlFor="ldap-bind-dn">{t("bindDn")}</Label>
               <Input
                 id="ldap-bind-dn"
                 value={bindDn}
                 onChange={(e) => setBindDn(e.target.value)}
-                placeholder="cn=admin,dc=example,dc=com"
+                placeholder={t("bindDnPlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-bind-password">Bind Password</Label>
+              <Label htmlFor="ldap-bind-password">{t("bindPassword")}</Label>
               <Input
                 id="ldap-bind-password"
                 type="password"
                 value={bindPassword}
                 onChange={(e) => setBindPassword(e.target.value)}
                 placeholder={
-                  editTarget ? "Leave blank to keep existing" : "bind-password"
+                  editTarget ? t("keepExistingPlaceholder") : t("bindPasswordPlaceholder")
                 }
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-user-base-dn">User Base DN</Label>
+              <Label htmlFor="ldap-user-base-dn">{t("userBaseDn")}</Label>
               <Input
                 id="ldap-user-base-dn"
                 value={userBaseDn}
                 onChange={(e) => setUserBaseDn(e.target.value)}
-                placeholder="ou=users,dc=example,dc=com"
+                placeholder={t("userBaseDnPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-user-filter">User Filter</Label>
+              <Label htmlFor="ldap-user-filter">{t("userFilter")}</Label>
               <Input
                 id="ldap-user-filter"
                 value={userFilter}
@@ -999,15 +1007,15 @@ function LdapTab() {
                 placeholder="(uid={0})"
               />
               <p className="text-xs text-muted-foreground">
-                Use {"{0}"} as a placeholder for the username.
+                {t("userFilterHint")}
               </p>
             </div>
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="ldap-use-starttls">Use STARTTLS</Label>
+                <Label htmlFor="ldap-use-starttls">{t("useStarttls")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Upgrade the connection to TLS after connecting.
+                  {t("useStarttlsHint")}
                 </p>
               </div>
               <Switch id="ldap-use-starttls" checked={useStarttls} onCheckedChange={setUseStarttls} />
@@ -1016,10 +1024,10 @@ function LdapTab() {
             <Separator />
 
             <div>
-              <p className="text-sm font-medium mb-3">Attribute Mapping</p>
+              <p className="text-sm font-medium mb-3">{t("attributeMapping")}</p>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-attr-username">Username Attribute</Label>
+                  <Label htmlFor="ldap-attr-username">{t("usernameAttribute")}</Label>
                   <Input
                     id="ldap-attr-username"
                     value={usernameAttribute}
@@ -1028,7 +1036,7 @@ function LdapTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-attr-email">Email Attribute</Label>
+                  <Label htmlFor="ldap-attr-email">{t("emailAttribute")}</Label>
                   <Input
                     id="ldap-attr-email"
                     value={emailAttribute}
@@ -1037,7 +1045,7 @@ function LdapTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-attr-display">Display Name Attribute</Label>
+                  <Label htmlFor="ldap-attr-display">{t("displayNameAttribute")}</Label>
                   <Input
                     id="ldap-attr-display"
                     value={displayNameAttribute}
@@ -1046,7 +1054,7 @@ function LdapTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-attr-groups">Groups Attribute</Label>
+                  <Label htmlFor="ldap-attr-groups">{t("groupsAttribute")}</Label>
                   <Input
                     id="ldap-attr-groups"
                     value={groupsAttribute}
@@ -1060,36 +1068,36 @@ function LdapTab() {
             <Separator />
 
             <div>
-              <p className="text-sm font-medium mb-3">Group Settings</p>
+              <p className="text-sm font-medium mb-3">{t("groupSettings")}</p>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-group-base-dn">Group Base DN</Label>
+                  <Label htmlFor="ldap-group-base-dn">{t("groupBaseDn")}</Label>
                   <Input
                     id="ldap-group-base-dn"
                     value={groupBaseDn}
                     onChange={(e) => setGroupBaseDn(e.target.value)}
-                    placeholder="ou=groups,dc=example,dc=com"
+                    placeholder={t("groupBaseDnPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-group-filter">Group Filter</Label>
+                  <Label htmlFor="ldap-group-filter">{t("groupFilter")}</Label>
                   <Input
                     id="ldap-group-filter"
                     value={groupFilter}
                     onChange={(e) => setGroupFilter(e.target.value)}
-                    placeholder="(objectClass=groupOfNames)"
+                    placeholder={t("groupFilterPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ldap-admin-group-dn">Admin Group DN</Label>
+                  <Label htmlFor="ldap-admin-group-dn">{t("adminGroupDn")}</Label>
                   <Input
                     id="ldap-admin-group-dn"
                     value={adminGroupDn}
                     onChange={(e) => setAdminGroupDn(e.target.value)}
-                    placeholder="cn=admins,ou=groups,dc=example,dc=com"
+                    placeholder={t("adminGroupDnPlaceholder")}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Users in this group will be granted admin privileges.
+                    {t("adminGroupHint")}
                   </p>
                 </div>
               </div>
@@ -1098,7 +1106,7 @@ function LdapTab() {
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="ldap-priority">Priority</Label>
+              <Label htmlFor="ldap-priority">{t("priority")}</Label>
               <Input
                 id="ldap-priority"
                 type="number"
@@ -1107,21 +1115,21 @@ function LdapTab() {
                 placeholder="0"
               />
               <p className="text-xs text-muted-foreground">
-                Lower values are tried first when multiple LDAP servers are configured.
+                {t("priorityHint")}
               </p>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={!name || !serverUrl || !userBaseDn || isSaving}
             >
               {isSaving && <Loader2 className="size-4 animate-spin mr-1.5" />}
-              {editTarget ? "Save Changes" : "Create Provider"}
+              {editTarget ? t("saveChanges") : t("createProvider")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1131,9 +1139,11 @@ function LdapTab() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete LDAP Provider"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? Users will no longer be able to sign in with this provider.`}
-        confirmText="Delete"
+        title={t("deleteLdapProvider")}
+        description={t("deleteProviderDescription", {
+          name: deleteTarget?.name ?? "",
+        })}
+        confirmText={t("delete")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
@@ -1147,6 +1157,7 @@ function LdapTab() {
 // ---------------------------------------------------------------------------
 
 function SamlTab() {
+  const t = useTranslations("app/admin/settings/sso");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SamlConfig | null>(null);
@@ -1178,10 +1189,10 @@ function SamlTab() {
     mutationFn: ssoApi.createSaml,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("SAML provider created successfully");
+      toast.success(t("samlCreated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to create SAML provider"),
+    onError: mutationErrorToast(t("samlCreatedError")),
   });
 
   const updateMutation = useMutation({
@@ -1189,20 +1200,20 @@ function SamlTab() {
       ssoApi.updateSaml(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("SAML provider updated successfully");
+      toast.success(t("samlUpdated"));
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to update SAML provider"),
+    onError: mutationErrorToast(t("samlUpdatedError")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: ssoApi.deleteSaml,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("SAML provider deleted");
+      toast.success(t("samlDeleted"));
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete SAML provider"),
+    onError: mutationErrorToast(t("samlDeletedError")),
   });
 
   const toggleMutation = useMutation({
@@ -1210,9 +1221,9 @@ function SamlTab() {
       enabled ? ssoApi.disableSaml(id) : ssoApi.enableSaml(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sso"] });
-      toast.success("SAML provider status updated");
+      toast.success(t("samlStatusUpdated"));
     },
-    onError: mutationErrorToast("Failed to toggle SAML provider"),
+    onError: mutationErrorToast(t("samlStatusUpdateError")),
   });
 
   function resetForm() {
@@ -1337,14 +1348,14 @@ function SamlTab() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle className="text-base">SAML Providers</CardTitle>
+            <CardTitle className="text-base">{t("samlProviders")}</CardTitle>
             <CardDescription>
-              SAML 2.0 identity providers for enterprise single sign-on.
+              {t("samlProvidersDescription")}
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
             <Plus className="size-4 mr-1.5" />
-            Add Provider
+            {t("addProvider")}
           </Button>
         </CardHeader>
         <CardContent>
@@ -1352,11 +1363,11 @@ function SamlTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Entity ID</TableHead>
-                  <TableHead>SSO URL</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colEntityId")}</TableHead>
+                  <TableHead>{t("colSsoUrl")}</TableHead>
+                  <TableHead>{t("colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1371,7 +1382,7 @@ function SamlTab() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        status={config.is_enabled ? "Active" : "Disabled"}
+                        status={config.is_enabled ? t("active") : t("disabled")}
                         color={config.is_enabled ? "green" : "default"}
                       />
                     </TableCell>
@@ -1381,7 +1392,10 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`${config.is_enabled ? "Disable" : "Enable"} SAML provider ${config.name}`}
+                          aria-label={t("toggleAria", {
+                            action: config.is_enabled ? t("disable") : t("enable"),
+                            name: config.name,
+                          })}
                           onClick={() =>
                             toggleMutation.mutate({
                               id: config.id,
@@ -1399,7 +1413,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8"
-                          aria-label={`Edit SAML provider ${config.name}`}
+                          aria-label={t("editAria", { name: config.name })}
                           onClick={() => openEdit(config)}
                         >
                           <Pencil className="size-4" />
@@ -1408,7 +1422,7 @@ function SamlTab() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
-                          aria-label={`Delete SAML provider ${config.name}`}
+                          aria-label={t("deleteAria", { name: config.name })}
                           onClick={() => setDeleteTarget(config)}
                         >
                           <Trash2 className="size-4" />
@@ -1423,11 +1437,11 @@ function SamlTab() {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FileKey className="size-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">
-                No SAML providers configured.
+                {t("noSamlProviders")}
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={openCreate}>
                 <Plus className="size-4 mr-1.5" />
-                Add SAML Provider
+                {t("addSamlProvider")}
               </Button>
             </div>
           )}
@@ -1439,69 +1453,69 @@ function SamlTab() {
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editTarget ? "Edit SAML Provider" : "Add SAML Provider"}
+              {editTarget ? t("editSamlProvider") : t("addSamlProvider")}
             </DialogTitle>
             <DialogDescription>
               {editTarget
-                ? "Update the SAML 2.0 identity provider configuration."
-                : "Configure a new SAML 2.0 identity provider for SSO."}
+                ? t("editSamlProviderDescription")
+                : t("addSamlProviderDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="saml-name">Name</Label>
+              <Label htmlFor="saml-name">{t("name")}</Label>
               <Input
                 id="saml-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Okta"
+                placeholder={t("samlNamePlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-entity-id">Entity ID</Label>
+              <Label htmlFor="saml-entity-id">{t("entityId")}</Label>
               <Input
                 id="saml-entity-id"
                 value={entityId}
                 onChange={(e) => setEntityId(e.target.value)}
-                placeholder="https://idp.example.com/metadata"
+                placeholder={t("samlEntityIdPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-sso-url">SSO URL</Label>
+              <Label htmlFor="saml-sso-url">{t("ssoUrl")}</Label>
               <Input
                 id="saml-sso-url"
                 value={ssoUrl}
                 onChange={(e) => setSsoUrl(e.target.value)}
-                placeholder="https://idp.example.com/sso/saml"
+                placeholder={t("samlSsoUrlPlaceholder")}
                 aria-required="true"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-slo-url">SLO URL (optional)</Label>
+              <Label htmlFor="saml-slo-url">{t("sloUrlOptional")}</Label>
               <Input
                 id="saml-slo-url"
                 value={sloUrl}
                 onChange={(e) => setSloUrl(e.target.value)}
-                placeholder="https://idp.example.com/slo/saml"
+                placeholder={t("samlSloUrlPlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-certificate">Certificate</Label>
+              <Label htmlFor="saml-certificate">{t("certificate")}</Label>
               <Textarea
                 id="saml-certificate"
                 value={certificate}
                 onChange={(e) => setCertificate(e.target.value)}
                 placeholder={
                   editTarget
-                    ? "Leave blank to keep existing certificate"
-                    : "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+                    ? t("keepExistingCertificatePlaceholder")
+                    : t("certificatePlaceholder")
                 }
                 rows={5}
                 className="font-mono text-xs"
@@ -1510,7 +1524,7 @@ function SamlTab() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-sp-entity-id">SP Entity ID</Label>
+              <Label htmlFor="saml-sp-entity-id">{t("spEntityId")}</Label>
               <Input
                 id="saml-sp-entity-id"
                 value={spEntityId}
@@ -1520,23 +1534,23 @@ function SamlTab() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="saml-name-id-format">NameID Format</Label>
+              <Label htmlFor="saml-name-id-format">{t("nameIdFormat")}</Label>
               <Select value={nameIdFormat} onValueChange={setNameIdFormat}>
                 <SelectTrigger id="saml-name-id-format">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">
-                    Email Address
+                    {t("nameIdEmailAddress")}
                   </SelectItem>
                   <SelectItem value="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified">
-                    Unspecified
+                    {t("nameIdUnspecified")}
                   </SelectItem>
                   <SelectItem value="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">
-                    Persistent
+                    {t("nameIdPersistent")}
                   </SelectItem>
                   <SelectItem value="urn:oasis:names:tc:SAML:2.0:nameid-format:transient">
-                    Transient
+                    {t("nameIdTransient")}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1544,9 +1558,9 @@ function SamlTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="saml-sign-requests">Sign Requests</Label>
+                <Label htmlFor="saml-sign-requests">{t("signRequests")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Sign authentication requests sent to the IdP.
+                  {t("signRequestsHint")}
                 </p>
               </div>
               <Switch id="saml-sign-requests" checked={signRequests} onCheckedChange={setSignRequests} />
@@ -1554,9 +1568,9 @@ function SamlTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="saml-require-signed-assertions">Require Signed Assertions</Label>
+                <Label htmlFor="saml-require-signed-assertions">{t("requireSignedAssertions")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Require the IdP to sign SAML assertions.
+                  {t("requireSignedAssertionsHint")}
                 </p>
               </div>
               <Switch
@@ -1568,12 +1582,9 @@ function SamlTab() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
-                <Label htmlFor="saml-use-absolute-acs-url">Use absolute ACS URL</Label>
+                <Label htmlFor="saml-use-absolute-acs-url">{t("useAbsoluteAcsUrl")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  Send an absolute AssertionConsumerServiceURL in the AuthnRequest
-                  instead of the historical relative path. Enable for stricter SAML
-                  2.0 IdPs that reject relative AssertionConsumerServiceURLs (e.g.
-                  Lark AnyCross). Off keeps the pre-existing wire format.
+                  {t("useAbsoluteAcsUrlHint")}
                 </p>
               </div>
               <Switch
@@ -1586,20 +1597,10 @@ function SamlTab() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="saml-map-groups-to-groups">
-                  Map IdP groups to Artifact Keeper groups
+                  {t("mapGroupsToGroupsSaml")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Reflect the values of the assertion&apos;s groups attribute
-                  into Artifact Keeper group memberships on login. Groups are
-                  matched by name and auto-created for this provider; the
-                  attribute read is the one configured under Groups Attribute
-                  below (attribute_mapping.groups). A group this provider did
-                  not create, including any operator-managed group of the same
-                  name, is never reused: that membership is refused instead.
-                  Membership is reconciled on every login, so removing a group
-                  at the IdP removes the membership here; only groups this
-                  provider created are touched. Off keeps the legacy
-                  role-mapping behavior.
+                  {t("mapGroupsToGroupsSamlHint")}
                 </p>
               </div>
               <Switch
@@ -1612,10 +1613,10 @@ function SamlTab() {
             <Separator />
 
             <div>
-              <p className="text-sm font-medium mb-3">Attribute Mapping</p>
+              <p className="text-sm font-medium mb-3">{t("attributeMapping")}</p>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="saml-attr-username">Username Attribute</Label>
+                  <Label htmlFor="saml-attr-username">{t("usernameAttribute")}</Label>
                   <Input
                     id="saml-attr-username"
                     value={usernameClaim}
@@ -1624,7 +1625,7 @@ function SamlTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="saml-attr-email">Email Attribute</Label>
+                  <Label htmlFor="saml-attr-email">{t("emailAttribute")}</Label>
                   <Input
                     id="saml-attr-email"
                     value={emailClaim}
@@ -1633,7 +1634,7 @@ function SamlTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="saml-attr-display">Display Name Attribute</Label>
+                  <Label htmlFor="saml-attr-display">{t("displayNameAttribute")}</Label>
                   <Input
                     id="saml-attr-display"
                     value={displayNameClaim}
@@ -1642,7 +1643,7 @@ function SamlTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="saml-attr-groups">Groups Attribute</Label>
+                  <Label htmlFor="saml-attr-groups">{t("groupsAttribute")}</Label>
                   <Input
                     id="saml-attr-groups"
                     value={groupsClaim}
@@ -1656,7 +1657,7 @@ function SamlTab() {
             <Separator />
 
             <div className="space-y-2">
-              <Label htmlFor="saml-admin-group">Admin Group</Label>
+              <Label htmlFor="saml-admin-group">{t("adminGroup")}</Label>
               <Input
                 id="saml-admin-group"
                 value={adminGroup}
@@ -1664,14 +1665,14 @@ function SamlTab() {
                 placeholder="artifact-keeper-admins"
               />
               <p className="text-xs text-muted-foreground">
-                Users in this group will be granted admin privileges.
+                {t("adminGroupHint")}
               </p>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -1684,7 +1685,7 @@ function SamlTab() {
               }
             >
               {isSaving && <Loader2 className="size-4 animate-spin mr-1.5" />}
-              {editTarget ? "Save Changes" : "Create Provider"}
+              {editTarget ? t("saveChanges") : t("createProvider")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1694,9 +1695,11 @@ function SamlTab() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete SAML Provider"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? Users will no longer be able to sign in with this provider.`}
-        confirmText="Delete"
+        title={t("deleteSamlProvider")}
+        description={t("deleteProviderDescription", {
+          name: deleteTarget?.name ?? "",
+        })}
+        confirmText={t("delete")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
@@ -1710,6 +1713,7 @@ function SamlTab() {
 // ---------------------------------------------------------------------------
 
 export default function SsoSettingsPage() {
+  const t = useTranslations("app/admin/settings/sso");
   const { user } = useAuth();
 
   const { data: oidcConfigs } = useQuery({
@@ -1730,11 +1734,11 @@ export default function SsoSettingsPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="SSO Providers" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
           <AlertDescription>
-            You must be an administrator to manage SSO providers.
+            {t("accessDeniedDescription")}
           </AlertDescription>
         </Alert>
       </div>
@@ -1754,20 +1758,20 @@ export default function SsoSettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="SSO Providers"
-        description="Configure single sign-on authentication providers."
+        title={t("title")}
+        description={t("description")}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={Shield}
-          label="Total Providers"
+          label={t("statTotalProviders")}
           value={totalCount}
           color="blue"
         />
         <StatCard
           icon={CheckCircle}
-          label="Enabled"
+          label={t("statEnabled")}
           value={enabledCount}
           color="green"
         />

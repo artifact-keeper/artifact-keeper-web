@@ -1,0 +1,18 @@
+{
+  "title": "Scan Results",
+  "status": "Status",
+  "type": "Type",
+  "findings": "Findings",
+  "completed": "Completed",
+  "critCount": "{count} crit",
+  "highCount": "{count} high",
+  "viewFindings": "View findings",
+  "scanCount": "{count, plural, one {# scan} other {# scans}}",
+  "loadFailed": "Could not load scan results",
+  "loadFailedDetail": "Unable to load scan results for this artifact.",
+  "noScans": "No security scans have been run against this artifact yet.",
+  "noScansDetail": "Trigger a scan from the artifact actions menu to populate this section.",
+  "cannotScan": "This artifact cannot be scanned.",
+  "cannotScanDetail": "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts.",
+  "noResults": "No scan results"
+}

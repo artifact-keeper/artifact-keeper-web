@@ -1,0 +1,51 @@
+{
+  "health": {
+    "overall": "Overall",
+    "database": "Database",
+    "storage": "Storage",
+    "securityScanner": "Security Scanner",
+    "searchEngine": "Search Engine",
+    "unknown": "Unknown"
+  },
+  "stats": {
+    "repositories": "Repositories",
+    "artifacts": "Artifacts",
+    "users": "Users",
+    "storageUsed": "Storage Used",
+    "local": "Local",
+    "remote": "Remote",
+    "failedToLoad": "Failed to load admin statistics."
+  },
+  "cve": {
+    "total": "Total CVEs",
+    "open": "Open CVEs",
+    "critical": "Critical",
+    "fixed": "Fixed",
+    "severityBreakdown": "Severity Breakdown",
+    "openLabel": "Open",
+    "fixedLabel": "Fixed",
+    "acknowledgedLabel": "Acknowledged",
+    "avgFixTime": "Avg fix time",
+    "noData": "No CVE data available yet. Generate SBOMs and run security scans to track vulnerabilities."
+  },
+  "welcomeBack": "Welcome back, {name}",
+  "title": "Dashboard",
+  "description": "Overview of your Artifact Keeper instance.",
+  "refresh": "Refresh",
+  "systemHealth": "System Health",
+  "statistics": "Statistics",
+  "securityOverview": "Security Overview",
+  "recentRepositories": "Recent Repositories",
+  "viewAll": "View all",
+  "table": {
+    "name": "Name",
+    "format": "Format",
+    "type": "Type",
+    "storage": "Storage"
+  },
+  "empty": {
+    "title": "No repositories yet",
+    "description": "Create your first repository to get started with Artifact Keeper.",
+    "createRepo": "Create Repository"
+  }
+}

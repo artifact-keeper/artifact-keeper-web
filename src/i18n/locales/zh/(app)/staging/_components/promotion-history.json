@@ -1,0 +1,23 @@
+{
+  "filterByStatus": "按状态筛选",
+  "allStatuses": "所有状态",
+  "promoted": "已提升",
+  "rejected": "已拒绝",
+  "pendingApproval": "待审批",
+  "noHistory": "暂无提升历史。",
+  "noHistoryDetail": "来自此暂存仓库的提升将显示在此处。",
+  "pageOf": "第 {page} 页，共 {totalPages} 页",
+  "previous": "上一页",
+  "next": "下一页",
+  "rejectionReason": "拒绝理由",
+  "notes": "备注",
+  "policyViolations": "策略违规",
+  "cveSummary": "CVE 摘要",
+  "criticalCount": "{count} 个严重",
+  "highCount": "{count} 个高",
+  "mediumCount": "{count} 个中",
+  "lowCount": "{count} 个低",
+  "licenseSummary": "许可证摘要",
+  "deniedLicenses": "已拒绝：{licenses}",
+  "foundLicenses": "已发现：{licenses}"
+}

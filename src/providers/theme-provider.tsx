@@ -18,8 +18,8 @@ export function ThemeProvider({
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      defaultTheme="brand"
+      themes={["brand", "light", "dark"]}
       disableTransitionOnChange
       nonce={nonce}
     >

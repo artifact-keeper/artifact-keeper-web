@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Loader2, Target, Info } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,6 +42,7 @@ interface ReleaseTargetSettingsProps {
  * targets are local repositories sharing the staging repo's format.
  */
 export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps) {
+  const t = useTranslations("app/repositories/_components/release-target-settings");
   const queryClient = useQueryClient();
 
   // Only staging repositories support release-target linking.
@@ -98,11 +100,11 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
       queryClient.invalidateQueries({ queryKey: ["repositories"] });
       toast.success(
         selected === NONE_VALUE
-          ? "Release target link removed"
-          : "Release target saved"
+          ? t("linkRemoved")
+          : t("saved")
       );
     },
-    onError: mutationErrorToast("Failed to save release target"),
+    onError: mutationErrorToast(t("saveFailed")),
   });
 
   if (!isStaging) {
@@ -114,19 +116,16 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
             id="settings-release-target-heading"
             className="text-base font-semibold"
           >
-            Release Target
+            {t("title")}
           </h3>
         </div>
         <p className="text-xs text-muted-foreground mb-3">
-          Release-target promotion links artifacts from a staging repository to a
-          release repository.
+          {t("notStagingDescription")}
         </p>
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            Release targets are only available for staging repositories. This
-            repository is a <span className="capitalize">{repository.repo_type}</span>{" "}
-            repository.
+            {t("notStaging", { type: repository.repo_type })}
           </AlertDescription>
         </Alert>
       </section>
@@ -146,63 +145,62 @@ export function ReleaseTargetSettings({ repository }: ReleaseTargetSettingsProps
           id="settings-release-target-heading"
           className="text-base font-semibold"
         >
-          Release Target
-        </h3>
-        <Badge variant="secondary" className="text-xs">
-          Staging
-        </Badge>
-      </div>
-      <p className="text-xs text-muted-foreground mb-4">
-        Link this staging repository to a release repository. Promotions from
-        here default to the linked target, and promotions elsewhere are rejected.
-        The target must be a local repository using the same{" "}
-        <span className="font-medium uppercase">{repository.format}</span> format.
-      </p>
-
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="release-target-select">Release repository</Label>
-          {candidatesLoading || targetLoading ? (
-            <Skeleton className="h-10 w-full" />
-          ) : (
-            <Select value={selected} onValueChange={handleSelect}>
-              <SelectTrigger id="release-target-select" className="w-full">
-                <SelectValue placeholder="Select a release repository" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_VALUE}>No release target (unlink)</SelectItem>
-                {candidates.map((repo) => (
-                  <SelectItem key={repo.id} value={repo.key}>
-                    {repo.name} ({repo.key})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {!candidatesLoading && candidates.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              No eligible release repositories found. Create a local{" "}
-              <span className="uppercase">{repository.format}</span> repository to
-              use as a release target.
-            </p>
-          )}
+            {t("title")}
+          </h3>
+          <Badge variant="secondary" className="text-xs">
+            {t("staging")}
+          </Badge>
         </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          {t.rich("description", {
+            format: (chunks) => (
+              <span className="font-medium uppercase">{chunks}</span>
+            ),
+          })}
+        </p>
 
-        <Button
-          onClick={handleSave}
-          disabled={saveMutation.isPending || !dirty}
-          className="w-fit"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            "Save release target"
-          )}
-        </Button>
-      </div>
-    </section>
-  );
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="release-target-select">{t("repoLabel")}</Label>
+            {candidatesLoading || targetLoading ? (
+              <Skeleton className="h-10 w-full" />
+            ) : (
+              <Select value={selected} onValueChange={handleSelect}>
+                <SelectTrigger id="release-target-select" className="w-full">
+                  <SelectValue placeholder={t("selectPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>{t("noneOption")}</SelectItem>
+                  {candidates.map((repo) => (
+                    <SelectItem key={repo.id} value={repo.key}>
+                      {repo.name} ({repo.key})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!candidatesLoading && candidates.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                {t("noCandidates", { format: repository.format })}
+              </p>
+            )}
+          </div>
+
+          <Button
+            onClick={handleSave}
+            disabled={saveMutation.isPending || !dirty}
+            className="w-fit"
+          >
+            {saveMutation.isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {t("saving")}
+              </>
+            ) : (
+              t("save")
+            )}
+          </Button>
+        </div>
+      </section>
+    );
 }

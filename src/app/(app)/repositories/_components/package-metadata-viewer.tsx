@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight, ChevronDown, Copy, Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, isSafeUrl } from "@/lib/utils";
@@ -177,12 +178,13 @@ interface PackageMetadataViewerProps {
 
 export function PackageMetadataViewer({ format, metadata }: PackageMetadataViewerProps) {
   const [copied, setCopied] = useState(false);
+  const t = useTranslations("app/repositories/_components/package-metadata-viewer");
 
   if (!metadata || Object.keys(metadata).length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-sm text-muted-foreground">
-          No metadata available for this package.
+          {t("noMetadata")}
         </p>
       </div>
     );
@@ -203,7 +205,7 @@ export function PackageMetadataViewer({ format, metadata }: PackageMetadataViewe
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
-          {allKeys.length} field{allKeys.length !== 1 ? "s" : ""}
+          {t("fieldCount", { count: allKeys.length })}
         </span>
         <Button
           variant="ghost"
@@ -212,7 +214,7 @@ export function PackageMetadataViewer({ format, metadata }: PackageMetadataViewe
           onClick={handleCopyJson}
         >
           {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-          {copied ? "Copied" : "Copy JSON"}
+          {copied ? t("copied") : t("copyJson")}
         </Button>
       </div>
 
@@ -235,7 +237,7 @@ export function PackageMetadataViewer({ format, metadata }: PackageMetadataViewe
       {highlighted.length > 0 && other.length > 0 && (
         <div className="border-t pt-2">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-            Additional fields
+            {t("additionalFields")}
           </span>
         </div>
       )}

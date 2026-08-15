@@ -2,9 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/providers/auth-provider";
 
 export function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("components/auth/require-admin");
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
@@ -21,7 +23,7 @@ export function RequireAdmin({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="text-muted-foreground">{t("loading")}</div>
       </div>
     );
   }

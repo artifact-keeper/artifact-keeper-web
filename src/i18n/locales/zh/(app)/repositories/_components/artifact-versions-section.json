@@ -1,0 +1,18 @@
+{
+  "downloadFailed": "无法开始下载修订版 {revision}",
+  "unavailable": "此制品目前无法获取版本历史。",
+  "empty": "此制品未记录版本历史。",
+  "emptyDetail": "历史从启用版本控制后的首次重新上传开始；在此之前，单一存储副本照常可下载。",
+  "description": "此路径的每次不同字节上传都会作为不可变修订版保留。下载某个修订版会通过 <code>?version=</code> 固定精确的已存字节。",
+  "revision": "修订版",
+  "label": "标签",
+  "size": "大小",
+  "sha256": "SHA-256",
+  "uploadedBy": "上传者",
+  "stored": "存储时间",
+  "actions": "操作",
+  "latest": "最新",
+  "unknown": "未知",
+  "downloadAria": "下载修订版 {revision}",
+  "downloadTooltip": "下载修订版 {revision}"
+}

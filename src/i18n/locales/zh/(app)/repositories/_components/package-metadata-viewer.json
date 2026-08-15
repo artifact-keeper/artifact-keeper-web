@@ -1,0 +1,7 @@
+{
+  "noMetadata": "此包没有可用的元数据。",
+  "fieldCount": "{count, plural, other {# 个字段}}",
+  "copyJson": "复制 JSON",
+  "copied": "已复制",
+  "additionalFields": "其他字段"
+}

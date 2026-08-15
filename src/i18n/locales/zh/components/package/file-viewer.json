@@ -1,0 +1,13 @@
+{
+  "showingFirst": "仅显示前 {shown}，共 {total}",
+  "downloadFullFile": "下载完整文件",
+  "pdfInlineUnavailable": "无法内联显示 PDF。",
+  "downloadFile": "下载文件",
+  "toViewIt": "以查看。",
+  "binaryFile": "二进制文件（{size}）",
+  "download": "下载",
+  "downloadAria": "下载 {name}",
+  "closeFileViewer": "关闭文件查看器",
+  "loadingFile": "加载文件中...",
+  "failedToLoadFile": "加载文件内容失败"
+}

@@ -1,0 +1,7 @@
+{
+  "rowsPerPage": "Rows per page",
+  "rangeOf": "{start}-{end} of {total}",
+  "previousPage": "Previous page",
+  "pageOf": "Page {page} of {total}",
+  "nextPage": "Next page"
+}

@@ -507,8 +507,8 @@ describe("WebhooksPage", () => {
     await renderPage();
     expect(screen.getByText("Deploy Hook")).toBeInTheDocument();
     expect(screen.getByText("https://example.com")).toBeInTheDocument();
-    expect(screen.getByText("artifact uploaded")).toBeInTheDocument();
-    expect(screen.getByText("artifact deleted")).toBeInTheDocument();
+    expect(screen.getByText("Artifact Uploaded")).toBeInTheDocument();
+    expect(screen.getByText("Artifact Deleted")).toBeInTheDocument();
   });
 
   it("shows disabled badge for disabled webhooks", async () => {
@@ -578,13 +578,13 @@ describe("WebhooksPage", () => {
     });
     await renderPage();
     // Green events
-    const uploaded = screen.getByText("artifact uploaded");
+    const uploaded = screen.getByText("Artifact Uploaded");
     expect(uploaded.className).toContain("emerald");
     // Red events
-    const deleted = screen.getByText("artifact deleted");
+    const deleted = screen.getByText("Artifact Deleted");
     expect(deleted.className).toContain("red");
     // Blue events
-    const started = screen.getByText("build started");
+    const started = screen.getByText("Build Started");
     expect(started.className).toContain("blue");
   });
 
@@ -609,12 +609,12 @@ describe("WebhooksPage", () => {
       },
     });
     await renderPage();
-    expect(screen.getByText("age gate approved").className).toContain(
+    expect(screen.getByText("Age Gate Approved").className).toContain(
       "emerald"
     );
-    expect(screen.getByText("age gate rejected").className).toContain("red");
+    expect(screen.getByText("Age Gate Rejected").className).toContain("red");
     // Queued is neither a success nor a failure: neutral default styling.
-    expect(screen.getByText("age gate queued").className).toContain(
+    expect(screen.getByText("Age Gate Queued").className).toContain(
       "secondary"
     );
   });

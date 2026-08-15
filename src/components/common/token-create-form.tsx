@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,7 +48,7 @@ export function TokenCreateForm({
   description,
   name,
   onNameChange,
-  namePlaceholder = "e.g., CI/CD Pipeline",
+  namePlaceholder,
   expiry,
   onExpiryChange,
   scopes,
@@ -56,11 +57,12 @@ export function TokenCreateForm({
   isPending,
   onSubmit,
   onCancel,
-  submitLabel = "Create",
+  submitLabel,
   showRepoSelector = false,
   repoSelector,
   onRepoSelectorChange,
 }: TokenCreateFormProps) {
+  const t = useTranslations("components/common/token-create-form");
   const toggleScope = (scope: string) => {
     onScopesChange(
       scopes.includes(scope)
@@ -83,17 +85,17 @@ export function TokenCreateForm({
         }}
       >
         <div className="space-y-2">
-          <Label htmlFor="token-form-name">Name</Label>
+          <Label htmlFor="token-form-name">{t("name")}</Label>
           <Input
             id="token-form-name"
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
-            placeholder={namePlaceholder}
+            placeholder={namePlaceholder ?? t("namePlaceholder")}
             required
           />
         </div>
         <div className="space-y-2">
-          <Label>Expiration</Label>
+          <Label>{t("expiration")}</Label>
           <Select value={expiry} onValueChange={onExpiryChange}>
             <SelectTrigger className="w-full">
               <SelectValue />
@@ -108,7 +110,7 @@ export function TokenCreateForm({
           </Select>
         </div>
         <div className="space-y-3">
-          <Label>Scopes</Label>
+          <Label>{t("scopes")}</Label>
           <div className="grid grid-cols-2 gap-3">
             {availableScopes.map((s) => (
               <label
@@ -126,10 +128,9 @@ export function TokenCreateForm({
         </div>
         {showRepoSelector && repoSelector && onRepoSelectorChange && (
           <div className="space-y-2 border-t pt-4">
-            <Label>Repository Access</Label>
+            <Label>{t("repositoryAccess")}</Label>
             <p className="text-xs text-muted-foreground">
-              Restrict which repositories this token can access. Leave empty for
-              unrestricted access.
+              {t("repositoryAccessDescription")}
             </p>
             <RepoSelectorForm
               value={repoSelector}
@@ -139,10 +140,10 @@ export function TokenCreateForm({
         )}
         <DialogFooter>
           <Button variant="outline" type="button" onClick={onCancel}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button type="submit" disabled={isPending || !name}>
-            {isPending ? "Creating..." : submitLabel}
+            {isPending ? t("creating") : (submitLabel ?? t("create"))}
           </Button>
         </DialogFooter>
       </form>

@@ -1,0 +1,15 @@
+{
+  "addInstance": "Add Instance",
+  "addTitle": "Add Artifact Keeper Instance",
+  "addDescription": "Connect to a remote Artifact Keeper instance to browse its repositories and artifacts.",
+  "invalidUrl": "Invalid instance URL. Private IPs, localhost, and non-HTTP protocols are not allowed.",
+  "addFailed": "Failed to add instance. Check the URL and try again.",
+  "name": "Name",
+  "productionPlaceholder": "Production",
+  "url": "URL",
+  "urlPlaceholder": "https://artifacts.example.com",
+  "apiKey": "API Key",
+  "apiKeyPlaceholder": "Optional -- stored encrypted on server",
+  "cancel": "Cancel",
+  "adding": "Adding..."
+}

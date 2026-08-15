@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Bell,
   Plus,
@@ -48,66 +49,70 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const WEBHOOK_EVENTS: { value: WebhookEvent; label: string; description: string }[] = [
+export const WEBHOOK_EVENTS: {
+  value: WebhookEvent;
+  labelKey: string;
+  descriptionKey: string;
+}[] = [
   {
     value: "artifact_uploaded",
-    label: "Artifact Uploaded",
-    description: "Triggered when an artifact is pushed to this repository",
+    labelKey: "evtArtifactUploaded",
+    descriptionKey: "evtArtifactUploadedDesc",
   },
   {
     value: "artifact_deleted",
-    label: "Artifact Deleted",
-    description: "Triggered when an artifact is removed from this repository",
+    labelKey: "evtArtifactDeleted",
+    descriptionKey: "evtArtifactDeletedDesc",
   },
   {
     value: "build_started",
-    label: "Build Started",
-    description: "Triggered when a build begins for artifacts in this repository",
+    labelKey: "evtBuildStarted",
+    descriptionKey: "evtBuildStartedDesc",
   },
   {
     value: "build_completed",
-    label: "Build Completed",
-    description: "Triggered when a build finishes successfully",
+    labelKey: "evtBuildCompleted",
+    descriptionKey: "evtBuildCompletedDesc",
   },
   {
     value: "build_failed",
-    label: "Build Failed",
-    description: "Triggered when a build finishes with errors",
+    labelKey: "evtBuildFailed",
+    descriptionKey: "evtBuildFailedDesc",
   },
   {
     value: "repository_created",
-    label: "Repository Created",
-    description: "Triggered when a new repository is created",
+    labelKey: "evtRepositoryCreated",
+    descriptionKey: "evtRepositoryCreatedDesc",
   },
   {
     value: "repository_deleted",
-    label: "Repository Deleted",
-    description: "Triggered when a repository is deleted",
+    labelKey: "evtRepositoryDeleted",
+    descriptionKey: "evtRepositoryDeletedDesc",
   },
   {
     value: "user_created",
-    label: "User Created",
-    description: "Triggered when a new user account is created",
+    labelKey: "evtUserCreated",
+    descriptionKey: "evtUserCreatedDesc",
   },
   {
     value: "user_deleted",
-    label: "User Deleted",
-    description: "Triggered when a user account is removed",
+    labelKey: "evtUserDeleted",
+    descriptionKey: "evtUserDeletedDesc",
   },
   {
     value: "age_gate_queued",
-    label: "Age Gate Queued",
-    description: "Triggered when a too-new upstream release enters the age gate review queue",
+    labelKey: "evtAgeGateQueued",
+    descriptionKey: "evtAgeGateQueuedDesc",
   },
   {
     value: "age_gate_approved",
-    label: "Age Gate Approved",
-    description: "Triggered when an age-gated release is approved for download",
+    labelKey: "evtAgeGateApproved",
+    descriptionKey: "evtAgeGateApprovedDesc",
   },
   {
     value: "age_gate_rejected",
-    label: "Age Gate Rejected",
-    description: "Triggered when an age-gated release is rejected",
+    labelKey: "evtAgeGateRejected",
+    descriptionKey: "evtAgeGateRejectedDesc",
   },
 ];
 
@@ -125,6 +130,7 @@ interface NotificationsTabContentProps {
 
 export function NotificationsTabContent({ repositoryId }: NotificationsTabContentProps) {
   const queryClient = useQueryClient();
+  const t = useTranslations("app/repositories/_components/notifications-tab-content");
   const [createOpen, setCreateOpen] = useState(false);
   const [webhookToDelete, setWebhookToDelete] = useState<string | null>(null);
   const [actingWebhookId, setActingWebhookId] = useState<string | null>(null);
@@ -166,9 +172,9 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
       setCreateOpen(false);
       resetForm();
-      toast.success("Webhook created");
+      toast.success(t("webhookCreated"));
     },
-    onError: mutationErrorToast("Failed to create webhook"),
+    onError: mutationErrorToast(t("webhookCreateFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -177,11 +183,11 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
       setWebhookToDelete(null);
       setActingWebhookId(null);
-      toast.success("Webhook deleted");
+      toast.success(t("webhookDeleted"));
     },
     onError: (err: unknown) => {
       setActingWebhookId(null);
-      toast.error(toUserMessage(err, "Failed to delete webhook"));
+      toast.error(toUserMessage(err, t("webhookDeleteFailed")));
     },
   });
 
@@ -190,11 +196,11 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
       setActingWebhookId(null);
-      toast.success("Webhook enabled");
+      toast.success(t("webhookEnabled"));
     },
     onError: (err: unknown) => {
       setActingWebhookId(null);
-      toast.error(toUserMessage(err, "Failed to enable webhook"));
+      toast.error(toUserMessage(err, t("webhookEnableFailed")));
     },
   });
 
@@ -203,11 +209,11 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhooks", repositoryId] });
       setActingWebhookId(null);
-      toast.success("Webhook disabled");
+      toast.success(t("webhookDisabled"));
     },
     onError: (err: unknown) => {
       setActingWebhookId(null);
-      toast.error(toUserMessage(err, "Failed to disable webhook"));
+      toast.error(toUserMessage(err, t("webhookDisableFailed")));
     },
   });
 
@@ -216,14 +222,14 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
     onSuccess: (result) => {
       setActingWebhookId(null);
       if (result.success) {
-        toast.success(`Test delivery succeeded (HTTP ${result.status_code})`);
+        toast.success(t("testSucceeded", { code: result.status_code ?? 0 }));
       } else {
-        toast.error(result.error ?? "Test delivery failed");
+        toast.error(result.error ?? t("testFailed"));
       }
     },
     onError: (err: unknown) => {
       setActingWebhookId(null);
-      toast.error(toUserMessage(err, "Failed to send test"));
+      toast.error(toUserMessage(err, t("testSendFailed")));
     },
   });
 
@@ -242,12 +248,12 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
 
   const handleCreate = useCallback(() => {
     if (!formName.trim() || !formUrl.trim() || formEvents.length === 0) {
-      toast.error("Name, URL, and at least one event are required");
+      toast.error(t("validationError"));
       return;
     }
     const trimmedUrl = formUrl.trim();
     if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
-      setUrlError("URL must start with http:// or https://");
+      setUrlError(t("urlError"));
       return;
     }
     setUrlError(null);
@@ -258,7 +264,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       secret: formSecret.trim() || undefined,
       repository_id: repositoryId,
     });
-  }, [formName, formUrl, formSecret, formEvents, repositoryId, createMutation]);
+  }, [formName, formUrl, formSecret, formEvents, repositoryId, createMutation, t]);
 
   // -------------------------------------------------------------------------
   // Loading state
@@ -284,10 +290,10 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Bell className="size-5 text-muted-foreground" />
-          <h3 className="text-sm font-medium">Webhook Notifications</h3>
+          <h3 className="text-sm font-medium">{t("title")}</h3>
           {webhooks.length > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {webhooks.length} configured
+              {t("configuredCount", { count: webhooks.length })}
             </Badge>
           )}
         </div>
@@ -297,7 +303,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
           data-testid="add-webhook-button"
         >
           <Plus className="size-4 mr-1" />
-          Add Webhook
+          {t("addWebhook")}
         </Button>
       </div>
 
@@ -306,10 +312,10 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Bell className="size-12 text-muted-foreground/40 mb-4" />
           <p className="text-sm text-muted-foreground">
-            No webhooks configured for this repository.
+            {t("empty")}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Add a webhook to receive notifications when events occur.
+            {t("emptyHint")}
           </p>
         </div>
       ) : (
@@ -345,26 +351,26 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Webhook</DialogTitle>
+            <DialogTitle>{t("dialogTitle")}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="webhook-name">Name</Label>
+              <Label htmlFor="webhook-name">{t("nameLabel")}</Label>
               <Input
                 id="webhook-name"
-                placeholder="e.g. CI/CD Pipeline"
+                placeholder={t("namePlaceholder")}
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="webhook-url">Payload URL</Label>
+              <Label htmlFor="webhook-url">{t("urlLabel")}</Label>
               <Input
                 id="webhook-url"
                 type="url"
-                placeholder="https://example.com/webhook"
+                placeholder={t("urlPlaceholder")}
                 value={formUrl}
                 onChange={(e) => {
                   setFormUrl(e.target.value);
@@ -380,20 +386,20 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
 
             <div className="space-y-2">
               <Label htmlFor="webhook-secret">
-                Secret{" "}
-                <span className="text-muted-foreground font-normal">(optional)</span>
+                {t("secretLabel")}{" "}
+                <span className="text-muted-foreground font-normal">{t("optional")}</span>
               </Label>
               <Input
                 id="webhook-secret"
                 type="password"
-                placeholder="Used to sign payloads"
+                placeholder={t("secretPlaceholder")}
                 value={formSecret}
                 onChange={(e) => setFormSecret(e.target.value)}
               />
             </div>
 
             <div className="space-y-3">
-              <Label>Events</Label>
+              <Label>{t("eventsLabel")}</Label>
               <div className="grid gap-2">
                 {WEBHOOK_EVENTS.map((event) => (
                   <label
@@ -405,12 +411,12 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
                       onCheckedChange={(checked) =>
                         handleToggleEvent(event.value, checked === true)
                       }
-                      aria-label={event.label}
+                      aria-label={t(event.labelKey)}
                     />
                     <div className="space-y-0.5">
-                      <span className="text-sm font-medium">{event.label}</span>
+                      <span className="text-sm font-medium">{t(event.labelKey)}</span>
                       <p className="text-xs text-muted-foreground">
-                        {event.description}
+                        {t(event.descriptionKey)}
                       </p>
                     </div>
                   </label>
@@ -427,7 +433,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
                 resetForm();
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleCreate}
@@ -437,10 +443,10 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
               {createMutation.isPending ? (
                 <>
                   <Loader2 className="size-4 mr-1 animate-spin" />
-                  Creating...
+                  {t("creating")}
                 </>
               ) : (
-                "Create Webhook"
+                t("createWebhook")
               )}
             </Button>
           </DialogFooter>
@@ -453,9 +459,9 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
         onOpenChange={(open) => {
           if (!open) setWebhookToDelete(null);
         }}
-        title="Delete Webhook"
-        description="This will permanently remove this webhook. It will no longer receive event notifications."
-        confirmText="Delete Webhook"
+        title={t("deleteTitle")}
+        description={t("deleteDescription")}
+        confirmText={t("deleteConfirmText")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {
@@ -492,6 +498,7 @@ function WebhookCard({
   isDeleting,
   isTesting,
 }: WebhookCardProps) {
+  const t = useTranslations("app/repositories/_components/notifications-tab-content");
   return (
     <div
       className="rounded-lg border bg-card p-4 space-y-3"
@@ -509,7 +516,7 @@ function WebhookCard({
                 : "text-muted-foreground"
             }`}
           >
-            {webhook.is_enabled ? "Active" : "Inactive"}
+            {webhook.is_enabled ? t("active") : t("inactive")}
           </Badge>
         </div>
 
@@ -521,7 +528,7 @@ function WebhookCard({
                 size="icon-xs"
                 onClick={() => onTest(webhook.id)}
                 disabled={isTesting}
-                aria-label="Test webhook"
+                aria-label={t("testAria")}
               >
                 {isTesting ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -530,7 +537,7 @@ function WebhookCard({
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Send test delivery</TooltipContent>
+            <TooltipContent>{t("sendTest")}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -543,7 +550,7 @@ function WebhookCard({
                     ? onDisable(webhook.id)
                     : onEnable(webhook.id)
                 }
-                aria-label={webhook.is_enabled ? "Disable webhook" : "Enable webhook"}
+                aria-label={webhook.is_enabled ? t("disableAria") : t("enableAria")}
               >
                 {webhook.is_enabled ? (
                   <PowerOff className="size-3.5" />
@@ -553,7 +560,7 @@ function WebhookCard({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {webhook.is_enabled ? "Disable" : "Enable"}
+              {webhook.is_enabled ? t("disable") : t("enable")}
             </TooltipContent>
           </Tooltip>
 
@@ -565,12 +572,12 @@ function WebhookCard({
                 className="text-destructive hover:text-destructive"
                 onClick={() => onDelete(webhook.id)}
                 disabled={isDeleting}
-                aria-label="Delete webhook"
+                aria-label={t("deleteAria")}
               >
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("delete")}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -585,7 +592,7 @@ function WebhookCard({
         <div className="flex flex-wrap gap-1">
           {webhook.events.map((event) => (
             <Badge key={event} variant="secondary" className="text-xs font-normal">
-              {formatEventLabel(event)}
+              {t(formatEventLabel(event))}
             </Badge>
           ))}
         </div>
@@ -596,14 +603,15 @@ function WebhookCard({
               <CheckCircle2 className="size-3 text-green-500" />
               <Clock className="size-3" />
               <span>
-                Last triggered{" "}
-                {new Date(webhook.last_triggered_at).toLocaleDateString()}
+                {t("lastTriggered", {
+                  date: new Date(webhook.last_triggered_at).toLocaleDateString(),
+                })}
               </span>
             </>
           ) : (
             <>
               <XCircle className="size-3" />
-              <span>Never triggered</span>
+              <span>{t("neverTriggered")}</span>
             </>
           )}
         </div>
@@ -618,5 +626,5 @@ function WebhookCard({
 
 function formatEventLabel(event: WebhookEvent): string {
   const found = WEBHOOK_EVENTS.find((e) => e.value === event);
-  return found?.label ?? event;
+  return found?.labelKey ?? event;
 }

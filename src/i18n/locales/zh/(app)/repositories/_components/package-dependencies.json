@@ -1,0 +1,9 @@
+{
+  "noDepsTitle": "没有可用的依赖信息",
+  "noDepsHint": "依赖信息会在可用时从包元数据中提取。",
+  "count": "{count, plural, other {# 个依赖}}",
+  "acrossScopes": "，覆盖 {count} 个作用域",
+  "package": "软件包",
+  "version": "版本",
+  "scope": "作用域"
+}

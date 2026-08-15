@@ -1,0 +1,14 @@
+{
+  "title": "Reject Artifacts",
+  "description": "Reject {count, plural, one {# artifact} other {# artifacts}} from staging. This action will mark them as rejected and prevent promotion.",
+  "reason": "Reason",
+  "reasonPlaceholder": "Provide a reason for rejecting these artifacts...",
+  "notes": "Notes (optional)",
+  "notesPlaceholder": "Add any additional notes...",
+  "cancel": "Cancel",
+  "rejecting": "Rejecting...",
+  "reject": "Reject Artifact",
+  "reasonRequired": "Please provide a reason for rejection",
+  "rejectFailed": "Rejection failed",
+  "rejected": "Successfully rejected {count, plural, one {# artifact} other {# artifacts}}"
+}

@@ -3,6 +3,7 @@
 import { useState, useCallback, useDeferredValue, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { repositoriesApi, type UpstreamAuthPayload } from "@/lib/api/repositories";
@@ -46,7 +47,8 @@ import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
 
 export function RepositoriesContent() {
-  useDocumentTitle("Repositories");
+  const t = useTranslations("app/repositories/_components/repositories-content");
+  useDocumentTitle(t("title"));
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
@@ -109,18 +111,18 @@ export function RepositoriesContent() {
       invalidateAllRepoQueries();
       setCreateOpen(false);
       if (variables.repo_type === "staging") {
-        toast.success("Repository created", {
-          description: "Configure promotion rules to start promoting artifacts.",
+        toast.success(t("toast.created"), {
+          description: t("toast.createdStaging"),
           action: {
-            label: "Go to Staging",
+            label: t("toast.goToStaging"),
             onClick: () => router.push("/staging"),
           },
         });
       } else {
-        toast.success("Repository created");
+        toast.success(t("toast.created"));
       }
     },
-    onError: mutationErrorToast("Failed to create repository"),
+    onError: mutationErrorToast(t("toast.createFailed")),
   });
 
   const updateMutation = useMutation({
@@ -137,9 +139,9 @@ export function RepositoriesContent() {
         url.searchParams.set("selected", updatedRepo.key);
         globalThis.window.history.replaceState(null, "", url.toString());
       }
-      toast.success("Repository updated");
+      toast.success(t("toast.updated"));
     },
-    onError: mutationErrorToast("Failed to update repository"),
+    onError: mutationErrorToast(t("toast.updateFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -149,9 +151,9 @@ export function RepositoriesContent() {
       setDeleteOpen(false);
       setDialogRepo(null);
       if (selectedKey === deletedKey) setSelectedKey(null);
-      toast.success("Repository deleted");
+      toast.success(t("toast.deleted"));
     },
-    onError: mutationErrorToast("Failed to delete repository"),
+    onError: mutationErrorToast(t("toast.deleteFailed")),
   });
 
   const upstreamAuthMutation = useMutation({
@@ -164,12 +166,12 @@ export function RepositoriesContent() {
     },
     onSuccess: () => {
       invalidateAllRepoQueries();
-      const message = "Upstream authentication updated";
+      const message = t("toast.upstreamAuthUpdated");
       toast.success(message);
       setUpstreamAuthStatus({ state: "success", message });
     },
     onError: (err: unknown) => {
-      const message = toUserMessage(err, "Failed to update upstream authentication");
+      const message = toUserMessage(err, t("toast.upstreamAuthFailed"));
       toast.error(message);
       setUpstreamAuthStatus({ state: "error", message });
     },
@@ -278,7 +280,7 @@ export function RepositoriesContent() {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Search..."
+            placeholder={t("searchPlaceholder")}
             className="pl-8 h-8 text-sm"
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
@@ -289,11 +291,11 @@ export function RepositoriesContent() {
             value={formatFilter}
             onValueChange={(v) => { setFormatFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs flex-1" aria-label="Filter by format">
-              <SelectValue placeholder="Format" />
+            <SelectTrigger className="h-7 text-xs flex-1" aria-label={t("filterByFormat")}>
+              <SelectValue placeholder={t("format")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All formats</SelectItem>
+              <SelectItem value="__all__">{t("allFormats")}</SelectItem>
               {FORMAT_GROUPS.map(([group, options]) => (
                 <SelectGroup key={group}>
                   <span className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
@@ -312,14 +314,14 @@ export function RepositoriesContent() {
             value={typeFilter}
             onValueChange={(v) => { setTypeFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs w-[100px]" aria-label="Filter by type">
-              <SelectValue placeholder="Type" />
+            <SelectTrigger className="h-7 text-xs w-[100px]" aria-label={t("filterByType")}>
+              <SelectValue placeholder={t("type")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All types</SelectItem>
+              <SelectItem value="__all__">{t("allTypes")}</SelectItem>
               {TYPE_OPTIONS.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
-                  {o.label}
+                  {t(`typeLabels.${o.value}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -348,9 +350,9 @@ export function RepositoriesContent() {
             role="alert"
           >
             <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-            <p className="text-sm font-medium text-foreground">Couldn&apos;t load repositories</p>
+            <p className="text-sm font-medium text-foreground">{t("loadFailed")}</p>
             <p className="mt-1 text-xs max-w-sm">
-              {toUserMessage(error, "The server could not be reached. Your repositories are safe.")}
+              {toUserMessage(error, t("loadFailedDetail"))}
             </p>
             <Button
               variant="outline"
@@ -360,14 +362,14 @@ export function RepositoriesContent() {
               disabled={isFetching}
             >
               <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-              Retry
+              {t("retry")}
             </Button>
           </div>
         )}
         {!isLoading && !isError && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <Package className="size-8 mb-2 opacity-50" />
-            <p className="text-sm">No repositories found.</p>
+            <p className="text-sm">{t("noRepos")}</p>
           </div>
         )}
         {!isLoading && filtered.length > 0 && (
@@ -393,7 +395,7 @@ export function RepositoriesContent() {
       {totalPages > 1 && (
         <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Page {page} of {totalPages}
+            {t("pageOf", { page, totalPages })}
           </span>
           <div className="flex gap-1">
             <Button
@@ -401,7 +403,7 @@ export function RepositoriesContent() {
               size="icon-xs"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              aria-label="Previous page"
+              aria-label={t("previousPage")}
             >
               &lt;
             </Button>
@@ -410,7 +412,7 @@ export function RepositoriesContent() {
               size="icon-xs"
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
-              aria-label="Next page"
+              aria-label={t("nextPage")}
             >
               &gt;
             </Button>
@@ -425,9 +427,9 @@ export function RepositoriesContent() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Repositories</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage artifact repositories across all formats.
+            {t("subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -439,19 +441,19 @@ export function RepositoriesContent() {
                 onClick={() =>
                   queryClient.invalidateQueries({ queryKey: ["repositories"] })
                 }
-                aria-label="Refresh repositories"
+                aria-label={t("refreshAria")}
               >
                 <RefreshCw
                   className={`size-4 ${isFetching ? "animate-spin" : ""}`}
                 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh</TooltipContent>
+            <TooltipContent>{t("refresh")}</TooltipContent>
           </Tooltip>
           {isAuthenticated && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              Create Repository
+              {t("create")}
             </Button>
           )}
         </div>
@@ -477,9 +479,9 @@ export function RepositoriesContent() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Package className="size-12 mb-3 opacity-30" />
-                <p className="text-sm font-medium">Select a repository</p>
+                <p className="text-sm font-medium">{t("selectRepo")}</p>
                 <p className="text-xs mt-1">
-                  Choose a repository from the list to view its contents.
+                  {t("selectRepoDetail")}
                 </p>
               </div>
             )}

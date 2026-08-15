@@ -1,0 +1,23 @@
+{
+  "filterByStatus": "Filter by status",
+  "allStatuses": "All statuses",
+  "promoted": "Promoted",
+  "rejected": "Rejected",
+  "pendingApproval": "Pending Approval",
+  "noHistory": "No promotion history yet.",
+  "noHistoryDetail": "Promotions from this staging repository will appear here.",
+  "pageOf": "Page {page} of {totalPages}",
+  "previous": "Previous",
+  "next": "Next",
+  "rejectionReason": "Rejection Reason",
+  "notes": "Notes",
+  "policyViolations": "Policy Violations",
+  "cveSummary": "CVE Summary",
+  "criticalCount": "{count} critical",
+  "highCount": "{count} high",
+  "mediumCount": "{count} medium",
+  "lowCount": "{count} low",
+  "licenseSummary": "License Summary",
+  "deniedLicenses": "Denied: {licenses}",
+  "foundLicenses": "Found: {licenses}"
+}

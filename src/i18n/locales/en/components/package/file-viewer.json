@@ -1,0 +1,13 @@
+{
+  "showingFirst": "Showing first {shown} of {total}",
+  "downloadFullFile": "Download full file",
+  "pdfInlineUnavailable": "Unable to display PDF inline.",
+  "downloadFile": "Download the file",
+  "toViewIt": "to view it.",
+  "binaryFile": "Binary file ({size})",
+  "download": "Download",
+  "downloadAria": "Download {name}",
+  "closeFileViewer": "Close file viewer",
+  "loadingFile": "Loading file...",
+  "failedToLoadFile": "Failed to load file content"
+}

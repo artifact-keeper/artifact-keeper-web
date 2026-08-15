@@ -1,0 +1,18 @@
+{
+  "loading": "Loading image tags…",
+  "empty": "No image tags found. Push an image with a tag to see it here, or switch to Flat view to inspect raw blobs.",
+  "tableAria": "Image tags",
+  "caption": "Docker image tags in this repository",
+  "tag": "Tag",
+  "digest": "Digest",
+  "size": "Size",
+  "lastPushed": "Last pushed",
+  "scan": "Scan",
+  "actions": "Actions",
+  "viewManifest": "View {image}:{tag} manifest",
+  "digestAria": "Digest {digest}",
+  "scanAria": "Scan {image}:{tag}",
+  "multiArch": "multi-arch",
+  "notScanned": "not scanned",
+  "itemLabel": "tags"
+}

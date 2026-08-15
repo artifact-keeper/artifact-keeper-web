@@ -1,0 +1,6 @@
+{
+  "serverError": "Server Error",
+  "somethingWentWrong": "Something Went Wrong",
+  "serverErrorDescription": "An unexpected server error occurred. Try refreshing the page or come back later. If the problem persists, contact support.",
+  "refresh": "Refresh"
+}

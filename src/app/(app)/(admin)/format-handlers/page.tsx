@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Blocks, Search, FlaskConical, AlertCircle, RotateCcw, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,7 +36,8 @@ import {
 const QUERY_KEY = FORMAT_HANDLERS_QUERY_KEY;
 
 export default function FormatHandlersPage() {
-  useDocumentTitle("Format Handlers");
+  const t = useTranslations("app/admin/format-handlers");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -56,16 +58,18 @@ export default function FormatHandlersPage() {
       formatHandlersApi.setEnabled(vars.key, vars.enabled),
     onSuccess: (h) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      toast.success(`${h.display_name} ${h.is_enabled ? "enabled" : "disabled"}`);
+      toast.success(
+        `${h.display_name} ${h.is_enabled ? t("enabled") : t("disabled")}`,
+      );
     },
-    onError: mutationErrorToast("Failed to toggle format handler"),
+    onError: mutationErrorToast(t("toggleFailed")),
   });
 
   const testMutation = useMutation({
     mutationFn: (vars: { key: string; path: string; content: string }) =>
       formatHandlersApi.test(vars.key, { path: vars.path, content: vars.content }),
     onSuccess: (res) => setTestResult(res),
-    onError: mutationErrorToast("Format test failed"),
+    onError: mutationErrorToast(t("testFailed")),
   });
 
   const filtered = useMemo(() => {
@@ -84,7 +88,7 @@ export default function FormatHandlersPage() {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <Blocks className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Format handler management requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -102,16 +106,16 @@ export default function FormatHandlersPage() {
       <div className="flex items-center gap-2">
         <Blocks className="size-6" />
         <div>
-          <h1 className="text-xl font-semibold">Format Handlers</h1>
+          <h1 className="text-xl font-semibold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">
-            Enable, disable, and test the package-format handlers (built-in and WASM plugins).
+            {t("description")}
           </p>
         </div>
       </div>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input className="pl-8" placeholder="Filter by format, name, or extension…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Filter handlers" />
+        <Input className="pl-8" placeholder={t("searchPlaceholder")} value={search} onChange={(e) => setSearch(e.target.value)} aria-label={t("filterAria")} />
       </div>
 
       {isLoading && (
@@ -124,18 +128,18 @@ export default function FormatHandlersPage() {
       {!isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load format handlers</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("loadFailed")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
 
       {!isLoading && !isError && filtered.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          {search ? "No handlers match your filter." : "No format handlers found."}
+          {search ? t("noFilterMatch") : t("noHandlers")}
         </div>
       )}
 
@@ -147,7 +151,7 @@ export default function FormatHandlersPage() {
                 <Switch
                   checked={h.is_enabled}
                   onCheckedChange={(v) => toggleMutation.mutate({ key: h.format_key, enabled: v })}
-                  aria-label={`Enable ${h.display_name}`}
+                  aria-label={t("enableAria", { name: h.display_name })}
                 />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -156,12 +160,12 @@ export default function FormatHandlersPage() {
                     <Badge variant={h.handler_type === "Wasm" ? "secondary" : "outline"}>{h.handler_type}</Badge>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
-                    {h.extensions.length > 0 ? h.extensions.join(", ") : "no extensions"} · priority {h.priority}
+                    {h.extensions.length > 0 ? h.extensions.join(", ") : t("noExtensions")} · {t("priority", { priority: h.priority })}
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" aria-label={`Test ${h.display_name}`} onClick={() => openTest(h)}>
-                <FlaskConical className="size-4" /> Test
+              <Button variant="ghost" size="sm" aria-label={t("testAria", { name: h.display_name })} onClick={() => openTest(h)}>
+                <FlaskConical className="size-4" /> {t("test")}
               </Button>
             </li>
           ))}
@@ -172,19 +176,19 @@ export default function FormatHandlersPage() {
       <Dialog open={testTarget !== null} onOpenChange={(o) => !o && setTestTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Test {testTarget?.display_name}</DialogTitle>
+            <DialogTitle>{t("testTitle", { name: testTarget?.display_name ?? "" })}</DialogTitle>
             <DialogDescription>
-              Dry-run the handler against sample content — checks parsing without storing anything.
+              {t("testDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="fh-path">Artifact path</Label>
+              <Label htmlFor="fh-path">{t("pathLabel")}</Label>
               <Input id="fh-path" value={testPath} onChange={(e) => setTestPath(e.target.value)} placeholder="acme/acme-1.0.0.whl" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="fh-content">Content</Label>
-              <Textarea id="fh-content" rows={6} value={testContent} onChange={(e) => setTestContent(e.target.value)} placeholder="Paste artifact content or metadata…" />
+              <Label htmlFor="fh-content">{t("contentLabel")}</Label>
+              <Textarea id="fh-content" rows={6} value={testContent} onChange={(e) => setTestContent(e.target.value)} placeholder={t("contentPlaceholder")} />
             </div>
             {testResult && (
               <div
@@ -192,18 +196,18 @@ export default function FormatHandlersPage() {
                 role={testResult.valid ? "status" : "alert"}
               >
                 {testResult.valid ? <CheckCircle2 className="size-4 mt-0.5" /> : <XCircle className="size-4 mt-0.5" />}
-                <span>{testResult.valid ? "Valid — the handler parsed this content." : testResult.parse_error || "Invalid content."}</span>
+                <span>{testResult.valid ? t("validResult") : testResult.parse_error || t("invalidResult")}</span>
               </div>
             )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setTestTarget(null)}>Close</Button>
+            <Button variant="ghost" onClick={() => setTestTarget(null)}>{t("close")}</Button>
             <Button
               disabled={!canRunTest}
               onClick={() => testTarget && testMutation.mutate({ key: testTarget.format_key, path: testPath.trim(), content: testContent })}
             >
               {testMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />}
-              Run test
+              {t("runTest")}
             </Button>
           </DialogFooter>
         </DialogContent>

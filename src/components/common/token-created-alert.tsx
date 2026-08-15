@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ export function TokenCreatedAlert({
   token,
   onDone,
 }: TokenCreatedAlertProps) {
+  const t = useTranslations("components/common/token-created-alert");
   return (
     <>
       <DialogHeader>
@@ -38,9 +40,9 @@ export function TokenCreatedAlert({
         className="border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
       >
         <AlertTriangle className="size-4" />
-        <AlertTitle>Store it safely</AlertTitle>
+        <AlertTitle>{t("storeSafely")}</AlertTitle>
         <AlertDescription>
-          This will only be shown once. Store it in a secure location.
+          {t("storeSafelyDescription")}
         </AlertDescription>
       </Alert>
       <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
@@ -48,7 +50,7 @@ export function TokenCreatedAlert({
         <CopyButton value={token} />
       </div>
       <DialogFooter>
-        <Button onClick={onDone}>Done</Button>
+        <Button onClick={onDone}>{t("done")}</Button>
       </DialogFooter>
     </>
   );

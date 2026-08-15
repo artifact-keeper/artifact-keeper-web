@@ -1,0 +1,8 @@
+{
+  "fileAria": "文件 {path}",
+  "folderAria": "文件夹 {path}",
+  "fileCount": "{count, plural, other {# 个文件}}",
+  "empty": "此仓库中没有制品。",
+  "folderTree": "文件夹树",
+  "treeAria": "仓库文件夹树"
+}

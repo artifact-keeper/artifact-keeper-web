@@ -1,0 +1,14 @@
+{
+  "title": "拒绝制品",
+  "description": "从暂存中拒绝 {count, plural, other {# 个制品}}。此操作将把它们标记为已拒绝并阻止提升。",
+  "reason": "理由",
+  "reasonPlaceholder": "提供拒绝这些制品的理由...",
+  "notes": "备注（可选）",
+  "notesPlaceholder": "添加任何附加备注...",
+  "cancel": "取消",
+  "rejecting": "拒绝中...",
+  "reject": "拒绝制品",
+  "reasonRequired": "请提供拒绝理由",
+  "rejectFailed": "拒绝失败",
+  "rejected": "已成功拒绝 {count, plural, other {# 个制品}}"
+}

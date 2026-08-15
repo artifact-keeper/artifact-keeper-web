@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Database, HardDrive, Layers, RefreshCcw, Info } from "lucide-react";
 
 import { storageApi } from "@/lib/api/storage";
@@ -72,6 +73,7 @@ function Metric({
  * panel falls back to the repository's coarse `storage_used_bytes`.
  */
 export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps) {
+  const t = useTranslations("app/repositories/_components/repo-storage-panel");
   const repoKey = repository.key;
 
   const {
@@ -103,7 +105,7 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     return (
       <Card data-testid="storage-panel-loading">
         <CardHeader>
-          <CardTitle className="text-base">Storage</CardTitle>
+          <CardTitle className="text-base">{t("title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -125,18 +127,17 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     return (
       <Card data-testid="storage-panel-fallback">
         <CardHeader>
-          <CardTitle className="text-base">Storage</CardTitle>
+          <CardTitle className="text-base">{t("title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <Metric
-            label="Logical size"
+            label={t("logicalSize")}
             value={formatBytes(repository.storage_used_bytes)}
             icon={<Database className="size-3.5" />}
             testId="storage-logical"
           />
           <p className="text-xs text-muted-foreground">
-            Detailed deduplicated storage metrics are unavailable for this
-            repository.
+            {t("unavailable")}
           </p>
         </CardContent>
       </Card>
@@ -170,26 +171,26 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
   return (
     <Card data-testid="storage-panel">
       <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <CardTitle className="text-base">Storage</CardTitle>
+        <CardTitle className="text-base">{t("title")}</CardTitle>
         <Badge
           variant="outline"
           className="text-xs font-normal"
           data-testid="storage-scope-badge"
         >
-          {isInstanceScope ? "Instance-wide dedup" : "Per-repository dedup"}
+          {isInstanceScope ? t("instanceWide") : t("perRepo")}
         </Badge>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Metric
-            label="Logical size"
+            label={t("logicalSize")}
             value={formatBytes(usage.logical_bytes)}
             icon={<Database className="size-3.5" />}
             testId="storage-logical"
           />
           {hasBreakdown && usage.physical_bytes != null && (
             <Metric
-              label="Physical (stored)"
+              label={t("physicalStored")}
               value={formatBytes(usage.physical_bytes)}
               icon={<HardDrive className="size-3.5" />}
               testId="storage-physical"
@@ -197,14 +198,14 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
           )}
           {hasBreakdown && usage.dedup_ratio != null && (
             <Metric
-              label="Dedup ratio"
+              label={t("dedupRatio")}
               value={`${usage.dedup_ratio.toFixed(2)}×`}
               icon={<Layers className="size-3.5" />}
               testId="storage-ratio"
             />
           )}
           <Metric
-            label="Blobs"
+            label={t("blobs")}
             value={usage.blob_count.toLocaleString()}
             testId="storage-blobs"
           />
@@ -212,11 +213,10 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
 
         {savingsBytes != null && savingsPct != null && (
           <p className="text-sm text-muted-foreground" data-testid="storage-savings">
-            Deduplication saves{" "}
-            <span className="font-medium text-foreground">
-              {formatBytes(savingsBytes)}
-            </span>{" "}
-            ({savingsPct}%) versus the logical footprint.
+            {t("savings", {
+              bytes: formatBytes(savingsBytes),
+              pct: savingsPct,
+            })}
           </p>
         )}
 
@@ -242,18 +242,16 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-primary" />
-                Unique {formatBytes(unique)}
+                {t("unique", { bytes: formatBytes(unique) })}
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-amber-400 dark:bg-amber-500" />
-                Shared {formatBytes(shared)}
+                {t("shared", { bytes: formatBytes(shared) })}
               </span>
             </div>
             {isAdmin && (
               <p className="text-xs text-muted-foreground">
-                &ldquo;Shared&rdquo; bytes are blobs this repository has in
-                common with other repositories; reclaiming them requires the
-                last referencing repository to release them.
+                {t("sharedExplanation")}
               </p>
             )}
           </div>
@@ -268,9 +266,7 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             data-testid="storage-instance-caveat"
           >
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            Deduplication is pooled across the whole instance. Physical, unique,
-            and shared figures reflect blobs that may be shared with other
-            repositories and are not attributable to this repository alone.
+            {t("instanceCaveat")}
           </p>
         )}
         {isInstanceScope && !hasBreakdown && (
@@ -279,8 +275,7 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             data-testid="storage-instance-note"
           >
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            Deduplicated storage is pooled across the instance; the detailed
-            breakdown is available to administrators.
+            {t("instanceNote")}
           </p>
         )}
 
@@ -291,7 +286,7 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             data-testid="storage-instance-total"
           >
             <Metric
-              label="Instance unique (all repositories)"
+              label={t("instanceUnique")}
               value={formatBytes(usage.instance_unique_bytes)}
               icon={<HardDrive className="size-3.5" />}
             />
@@ -303,7 +298,7 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
           <div className="border-t pt-3" data-testid="storage-reclaimable">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Reclaimable now
+                {t("reclaimableNow")}
               </div>
               <Button
                 variant="outline"
@@ -315,15 +310,15 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
                   className={`size-3.5 ${gcFetching ? "animate-spin" : ""}`}
                 />
                 {gcFetching
-                  ? "Estimating…"
+                  ? t("estimating")
                   : reclaimRequested
-                    ? "Re-estimate"
-                    : "Estimate"}
+                    ? t("reEstimate")
+                    : t("estimate")}
               </Button>
             </div>
             {gcError && (
               <p className="mt-2 text-xs text-destructive">
-                Could not estimate reclaimable space.
+                {t("estimateFailed")}
               </p>
             )}
             {gcPreview && !gcFetching && (
@@ -331,14 +326,10 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
                 className="mt-2 text-sm"
                 data-testid="storage-reclaimable-value"
               >
-                <span className="font-semibold">
-                  {formatBytes(gcPreview.bytes_freed)}
-                </span>{" "}
-                <span className="text-muted-foreground">
-                  could be reclaimed by garbage-collecting{" "}
-                  {gcPreview.storage_keys_deleted.toLocaleString()} unreferenced
-                  blob(s). This is a dry-run estimate; nothing was deleted.
-                </span>
+                {t("reclaimable", {
+                  bytes: formatBytes(gcPreview.bytes_freed),
+                  count: gcPreview.storage_keys_deleted.toLocaleString(),
+                })}
               </p>
             )}
           </div>
@@ -349,7 +340,9 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             <Tooltip>
               <TooltipTrigger asChild>
                 <span data-testid="storage-computed-at">
-                  Computed {formatRelativeTimestamp(usage.computed_at)}
+                  {t("computed", {
+                    time: formatRelativeTimestamp(usage.computed_at),
+                  })}
                 </span>
               </TooltipTrigger>
               <TooltipContent>

@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { GitPullRequestArrow, Plus, Trash2, Pencil, FlaskConical, AlertCircle, RotateCcw, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -92,7 +93,9 @@ function toRequest(f: FormState): CreatePromotionRuleRequest {
 }
 
 export default function PromotionRulesPage() {
-  useDocumentTitle("Promotion Rules");
+  const t = useTranslations("app/admin/promotion-rules");
+  const tSev = useTranslations("core/severity");
+  useDocumentTitle(t("title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -144,9 +147,9 @@ export default function PromotionRulesPage() {
       setDialogOpen(false);
       setEditing(null);
       setForm(emptyForm);
-      toast.success(vars.id ? "Promotion rule updated" : "Promotion rule created");
+      toast.success(vars.id ? t("toast.updated") : t("toast.created"));
     },
-    onError: mutationErrorToast("Failed to save promotion rule"),
+    onError: mutationErrorToast(t("toast.saveFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -154,24 +157,24 @@ export default function PromotionRulesPage() {
     onSuccess: () => {
       invalidate();
       setDeleteTarget(null);
-      toast.success("Promotion rule deleted");
+      toast.success(t("toast.deleted"));
     },
-    onError: mutationErrorToast("Failed to delete promotion rule"),
+    onError: mutationErrorToast(t("toast.deleteFailed")),
   });
 
   const evaluateMutation = useMutation({
     mutationFn: (id: string) => promotionRulesApi.evaluate(id),
     onSuccess: (res) => {
-      toast.success(`"${res.rule_name}": ${res.passed}/${res.total} pass, ${res.failed} fail`);
+      toast.success(t("evaluateResult", { ruleName: res.rule_name, passed: res.passed, total: res.total, failed: res.failed }));
     },
-    onError: mutationErrorToast("Evaluation failed"),
+    onError: mutationErrorToast(t("toast.evaluationFailed")),
   });
 
   if (!user?.is_admin) {
     return (
       <div className="p-8 text-center text-muted-foreground" role="alert">
         <GitPullRequestArrow className="mx-auto mb-2 size-8 opacity-50" />
-        <p className="text-sm">Promotion rule management requires administrator access.</p>
+        <p className="text-sm">{t("accessDenied")}</p>
       </div>
     );
   }
@@ -224,15 +227,15 @@ export default function PromotionRulesPage() {
         <div className="flex items-center gap-2">
           <GitPullRequestArrow className="size-6" />
           <div>
-            <h1 className="text-xl font-semibold">Promotion Rules</h1>
+            <h1 className="text-xl font-semibold">{t("title")}</h1>
             <p className="text-sm text-muted-foreground">
-              Gating criteria for promoting artifacts from staging to release repositories.
+              {t("description")}
             </p>
           </div>
         </div>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
-          New Rule
+          {t("newRule")}
         </Button>
       </div>
 
@@ -246,11 +249,11 @@ export default function PromotionRulesPage() {
       {!isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
-          <p className="text-sm font-medium">Couldn&apos;t load promotion rules</p>
-          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, "Unknown error")}</p>
+          <p className="text-sm font-medium">{t("couldNotLoad")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{toUserMessage(error, t("unknownError"))}</p>
           <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} disabled={isFetching}>
             <RotateCcw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -258,8 +261,8 @@ export default function PromotionRulesPage() {
       {!isLoading && !isError && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-12 text-center text-muted-foreground">
           <GitPullRequestArrow className="size-8 mb-2 opacity-50" />
-          <p className="text-sm">No promotion rules yet.</p>
-          <p className="text-xs">Create one to gate staging-to-release promotions.</p>
+          <p className="text-sm">{t("emptyTitle")}</p>
+          <p className="text-xs">{t("emptyHint")}</p>
         </div>
       )}
 
@@ -270,26 +273,26 @@ export default function PromotionRulesPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate font-medium">{r.name}</span>
-                  {r.auto_promote && <Badge variant="secondary">auto-promote</Badge>}
-                  {!r.is_enabled && <Badge variant="outline">disabled</Badge>}
-                  {r.require_signature && <Badge variant="outline">signed</Badge>}
+                  {r.auto_promote && <Badge variant="secondary">{t("autoPromote")}</Badge>}
+                  {!r.is_enabled && <Badge variant="outline">{t("disabled")}</Badge>}
+                  {r.require_signature && <Badge variant="outline">{t("signed")}</Badge>}
                 </div>
                 <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                   <span className="font-mono">{repoKey(r.source_repo_id)}</span>
                   <ArrowRight className="size-3" />
                   <span className="font-mono">{repoKey(r.target_repo_id)}</span>
-                  {r.max_cve_severity && <span>· max CVE {r.max_cve_severity}</span>}
-                  {r.min_health_score != null && <span>· health ≥ {r.min_health_score}</span>}
+                  {r.max_cve_severity && <span>· {t("maxCve", { severity: r.max_cve_severity })}</span>}
+                  {r.min_health_score != null && <span>· {t("healthMin", { score: r.min_health_score })}</span>}
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" aria-label={`Evaluate ${r.name}`} disabled={evaluateMutation.isPending} onClick={() => evaluateMutation.mutate(r.id)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("evaluateAria", { name: r.name })} disabled={evaluateMutation.isPending} onClick={() => evaluateMutation.mutate(r.id)}>
                   <FlaskConical className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={`Edit ${r.name}`} onClick={() => openEdit(r)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("editAria", { name: r.name })} onClick={() => openEdit(r)}>
                   <Pencil className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={`Delete ${r.name}`} onClick={() => setDeleteTarget(r)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("deleteAria", { name: r.name })} onClick={() => setDeleteTarget(r)}>
                   <Trash2 className="size-4 text-destructive" />
                 </Button>
               </div>
@@ -303,24 +306,24 @@ export default function PromotionRulesPage() {
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <form onSubmit={submit}>
             <DialogHeader>
-              <DialogTitle>{editing ? "Edit promotion rule" : "New promotion rule"}</DialogTitle>
+              <DialogTitle>{editing ? t("editTitle") : t("createTitle")}</DialogTitle>
               <DialogDescription>
-                Artifacts in the source repo are promoted to the target repo when they meet every gate below.
+                {t("dialogDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-1.5">
-                <Label htmlFor="pr-name">Name</Label>
-                <Input id="pr-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="promote-stable" />
+                <Label htmlFor="pr-name">{t("name")}</Label>
+                <Input id="pr-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder={t("namePlaceholder")} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-source">Source (staging)</Label>
+                  <Label htmlFor="pr-source">{t("sourceStaging")}</Label>
                   {editing ? (
                     <Input id="pr-source" value={repoKey(form.source_repo_id)} disabled />
                   ) : (
                     <Select value={form.source_repo_id} onValueChange={(v) => setForm((f) => ({ ...f, source_repo_id: v }))}>
-                      <SelectTrigger id="pr-source" aria-label="Source repository"><SelectValue placeholder="Select source" /></SelectTrigger>
+                      <SelectTrigger id="pr-source" aria-label={t("sourceRepository")}><SelectValue placeholder={t("selectSource")} /></SelectTrigger>
                       <SelectContent>
                         {repoOptions.map((r) => <SelectItem key={r.id} value={r.id}>{r.key}</SelectItem>)}
                       </SelectContent>
@@ -328,12 +331,12 @@ export default function PromotionRulesPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-target">Target (release)</Label>
+                  <Label htmlFor="pr-target">{t("targetRelease")}</Label>
                   {editing ? (
                     <Input id="pr-target" value={repoKey(form.target_repo_id)} disabled />
                   ) : (
                     <Select value={form.target_repo_id} onValueChange={(v) => setForm((f) => ({ ...f, target_repo_id: v }))}>
-                      <SelectTrigger id="pr-target" aria-label="Target repository"><SelectValue placeholder="Select target" /></SelectTrigger>
+                      <SelectTrigger id="pr-target" aria-label={t("targetRepository")}><SelectValue placeholder={t("selectTarget")} /></SelectTrigger>
                       <SelectContent>
                         {repoOptions.map((r) => <SelectItem key={r.id} value={r.id}>{r.key}</SelectItem>)}
                       </SelectContent>
@@ -343,51 +346,51 @@ export default function PromotionRulesPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-cve">Max CVE severity</Label>
+                  <Label htmlFor="pr-cve">{t("maxCveSeverity")}</Label>
                   <Select value={form.max_cve_severity} onValueChange={(v) => setForm((f) => ({ ...f, max_cve_severity: v }))}>
-                    <SelectTrigger id="pr-cve" aria-label="Max CVE severity"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="pr-cve" aria-label={t("maxCveSeverity")}><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {SEVERITIES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>)}
+                      {SEVERITIES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s === "any" ? t("severityAny") : tSev(s)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-health">Min health score</Label>
+                  <Label htmlFor="pr-health">{t("minHealthScore")}</Label>
                   <Input id="pr-health" type="number" min={0} value={form.min_health_score ?? ""} onChange={(e) => setForm((f) => ({ ...f, min_health_score: numField(e.target.value) }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-staging">Min staging hours</Label>
+                  <Label htmlFor="pr-staging">{t("minStagingHours")}</Label>
                   <Input id="pr-staging" type="number" min={0} value={form.min_staging_hours ?? ""} onChange={(e) => setForm((f) => ({ ...f, min_staging_hours: numField(e.target.value) }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pr-age">Max artifact age (days)</Label>
+                  <Label htmlFor="pr-age">{t("maxArtifactAge")}</Label>
                   <Input id="pr-age" type="number" min={0} value={form.max_artifact_age_days ?? ""} onChange={(e) => setForm((f) => ({ ...f, max_artifact_age_days: numField(e.target.value) }))} />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="pr-licenses">Allowed licenses (comma-separated, blank = any)</Label>
-                <Input id="pr-licenses" value={form.allowed_licenses} onChange={(e) => setForm((f) => ({ ...f, allowed_licenses: e.target.value }))} placeholder="MIT, Apache-2.0, BSD-3-Clause" />
+                <Label htmlFor="pr-licenses">{t("allowedLicenses")}</Label>
+                <Input id="pr-licenses" value={form.allowed_licenses} onChange={(e) => setForm((f) => ({ ...f, allowed_licenses: e.target.value }))} placeholder={t("allowedLicensesPlaceholder")} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label htmlFor="pr-auto">Auto-promote when gates pass</Label>
+                <Label htmlFor="pr-auto">{t("autoPromoteLabel")}</Label>
                 <Switch id="pr-auto" checked={form.auto_promote} onCheckedChange={(v) => setForm((f) => ({ ...f, auto_promote: v }))} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label htmlFor="pr-sig">Require signature</Label>
+                <Label htmlFor="pr-sig">{t("requireSignature")}</Label>
                 <Switch id="pr-sig" checked={form.require_signature} onCheckedChange={(v) => setForm((f) => ({ ...f, require_signature: v }))} />
               </div>
               <div className="flex items-center justify-between rounded-md border p-3">
-                <Label htmlFor="pr-enabled">Enabled</Label>
+                <Label htmlFor="pr-enabled">{t("enabled")}</Label>
                 <Switch id="pr-enabled" checked={form.is_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, is_enabled: v }))} />
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
               <Button type="submit" disabled={!canSave}>
                 {saveMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {editing ? "Save" : "Create"}
+                {editing ? t("save") : t("create")}
               </Button>
             </DialogFooter>
           </form>
@@ -397,9 +400,9 @@ export default function PromotionRulesPage() {
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete promotion rule?"
-        description={`"${deleteTarget?.name ?? ""}" will be permanently deleted. Promotions stop following this rule.`}
-        confirmText="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: deleteTarget?.name ?? "" })}
+        confirmText={t("deleteConfirm")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

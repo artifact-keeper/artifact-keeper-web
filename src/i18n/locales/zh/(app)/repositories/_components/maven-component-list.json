@@ -1,0 +1,9 @@
+{
+  "loading": "正在加载 Maven 组件…",
+  "empty": "未找到 Maven 组件。切换到平面视图查看原始文件，或推送具有有效 GAV 坐标的制品。",
+  "itemLabel": "个组件",
+  "files": "{count, plural, other {# 个文件}}",
+  "downloads": "{count} 次下载",
+  "openAria": "打开 {filename} 的详情",
+  "pom": "POM"
+}

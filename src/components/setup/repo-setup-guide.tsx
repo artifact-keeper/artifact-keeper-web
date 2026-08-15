@@ -1,6 +1,7 @@
 "use client";
 
 import type { Repository, RepositoryType } from "@/types";
+import { useTranslations } from "next-intl";
 
 import {
   Tabs,
@@ -9,6 +10,117 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/common/copy-button";
+
+// -- setup text key map --
+// Client-tool setup snippets share a small vocabulary of step titles,
+// descriptions and variant labels. Map each unique English string to a
+// translation key so the data builders above can stay English while the
+// rendered output localizes.
+const SETUP_TEXT_KEYS: Record<string, string> = {
+  "Add a dependency": "addDependency",
+  "Add APK repository": "addApkRepository",
+  "Add CI/CD variables: ARTIFACT_KEEPER_TOKEN and ARTIFACT_KEEPER_URL.": "gitlabVariablesHint",
+  "Add service connection for Artifact Keeper in Project Settings.": "azureServiceConnectionHint",
+  "Add secrets": "addSecrets",
+  "Add APT repository (DEB822, modern)": "addAptDeb822",
+  "Add APT repository (single-line, old)": "addAptSingleLine",
+  "Add as SimpleStreams remote": "addSimpleStreamsRemote",
+  "Add Composer repository": "addComposerRepository",
+  "Add Helm repository": "addHelmRepository",
+  "Add NuGet source": "addNuGetSource",
+  "Add repository signing key": "addRepoSigningKey",
+  "Add repository to build.gradle": "addRepoBuildGradle",
+  "Add repository to build.gradle.kts": "addRepoBuildGradleKts",
+  "Add repository to pom.xml": "addRepoPomXml",
+  "Add resolver to build.sbt": "addResolverBuildSbt",
+  "Add to .yarnrc.yml (project root):": "addToYarnrc",
+  "Add to /etc/apk/repositories:": "addToEtcApk",
+  "Add to /etc/apt/sources.list.d/artifact-keeper.list:": "addToAptList",
+  "Add to /etc/apt/sources.list.d/artifact-keeper.sources:": "addToAptSources",
+  "Add to ~/.cargo/config.toml:": "addToCargoConfig",
+  "Add to ~/.gradle/gradle.properties:": "addToGradleProps",
+  "Add to ~/.m2/settings.xml:": "addToM2Settings",
+  "Add to ~/.npmrc:": "addToNpmrc",
+  "Add to ~/.pip/pip.conf or ~/.config/pip/pip.conf:": "addToPipConfEither",
+  "Add to ~/.pip/pip.conf:": "addToPipConf",
+  "Add to ~/.pypirc. Use `__token__` as the username for an access token; otherwise use your login:": "addToPypirc",
+  "Add to ~/.sbt/.credentials:": "addToSbtCredentials",
+  "Add to Pipfile. Use `__token__` as the username for an access token; otherwise use your login:": "addToPipfile",
+  "Add to pyproject.toml:": "addToPyproject",
+  "Add YUM/DNF repository": "addYumDnfRepository",
+  "Authenticate": "authenticate",
+  "Authenticate with buf CLI": "authenticateWithBufCli",
+  "Bun": "bun",
+  "Configure .gitlab-ci.yml": "configureGitlabCi",
+  "Configure azure-pipelines.yml": "configureAzurePipelines",
+  "Configure buf.yaml": "configureBufYaml",
+  "Configure Bundler": "configureBundler",
+  "Configure Cargo": "configureCargo",
+  "Configure Jenkinsfile": "configureJenkinsfile",
+  "Configure credentials": "configureCredentials",
+  "Configure Go proxy": "configureGoProxy",
+  "Configure index": "configureIndex",
+  "Configure pip": "configurePip",
+  "Configure provider mirror": "configureProviderMirror",
+  "Configure registry": "configureRegistry",
+  "Configure repository": "configureRepository",
+  "Configure settings.xml": "configureSettingsXml",
+  "Configure source": "configureSource",
+  "Create /etc/yum.repos.d/artifact-keeper.repo:": "createYumRepo",
+  "dart and flutter read the registry location from PUB_HOSTED_URL:": "pubHostedUrlHint",
+  "Deploy artifacts": "deployArtifacts",
+  "Download an artifact": "downloadArtifact",
+  "Go to Settings > Secrets and add ARTIFACT_KEEPER_TOKEN and ARTIFACT_KEEPER_URL.": "githubSecretsHint",
+  "Gradle (Groovy)": "gradleGroovy",
+  "Gradle (Kotlin)": "gradleKotlin",
+  "In ~/.terraformrc:": "inTerraformrc",
+  "In buf.yaml, add deps and run update:": "inBufYamlDeps",
+  "In Cargo.toml:": "inCargoToml",
+  "In pubspec.yaml:": "inPubspecYaml",
+  "In your Gemfile:": "inGemfile",
+  "Install a chart": "installChart",
+  "Install a package": "installPackage",
+  "Launch a container": "launchContainer",
+  "List images": "listImages",
+  "Login to registry": "loginToRegistry",
+  "Maven": "maven",
+  "Npm": "npm",
+  "Pip": "pip",
+  "Pipenv": "pipenv",
+  "Pnpm": "pnpm",
+  "Poetry": "poetry",
+  "Point the Dart client at this repository": "pointDartClient",
+  "Publish a crate": "publishCrate",
+  "Publish a package": "publishPackage",
+  "Publish artifacts": "publishArtifacts",
+  "Pull an image": "pullImage",
+  "Push a chart": "pushChart",
+  "Push a gem": "pushGem",
+  "Push a module": "pushModule",
+  "Push a package": "pushPackage",
+  "Push an image": "pushImage",
+  "Require a package": "requirePackage",
+  "Resolve dependencies": "resolveDependencies",
+  "Run:": "run",
+  "SBT": "sbt",
+  "Run. Use `__token__` as the username for access tokens not scoped to a user; otherwise use your login:": "poetryRunHint",
+  "Set credentials": "setCredentials",
+  "Set the registry in your module's buf.yaml:": "setRegistryBufYaml",
+  "Store credentials in Jenkins Credential Manager.": "jenkinsCredentialsHint",
+  "Tag an image": "tagImage",
+  "Twine": "twine",
+  "Update and install": "updateAndInstall",
+  "Uv": "uv",
+  "Upload a distribution": "uploadDistribution",
+  "Upload an artifact": "uploadArtifact",
+  "Upload an image": "uploadImage",
+  "uv reads credentials from environment variables (name uppercased, non-alphanumerics → _). Use `__token__` as the username for unscoped access tokens:": "uvCredentialsHint",
+  "Yarn (v2+)": "yarnV2",
+};
+
+function setupTextKey(text: string): string {
+  return SETUP_TEXT_KEYS[text] ?? text;
+}
 
 // -- types --
 
@@ -780,6 +892,7 @@ function CodeBlock({ code }: { code: string }) {
 // -- StepsList component (numbered step list with code blocks) --
 
 export function StepsList({ steps }: { steps: SetupStep[] }) {
+  const t = useTranslations("components/setup/repo-setup-guide");
   return (
     <div className="space-y-6">
       {steps.map((step, i) => (
@@ -788,11 +901,11 @@ export function StepsList({ steps }: { steps: SetupStep[] }) {
             <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
               {i + 1}
             </span>
-            {step.title}
+            {t(setupTextKey(step.title))}
           </h4>
           {step.description && (
             <p className="text-sm text-muted-foreground ml-8">
-              {step.description}
+              {t(setupTextKey(step.description))}
             </p>
           )}
           <div className="ml-8">
@@ -810,6 +923,7 @@ export function StepsList({ steps }: { steps: SetupStep[] }) {
  *  tabs (JVM/npm/PyPI) or a flat step list. Used by the Setup page and the
  *  per-repo Setup tab (#560). */
 export function RepoSetupGuide({ repo }: { repo: Repository }) {
+  const t = useTranslations("components/setup/repo-setup-guide");
   const content = getRepoSetupContent(repo);
 
   if (content.kind === "variants") {
@@ -820,7 +934,7 @@ export function RepoSetupGuide({ repo }: { repo: Repository }) {
         <TabsList className="h-auto flex-wrap">
           {content.variants.map((variant) => (
             <TabsTrigger key={variant.key} value={variant.key}>
-              {variant.label}
+              {t(setupTextKey(variant.label))}
             </TabsTrigger>
           ))}
         </TabsList>

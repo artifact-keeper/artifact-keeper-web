@@ -1,0 +1,6 @@
+{
+  "quarantineBannerRejectedTitle": "This artifact was rejected in review",
+  "quarantineBannerTitle": "This artifact is quarantined",
+  "quarantineBannerRejectedDescription": "Downloads are blocked. A rejection is final; the artifact cannot be released.",
+  "quarantineBannerDescription": "Downloads are blocked until the quarantine is lifted by an administrator."
+}

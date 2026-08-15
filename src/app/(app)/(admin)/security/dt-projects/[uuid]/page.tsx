@@ -5,6 +5,7 @@ import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -89,10 +90,20 @@ const VIOLATION_STATE_BADGE: Record<string, string> = {
   INFO: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
 };
 
-function formatAnalysisState(state: string | null): string {
-  if (!state) return "NOT_SET";
-  return state.replace(/_/g, " ");
-}
+const ANALYSIS_STATE_KEYS: Record<string, string> = {
+  NOT_SET: "analysisNotSet",
+  IN_TRIAGE: "analysisInTriage",
+  EXPLOITABLE: "analysisExploitable",
+  NOT_AFFECTED: "analysisNotAffected",
+  RESOLVED: "analysisResolved",
+  FALSE_POSITIVE: "analysisFalsePositive",
+};
+
+const VIOLATION_STATE_KEYS: Record<string, string> = {
+  FAIL: "fail",
+  WARN: "warn",
+  INFO: "info",
+};
 
 function findingKey(f: DtFinding): string {
   return `${f.vulnerability.uuid}-${f.component.uuid}`;
@@ -115,6 +126,8 @@ function FindingTriageRow({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
+  const t = useTranslations("app/admin/security/dt-projects/detail");
+  const tSev = useTranslations("core/severity");
   const queryClient = useQueryClient();
   const currentState = finding.analysis?.state ?? "NOT_SET";
 
@@ -126,11 +139,11 @@ function FindingTriageRow({
   const updateMutation = useMutation({
     mutationFn: (req: UpdateAnalysisRequest) => dtApi.updateAnalysis(req),
     onSuccess: () => {
-      toast.success("Analysis state updated");
+      toast.success(t("analysisUpdated"));
       queryClient.invalidateQueries({ queryKey: ["dt", "project-findings", projectUuid] });
       queryClient.invalidateQueries({ queryKey: ["dt", "project-metrics", projectUuid] });
     },
-    onError: mutationErrorToast("Failed to update analysis state"),
+    onError: mutationErrorToast(t("updateFailed")),
   });
 
   const handleSave = () => {
@@ -177,7 +190,7 @@ function FindingTriageRow({
             variant="outline"
             className={`border font-semibold uppercase text-xs ${SEVERITY_BADGE[finding.vulnerability.severity] ?? ""}`}
           >
-            {finding.vulnerability.severity}
+            {tSev(finding.vulnerability.severity.toLowerCase())}
           </Badge>
         </td>
         {/* Vulnerability */}
@@ -233,7 +246,7 @@ function FindingTriageRow({
                     s === "EXPLOITABLE" ? "bg-red-500" :
                     "bg-emerald-500"
                   }`} />
-                  {formatAnalysisState(s)}
+                  {t(ANALYSIS_STATE_KEYS[s] ?? s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -263,29 +276,29 @@ function FindingTriageRow({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 max-w-4xl">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  Justification
+                  {t("justification")}
                 </Label>
                 <Input
                   value={justification}
                   onChange={(e) => setJustification(e.target.value)}
-                  placeholder="e.g., code not reachable"
+                  placeholder={t("justificationPlaceholder")}
                   className="h-8 text-xs"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  Details
+                  {t("details")}
                 </Label>
                 <Input
                   value={details}
                   onChange={(e) => setDetails(e.target.value)}
-                  placeholder="Additional context..."
+                  placeholder={t("detailsPlaceholder")}
                   className="h-8 text-xs"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  Suppress
+                  {t("suppress")}
                 </Label>
                 <div className="flex items-center gap-2 h-8">
                   <Checkbox
@@ -295,7 +308,7 @@ function FindingTriageRow({
                     }
                   />
                   <span className="text-xs text-muted-foreground">
-                    Suppress finding
+                    {t("suppressFinding")}
                   </span>
                 </div>
               </div>
@@ -309,10 +322,10 @@ function FindingTriageRow({
                   {updateMutation.isPending ? (
                     <>
                       <Loader2 className="size-3 animate-spin mr-1" />
-                      Saving...
+                      {t("saving")}
                     </>
                   ) : (
-                    "Save Triage"
+                    t("saveTriage")
                   )}
                 </Button>
               </div>
@@ -330,7 +343,9 @@ function FindingTriageRow({
 }
 
 export default function DtProjectDetailPage() {
-  useDocumentTitle("Project Details");
+  const t = useTranslations("app/admin/security/dt-projects/detail");
+  const tSev = useTranslations("core/severity");
+  useDocumentTitle(t("title"));
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -459,12 +474,12 @@ export default function DtProjectDetailPage() {
       );
     },
     onSuccess: () => {
-      toast.success(`Updated ${selectedFindings.size} finding(s)`);
+      toast.success(t("updatedFindings", { count: selectedFindings.size }));
       setSelectedFindings(new Set());
       queryClient.invalidateQueries({ queryKey: ["dt", "project-findings", uuid] });
       queryClient.invalidateQueries({ queryKey: ["dt", "project-metrics", uuid] });
     },
-    onError: mutationErrorToast("Failed to update some findings"),
+    onError: mutationErrorToast(t("bulkUpdateFailed")),
   });
 
   // -- loading state --
@@ -482,7 +497,7 @@ export default function DtProjectDetailPage() {
   const componentsColumns: DataTableColumn<DtComponentFull>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (r) => (r.group ? `${r.group}/${r.name}` : r.name),
       sortable: true,
       cell: (r) => (
@@ -492,7 +507,7 @@ export default function DtProjectDetailPage() {
           </p>
           {r.isInternal && (
             <Badge variant="secondary" className="text-xs font-normal mt-0.5">
-              Internal
+              {t("internal")}
             </Badge>
           )}
         </div>
@@ -500,7 +515,7 @@ export default function DtProjectDetailPage() {
     },
     {
       id: "version",
-      header: "Version",
+      header: t("colVersion"),
       accessor: (r) => r.version ?? "",
       sortable: true,
       cell: (r) =>
@@ -512,7 +527,7 @@ export default function DtProjectDetailPage() {
     },
     {
       id: "license",
-      header: "License",
+      header: t("colLicense"),
       accessor: (r) =>
         r.resolvedLicense?.licenseId ?? r.resolvedLicense?.name ?? "",
       sortable: true,
@@ -522,12 +537,12 @@ export default function DtProjectDetailPage() {
             {r.resolvedLicense.licenseId ?? r.resolvedLicense.name}
           </Badge>
         ) : (
-          <span className="text-xs text-muted-foreground">Unknown</span>
+          <span className="text-xs text-muted-foreground">{t("unknown")}</span>
         ),
     },
     {
       id: "purl",
-      header: "Package URL",
+      header: t("colPackageUrl"),
       accessor: (r) => r.purl ?? "",
       cell: (r) =>
         r.purl ? (
@@ -544,7 +559,7 @@ export default function DtProjectDetailPage() {
   const violationsColumns: DataTableColumn<DtPolicyViolation>[] = [
     {
       id: "state",
-      header: "State",
+      header: t("colState"),
       accessor: (r) => r.policyCondition.policy.violationState,
       sortable: true,
       cell: (r) => {
@@ -554,14 +569,14 @@ export default function DtProjectDetailPage() {
             variant="outline"
             className={`border font-semibold uppercase text-xs ${VIOLATION_STATE_BADGE[state] ?? ""}`}
           >
-            {state}
+            {t(VIOLATION_STATE_KEYS[state] ?? state)}
           </Badge>
         );
       },
     },
     {
       id: "policy",
-      header: "Policy",
+      header: t("colPolicy"),
       accessor: (r) => r.policyCondition.policy.name,
       sortable: true,
       cell: (r) => (
@@ -572,7 +587,7 @@ export default function DtProjectDetailPage() {
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       accessor: (r) => r.type,
       sortable: true,
       cell: (r) => (
@@ -583,7 +598,7 @@ export default function DtProjectDetailPage() {
     },
     {
       id: "condition",
-      header: "Condition",
+      header: t("colCondition"),
       accessor: (r) => `${r.policyCondition.subject} ${r.policyCondition.operator}`,
       cell: (r) => (
         <div className="text-xs">
@@ -599,7 +614,7 @@ export default function DtProjectDetailPage() {
     },
     {
       id: "component",
-      header: "Component",
+      header: t("colComponent"),
       accessor: (r) =>
         r.component.group
           ? `${r.component.group}/${r.component.name}`
@@ -635,7 +650,7 @@ export default function DtProjectDetailPage() {
           onClick={() => router.push("/security/dt-projects")}
         >
           <ArrowLeft className="size-4 mr-1" />
-          DT Projects
+          {t("backToDtProjects")}
         </Button>
         <span>/</span>
         <span className="font-medium text-foreground">
@@ -646,7 +661,7 @@ export default function DtProjectDetailPage() {
       {/* Project header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
-          {project?.name ?? "Loading..."}
+          {project?.name ?? t("loading")}
           {project?.version && (
             <Badge variant="secondary" className="ml-2 text-sm font-normal align-middle">
               {project.version}
@@ -660,8 +675,9 @@ export default function DtProjectDetailPage() {
         )}
         {project?.lastBomImport && (
           <p className="text-xs text-muted-foreground mt-1">
-            Last BOM import:{" "}
-            {new Date(project.lastBomImport).toLocaleString()}
+            {t("lastBomImport", {
+              date: new Date(project.lastBomImport).toLocaleString(),
+            })}
             {project.lastBomImportFormat && (
               <span className="ml-1">({project.lastBomImportFormat})</span>
             )}
@@ -684,37 +700,37 @@ export default function DtProjectDetailPage() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <StatCard
               icon={AlertCircle}
-              label="Critical"
+              label={tSev("critical")}
               value={metrics.critical}
               color={metrics.critical > 0 ? "red" : "green"}
             />
             <StatCard
               icon={AlertTriangle}
-              label="High"
+              label={tSev("high")}
               value={metrics.high}
               color={metrics.high > 0 ? "red" : "green"}
             />
             <StatCard
               icon={ShieldAlert}
-              label="Medium"
+              label={tSev("medium")}
               value={metrics.medium}
               color={metrics.medium > 0 ? "yellow" : "green"}
             />
             <StatCard
               icon={Info}
-              label="Low"
+              label={tSev("low")}
               value={metrics.low}
               color="blue"
             />
             <StatCard
               icon={CheckCircle2}
-              label="Audited"
+              label={t("audited")}
               value={`${metrics.findingsAudited}/${metrics.findingsTotal}`}
               color="green"
             />
             <StatCard
               icon={Bug}
-              label="Risk Score"
+              label={t("riskScore")}
               value={metrics.inheritedRiskScore}
               color={metrics.inheritedRiskScore >= 70 ? "red" : metrics.inheritedRiskScore >= 40 ? "yellow" : "green"}
             />
@@ -727,7 +743,7 @@ export default function DtProjectDetailPage() {
         <TabsList>
           <TabsTrigger value="findings">
             <Bug className="size-4 mr-1.5" />
-            Findings
+            {t("findings")}
             {findings && (
               <Badge variant="secondary" className="ml-1.5 text-xs">
                 {findings.length}
@@ -736,7 +752,7 @@ export default function DtProjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="components">
             <Package className="size-4 mr-1.5" />
-            Components
+            {t("components")}
             {components && (
               <Badge variant="secondary" className="ml-1.5 text-xs">
                 {components.length}
@@ -745,7 +761,7 @@ export default function DtProjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="violations">
             <Scale className="size-4 mr-1.5" />
-            Violations
+            {t("violations")}
             {violations && (
               <Badge variant="secondary" className="ml-1.5 text-xs">
                 {violations.length}
@@ -754,7 +770,7 @@ export default function DtProjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="metrics">
             <BarChart3 className="size-4 mr-1.5" />
-            Metrics
+            {t("metrics")}
           </TabsTrigger>
         </TabsList>
 
@@ -767,10 +783,10 @@ export default function DtProjectDetailPage() {
               <Filter className="size-4 text-muted-foreground" />
               <Select value={filterState} onValueChange={setFilterState}>
                 <SelectTrigger size="sm" className="w-[180px] h-8 text-xs">
-                  <SelectValue placeholder="Filter by state..." />
+                  <SelectValue placeholder={t("filterByStatePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">All States</SelectItem>
+                  <SelectItem value="ALL">{t("allStates")}</SelectItem>
                   {ANALYSIS_STATES.map((s) => (
                     <SelectItem key={s} value={s}>
                       <span className={`inline-block size-2 rounded-full mr-1.5 ${
@@ -779,7 +795,7 @@ export default function DtProjectDetailPage() {
                         s === "EXPLOITABLE" ? "bg-red-500" :
                         "bg-emerald-500"
                       }`} />
-                      {formatAnalysisState(s)}
+                      {t(ANALYSIS_STATE_KEYS[s] ?? s)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -792,11 +808,11 @@ export default function DtProjectDetailPage() {
                   onClick={() => setFilterState("ALL")}
                 >
                   <X className="size-3 mr-1" />
-                  Clear
+                  {t("clear")}
                 </Button>
               )}
               <span className="text-xs text-muted-foreground ml-1">
-                {filteredFindings.length} finding(s)
+                {t("findingsCount", { count: filteredFindings.length })}
               </span>
             </div>
 
@@ -805,7 +821,7 @@ export default function DtProjectDetailPage() {
               <div className="flex items-center gap-2">
                 <CheckSquare className="size-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  {selectedFindings.size} selected
+                  {t("selectedCount", { count: selectedFindings.size })}
                 </span>
                 <Button
                   variant="ghost"
@@ -813,7 +829,7 @@ export default function DtProjectDetailPage() {
                   className="h-7 px-2 text-xs"
                   onClick={() => setSelectedFindings(new Set())}
                 >
-                  Deselect all
+                  {t("deselectAll")}
                 </Button>
               </div>
             )}
@@ -825,7 +841,7 @@ export default function DtProjectDetailPage() {
               <CardContent className="py-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Set State</Label>
+                    <Label className="text-xs font-medium">{t("setState")}</Label>
                     <Select value={bulkState} onValueChange={setBulkState}>
                       <SelectTrigger size="sm" className="w-[160px] h-8 text-xs">
                         <SelectValue />
@@ -833,27 +849,27 @@ export default function DtProjectDetailPage() {
                       <SelectContent>
                         {ANALYSIS_STATES.map((s) => (
                           <SelectItem key={s} value={s}>
-                            {formatAnalysisState(s)}
+                            {t(ANALYSIS_STATE_KEYS[s] ?? s)}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Justification</Label>
+                    <Label className="text-xs font-medium">{t("justification")}</Label>
                     <Input
                       value={bulkJustification}
                       onChange={(e) => setBulkJustification(e.target.value)}
-                      placeholder="Optional..."
+                      placeholder={t("optionalPlaceholder")}
                       className="h-8 text-xs w-[180px]"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Details</Label>
+                    <Label className="text-xs font-medium">{t("details")}</Label>
                     <Input
                       value={bulkDetails}
                       onChange={(e) => setBulkDetails(e.target.value)}
-                      placeholder="Optional..."
+                      placeholder={t("optionalPlaceholder")}
                       className="h-8 text-xs w-[180px]"
                     />
                   </div>
@@ -862,7 +878,7 @@ export default function DtProjectDetailPage() {
                       checked={bulkSuppressed}
                       onCheckedChange={(c) => setBulkSuppressed(c === true)}
                     />
-                    <span className="text-xs">Suppress</span>
+                    <span className="text-xs">{t("suppress")}</span>
                   </div>
                   <Button
                     size="sm"
@@ -873,12 +889,12 @@ export default function DtProjectDetailPage() {
                     {bulkUpdateMutation.isPending ? (
                       <>
                         <Loader2 className="size-3 animate-spin mr-1" />
-                        Updating...
+                        {t("updating")}
                       </>
                     ) : (
                       <>
                         <CheckSquare className="size-3 mr-1" />
-                        Update {selectedFindings.size} Finding(s)
+                        {t("updateFindings", { count: selectedFindings.size })}
                       </>
                     )}
                   </Button>
@@ -896,12 +912,12 @@ export default function DtProjectDetailPage() {
                     <tr className="border-b bg-muted/50">
                       <th className="px-3 py-2.5 w-10" />
                       <th className="px-2 py-2.5 w-8" />
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Severity</th>
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Vulnerability</th>
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CVSS</th>
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Component</th>
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Analysis</th>
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CWE</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colSeverity")}</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colVulnerability")}</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCvss")}</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colComponent")}</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colAnalysis")}</th>
+                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCwe")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -925,19 +941,21 @@ export default function DtProjectDetailPage() {
                   <tr className="border-b bg-muted/50">
                     <th className="px-3 py-2.5 w-10" />
                     <th className="px-2 py-2.5 w-8" />
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Severity</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Vulnerability</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CVSS</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Component</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Analysis</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CWE</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colSeverity")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colVulnerability")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCvss")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colComponent")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colAnalysis")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCwe")}</th>
                   </tr>
                 </thead>
               </table>
               <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
                 {filterState !== "ALL"
-                  ? `No findings with state "${formatAnalysisState(filterState)}".`
-                  : "No findings for this project."}
+                  ? t("noFindingsForState", {
+                      state: t(ANALYSIS_STATE_KEYS[filterState] ?? filterState),
+                    })
+                  : t("noFindings")}
               </div>
             </div>
           ) : (
@@ -952,12 +970,12 @@ export default function DtProjectDetailPage() {
                       />
                     </th>
                     <th className="px-2 py-2.5 w-8" />
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Severity</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Vulnerability</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CVSS</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Component</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Analysis</th>
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">CWE</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colSeverity")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colVulnerability")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCvss")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colComponent")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colAnalysis")}</th>
+                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">{t("colCwe")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -987,7 +1005,7 @@ export default function DtProjectDetailPage() {
             columns={componentsColumns}
             data={components ?? []}
             loading={componentsLoading}
-            emptyMessage="No components found in this project."
+            emptyMessage={t("noComponents")}
             rowKey={(r) => r.uuid}
           />
         </TabsContent>
@@ -998,7 +1016,7 @@ export default function DtProjectDetailPage() {
             columns={violationsColumns}
             data={violations ?? []}
             loading={violationsLoading}
-            emptyMessage="No policy violations for this project."
+            emptyMessage={t("noViolations")}
             rowKey={(r) => r.uuid}
           />
         </TabsContent>
@@ -1018,7 +1036,7 @@ export default function DtProjectDetailPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">
-                        Vulnerability Distribution
+                        {t("vulnerabilityDistribution")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -1036,18 +1054,18 @@ export default function DtProjectDetailPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">
-                          Audit Progress
+                          {t("auditProgress")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <ProgressRow
-                          label="Findings Audited"
+                          label={t("findingsAudited")}
                           current={metrics.findingsAudited}
                           total={metrics.findingsTotal}
                           color="bg-green-500"
                         />
                         <ProgressRow
-                          label="Policy Violations"
+                          label={t("policyViolations")}
                           current={
                             metrics.policyViolationsFail +
                             metrics.policyViolationsWarn
@@ -1056,7 +1074,7 @@ export default function DtProjectDetailPage() {
                           color="bg-orange-500"
                         />
                         <ProgressRow
-                          label="Suppressions"
+                          label={t("suppressions")}
                           current={metrics.suppressions}
                           total={metrics.findingsTotal}
                           color="bg-slate-500"
@@ -1066,7 +1084,7 @@ export default function DtProjectDetailPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">
-                          Inherited Risk Score
+                          {t("inheritedRiskScore")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="flex items-center justify-center">
@@ -1080,7 +1098,7 @@ export default function DtProjectDetailPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">
-                          Vulnerability Trend (30 days)
+                          {t("vulnerabilityTrend")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1093,14 +1111,14 @@ export default function DtProjectDetailPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">
-                        Detailed Metrics
+                        {t("detailedMetrics")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Total Vulnerabilities
+                            {t("totalVulnerabilities")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums">
                             {metrics.vulnerabilities ?? (metrics.critical + metrics.high + metrics.medium + metrics.low + metrics.unassigned)}
@@ -1108,7 +1126,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Findings Total
+                            {t("findingsTotal")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums">
                             {metrics.findingsTotal}
@@ -1116,7 +1134,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Findings Audited
+                            {t("findingsAudited")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums">
                             {metrics.findingsAudited}
@@ -1124,7 +1142,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Findings Unaudited
+                            {t("findingsUnaudited")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums">
                             {metrics.findingsUnaudited}
@@ -1132,7 +1150,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Suppressions
+                            {t("suppressions")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums">
                             {metrics.suppressions}
@@ -1140,7 +1158,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Policy Violations (Fail)
+                            {t("policyViolationsFail")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums text-red-600 dark:text-red-400">
                             {metrics.policyViolationsFail}
@@ -1148,7 +1166,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Policy Violations (Warn)
+                            {t("policyViolationsWarn")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums text-amber-600 dark:text-amber-400">
                             {metrics.policyViolationsWarn}
@@ -1156,7 +1174,7 @@ export default function DtProjectDetailPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">
-                            Policy Violations (Info)
+                            {t("policyViolationsInfo")}
                           </p>
                           <p className="text-lg font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                             {metrics.policyViolationsInfo}
@@ -1165,7 +1183,7 @@ export default function DtProjectDetailPage() {
                         {metrics.firstOccurrence && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1">
-                              First Occurrence
+                              {t("firstOccurrence")}
                             </p>
                             <p className="text-sm">
                               {new Date(metrics.firstOccurrence).toLocaleDateString()}
@@ -1175,7 +1193,7 @@ export default function DtProjectDetailPage() {
                         {metrics.lastOccurrence && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1">
-                              Last Occurrence
+                              {t("lastOccurrence")}
                             </p>
                             <p className="text-sm">
                               {new Date(metrics.lastOccurrence).toLocaleDateString()}

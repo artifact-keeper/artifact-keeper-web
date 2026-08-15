@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Plus, Trash2, Loader2, Tag } from "lucide-react";
 
 import { repoLabelsApi, type RepoLabel } from "@/lib/api/repo-labels";
@@ -21,6 +22,7 @@ const LABELS_KEY = (key: string) => ["repo-labels", key];
 
 /** Manage a repository's key/value labels (artifact-keeper#... labels API). */
 export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
+  const t = useTranslations("app/repositories/_components/repo-labels-panel");
   const queryClient = useQueryClient();
   const [labelKey, setLabelKey] = useState("");
   const [labelValue, setLabelValue] = useState("");
@@ -38,18 +40,18 @@ export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
       invalidate();
       setLabelKey("");
       setLabelValue("");
-      toast.success(`Label "${k}" saved`);
+      toast.success(t("saved", { key: k }));
     },
-    onError: mutationErrorToast("Failed to save label"),
+    onError: mutationErrorToast(t("saveFailed")),
   });
 
   const removeMutation = useMutation({
     mutationFn: (k: string) => repoLabelsApi.remove(repository.key, k),
     onSuccess: () => {
       invalidate();
-      toast.success("Label removed");
+      toast.success(t("removed"));
     },
-    onError: mutationErrorToast("Failed to remove label"),
+    onError: mutationErrorToast(t("removeFailed")),
   });
 
   const trimmedKey = labelKey.trim();
@@ -66,15 +68,15 @@ export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Key/value labels for organizing and filtering repositories.
+        {t("description")}
       </p>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center" aria-label="Add a label">
-        <Input placeholder="key (e.g. team)" value={labelKey} onChange={(e) => setLabelKey(e.target.value)} aria-label="Label key" className="sm:max-w-xs" />
-        <Input placeholder="value (e.g. platform)" value={labelValue} onChange={(e) => setLabelValue(e.target.value)} aria-label="Label value" />
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center" aria-label={t("addAria")}>
+        <Input placeholder={t("keyPlaceholder")} value={labelKey} onChange={(e) => setLabelKey(e.target.value)} aria-label={t("keyAria")} className="sm:max-w-xs" />
+        <Input placeholder={t("valuePlaceholder")} value={labelValue} onChange={(e) => setLabelValue(e.target.value)} aria-label={t("valueAria")} />
         <Button type="submit" disabled={!canAdd}>
           {addMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-          Add
+          {t("add")}
         </Button>
       </form>
 
@@ -88,7 +90,7 @@ export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
       {!isLoading && rows.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-md border border-dashed py-10 text-center text-muted-foreground">
           <Tag className="size-6 mb-2 opacity-50" />
-          <p className="text-sm">No labels yet.</p>
+          <p className="text-sm">{t("empty")}</p>
         </div>
       )}
 
@@ -103,7 +105,7 @@ export function RepoLabelsPanel({ repository }: RepoLabelsPanelProps) {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Remove label ${l.key}`}
+                aria-label={t("removeAria", { key: l.key })}
                 disabled={removeMutation.isPending}
                 onClick={() => removeMutation.mutate(l.key)}
               >

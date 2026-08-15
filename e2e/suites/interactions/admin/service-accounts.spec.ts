@@ -80,7 +80,9 @@ test.describe.serial('Service Account CRUD', () => {
     const descInput = dialog.getByRole('textbox', { name: /description/i });
     await descInput.fill('E2E test service account');
 
-    await dialog.getByRole('button', { name: /create$/i }).click();
+    // The submit button is located by its stable id, not by its (translated)
+    // label text, so the assertion survives copy/i18n changes.
+    await dialog.locator('#create-service-account-submit').click();
     await page.waitForTimeout(3000);
     await assertNoAppErrors(page);
   });

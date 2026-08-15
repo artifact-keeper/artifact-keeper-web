@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   ShieldCheck,
@@ -182,6 +183,7 @@ function GradeBadge({ grade }: { grade: string }) {
 // -- Health Grade Distribution Bar --
 
 function GradeDistributionBar({ dashboard }: { dashboard: HealthDashboard }) {
+  const t = useTranslations("app/admin/quality-gates");
   const grades = [
     { label: "A", count: dashboard.repos_grade_a, color: "bg-emerald-500" },
     { label: "B", count: dashboard.repos_grade_b, color: "bg-blue-500" },
@@ -201,7 +203,7 @@ function GradeDistributionBar({ dashboard }: { dashboard: HealthDashboard }) {
               key={g.label}
               className={`${g.color} transition-all`}
               style={{ width: `${(g.count / total) * 100}%` }}
-              title={`Grade ${g.label}: ${g.count}`}
+              title={t("gradeTooltip", { label: g.label, count: g.count })}
             />
           ) : null
         )}
@@ -243,6 +245,7 @@ function GateFormDialog({
   loading: boolean;
   submitLabel: string;
 }) {
+  const t = useTranslations("app/admin/quality-gates");
   const toggleCheck = (check: string) => {
     setForm({
       ...form,
@@ -262,32 +265,32 @@ function GateFormDialog({
         <div className="space-y-5 py-2">
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="gate-name">Name</Label>
+            <Label htmlFor="gate-name">{t("formName")}</Label>
             <Input
               id="gate-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g., Production Release Gate"
+              placeholder={t("formNamePlaceholder")}
             />
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="gate-description">Description</Label>
+            <Label htmlFor="gate-description">{t("formDescription")}</Label>
             <Input
               id="gate-description"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Optional description"
+              placeholder={t("formDescriptionPlaceholder")}
             />
           </div>
 
           {/* Score Thresholds */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Minimum Score Thresholds (0-100)</Label>
+            <Label className="text-sm font-medium">{t("scoreThresholds")}</Label>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="gate-min-health-score" className="text-xs text-muted-foreground">Health Score</Label>
+                <Label htmlFor="gate-min-health-score" className="text-xs text-muted-foreground">{t("healthScore")}</Label>
                 <Input
                   id="gate-min-health-score"
                   type="number"
@@ -299,7 +302,7 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gate-min-security-score" className="text-xs text-muted-foreground">Security Score</Label>
+                <Label htmlFor="gate-min-security-score" className="text-xs text-muted-foreground">{t("securityScore")}</Label>
                 <Input
                   id="gate-min-security-score"
                   type="number"
@@ -311,7 +314,7 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gate-min-quality-score" className="text-xs text-muted-foreground">Quality Score</Label>
+                <Label htmlFor="gate-min-quality-score" className="text-xs text-muted-foreground">{t("qualityScore")}</Label>
                 <Input
                   id="gate-min-quality-score"
                   type="number"
@@ -323,7 +326,7 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gate-min-metadata-score" className="text-xs text-muted-foreground">Metadata Score</Label>
+                <Label htmlFor="gate-min-metadata-score" className="text-xs text-muted-foreground">{t("metadataScore")}</Label>
                 <Input
                   id="gate-min-metadata-score"
                   type="number"
@@ -339,10 +342,10 @@ function GateFormDialog({
 
           {/* Max Issues */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Maximum Issue Counts</Label>
+            <Label className="text-sm font-medium">{t("maxIssues")}</Label>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="gate-max-critical" className="text-xs text-muted-foreground">Critical</Label>
+                <Label htmlFor="gate-max-critical" className="text-xs text-muted-foreground">{t("critical")}</Label>
                 <Input
                   id="gate-max-critical"
                   type="number"
@@ -353,7 +356,7 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gate-max-high" className="text-xs text-muted-foreground">High</Label>
+                <Label htmlFor="gate-max-high" className="text-xs text-muted-foreground">{t("high")}</Label>
                 <Input
                   id="gate-max-high"
                   type="number"
@@ -364,7 +367,7 @@ function GateFormDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gate-max-medium" className="text-xs text-muted-foreground">Medium</Label>
+                <Label htmlFor="gate-max-medium" className="text-xs text-muted-foreground">{t("medium")}</Label>
                 <Input
                   id="gate-max-medium"
                   type="number"
@@ -379,7 +382,7 @@ function GateFormDialog({
 
           {/* Required Checks */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Required Checks</Label>
+            <Label className="text-sm font-medium">{t("requiredChecks")}</Label>
             <div className="grid grid-cols-2 gap-2">
               {CHECK_TYPES.map((check) => (
                 <label
@@ -400,7 +403,7 @@ function GateFormDialog({
 
           {/* Action */}
           <div className="space-y-2">
-            <Label>Action When Gate Fails</Label>
+            <Label>{t("actionWhenFails")}</Label>
             <Select
               value={form.action}
               onValueChange={(v) => setForm({ ...form, action: v })}
@@ -409,26 +412,26 @@ function GateFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="allow">Allow (log only)</SelectItem>
-                <SelectItem value="warn">Warn (proceed with warning)</SelectItem>
-                <SelectItem value="block">Block (prevent action)</SelectItem>
+                <SelectItem value="allow">{t("actionAllow")}</SelectItem>
+                <SelectItem value="warn">{t("actionWarn")}</SelectItem>
+                <SelectItem value="block">{t("actionBlock")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Enforcement */}
           <div className="space-y-3">
-            <Label className="text-sm font-medium">Enforcement</Label>
+            <Label className="text-sm font-medium">{t("enforcement")}</Label>
             <div className="space-y-3">
               <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium">Enforce on Promotion</p>
+                  <p className="text-sm font-medium">{t("enforceOnPromotion")}</p>
                   <p className="text-xs text-muted-foreground">
-                    Evaluate this gate when artifacts are promoted
+                    {t("enforceOnPromotionHint")}
                   </p>
                 </div>
                 <Switch
-                  aria-label="Enforce on Promotion"
+                  aria-label={t("enforceOnPromotion")}
                   checked={form.enforce_on_promotion}
                   onCheckedChange={(checked) =>
                     setForm({ ...form, enforce_on_promotion: checked })
@@ -437,13 +440,13 @@ function GateFormDialog({
               </div>
               <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium">Enforce on Download</p>
+                  <p className="text-sm font-medium">{t("enforceOnDownload")}</p>
                   <p className="text-xs text-muted-foreground">
-                    Evaluate this gate when artifacts are downloaded
+                    {t("enforceOnDownloadHint")}
                   </p>
                 </div>
                 <Switch
-                  aria-label="Enforce on Download"
+                  aria-label={t("enforceOnDownload")}
                   checked={form.enforce_on_download}
                   onCheckedChange={(checked) =>
                     setForm({ ...form, enforce_on_download: checked })
@@ -455,7 +458,7 @@ function GateFormDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             onClick={onSubmit}
@@ -473,6 +476,7 @@ function GateFormDialog({
 // -- Main page --
 
 export default function QualityGatesPage() {
+  const t = useTranslations("app/admin/quality-gates");
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -499,33 +503,33 @@ export default function QualityGatesPage() {
   const createMutation = useMutation({
     mutationFn: (req: CreateQualityGateRequest) => qualityGatesApi.createGate(req),
     onSuccess: () => {
-      toast.success("Quality gate created");
+      toast.success(t("toast.created"));
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
       setCreateOpen(false);
       setCreateForm(emptyForm);
     },
-    onError: mutationErrorToast("Failed to create quality gate"),
+    onError: mutationErrorToast(t("toast.createFailed")),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, req }: { id: string; req: UpdateQualityGateRequest }) =>
       qualityGatesApi.updateGate(id, req),
     onSuccess: () => {
-      toast.success("Quality gate updated");
+      toast.success(t("toast.updated"));
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
       setEditTarget(null);
     },
-    onError: mutationErrorToast("Failed to update quality gate"),
+    onError: mutationErrorToast(t("toast.updateFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => qualityGatesApi.deleteGate(id),
     onSuccess: () => {
-      toast.success("Quality gate deleted");
+      toast.success(t("toast.deleted"));
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
       setDeleteTarget(null);
     },
-    onError: mutationErrorToast("Failed to delete quality gate"),
+    onError: mutationErrorToast(t("toast.deleteFailed")),
   });
 
   const toggleMutation = useMutation({
@@ -534,7 +538,7 @@ export default function QualityGatesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quality-gates"] });
     },
-    onError: mutationErrorToast("Failed to update quality gate"),
+    onError: mutationErrorToast(t("toast.toggleFailed")),
   });
 
   // -- Helpers --
@@ -559,9 +563,9 @@ export default function QualityGatesPage() {
   if (!user?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Quality Gates" />
+        <PageHeader title={t("title")} />
         <Alert variant="destructive">
-          <AlertTitle>Access Denied</AlertTitle>
+          <AlertTitle>{t("accessDenied")}</AlertTitle>
         </Alert>
       </div>
     );
@@ -573,8 +577,8 @@ export default function QualityGatesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Quality Gates"
-        description="Define quality thresholds that artifacts must pass before promotion or download."
+        title={t("title")}
+        description={t("description")}
         actions={
           <div className="flex gap-2">
             <Button
@@ -595,7 +599,7 @@ export default function QualityGatesPage() {
               }}
             >
               <Plus className="size-4 mr-1.5" />
-              New Gate
+              {t("newGate")}
             </Button>
           </div>
         }
@@ -613,25 +617,25 @@ export default function QualityGatesPage() {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard
               icon={Activity}
-              label="Avg Health Score"
+              label={t("avgHealthScore")}
               value={`${dashboard.avg_health_score}/100`}
               color={dashboard.avg_health_score >= 70 ? "green" : dashboard.avg_health_score >= 40 ? "yellow" : "red"}
             />
             <StatCard
               icon={BarChart3}
-              label="Artifacts Evaluated"
+              label={t("artifactsEvaluated")}
               value={dashboard.total_artifacts_evaluated}
               color="blue"
             />
             <StatCard
               icon={Award}
-              label="Grade A Repos"
+              label={t("gradeARepos")}
               value={dashboard.repos_grade_a}
               color="green"
             />
             <StatCard
               icon={AlertTriangle}
-              label="Grade F Repos"
+              label={t("gradeFRepos")}
               value={dashboard.repos_grade_f}
               color={dashboard.repos_grade_f > 0 ? "red" : "green"}
             />
@@ -640,7 +644,7 @@ export default function QualityGatesPage() {
           {/* Grade Distribution */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Repository Grade Distribution</CardTitle>
+              <CardTitle className="text-base">{t("gradeDistributionTitle")}</CardTitle>
             </CardHeader>
             <CardContent>
               <GradeDistributionBar dashboard={dashboard} />
@@ -651,18 +655,18 @@ export default function QualityGatesPage() {
           {dashboard.repositories.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Repository Health</CardTitle>
+                <CardTitle className="text-base">{t("repositoryHealth")}</CardTitle>
               </CardHeader>
               <CardContent className="px-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repository</TableHead>
-                      <TableHead>Grade</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead className="text-right">Evaluated</TableHead>
-                      <TableHead className="text-right">Passing</TableHead>
-                      <TableHead className="text-right">Failing</TableHead>
+                      <TableHead>{t("colRepository")}</TableHead>
+                      <TableHead>{t("colGrade")}</TableHead>
+                      <TableHead>{t("colScore")}</TableHead>
+                      <TableHead className="text-right">{t("colEvaluated")}</TableHead>
+                      <TableHead className="text-right">{t("colPassing")}</TableHead>
+                      <TableHead className="text-right">{t("colFailing")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -713,19 +717,19 @@ export default function QualityGatesPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <StatCard
             icon={ShieldCheck}
-            label="Total Gates"
+            label={t("totalGates")}
             value={gates?.length ?? 0}
             color="blue"
           />
           <StatCard
             icon={CheckCircle2}
-            label="Enabled"
+            label={t("enabled")}
             value={enabledCount}
             color="green"
           />
           <StatCard
             icon={AlertTriangle}
-            label="Blocking"
+            label={t("blocking")}
             value={blockCount}
             color={blockCount > 0 ? "red" : "default"}
           />
@@ -735,7 +739,7 @@ export default function QualityGatesPage() {
       {/* Quality Gates Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Quality Gates</CardTitle>
+          <CardTitle className="text-base">{t("gatesTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="px-0">
           {gatesLoading ? (
@@ -748,8 +752,8 @@ export default function QualityGatesPage() {
             <div className="px-6 pb-4">
               <EmptyState
                 icon={ShieldCheck}
-                title="No quality gates"
-                description="Create a quality gate to enforce minimum standards for your artifacts."
+                title={t("emptyTitle")}
+                description={t("emptyDescription")}
                 action={
                   <Button
                     size="sm"
@@ -759,7 +763,7 @@ export default function QualityGatesPage() {
                     }}
                   >
                     <Plus className="size-4 mr-1.5" />
-                    Create Gate
+                    {t("createGate")}
                   </Button>
                 }
               />
@@ -768,12 +772,12 @@ export default function QualityGatesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Thresholds</TableHead>
-                  <TableHead>Enforcement</TableHead>
-                  <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("colName")}</TableHead>
+                  <TableHead>{t("colAction")}</TableHead>
+                  <TableHead>{t("colThresholds")}</TableHead>
+                  <TableHead>{t("colEnforcement")}</TableHead>
+                  <TableHead>{t("colActive")}</TableHead>
+                  <TableHead className="text-right">{t("colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -801,37 +805,37 @@ export default function QualityGatesPage() {
                       <div className="flex flex-wrap gap-1">
                         {gate.min_health_score != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Health {"\u2265"} {gate.min_health_score}
+                            {t("thresholdHealth", { value: gate.min_health_score })}
                           </Badge>
                         )}
                         {gate.min_security_score != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Security {"\u2265"} {gate.min_security_score}
+                            {t("thresholdSecurity", { value: gate.min_security_score })}
                           </Badge>
                         )}
                         {gate.min_quality_score != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Quality {"\u2265"} {gate.min_quality_score}
+                            {t("thresholdQuality", { value: gate.min_quality_score })}
                           </Badge>
                         )}
                         {gate.min_metadata_score != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Metadata {"\u2265"} {gate.min_metadata_score}
+                            {t("thresholdMetadata", { value: gate.min_metadata_score })}
                           </Badge>
                         )}
                         {gate.max_critical_issues != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Critical {"\u2264"} {gate.max_critical_issues}
+                            {t("thresholdCritical", { value: gate.max_critical_issues })}
                           </Badge>
                         )}
                         {gate.max_high_issues != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            High {"\u2264"} {gate.max_high_issues}
+                            {t("thresholdHigh", { value: gate.max_high_issues })}
                           </Badge>
                         )}
                         {gate.max_medium_issues != null && (
                           <Badge variant="secondary" className="text-xs font-normal">
-                            Medium {"\u2264"} {gate.max_medium_issues}
+                            {t("thresholdMedium", { value: gate.max_medium_issues })}
                           </Badge>
                         )}
                         {gate.min_health_score == null &&
@@ -842,7 +846,7 @@ export default function QualityGatesPage() {
                          gate.max_high_issues == null &&
                          gate.max_medium_issues == null && (
                           <span className="text-xs text-muted-foreground">
-                            No thresholds set
+                            {t("noThresholds")}
                           </span>
                         )}
                       </div>
@@ -851,24 +855,24 @@ export default function QualityGatesPage() {
                       <div className="flex flex-wrap gap-1">
                         {gate.enforce_on_promotion && (
                           <Badge variant="outline" className="text-xs font-normal">
-                            Promotion
+                            {t("enforcementPromotion")}
                           </Badge>
                         )}
                         {gate.enforce_on_download && (
                           <Badge variant="outline" className="text-xs font-normal">
-                            Download
+                            {t("enforcementDownload")}
                           </Badge>
                         )}
                         {!gate.enforce_on_promotion && !gate.enforce_on_download && (
                           <span className="text-xs text-muted-foreground">
-                            None
+                            {t("enforcementNone")}
                           </span>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <Switch
-                        aria-label={`${gate.is_enabled ? "Disable" : "Enable"} gate ${gate.name}`}
+                        aria-label={t("toggleAria", { action: gate.is_enabled ? t("disable") : t("enable"), name: gate.name })}
                         checked={gate.is_enabled}
                         onCheckedChange={(checked) =>
                           toggleMutation.mutate({
@@ -885,7 +889,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEdit(gate)}
-                          aria-label={`Edit gate ${gate.name}`}
+                          aria-label={t("editAria", { name: gate.name })}
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -893,7 +897,7 @@ export default function QualityGatesPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteTarget(gate)}
-                          aria-label={`Delete gate ${gate.name}`}
+                          aria-label={t("deleteAria", { name: gate.name })}
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
@@ -914,13 +918,13 @@ export default function QualityGatesPage() {
           setCreateOpen(o);
           if (!o) setCreateForm(emptyForm);
         }}
-        title="Create Quality Gate"
-        description="Define thresholds that artifacts must pass."
+        title={t("createDialogTitle")}
+        description={t("createDialogDescription")}
         form={createForm}
         setForm={setCreateForm}
         onSubmit={handleCreate}
         loading={createMutation.isPending}
-        submitLabel="Create"
+        submitLabel={t("create")}
       />
 
       {/* Edit Dialog */}
@@ -929,21 +933,21 @@ export default function QualityGatesPage() {
         onOpenChange={(o) => {
           if (!o) setEditTarget(null);
         }}
-        title="Edit Quality Gate"
-        description="Update the quality gate settings."
+        title={t("editDialogTitle")}
+        description={t("editDialogDescription")}
         form={editForm}
         setForm={setEditForm}
         onSubmit={handleUpdate}
         loading={updateMutation.isPending}
-        submitLabel="Save Changes"
+        submitLabel={t("saveChanges")}
       />
 
       {/* Delete Confirm */}
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Quality Gate"
-        description={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
+        title={t("deleteTitle")}
+        description={t("deleteDescription", { name: deleteTarget?.name ?? "" })}
         danger
         onConfirm={() => {
           if (deleteTarget) deleteMutation.mutate(deleteTarget.id);

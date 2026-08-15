@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { Check, ChevronsUpDown, Plus, Pencil, Trash2, Shield } from "lucide-react";
 import { toast } from "sonner";
 
@@ -103,15 +104,16 @@ const EMPTY_FORM: PermissionForm = {
   actions: ["read"],
 };
 
-const PRINCIPAL_TYPE_LABELS: Record<PermissionPrincipalType, string> = {
-  user: "User",
-  service_account: "Service Account",
-  group: "Group",
+const PRINCIPAL_TYPE_LABEL_KEYS: Record<PermissionPrincipalType, string> = {
+  user: "principalType.user",
+  service_account: "principalType.serviceAccount",
+  group: "principalType.group",
 };
 
 // -- page --
 
 export default function PermissionsPage() {
+  const t = useTranslations("app/admin/permissions");
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
 
@@ -242,12 +244,12 @@ export default function PermissionsPage() {
   const createMutation = useMutation({
     mutationFn: (data: CreatePermissionRequest) => permissionsApi.create(data),
     onSuccess: () => {
-      toast.success("Permission created successfully");
+      toast.success(t("toast.created"));
       queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
       setCreateOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: mutationErrorToast("Failed to create permission"),
+    onError: mutationErrorToast(t("toast.createFailed")),
   });
 
   const updateMutation = useMutation({
@@ -259,23 +261,23 @@ export default function PermissionsPage() {
       data: CreatePermissionRequest;
     }) => permissionsApi.update(id, data),
     onSuccess: () => {
-      toast.success("Permission updated successfully");
+      toast.success(t("toast.updated"));
       queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
       setEditOpen(false);
       setSelectedPermission(null);
     },
-    onError: mutationErrorToast("Failed to update permission"),
+    onError: mutationErrorToast(t("toast.updateFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => permissionsApi.delete(id),
     onSuccess: () => {
-      toast.success("Permission deleted successfully");
+      toast.success(t("toast.deleted"));
       queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
       setDeleteOpen(false);
       setSelectedPermission(null);
     },
-    onError: mutationErrorToast("Failed to delete permission"),
+    onError: mutationErrorToast(t("toast.deleteFailed")),
   });
 
   // -- handlers --
@@ -312,13 +314,13 @@ export default function PermissionsPage() {
   const columns: DataTableColumn<Permission>[] = [
     {
       id: "principal",
-      header: "Principal",
+      header: t("colPrincipal"),
       accessor: getPrincipalLabel,
       sortable: true,
       cell: (p) => (
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
-            {PRINCIPAL_TYPE_LABELS[p.principal_type]}
+            {t(PRINCIPAL_TYPE_LABEL_KEYS[p.principal_type])}
           </Badge>
           <span className="text-sm font-medium">
             {getPrincipalLabel(p)}
@@ -328,7 +330,7 @@ export default function PermissionsPage() {
     },
     {
       id: "target",
-      header: "Target",
+      header: t("colTarget"),
       accessor: (p) => p.target_name ?? p.target_id,
       sortable: true,
       cell: (p) => (
@@ -344,7 +346,7 @@ export default function PermissionsPage() {
     },
     {
       id: "actions_list",
-      header: "Actions",
+      header: t("colActions"),
       cell: (p) => (
         <div className="flex items-center gap-1 flex-wrap">
           {p.actions.map((a) => (
@@ -360,7 +362,7 @@ export default function PermissionsPage() {
     },
     {
       id: "created_at",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (p) => p.created_at,
       sortable: true,
       cell: (p) => (
@@ -387,7 +389,7 @@ export default function PermissionsPage() {
                 <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
+            <TooltipContent>{t("edit")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -400,7 +402,7 @@ export default function PermissionsPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("delete")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -412,7 +414,7 @@ export default function PermissionsPage() {
     <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Principal Type</Label>
+          <Label>{t("principalTypeLabel")}</Label>
           <Select
             value={form.principal_type}
             onValueChange={(v) => {
@@ -430,14 +432,14 @@ export default function PermissionsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="user">User</SelectItem>
-              <SelectItem value="service_account">Service Account</SelectItem>
-              <SelectItem value="group">Group</SelectItem>
+              <SelectItem value="user">{t("principalType.user")}</SelectItem>
+              <SelectItem value="service_account">{t("principalType.serviceAccount")}</SelectItem>
+              <SelectItem value="group">{t("principalType.group")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Principal</Label>
+          <Label>{t("principalLabel")}</Label>
           <Popover
             open={principalPickerOpen}
             onOpenChange={(open) => {
@@ -450,7 +452,7 @@ export default function PermissionsPage() {
                 type="button"
                 variant="outline"
                 role="combobox"
-                aria-label="Principal"
+                aria-label={t("principalLabel")}
                 aria-expanded={principalPickerOpen}
                 className="w-full justify-between font-normal"
                 disabled={
@@ -459,11 +461,11 @@ export default function PermissionsPage() {
                 }
               >
                 {form.principal_type === "service_account" && serviceAccountsLoading
-                  ? "Loading service accounts..."
+                  ? t("loadingServiceAccounts")
                   : selectedPrincipal?.label ??
                     (editOpen && selectedPermission
                       ? getPrincipalLabel(selectedPermission)
-                      : "Select...")}
+                      : t("select"))}
                 <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -473,8 +475,8 @@ export default function PermissionsPage() {
             >
               <Command shouldFilter={false}>
                 <CommandInput
-                  aria-label="Search principals"
-                  placeholder="Search principals..."
+                  aria-label={t("searchPrincipalsAria")}
+                  placeholder={t("searchPrincipalsPlaceholder")}
                   value={principalSearch}
                   onValueChange={setPrincipalSearch}
                 />
@@ -482,12 +484,12 @@ export default function PermissionsPage() {
                   {filteredPrincipalOptions.length === 0 && (
                     <CommandEmpty>
                       {principalSearch
-                        ? "No principals match your search."
-                        : "No principals are available."}
+                        ? t("noPrincipalsMatch")
+                        : t("noPrincipalsAvailable")}
                     </CommandEmpty>
                   )}
                   {filteredPrincipalOptions.length > 0 && (
-                    <CommandGroup heading="Principals">
+                    <CommandGroup heading={t("principals")}>
                       {filteredPrincipalOptions.map((principal) => (
                         <CommandItem
                           key={principal.value}
@@ -519,7 +521,7 @@ export default function PermissionsPage() {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Target Type</Label>
+          <Label>{t("targetTypeLabel")}</Label>
           <Select
             value={form.target_type}
             onValueChange={(v) =>
@@ -535,17 +537,17 @@ export default function PermissionsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="repository">Repository</SelectItem>
-              <SelectItem value="group">Group</SelectItem>
-              <SelectItem value="artifact">Artifact</SelectItem>
+              <SelectItem value="repository">{t("targetType.repository")}</SelectItem>
+              <SelectItem value="group">{t("targetType.group")}</SelectItem>
+              <SelectItem value="artifact">{t("targetType.artifact")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>{form.target_type === "repository" ? "Repository" : form.target_type === "group" ? "Target Group" : "Artifact ID"}</Label>
+          <Label>{form.target_type === "repository" ? t("targetType.repository") : form.target_type === "group" ? t("targetGroup") : t("artifactId")}</Label>
           {form.target_type === "artifact" ? (
             <Input
-              placeholder="Artifact UUID"
+              placeholder={t("artifactUuid")}
               value={form.target_id}
               onChange={(e) =>
                 setForm((f) => ({ ...f, target_id: e.target.value.trim() }))
@@ -561,7 +563,7 @@ export default function PermissionsPage() {
               disabled={editOpen}
             >
               <SelectTrigger>
-                <SelectValue placeholder={`Select ${form.target_type}...`} />
+                <SelectValue placeholder={t("selectTarget", { targetType: form.target_type })} />
               </SelectTrigger>
               <SelectContent>
                 {targetOptions.map((o) => (
@@ -576,7 +578,7 @@ export default function PermissionsPage() {
       </div>
 
       <div className="space-y-2">
-        <Label>Actions</Label>
+        <Label>{t("actionsLabel")}</Label>
         <div className="flex items-center gap-4">
           {ALL_ACTIONS.map((action) => (
             <div key={action} className="flex items-center gap-2">
@@ -602,9 +604,9 @@ export default function PermissionsPage() {
   if (!currentUser?.is_admin) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Permissions" />
+        <PageHeader title={t("title")} />
         <p className="text-sm text-muted-foreground">
-          You must be an administrator to view this page.
+          {t("accessDenied")}
         </p>
       </div>
     );
@@ -613,8 +615,8 @@ export default function PermissionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Permissions"
-        description="Control access to repositories and resources."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             onClick={() => {
@@ -623,7 +625,7 @@ export default function PermissionsPage() {
             }}
           >
             <Plus className="size-4" />
-            Create Permission
+            {t("createPermission")}
           </Button>
         }
       />
@@ -631,8 +633,8 @@ export default function PermissionsPage() {
       {!permissionsLoading && permissions.length === 0 ? (
         <EmptyState
           icon={Shield}
-          title="No permissions configured"
-          description="Create a permission rule to control access to repositories and resources."
+          title={t("noPermissions")}
+          description={t("noPermissionsDescription")}
           action={
             <Button
               onClick={() => {
@@ -641,7 +643,7 @@ export default function PermissionsPage() {
               }}
             >
               <Plus className="size-4" />
-              Create Permission
+              {t("createPermission")}
             </Button>
           }
         />
@@ -650,7 +652,7 @@ export default function PermissionsPage() {
           columns={columns}
           data={permissions}
           loading={permissionsLoading}
-          emptyMessage="No permissions found."
+          emptyMessage={t("noPermissionsFound")}
           rowKey={(p) => p.id}
         />
       )}
@@ -673,9 +675,9 @@ export default function PermissionsPage() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create Permission</DialogTitle>
+            <DialogTitle>{t("createDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Grant a user, service account, or group access to a target resource.
+              {t("createDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -683,7 +685,7 @@ export default function PermissionsPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!form.principal_id || !form.target_id || form.actions.length === 0) {
-                toast.error("Please fill in all required fields");
+                toast.error(t("requiredFields"));
                 return;
               }
               createMutation.mutate({
@@ -705,10 +707,10 @@ export default function PermissionsPage() {
                   setForm(EMPTY_FORM);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Permission"}
+                {createMutation.isPending ? t("creating") : t("createPermission")}
               </Button>
             </DialogFooter>
           </form>
@@ -728,9 +730,9 @@ export default function PermissionsPage() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Permission</DialogTitle>
+            <DialogTitle>{t("editPermission")}</DialogTitle>
             <DialogDescription>
-              Update the granted actions for this permission.
+              {t("editDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -762,10 +764,10 @@ export default function PermissionsPage() {
                   setForm(EMPTY_FORM);
                 }}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                {updateMutation.isPending ? t("saving") : t("saveChanges")}
               </Button>
             </DialogFooter>
           </form>
@@ -779,9 +781,9 @@ export default function PermissionsPage() {
           setDeleteOpen(o);
           if (!o) setSelectedPermission(null);
         }}
-        title="Delete Permission"
-        description="Deleting this permission will revoke the associated access. Users, service accounts, or groups will lose the granted actions on the target resource. This action cannot be undone."
-        confirmText="Delete Permission"
+        title={t("deletePermission")}
+        description={t("deleteDescription")}
+        confirmText={t("deletePermission")}
         danger
         loading={deleteMutation.isPending}
         onConfirm={() => {

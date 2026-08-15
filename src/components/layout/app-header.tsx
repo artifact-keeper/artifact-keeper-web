@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useTranslations } from "next-intl";
 import {
   Sun,
   Moon,
+  Palette,
   SearchIcon,
   User,
   LogOut,
@@ -24,11 +26,13 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { QuickSearch } from "@/components/search/quick-search";
 import { InstanceSwitcher } from "./instance-switcher";
+import { LocaleSwitcher } from "./locale-switcher";
 
 export function AppHeader() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, isAuthenticated, logout } = useAuth();
+  const t = useTranslations("components/layout/app-header");
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Global Cmd+K / Ctrl+K shortcut
@@ -59,7 +63,7 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-header-border bg-header px-4 shadow-[0_1px_3px_rgba(2,55,149,0.06)]">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
         <div className="flex flex-1 items-center gap-2">
@@ -76,7 +80,7 @@ export function AppHeader() {
             onClick={() => setSearchOpen(true)}
           >
             <SearchIcon className="size-4" />
-            <span>Search...</span>
+            <span>{t("search")}</span>
             <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
               <span className="text-xs">&#8984;</span>K
             </kbd>
@@ -86,7 +90,7 @@ export function AppHeader() {
             size="icon"
             className="sm:hidden"
             onClick={() => setSearchOpen(true)}
-            aria-label="Search"
+            aria-label={t("searchAria")}
           >
             <SearchIcon className="size-4" />
           </Button>
@@ -94,22 +98,36 @@ export function AppHeader() {
           {/* Instance switcher */}
           <InstanceSwitcher />
 
-          {/* Theme toggle */}
+          {/* Language switcher */}
+          <LocaleSwitcher />
+
+          {/* Theme toggle — three themes, three states: light=Sun, dark=Moon,
+              brand=Palette (the white/navy brand theme). */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label={t("toggleTheme")}
+            onClick={() =>
+              setTheme(
+                theme === "brand" ? "light" : theme === "light" ? "dark" : "brand",
+              )
+            }
           >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
+            {theme === "dark" ? (
+              <Moon className="size-4" />
+            ) : theme === "brand" ? (
+              <Palette className="size-4" />
+            ) : (
+              <Sun className="size-4" />
+            )}
+            <span className="sr-only">{t("toggleTheme")}</span>
           </Button>
 
           {/* User menu or sign in */}
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full" aria-label="User menu">
+                <Button variant="ghost" size="icon" className="rounded-full" aria-label={t("userMenu")}>
                   <Avatar className="size-7">
                     <AvatarFallback className="text-xs">
                       {userInitials}
@@ -127,18 +145,18 @@ export function AppHeader() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push("/profile")}>
                   <User className="mr-2 size-4" />
-                  Profile
+                  {t("profile")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="mr-2 size-4" />
-                  Logout
+                  {t("logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             <Button size="sm" onClick={() => router.push("/login")}>
-              Sign In
+              {t("signIn")}
             </Button>
           )}
         </div>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   CheckCircle,
@@ -85,10 +86,10 @@ const SEVERITY_ORDER: Record<string, number> = {
 };
 
 const ACK_REASONS = [
-  { value: "false_positive", label: "False Positive" },
-  { value: "risk_accepted", label: "Risk Accepted" },
-  { value: "mitigated", label: "Mitigated" },
-  { value: "other", label: "Other" },
+  { value: "false_positive", labelKey: "falsePositive" },
+  { value: "risk_accepted", labelKey: "riskAccepted" },
+  { value: "mitigated", labelKey: "mitigated" },
+  { value: "other", labelKey: "other" },
 ];
 
 function formatDuration(start: string | null, end: string | null): string {
@@ -101,7 +102,9 @@ function formatDuration(start: string | null, end: string | null): string {
 }
 
 export default function SecurityScanDetailPage() {
-  useDocumentTitle("Scan Details");
+  const t = useTranslations("app/admin/security/scans/detail");
+  const tSev = useTranslations("core/severity");
+  useDocumentTitle(t("title"));
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -153,9 +156,9 @@ export default function SecurityScanDetailPage() {
       setAckReason("risk_accepted");
       setAckNotes("");
       setAckFindingId(null);
-      toast.success("Finding acknowledged.");
+      toast.success(t("findingAcknowledged"));
     },
-    onError: mutationErrorToast("Failed to acknowledge finding"),
+    onError: mutationErrorToast(t("ackFailed")),
   });
 
   const revokeMutation = useMutation({
@@ -167,9 +170,9 @@ export default function SecurityScanDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["security", "scan", id] });
       setRevokeOpen(false);
       setRevokeFindingId(null);
-      toast.success("Acknowledgment revoked.");
+      toast.success(t("ackRevoked"));
     },
-    onError: mutationErrorToast("Failed to revoke acknowledgment"),
+    onError: mutationErrorToast(t("revokeFailed")),
   });
 
   // -- filter findings by severity locally --
@@ -183,7 +186,7 @@ export default function SecurityScanDetailPage() {
   const columns: DataTableColumn<ScanFinding>[] = [
     {
       id: "severity",
-      header: "Severity",
+      header: t("colSeverity"),
       accessor: (r) => SEVERITY_ORDER[r.severity] ?? 5,
       sortable: true,
       cell: (r) => (
@@ -191,13 +194,13 @@ export default function SecurityScanDetailPage() {
           variant="outline"
           className={`border font-semibold uppercase text-xs ${SEVERITY_BADGE[r.severity] ?? ""}`}
         >
-          {r.severity}
+          {tSev(r.severity)}
         </Badge>
       ),
     },
     {
       id: "title",
-      header: "Title",
+      header: t("colTitle"),
       accessor: (r) => r.title,
       sortable: true,
       cell: (r) => (
@@ -213,7 +216,7 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "component",
-      header: "Package",
+      header: t("colPackage"),
       accessor: (r) => r.affected_component ?? "",
       cell: (r) => (
         <span className="text-sm">
@@ -223,7 +226,7 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "installed_version",
-      header: "Installed",
+      header: t("colInstalled"),
       cell: (r) =>
         r.affected_version ? (
           <code className="text-xs text-red-600 dark:text-red-400">
@@ -235,7 +238,7 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "fixed_version",
-      header: "Fixed",
+      header: t("colFixed"),
       cell: (r) =>
         r.fixed_version ? (
           <code className="text-xs text-emerald-600 dark:text-emerald-400">
@@ -247,7 +250,7 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "cve_id",
-      header: "Advisory",
+      header: t("colAdvisory"),
       accessor: (r) => r.cve_id ?? "",
       cell: (r) =>
         r.cve_id ? (
@@ -255,8 +258,8 @@ export default function SecurityScanDetailPage() {
             <VulnIdLink id={r.cve_id} />
             <Link
               href={blastRadiusHref(r.cve_id)}
-              aria-label={`Blast radius of ${r.cve_id}`}
-              title="Who is exposed to this vulnerability?"
+              aria-label={t("blastRadiusAria", { id: r.cve_id })}
+              title={t("blastRadiusTitle")}
               className="inline-flex items-center text-muted-foreground hover:text-foreground"
               onClick={(e) => e.stopPropagation()}
             >
@@ -269,7 +272,7 @@ export default function SecurityScanDetailPage() {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (r) =>
         r.is_acknowledged ? (
           <Badge
@@ -277,14 +280,14 @@ export default function SecurityScanDetailPage() {
             className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 text-xs font-medium"
           >
             <CheckCircle className="size-3 mr-1" />
-            Acknowledged
+            {t("acknowledged")}
           </Badge>
         ) : (
           <Badge
             variant="outline"
             className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs font-medium"
           >
-            Open
+            {t("open")}
           </Badge>
         ),
     },
@@ -303,7 +306,7 @@ export default function SecurityScanDetailPage() {
             }}
           >
             <Undo2 className="size-3.5 mr-1" />
-            Revoke
+            {t("revoke")}
           </Button>
         ) : (
           <Button
@@ -316,7 +319,7 @@ export default function SecurityScanDetailPage() {
             }}
           >
             <CheckCircle className="size-3.5 mr-1" />
-            Acknowledge
+            {t("acknowledge")}
           </Button>
         ),
     },
@@ -344,7 +347,7 @@ export default function SecurityScanDetailPage() {
           onClick={() => router.push("/security/scans")}
         >
           <ArrowLeft className="size-4 mr-1" />
-          Scans
+          {t("scans")}
         </Button>
         <span>/</span>
         <span className="font-medium text-foreground">
@@ -358,7 +361,7 @@ export default function SecurityScanDetailPage() {
           <CardContent className="pt-6">
             <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Status</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("status")}</p>
                 <Badge
                   variant="outline"
                   className={`border font-medium capitalize text-xs ${STATUS_BADGE[scan.status] ?? ""}`}
@@ -367,14 +370,14 @@ export default function SecurityScanDetailPage() {
                 </Badge>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Scanner</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("scanner")}</p>
                 <Badge variant="secondary" className="text-xs font-normal">
                   {scan.scan_type}
                 </Badge>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Artifact
+                  {t("artifact")}
                 </p>
                 <p className="text-sm font-medium">
                   {scan.artifact_name ?? scan.artifact_id.slice(0, 12)}
@@ -387,14 +390,14 @@ export default function SecurityScanDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Duration
+                  {t("duration")}
                 </p>
                 <p className="text-sm">
                   {formatDuration(scan.started_at, scan.completed_at)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Started</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("started")}</p>
                 <p className="text-sm">
                   {scan.started_at
                     ? new Date(scan.started_at).toLocaleString()
@@ -403,7 +406,7 @@ export default function SecurityScanDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Completed
+                  {t("completed")}
                 </p>
                 <p className="text-sm">
                   {scan.completed_at
@@ -413,7 +416,7 @@ export default function SecurityScanDetailPage() {
               </div>
               {scan.error_message && (
                 <div className="col-span-full">
-                  <p className="text-xs text-muted-foreground mb-1">Error</p>
+                  <p className="text-xs text-muted-foreground mb-1">{t("error")}</p>
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {scan.error_message}
                   </p>
@@ -430,12 +433,12 @@ export default function SecurityScanDetailPage() {
           <AlertCircle className="size-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-red-800 dark:text-red-400">
-              This scan failed to complete
+              {t("scanFailedTitle")}
             </p>
             <p className="text-xs text-red-700 dark:text-red-500 mt-1">
               {scan.error_message
                 ? scan.error_message
-                : "The scanner encountered an error. Findings data below may be incomplete or missing. Try triggering a new scan."}
+                : t("scanFailedFallback")}
             </p>
           </div>
         </div>
@@ -446,31 +449,31 @@ export default function SecurityScanDetailPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
             icon={Bug}
-            label="Total Findings"
+            label={t("totalFindings")}
             value={scan.findings_count}
             color={scan.findings_count > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={AlertCircle}
-            label="Critical"
+            label={tSev("critical")}
             value={scan.critical_count}
             color={scan.critical_count > 0 ? "red" : "green"}
           />
           <StatCard
             icon={AlertTriangle}
-            label="High"
+            label={tSev("high")}
             value={scan.high_count}
             color={scan.high_count > 0 ? "red" : "green"}
           />
           <StatCard
             icon={ShieldAlert}
-            label="Medium"
+            label={tSev("medium")}
             value={scan.medium_count}
             color={scan.medium_count > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={Info}
-            label="Low"
+            label={tSev("low")}
             value={scan.low_count}
             color="blue"
           />
@@ -479,21 +482,21 @@ export default function SecurityScanDetailPage() {
 
       {/* Findings filter */}
       <div className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold tracking-tight">Findings</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{t("findings")}</h2>
         <Select
           value={severityFilter}
           onValueChange={setSeverityFilter}
         >
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Severity" />
+            <SelectValue placeholder={t("severityPlaceholder")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All severities</SelectItem>
-            <SelectItem value="critical">Critical</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="medium">Medium</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
+            <SelectItem value="__all__">{t("allSeverities")}</SelectItem>
+            <SelectItem value="critical">{tSev("critical")}</SelectItem>
+            <SelectItem value="high">{tSev("high")}</SelectItem>
+            <SelectItem value="medium">{tSev("medium")}</SelectItem>
+            <SelectItem value="low">{tSev("low")}</SelectItem>
+            <SelectItem value="info">{tSev("info")}</SelectItem>
           </SelectContent>
         </Select>
         {severityFilter !== "__all__" && (
@@ -502,7 +505,7 @@ export default function SecurityScanDetailPage() {
             size="sm"
             onClick={() => setSeverityFilter("__all__")}
           >
-            Clear
+            {t("clear")}
           </Button>
         )}
       </div>
@@ -527,9 +530,9 @@ export default function SecurityScanDetailPage() {
         emptyMessage={
           scan && isScanIncomplete(scan.status)
             ? scan.status === "failed" || scan.status === "error"
-              ? "No findings available. The scan did not complete successfully."
-              : "Scan is still in progress."
-            : "No findings for this scan."
+              ? t("noFindingsIncomplete")
+              : t("scanInProgress")
+            : t("noFindings")
         }
         rowKey={(r) => r.id}
       />
@@ -548,15 +551,14 @@ export default function SecurityScanDetailPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Acknowledge Finding</DialogTitle>
+            <DialogTitle>{t("ackTitle")}</DialogTitle>
             <DialogDescription>
-              Acknowledging a finding marks it as an accepted risk. It will no
-              longer count against the repository security score.
+              {t("ackDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Reason</Label>
+              <Label>{t("reason")}</Label>
               <Select value={ackReason} onValueChange={setAckReason}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -564,18 +566,18 @@ export default function SecurityScanDetailPage() {
                 <SelectContent>
                   {ACK_REASONS.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
-                      {r.label}
+                      {t(r.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ack-notes">Notes (optional)</Label>
+              <Label htmlFor="ack-notes">{t("notesOptional")}</Label>
               <Textarea
                 id="ack-notes"
                 rows={3}
-                placeholder="Additional context for acknowledging this finding..."
+                placeholder={t("ackNotesPlaceholder")}
                 value={ackNotes}
                 onChange={(e) => setAckNotes(e.target.value)}
               />
@@ -591,7 +593,7 @@ export default function SecurityScanDetailPage() {
                 setAckNotes("");
               }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               disabled={acknowledgeMutation.isPending}
@@ -608,8 +610,8 @@ export default function SecurityScanDetailPage() {
               }}
             >
               {acknowledgeMutation.isPending
-                ? "Acknowledging..."
-                : "Acknowledge"}
+                ? t("acknowledging")
+                : t("acknowledge")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -622,9 +624,9 @@ export default function SecurityScanDetailPage() {
           setRevokeOpen(o);
           if (!o) setRevokeFindingId(null);
         }}
-        title="Revoke Acknowledgment"
-        description="This finding will count against the repository security score again. Are you sure?"
-        confirmText="Revoke"
+        title={t("revokeTitle")}
+        description={t("revokeDescription")}
+        confirmText={t("revoke")}
         danger
         loading={revokeMutation.isPending}
         onConfirm={() => {

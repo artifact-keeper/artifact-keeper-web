@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { settingsApi, type PasswordPolicy } from "@/lib/api/settings";
 
@@ -17,45 +18,51 @@ interface PolicyRule {
   met: boolean;
 }
 
-function buildRules(password: string, policy: PasswordPolicy): PolicyRule[] {
+function buildRules(
+  password: string,
+  policy: PasswordPolicy,
+  t: (key: string, values?: Record<string, string | number>) => string
+): PolicyRule[] {
   const rules: PolicyRule[] = [
     {
-      label: `Minimum ${policy.min_length} characters`,
+      label: t("minLength", { min: policy.min_length }),
       met: password.length >= policy.min_length,
     },
   ];
 
   if (policy.require_uppercase) {
     rules.push({
-      label: "At least one uppercase letter",
+      label: t("requireUppercase"),
       met: /[A-Z]/.test(password),
     });
   }
 
   if (policy.require_lowercase) {
     rules.push({
-      label: "At least one lowercase letter",
+      label: t("requireLowercase"),
       met: /[a-z]/.test(password),
     });
   }
 
   if (policy.require_digit) {
     rules.push({
-      label: "At least one number",
+      label: t("requireNumber"),
       met: /\d/.test(password),
     });
   }
 
   if (policy.require_special) {
     rules.push({
-      label: "At least one special character",
+      label: t("requireSpecial"),
       met: /[^A-Za-z0-9]/.test(password),
     });
   }
 
   if (policy.history_count > 0) {
     rules.push({
-      label: `Cannot reuse your last ${policy.history_count} ${policy.history_count === 1 ? "password" : "passwords"}`,
+      label: t("historyCount", {
+        count: policy.history_count,
+      }),
       // History check is server-side only; always show as neutral
       met: false,
     });
@@ -73,6 +80,7 @@ export function PasswordPolicyHint({
   password = "",
   className,
 }: PasswordPolicyHintProps) {
+  const t = useTranslations("components/common/password-policy-hint");
   const { data: policy } = useQuery({
     queryKey: ["password-policy"],
     queryFn: () => settingsApi.getPasswordPolicy(),
@@ -81,21 +89,21 @@ export function PasswordPolicyHint({
   });
 
   const effectivePolicy = policy ?? settingsApi.DEFAULT_PASSWORD_POLICY;
-  const rules = buildRules(password, effectivePolicy);
+  const rules = buildRules(password, effectivePolicy, t);
   const hasInput = password.length > 0;
 
   return (
     <div
       className={cn("space-y-1.5", className)}
       role="list"
-      aria-label="Password requirements"
+      aria-label={t("passwordRequirements")}
     >
       <p className="text-xs font-medium text-muted-foreground">
-        Password requirements
+        {t("passwordRequirements")}
       </p>
       {rules.map((rule) => {
         // For history rules, never show a check since we can't validate client-side
-        const isHistoryRule = rule.label.startsWith("Cannot reuse");
+        const isHistoryRule = rule.label.startsWith(t("historyPrefix"));
         const showStatus = hasInput && !isHistoryRule;
 
         return (

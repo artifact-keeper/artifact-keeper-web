@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Home } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 interface ErrorPageProps {
@@ -28,6 +29,7 @@ export function ErrorPage({
   actionIcon: ActionIcon,
   onAction,
 }: ErrorPageProps) {
+  const t = useTranslations("components/common/error-page");
   return (
     <div className="flex min-h-svh flex-col items-center justify-center px-6">
       <div className="flex flex-col items-center text-center max-w-md">
@@ -52,7 +54,7 @@ export function ErrorPage({
             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
           >
             <Home className="size-4" />
-            Go to Dashboard
+            {t("goToDashboard")}
           </Link>
           <button
             onClick={onAction}

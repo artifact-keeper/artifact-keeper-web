@@ -1,0 +1,6 @@
+{
+  "title": "认证错误",
+  "description": "认证过程中出现问题。请重试。",
+  "errorId": "错误 ID：{digest}",
+  "tryAgain": "重试"
+}

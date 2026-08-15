@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Plus,
   RefreshCw,
@@ -248,6 +249,7 @@ const INITIAL_CONN_FORM: {
 };
 
 export default function MigrationPage() {
+  const t = useTranslations("app/admin/migration");
   const queryClient = useQueryClient();
 
   // -- Connection state --
@@ -428,9 +430,9 @@ export default function MigrationPage() {
       });
       setCreateConnOpen(false);
       setConnForm(INITIAL_CONN_FORM);
-      toast.success("Connection created");
+      toast.success(t("toastConnCreated"));
     },
-    onError: mutationErrorToast("Failed to create connection"),
+    onError: mutationErrorToast(t("toastConnCreateFailed")),
   });
 
   const deleteConnMutation = useMutation({
@@ -440,25 +442,30 @@ export default function MigrationPage() {
         queryKey: ["migration", "connections"],
       });
       setDeleteConnId(null);
-      toast.success("Connection deleted");
+      toast.success(t("toastConnDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete connection"),
+    onError: mutationErrorToast(t("toastConnDeleteFailed")),
   });
 
   const testConnMutation = useMutation({
     mutationFn: (c: SourceConnection) => migrationApi.testConnection(c.id),
     onSuccess: (result, c) => {
       if (result.success) {
-        const label =
-          c.source_type.charAt(0).toUpperCase() + c.source_type.slice(1);
         toast.success(
-          `Connection verified. ${label} version ${result.artifactory_version || "unknown"}`
+          t("connVerified", {
+            label: t(
+              c.source_type === "artifactory"
+                ? "sourceTypeArtifactory"
+                : "sourceTypeNexus",
+            ),
+            version: result.artifactory_version || t("unknown"),
+          })
         );
       } else {
-        toast.error(`Connection failed: ${result.message}`);
+        toast.error(t("connFailed", { message: result.message }));
       }
     },
-    onError: mutationErrorToast("Failed to test connection"),
+    onError: mutationErrorToast(t("toastConnTestFailed")),
   });
 
   // -- Migration mutations --
@@ -469,9 +476,9 @@ export default function MigrationPage() {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       setCreateMigOpen(false);
       resetMigForm();
-      toast.success("Migration job created");
+      toast.success(t("toastMigCreated"));
     },
-    onError: mutationErrorToast("Failed to create migration"),
+    onError: mutationErrorToast(t("toastMigCreateFailed")),
   });
 
   const runAssessmentMutation = useMutation({
@@ -481,9 +488,9 @@ export default function MigrationPage() {
       queryClient.invalidateQueries({
         queryKey: ["migration", "assessment", job.id],
       });
-      toast.success("Assessment started");
+      toast.success(t("toastAssessmentStarted"));
     },
-    onError: mutationErrorToast("Failed to run assessment"),
+    onError: mutationErrorToast(t("toastAssessmentFailed")),
   });
 
   const startMigMutation = useMutation({
@@ -491,18 +498,18 @@ export default function MigrationPage() {
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       startStream(job.id);
-      toast.success("Migration started");
+      toast.success(t("toastMigStarted"));
     },
-    onError: mutationErrorToast("Failed to start migration"),
+    onError: mutationErrorToast(t("toastMigStartFailed")),
   });
 
   const pauseMigMutation = useMutation({
     mutationFn: (id: string) => migrationApi.pauseMigration(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
-      toast.success("Migration paused");
+      toast.success(t("toastMigPaused"));
     },
-    onError: mutationErrorToast("Failed to pause migration"),
+    onError: mutationErrorToast(t("toastMigPauseFailed")),
   });
 
   const resumeMigMutation = useMutation({
@@ -510,18 +517,18 @@ export default function MigrationPage() {
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       startStream(job.id);
-      toast.success("Migration resumed");
+      toast.success(t("toastMigResumed"));
     },
-    onError: mutationErrorToast("Failed to resume migration"),
+    onError: mutationErrorToast(t("toastMigResumeFailed")),
   });
 
   const cancelMigMutation = useMutation({
     mutationFn: (id: string) => migrationApi.cancelMigration(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
-      toast.success("Migration cancelled");
+      toast.success(t("toastMigCancelled"));
     },
-    onError: mutationErrorToast("Failed to cancel migration"),
+    onError: mutationErrorToast(t("toastMigCancelFailed")),
   });
 
   const deleteMigMutation = useMutation({
@@ -529,9 +536,9 @@ export default function MigrationPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
       setDeleteMigId(null);
-      toast.success("Migration deleted");
+      toast.success(t("toastMigDeleted"));
     },
-    onError: mutationErrorToast("Failed to delete migration"),
+    onError: mutationErrorToast(t("toastMigDeleteFailed")),
   });
 
   // Copy a connection's UUID to the clipboard. Previously the only way to get
@@ -539,12 +546,12 @@ export default function MigrationPage() {
   // surfacing it here lets operators grab it for API / SDK use.
   const copyConnectionId = (id: string) => {
     void navigator.clipboard?.writeText(id);
-    toast.success("Connection ID copied");
+    toast.success(t("toastConnIdCopied"));
   };
 
   const copyPath = (label: string, path: string) => {
     void navigator.clipboard?.writeText(path);
-    toast.success(`${label} path copied`);
+    toast.success(t("toastPathCopied", { label }));
   };
 
   // Fetch the reconciliation report as HTML and trigger a file download so
@@ -561,7 +568,7 @@ export default function MigrationPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Failed to download report");
+      toast.error(t("toastReportDownloadFailed"));
     }
   };
 
@@ -569,7 +576,7 @@ export default function MigrationPage() {
   const connColumns: DataTableColumn<SourceConnection>[] = [
     {
       id: "name",
-      header: "Name",
+      header: t("colName"),
       accessor: (c) => c.name,
       sortable: true,
       cell: (c) => (
@@ -581,7 +588,7 @@ export default function MigrationPage() {
     },
     {
       id: "id",
-      header: "Connection ID",
+      header: t("colConnectionId"),
       accessor: (c) => c.id,
       cell: (c) => (
         <div className="flex items-center gap-1.5">
@@ -593,7 +600,7 @@ export default function MigrationPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Copy connection ID"
+                aria-label={t("copyIdAria")}
                 onClick={(e) => {
                   e.stopPropagation();
                   copyConnectionId(c.id);
@@ -602,14 +609,14 @@ export default function MigrationPage() {
                 <Copy className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Copy connection ID</TooltipContent>
+            <TooltipContent>{t("copyIdTooltip")}</TooltipContent>
           </Tooltip>
         </div>
       ),
     },
     {
       id: "url",
-      header: "Endpoint",
+      header: t("colEndpoint"),
       accessor: (c) => c.url,
       cell: (c) => (
         <span className="text-sm text-muted-foreground truncate block max-w-[300px]">
@@ -619,26 +626,26 @@ export default function MigrationPage() {
     },
     {
       id: "auth_type",
-      header: "Auth Type",
+      header: t("colAuthType"),
       cell: (c) => (
         <Badge variant="secondary" className="text-xs">
-          {c.auth_type === "api_token" ? "API Token" : "Basic Auth"}
+          {c.auth_type === "api_token" ? t("authApiToken") : t("authBasicAuth")}
         </Badge>
       ),
     },
     {
       id: "verified",
-      header: "Verified",
+      header: t("colVerified"),
       cell: (c) => (
         <StatusBadge
-          status={c.verified_at ? "Verified" : "Unverified"}
+          status={c.verified_at ? t("statusVerified") : t("statusUnverified")}
           color={c.verified_at ? "green" : "default"}
         />
       ),
     },
     {
       id: "created",
-      header: "Created",
+      header: t("colCreated"),
       accessor: (c) => c.created_at,
       cell: (c) => (
         <span className="text-sm text-muted-foreground">
@@ -665,7 +672,7 @@ export default function MigrationPage() {
                 <Unplug className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Test connection</TooltipContent>
+            <TooltipContent>{t("testConnTooltip")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -678,7 +685,7 @@ export default function MigrationPage() {
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
+            <TooltipContent>{t("deleteLabel")}</TooltipContent>
           </Tooltip>
         </div>
       ),
@@ -689,7 +696,7 @@ export default function MigrationPage() {
   const migColumns: DataTableColumn<MigrationJob>[] = [
     {
       id: "id",
-      header: "Job",
+      header: t("colJob"),
       cell: (j) => {
         // Scope the row by its target repos so jobs are distinguishable at a
         // glance; empty include_repos means the whole connection.
@@ -699,10 +706,13 @@ export default function MigrationPage() {
         const others = repos.length - 1;
         const scope =
           repos.length === 0
-            ? "All repositories"
+            ? t("allRepositories")
             : repos.length === 1
               ? repos[0]
-              : `${repos[0]} and ${others} other repo${others > 1 ? "s" : ""}`;
+              : t("scopeOthers", {
+                  first: repos[0],
+                  count: others,
+                });
         return (
           <button
             className="flex flex-col items-start text-left"
@@ -723,7 +733,7 @@ export default function MigrationPage() {
     },
     {
       id: "connection",
-      header: "Source",
+      header: t("colSource"),
       cell: (j) => {
         const conn = connections.find(
           (c) => c.id === j.source_connection_id
@@ -737,7 +747,7 @@ export default function MigrationPage() {
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       cell: (j) => (
         <Badge variant="secondary" className="text-xs capitalize">
           {j.job_type}
@@ -746,12 +756,12 @@ export default function MigrationPage() {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (j) => <StatusBadge status={j.status} color={statusColor(j.status)} />,
     },
     {
       id: "progress",
-      header: "Progress",
+      header: t("colProgress"),
       cell: (j) => (
         <div className="flex items-center gap-2 min-w-[120px]">
           <Progress
@@ -766,13 +776,13 @@ export default function MigrationPage() {
     },
     {
       id: "items",
-      header: "Items",
+      header: t("colItems"),
       cell: (j) => (
         <span className="text-sm text-muted-foreground">
           {j.completed_items}/{effectiveTotal(j)}
           {j.failed_items > 0 && (
             <span className="text-red-500 ml-1">
-              ({j.failed_items} failed)
+              {t("itemsFailed", { count: j.failed_items })}
             </span>
           )}
         </span>
@@ -780,13 +790,13 @@ export default function MigrationPage() {
     },
     {
       id: "started",
-      header: "Started",
+      header: t("colStarted"),
       accessor: (j) => j.started_at ?? "",
       cell: (j) => (
         <span className="text-sm text-muted-foreground">
           {j.started_at
             ? new Date(j.started_at).toLocaleString()
-            : "Not started"}
+            : t("notStarted")}
         </span>
       ),
     },
@@ -809,7 +819,7 @@ export default function MigrationPage() {
                   <Play className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Start</TooltipContent>
+              <TooltipContent>{t("startTooltip")}</TooltipContent>
             </Tooltip>
           )}
           {j.status === "running" && (
@@ -823,7 +833,7 @@ export default function MigrationPage() {
                   <Pause className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Pause</TooltipContent>
+              <TooltipContent>{t("pauseTooltip")}</TooltipContent>
             </Tooltip>
           )}
           {j.status === "paused" && (
@@ -837,7 +847,7 @@ export default function MigrationPage() {
                   <RotateCcw className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Resume</TooltipContent>
+              <TooltipContent>{t("resumeTooltip")}</TooltipContent>
             </Tooltip>
           )}
           {(j.status === "running" || j.status === "paused") && (
@@ -852,7 +862,7 @@ export default function MigrationPage() {
                   <Square className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Cancel</TooltipContent>
+              <TooltipContent>{t("cancelTooltip")}</TooltipContent>
             </Tooltip>
           )}
           {(j.status === "completed" ||
@@ -870,7 +880,7 @@ export default function MigrationPage() {
                   <Trash2 className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
+              <TooltipContent>{t("deleteLabel")}</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -882,7 +892,7 @@ export default function MigrationPage() {
   const itemColumns: DataTableColumn<MigrationItem>[] = [
     {
       id: "path",
-      header: "Path",
+      header: t("colPath"),
       accessor: (i) => i.source_path,
       // Source over target in one column; (S)/(T) markers explain which is which
       // on hover. Keeps the dialog from blowing out horizontally.
@@ -897,7 +907,7 @@ export default function MigrationPage() {
                   className="flex items-center gap-1 min-w-0 text-left cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    copyPath("Source", i.source_path);
+                    copyPath(t("sourceLabel"), i.source_path);
                   }}
                 >
                   <span className="text-muted-foreground shrink-0">(S)</span>
@@ -907,7 +917,7 @@ export default function MigrationPage() {
                 </button>
               </TooltipTrigger>
               <TooltipContent className="max-w-[min(90vw,720px)]">
-                <p>Source path (click to copy)</p>
+                <p>{t("sourcePathTooltip")}</p>
                 <p className="font-mono text-[10px] break-all opacity-80">
                   {i.source_path}
                 </p>
@@ -921,7 +931,7 @@ export default function MigrationPage() {
                     className="flex items-center gap-1 min-w-0 text-left cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      copyPath("Target", target);
+                      copyPath(t("targetLabel"), target);
                     }}
                   >
                     <span className="text-muted-foreground shrink-0">(T)</span>
@@ -931,7 +941,7 @@ export default function MigrationPage() {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[min(90vw,720px)]">
-                  <p>Target path (click to copy)</p>
+                  <p>{t("targetPathTooltip")}</p>
                   <p className="font-mono text-[10px] break-all opacity-80">
                     {target}
                   </p>
@@ -949,7 +959,7 @@ export default function MigrationPage() {
     },
     {
       id: "type",
-      header: "Type",
+      header: t("colType"),
       cell: (i) => (
         <Badge variant="secondary" className="text-xs capitalize">
           {i.item_type}
@@ -958,7 +968,7 @@ export default function MigrationPage() {
     },
     {
       id: "status",
-      header: "Status",
+      header: t("colStatus"),
       cell: (i) => {
         const colors: Record<string, "green" | "blue" | "red" | "default"> = {
           completed: "green",
@@ -977,7 +987,7 @@ export default function MigrationPage() {
     },
     {
       id: "size",
-      header: "Size",
+      header: t("colSize"),
       accessor: (i) => i.size_bytes,
       cell: (i) => (
         <span className="text-sm text-muted-foreground">
@@ -987,7 +997,7 @@ export default function MigrationPage() {
     },
     {
       id: "error",
-      header: "Error",
+      header: t("colError"),
       cell: (i) =>
         i.error_message ? (
           <span className="text-xs text-red-500 truncate block max-w-[200px]">
@@ -1000,15 +1010,15 @@ export default function MigrationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Migration"
-        description="Migrate artifacts from Artifactory or Nexus to Artifact Keeper."
+        title={t("title")}
+        description={t("description")}
         actions={
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="outline"
                 size="icon"
-                aria-label="Refresh migration data"
+                aria-label={t("refreshAria")}
                 onClick={() => {
                   queryClient.invalidateQueries({
                     queryKey: ["migration"],
@@ -1018,7 +1028,7 @@ export default function MigrationPage() {
                 <RefreshCw className="size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh</TooltipContent>
+            <TooltipContent>{t("refreshTooltip")}</TooltipContent>
           </Tooltip>
         }
       />
@@ -1027,11 +1037,11 @@ export default function MigrationPage() {
         <TabsList>
           <TabsTrigger value="connections">
             <Database className="size-4" />
-            Source Connections
+            {t("tabConnections")}
           </TabsTrigger>
           <TabsTrigger value="jobs">
             <ArrowRight className="size-4" />
-            Migration Jobs
+            {t("tabJobs")}
           </TabsTrigger>
         </TabsList>
 
@@ -1039,26 +1049,26 @@ export default function MigrationPage() {
         <TabsContent value="connections" className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">Source Connections</h2>
+              <h2 className="text-lg font-semibold">{t("tabConnections")}</h2>
               <p className="text-sm text-muted-foreground">
-                Configure connections to source artifact registries.
+                {t("connSubtitle")}
               </p>
             </div>
             <Button onClick={() => setCreateConnOpen(true)}>
               <Plus className="size-4" />
-              Add Connection
+              {t("addConnection")}
             </Button>
           </div>
 
           {connections.length === 0 && !connectionsLoading ? (
             <EmptyState
               icon={Database}
-              title="No connections"
-              description="Add a connection to an Artifactory or Nexus instance to begin migration."
+              title={t("emptyConnTitle")}
+              description={t("emptyConnDescription")}
               action={
                 <Button onClick={() => setCreateConnOpen(true)}>
                   <Plus className="size-4" />
-                  Add Connection
+                  {t("addConnection")}
                 </Button>
               }
             />
@@ -1068,7 +1078,7 @@ export default function MigrationPage() {
               data={connections}
               loading={connectionsLoading}
               rowKey={(c) => c.id}
-              emptyMessage="No connections found."
+              emptyMessage={t("emptyConnMessage")}
             />
           )}
         </TabsContent>
@@ -1077,9 +1087,9 @@ export default function MigrationPage() {
         <TabsContent value="jobs" className="mt-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold">Migration Jobs</h2>
+              <h2 className="text-lg font-semibold">{t("tabJobs")}</h2>
               <p className="text-sm text-muted-foreground">
-                Create and manage migration jobs.
+                {t("jobsSubtitle")}
               </p>
             </div>
             <Button
@@ -1087,22 +1097,22 @@ export default function MigrationPage() {
               disabled={connections.length === 0}
             >
               <Plus className="size-4" />
-              Create Migration
+              {t("createMigration")}
             </Button>
           </div>
 
           {migrations.length === 0 && !migrationsLoading ? (
             <EmptyState
               icon={ArrowRight}
-              title="No migration jobs"
-              description="Create a migration job to transfer artifacts from a source registry."
+              title={t("emptyJobsTitle")}
+              description={t("emptyJobsDescription")}
               action={
                 <Button
                   onClick={() => setCreateMigOpen(true)}
                   disabled={connections.length === 0}
                 >
                   <Plus className="size-4" />
-                  Create Migration
+                  {t("createMigration")}
                 </Button>
               }
             />
@@ -1112,7 +1122,7 @@ export default function MigrationPage() {
               data={migrations}
               loading={migrationsLoading}
               rowKey={(j) => j.id}
-              emptyMessage="No migration jobs found."
+              emptyMessage={t("emptyJobsMessage")}
             />
           )}
           <ListTruncationNotice
@@ -1132,9 +1142,9 @@ export default function MigrationPage() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Source Connection</DialogTitle>
+            <DialogTitle>{t("connDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Connect to an Artifactory or Nexus instance for migration.
+              {t("connDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1157,19 +1167,19 @@ export default function MigrationPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="conn-name">Name</Label>
+              <Label htmlFor="conn-name">{t("nameLabel")}</Label>
               <Input
                 id="conn-name"
                 value={connForm.name}
                 onChange={(e) =>
                   setConnForm((f) => ({ ...f, name: e.target.value }))
                 }
-                placeholder="e.g., Production Artifactory"
+                placeholder={t("connNamePlaceholder")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="conn-url">Endpoint URL</Label>
+              <Label htmlFor="conn-url">{t("endpointUrlLabel")}</Label>
               <Input
                 id="conn-url"
                 type="url"
@@ -1177,12 +1187,12 @@ export default function MigrationPage() {
                 onChange={(e) =>
                   setConnForm((f) => ({ ...f, url: e.target.value }))
                 }
-                placeholder="https://artifactory.example.com"
+                placeholder={t("endpointUrlPlaceholder")}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="conn-source-type">Source Type</Label>
+              <Label htmlFor="conn-source-type">{t("sourceTypeLabel")}</Label>
               <Select
                 value={connForm.source_type}
                 onValueChange={(v) =>
@@ -1193,13 +1203,13 @@ export default function MigrationPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="artifactory">Artifactory</SelectItem>
-                  <SelectItem value="nexus">Nexus</SelectItem>
+                  <SelectItem value="artifactory">{t("sourceTypeArtifactory")}</SelectItem>
+                  <SelectItem value="nexus">{t("sourceTypeNexus")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Authentication Type</Label>
+              <Label>{t("authTypeLabel")}</Label>
               <Select
                 value={connForm.auth_type}
                 onValueChange={(v) =>
@@ -1210,28 +1220,28 @@ export default function MigrationPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="api_token">API Token</SelectItem>
-                  <SelectItem value="basic_auth">Basic Auth</SelectItem>
+                  <SelectItem value="api_token">{t("authApiToken")}</SelectItem>
+                  <SelectItem value="basic_auth">{t("authBasicAuth")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {connForm.auth_type === "basic_auth" && (
               <div className="space-y-2">
-                <Label htmlFor="conn-username">Username</Label>
+                <Label htmlFor="conn-username">{t("usernameLabel")}</Label>
                 <Input
                   id="conn-username"
                   value={connForm.username}
                   onChange={(e) =>
                     setConnForm((f) => ({ ...f, username: e.target.value }))
                   }
-                  placeholder="admin"
+                  placeholder={t("usernamePlaceholder")}
                   required
                 />
               </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="conn-token">
-                {connForm.auth_type === "api_token" ? "API Token" : "Password"}
+                {connForm.auth_type === "api_token" ? t("authApiToken") : t("passwordLabel")}
               </Label>
               <Input
                 id="conn-token"
@@ -1242,8 +1252,8 @@ export default function MigrationPage() {
                 }
                 placeholder={
                   connForm.auth_type === "api_token"
-                    ? "Enter API token"
-                    : "Enter password"
+                    ? t("apiTokenPlaceholder")
+                    : t("passwordPlaceholder")
                 }
                 required
               />
@@ -1254,12 +1264,12 @@ export default function MigrationPage() {
                 type="button"
                 onClick={() => setCreateConnOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={createConnMutation.isPending}>
                 {createConnMutation.isPending
-                  ? "Creating..."
-                  : "Add Connection"}
+                  ? t("creating")
+                  : t("addConnection")}
               </Button>
             </DialogFooter>
           </form>
@@ -1276,9 +1286,9 @@ export default function MigrationPage() {
       >
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Migration Job</DialogTitle>
+            <DialogTitle>{t("migDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Configure a new migration from a source connection.
+              {t("migDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1313,7 +1323,7 @@ export default function MigrationPage() {
             }}
           >
             <div className="space-y-2">
-              <Label>Source Connection</Label>
+              <Label>{t("sourceConnectionLabel")}</Label>
               <Select
                 value={migForm.source_connection_id}
                 onValueChange={(v) =>
@@ -1321,7 +1331,7 @@ export default function MigrationPage() {
                 }
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a connection" />
+                  <SelectValue placeholder={t("selectConnectionPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {connections.map((c) => (
@@ -1333,7 +1343,7 @@ export default function MigrationPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Job Type</Label>
+              <Label>{t("jobTypeLabel")}</Label>
               <Select
                 value={migForm.job_type}
                 onValueChange={(v) =>
@@ -1347,9 +1357,9 @@ export default function MigrationPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="full">Full Migration</SelectItem>
-                  <SelectItem value="incremental">Incremental</SelectItem>
-                  <SelectItem value="assessment">Assessment Only</SelectItem>
+                  <SelectItem value="full">{t("jobTypeFull")}</SelectItem>
+                  <SelectItem value="incremental">{t("jobTypeIncremental")}</SelectItem>
+                  <SelectItem value="assessment">{t("jobTypeAssessment")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1358,11 +1368,9 @@ export default function MigrationPage() {
 
             {/* Repository selection */}
             <div className="space-y-2">
-              <Label>Include Repositories</Label>
+              <Label>{t("includeReposLabel")}</Label>
               <p className="text-xs text-muted-foreground">
-                Leave all unchecked to migrate every repository. Select a
-                connection to load its repositories. Optionally rename a
-                repository as it migrates.
+                {t("includeReposHint")}
               </p>
               {migForm.source_connection_id && sourceRepos.length > 0 ? (
                 <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
@@ -1383,7 +1391,7 @@ export default function MigrationPage() {
                           {included && (
                             <div className="ml-6 flex items-center gap-2">
                               <span className="text-xs text-muted-foreground shrink-0">
-                                rename to
+                                {t("renameTo")}
                               </span>
                               <Input
                                 id={`rename-repo-${repo.key}`}
@@ -1403,37 +1411,37 @@ export default function MigrationPage() {
               ) : (
                 <p className="text-xs text-muted-foreground italic">
                   {migForm.source_connection_id
-                    ? "No repositories found for this connection."
-                    : "No connection selected."}
+                    ? t("noReposFound")
+                    : t("noConnectionSelected")}
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mig-exclude-repos">Exclude Repositories</Label>
+              <Label htmlFor="mig-exclude-repos">{t("excludeReposLabel")}</Label>
               <Textarea
                 id="mig-exclude-repos"
                 value={excludeReposText}
                 onChange={(e) => setExcludeReposText(e.target.value)}
-                placeholder="repo-key-1, repo-key-2"
+                placeholder={t("excludeReposPlaceholder")}
                 rows={2}
               />
               <p className="text-xs text-muted-foreground">
-                Comma- or newline-separated repository keys to skip.
+                {t("excludeReposHint")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mig-exclude-paths">Exclude Paths</Label>
+              <Label htmlFor="mig-exclude-paths">{t("excludePathsLabel")}</Label>
               <Textarea
                 id="mig-exclude-paths"
                 value={excludePathsText}
                 onChange={(e) => setExcludePathsText(e.target.value)}
-                placeholder="**/snapshots/**, tmp/**"
+                placeholder={t("excludePathsPlaceholder")}
                 rows={2}
               />
               <p className="text-xs text-muted-foreground">
-                Comma- or newline-separated path globs to skip.
+                {t("excludePathsHint")}
               </p>
             </div>
 
@@ -1441,11 +1449,11 @@ export default function MigrationPage() {
 
             {/* Content options */}
             <div className="space-y-2">
-              <Label>Content to Migrate</Label>
+              <Label>{t("contentToMigrate")}</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <BoolField
                   id="mig-include-users"
-                  label="Users"
+                  label={t("contentUsers")}
                   checked={migConfig.include_users ?? true}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, include_users: v }))
@@ -1453,7 +1461,7 @@ export default function MigrationPage() {
                 />
                 <BoolField
                   id="mig-include-groups"
-                  label="Groups"
+                  label={t("contentGroups")}
                   checked={migConfig.include_groups ?? true}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, include_groups: v }))
@@ -1461,7 +1469,7 @@ export default function MigrationPage() {
                 />
                 <BoolField
                   id="mig-include-permissions"
-                  label="Permissions"
+                  label={t("contentPermissions")}
                   checked={migConfig.include_permissions ?? true}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, include_permissions: v }))
@@ -1469,7 +1477,7 @@ export default function MigrationPage() {
                 />
                 <BoolField
                   id="mig-include-cached-remote"
-                  label="Cached remote artifacts"
+                  label={t("contentCachedRemote")}
                   checked={migConfig.include_cached_remote ?? false}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, include_cached_remote: v }))
@@ -1477,7 +1485,7 @@ export default function MigrationPage() {
                 />
                 <BoolField
                   id="mig-verify-checksums"
-                  label="Verify checksums"
+                  label={t("contentVerifyChecksums")}
                   checked={migConfig.verify_checksums ?? true}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, verify_checksums: v }))
@@ -1485,7 +1493,7 @@ export default function MigrationPage() {
                 />
                 <BoolField
                   id="mig-dry-run"
-                  label="Dry run (simulate without transferring)"
+                  label={t("contentDryRun")}
                   checked={migConfig.dry_run ?? false}
                   onChange={(v) =>
                     setMigConfig((c) => ({ ...c, dry_run: v }))
@@ -1498,7 +1506,7 @@ export default function MigrationPage() {
 
             {/* Transfer tuning */}
             <div className="space-y-2">
-              <Label htmlFor="mig-conflict-resolution">Conflict Resolution</Label>
+              <Label htmlFor="mig-conflict-resolution">{t("conflictResolutionLabel")}</Label>
               <Select
                 value={migConfig.conflict_resolution ?? "skip"}
                 onValueChange={(v) =>
@@ -1512,9 +1520,9 @@ export default function MigrationPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="skip">Skip existing</SelectItem>
-                  <SelectItem value="overwrite">Overwrite</SelectItem>
-                  <SelectItem value="rename">Rename</SelectItem>
+                  <SelectItem value="skip">{t("conflictSkip")}</SelectItem>
+                  <SelectItem value="overwrite">{t("conflictOverwrite")}</SelectItem>
+                  <SelectItem value="rename">{t("conflictRename")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1522,7 +1530,7 @@ export default function MigrationPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="mig-concurrent-transfers">
-                  Concurrent Transfers
+                  {t("concurrentTransfersLabel")}
                 </Label>
                 <Input
                   id="mig-concurrent-transfers"
@@ -1538,7 +1546,7 @@ export default function MigrationPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mig-throttle-delay">Throttle Delay (ms)</Label>
+                <Label htmlFor="mig-throttle-delay">{t("throttleDelayLabel")}</Label>
                 <Input
                   id="mig-throttle-delay"
                   type="number"
@@ -1557,7 +1565,7 @@ export default function MigrationPage() {
             {migForm.job_type === "incremental" && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="mig-date-from">Date From</Label>
+                  <Label htmlFor="mig-date-from">{t("dateFromLabel")}</Label>
                   <Input
                     id="mig-date-from"
                     type="datetime-local"
@@ -1566,7 +1574,7 @@ export default function MigrationPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="mig-date-to">Date To</Label>
+                  <Label htmlFor="mig-date-to">{t("dateToLabel")}</Label>
                   <Input
                     id="mig-date-to"
                     type="datetime-local"
@@ -1583,7 +1591,7 @@ export default function MigrationPage() {
                 type="button"
                 onClick={() => setCreateMigOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 type="submit"
@@ -1593,8 +1601,8 @@ export default function MigrationPage() {
                 }
               >
                 {createMigMutation.isPending
-                  ? "Creating..."
-                  : "Create Migration"}
+                  ? t("creating")
+                  : t("createMigration")}
               </Button>
             </DialogFooter>
           </form>
@@ -1611,36 +1619,36 @@ export default function MigrationPage() {
         <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Migration Job: {detailJob?.id.slice(0, 8)}
+              {t("jobDetailTitle", { id: detailJob?.id?.slice(0, 8) ?? "" })}
             </DialogTitle>
             <DialogDescription>
-              View detailed progress and individual item status.
+              {t("jobDetailDescription")}
             </DialogDescription>
           </DialogHeader>
           {detailJob && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="text-xs text-muted-foreground">{t("detailStatus")}</p>
                   <StatusBadge
                     status={detailJob.status}
                     color={statusColor(detailJob.status)}
                   />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Progress</p>
+                  <p className="text-xs text-muted-foreground">{t("detailProgress")}</p>
                   <p className="font-semibold">
                     {jobProgress(detailJob)}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Items</p>
+                  <p className="text-xs text-muted-foreground">{t("colItems")}</p>
                   <p className="font-semibold">
                     {detailJob.completed_items}/{effectiveTotal(detailJob)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Transferred</p>
+                  <p className="text-xs text-muted-foreground">{t("detailTransferred")}</p>
                   <p className="font-semibold">
                     {formatBytes(detailJob.transferred_bytes)}/{formatBytes(effectiveTotalBytes(detailJob))}
                   </p>
@@ -1653,10 +1661,10 @@ export default function MigrationPage() {
               {/* Repositories this job handles (empty = whole connection). */}
               <div>
                 <p className="text-xs text-muted-foreground mb-1.5">
-                  Repositories
+                  {t("repositoriesLabel")}
                 </p>
                 {(detailJob.config.include_repos?.length ?? 0) === 0 ? (
-                  <p className="text-sm">All repositories on the connection</p>
+                  <p className="text-sm">{t("allReposOnConnection")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {[...detailJob.config.include_repos!]
@@ -1684,7 +1692,7 @@ export default function MigrationPage() {
                               </code>
                             </TooltipTrigger>
                             <TooltipContent>
-                              Renamed to {renamedTo}
+                              {t("renamedTo", { target: renamedTo })}
                             </TooltipContent>
                           </Tooltip>
                         );
@@ -1703,7 +1711,7 @@ export default function MigrationPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium flex items-center gap-1.5">
                       <ClipboardCheck className="size-4" />
-                      Assessment
+                      {t("assessmentLabel")}
                     </p>
                     <Button
                       variant="outline"
@@ -1713,7 +1721,7 @@ export default function MigrationPage() {
                         runAssessmentMutation.mutate(detailJob.id)
                       }
                     >
-                      Run Assessment
+                      {t("runAssessment")}
                     </Button>
                   </div>
                   {assessment ? (
@@ -1721,21 +1729,21 @@ export default function MigrationPage() {
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div>
                           <p className="text-xs text-muted-foreground">
-                            Repositories
+                            {t("repositoriesLabel")}
                           </p>
                           <p className="font-semibold">
                             {assessment.repositories.length}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">Users</p>
+                          <p className="text-xs text-muted-foreground">{t("assessmentUsers")}</p>
                           <p className="font-semibold">
                             {assessment.users_count}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">
-                            Artifacts
+                            {t("artifactsLabel")}
                           </p>
                           <p className="font-semibold">
                             {assessment.total_artifacts}
@@ -1743,7 +1751,7 @@ export default function MigrationPage() {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">
-                            Est. Duration
+                            {t("estDuration")}
                           </p>
                           <p className="font-semibold">
                             {formatDuration(
@@ -1754,13 +1762,13 @@ export default function MigrationPage() {
                       </div>
                       {assessment.blockers.length > 0 && (
                         <div className="text-xs text-red-500">
-                          Blockers: {assessment.blockers.join(", ")}
+                          {t("blockers", { list: assessment.blockers.join(", ") })}
                         </div>
                       )}
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      No assessment yet. Run an assessment to estimate scope.
+                      {t("noAssessment")}
                     </p>
                   )}
                 </div>
@@ -1772,7 +1780,7 @@ export default function MigrationPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium flex items-center gap-1.5">
                       <FileText className="size-4" />
-                      Reconciliation Report
+                      {t("reportTitle")}
                     </p>
                     <Button
                       variant="outline"
@@ -1780,30 +1788,30 @@ export default function MigrationPage() {
                       onClick={() => downloadReportHtml(detailJob.id)}
                     >
                       <Download className="size-3.5" />
-                      HTML
+                      {t("htmlLabel")}
                     </Button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                     <div>
-                      <p className="text-xs text-muted-foreground">Artifacts</p>
+                      <p className="text-xs text-muted-foreground">{t("artifactsLabel")}</p>
                       <p className="font-semibold">
                         {formatItemCount(report.summary?.artifacts)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Repos</p>
+                      <p className="text-xs text-muted-foreground">{t("reportRepos")}</p>
                       <p className="font-semibold">
                         {formatItemCount(report.summary?.repositories)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Warnings</p>
+                      <p className="text-xs text-muted-foreground">{t("reportWarnings")}</p>
                       <p className="font-semibold">
                         {report.warnings?.length ?? 0}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Errors</p>
+                      <p className="text-xs text-muted-foreground">{t("reportErrors")}</p>
                       <p className="font-semibold">{report.errors?.length ?? 0}</p>
                     </div>
                   </div>
@@ -1822,7 +1830,7 @@ export default function MigrationPage() {
                 data={detailItems?.items ?? []}
                 loading={!detailItems}
                 rowKey={(i) => i.id}
-                emptyMessage="No items."
+                emptyMessage={t("noItems")}
               />
               <ListTruncationNotice
                 shown={detailItems?.items.length ?? 0}
@@ -1840,9 +1848,9 @@ export default function MigrationPage() {
         onOpenChange={(o) => {
           if (!o) setDeleteConnId(null);
         }}
-        title="Delete Connection"
-        description="This will permanently remove this source connection. Existing migration jobs referencing it will remain."
-        confirmText="Delete"
+        title={t("deleteConnTitle")}
+        description={t("deleteConnDescription")}
+        confirmText={t("deleteLabel")}
         danger
         loading={deleteConnMutation.isPending}
         onConfirm={() => {
@@ -1856,9 +1864,9 @@ export default function MigrationPage() {
         onOpenChange={(o) => {
           if (!o) setDeleteMigId(null);
         }}
-        title="Delete Migration Job"
-        description="This will permanently remove this migration job and its history."
-        confirmText="Delete"
+        title={t("deleteMigTitle")}
+        description={t("deleteMigDescription")}
+        confirmText={t("deleteLabel")}
         danger
         loading={deleteMigMutation.isPending}
         onConfirm={() => {

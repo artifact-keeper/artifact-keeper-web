@@ -1,0 +1,9 @@
+{
+  "loading": "Loading Maven components…",
+  "empty": "No Maven components found. Switch to Flat to see raw files, or push an artifact with valid GAV coordinates.",
+  "itemLabel": "components",
+  "files": "{count, plural, one {# file} other {# files}}",
+  "downloads": "{count} downloads",
+  "openAria": "Open details for {filename}",
+  "pom": "POM"
+}

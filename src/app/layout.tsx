@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Providers } from "@/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { NONCE_HEADER } from "@/lib/security-headers";
+import { CORE_ROOTS, loadMessages } from "@/i18n/load-messages";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,11 +19,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Artifact Keeper",
-  description:
-    "Enterprise artifact registry for managing software packages across multiple formats.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("layout");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -31,12 +36,22 @@ export default async function RootLayout({
   // opts every route into dynamic rendering, which nonce-based CSP requires:
   // Next.js stamps the nonce onto framework scripts during SSR only.
   const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
+
+  // Resolve the active locale + messages (from the NEXT_LOCALE cookie) and
+  // expose them to client components via NextIntlClientProvider. The root
+  // provider carries the always-on shared messages (CORE_ROOTS: shared
+  // components, severity, root specials, error pages).
+  const locale = await getLocale();
+  const messages = await loadMessages(locale, CORE_ROOTS);
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers nonce={nonce}>{children}</Providers>
+        <NextIntlClientProvider messages={messages}>
+          <Providers nonce={nonce}>{children}</Providers>
+        </NextIntlClientProvider>
         <Toaster />
       </body>
     </html>

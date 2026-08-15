@@ -1,0 +1,3 @@
+{
+  "artifactCount": "{count, plural, one {# artifact} other {# artifacts}}"
+}

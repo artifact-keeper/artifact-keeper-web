@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { ArrowRight, AlertTriangle, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,6 +56,7 @@ export function PromotionDialog({
   selectedArtifacts,
   onSuccess,
 }: PromotionDialogProps) {
+  const t = useTranslations("app/staging/_components/promotion-dialog");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
@@ -105,10 +107,14 @@ export function PromotionDialog({
     mutationFn: (req: BulkPromoteRequest) => promotionApi.promoteBulk(sourceRepoKey, req),
     onSuccess: (result) => {
       if (result.promoted === result.total) {
-        toast.success(`Successfully promoted ${result.promoted} artifact(s)`);
+        toast.success(t("promoted", { count: result.promoted }));
       } else {
         toast.warning(
-          `Promoted ${result.promoted} of ${result.total} artifacts. ${result.failed} failed.`
+          t("promotedPartial", {
+            promoted: result.promoted,
+            total: result.total,
+            failed: result.failed,
+          })
         );
       }
       queryClient.invalidateQueries({ queryKey: ["staging-artifacts", sourceRepoKey] });
@@ -119,13 +125,13 @@ export function PromotionDialog({
       setSkipPolicyCheck(false);
       onSuccess?.();
     },
-    onError: mutationErrorToast("Promotion failed"),
+    onError: mutationErrorToast(t("promoteFailed")),
   });
 
   const handlePromote = () => {
     const target = lockedKey ?? targetRepo;
     if (!target) {
-      toast.error("Please select a target repository");
+      toast.error(t("targetRequired"));
       return;
     }
     promoteMutation.mutate({
@@ -143,20 +149,19 @@ export function PromotionDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Promote Artifacts
+            {t("title")}
             <ArrowRight className="size-4 text-muted-foreground" />
-            <span className="text-muted-foreground font-normal">Release</span>
+            <span className="text-muted-foreground font-normal">{t("release")}</span>
           </DialogTitle>
           <DialogDescription>
-            Promote {selectedArtifacts.length} artifact
-            {selectedArtifacts.length !== 1 ? "s" : ""} from staging to a release repository.
+            {t("description", { count: selectedArtifacts.length })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Target Repository */}
           <div className="space-y-2">
-            <Label>Target Repository</Label>
+            <Label>{t("targetRepo")}</Label>
             {targetLoading ? (
               <Skeleton className="h-10 w-full" />
             ) : lockedKey ? (
@@ -164,23 +169,22 @@ export function PromotionDialog({
                 <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                   <span className="font-medium">{lockedKey}</span>
                   <Badge variant="secondary" className="text-xs">
-                    Linked release target
+                    {t("linkedTarget")}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  This staging repository is linked to a release target, so
-                  promotions always go here.
+                  {t("linkedTargetDetail")}
                 </p>
               </>
             ) : (
               <Select value={targetRepo} onValueChange={setTargetRepo} disabled={reposLoading}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={reposLoading ? "Loading..." : "Select target repository"} />
+                  <SelectValue placeholder={reposLoading ? t("loading") : t("selectTarget")} />
                 </SelectTrigger>
                 <SelectContent>
                   {targetRepoList.length === 0 ? (
                     <div className="p-2 text-sm text-muted-foreground">
-                      No release repositories found for {sourceRepoFormat}
+                      {t("noReleaseRepos", { format: sourceRepoFormat })}
                     </div>
                   ) : (
                     targetRepoList.map((repo: Repository) => (
@@ -212,7 +216,7 @@ export function PromotionDialog({
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
                 <AlertTriangle className="size-4" />
-                Policy Violations ({allViolations.length})
+                {t("policyViolations", { count: allViolations.length })}
               </Label>
               <ScrollArea className="h-24 rounded-md border border-yellow-200 dark:border-yellow-900 bg-yellow-50/50 dark:bg-yellow-950/20">
                 <div className="p-2 space-y-1">
@@ -230,7 +234,7 @@ export function PromotionDialog({
                   ))}
                   {allViolations.length > 10 && (
                     <p className="text-xs text-muted-foreground italic">
-                      ...and {allViolations.length - 10} more
+                      {t("andMore", { count: allViolations.length - 10 })}
                     </p>
                   )}
                 </div>
@@ -240,10 +244,10 @@ export function PromotionDialog({
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="promo-notes">Notes (optional)</Label>
+            <Label htmlFor="promo-notes">{t("notes")}</Label>
             <Textarea
               id="promo-notes"
-              placeholder="Add notes about this promotion..."
+              placeholder={t("notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -263,10 +267,10 @@ export function PromotionDialog({
                   htmlFor="skip-policy"
                   className="text-sm font-medium cursor-pointer"
                 >
-                  Skip policy check (Admin override)
+                  {t("skipPolicy")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  This will promote artifacts with policy violations.
+                  {t("skipPolicyDetail")}
                 </p>
               </div>
             </div>
@@ -275,7 +279,7 @@ export function PromotionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             onClick={handlePromote}
@@ -285,7 +289,7 @@ export function PromotionDialog({
               (hasBlockingViolations && !skipPolicyCheck)
             }
           >
-            {promoteMutation.isPending ? "Promoting..." : "Promote"}
+            {promoteMutation.isPending ? t("promoting") : t("promote")}
           </Button>
         </DialogFooter>
       </DialogContent>
