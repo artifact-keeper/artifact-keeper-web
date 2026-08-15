@@ -1,22 +1,24 @@
 # Artifact Keeper — Web
 
-Next.js 15 web frontend for Artifact Keeper, an enterprise artifact registry.
+Next.js 16 web frontend for Artifact Keeper, an enterprise artifact registry.
 
 ## Tech Stack
 
-- **Next.js 15** with App Router
-- **TypeScript 5.x**
+- **Next.js 16** with App Router
+- **React 19** + **TypeScript 6**
 - **Tailwind CSS 4** for styling
 - **shadcn/ui** for component primitives
 - **TanStack Query 5** for server state management
-- **Axios** for HTTP client
+- **next-intl** for internationalization (en / zh)
+- **next-themes** for theming (brand / light / dark)
+- **@artifact-keeper/sdk** (+ `apiFetch` wrapper) for the backend API
 - **Lucide React** for icons
 
 ## Design Principles
 
 Inspired by Apple HIG, Material Design 3, Linear, and Vercel Dashboard:
 
-1. Dark mode first — developer tool default
+1. Brand-first — a white/navy default theme, with the original light and dark themes one click away
 2. Typography-driven hierarchy — minimal chrome
 3. Generous whitespace — content breathes
 4. Progressive disclosure — essentials first, details on demand
@@ -30,6 +32,42 @@ npm run dev
 ```
 
 Runs on http://localhost:3000. Configure `NEXT_PUBLIC_API_URL` to point to the Artifact Keeper backend.
+
+## Localization (i18n)
+
+The UI is fully localized in English (`en`) and Simplified Chinese (`zh`) with
+[next-intl](https://next-intl.dev). The locale is resolved per request from the
+`NEXT_LOCALE` cookie — not a URL prefix — so existing deep links, bookmarks and
+E2E specs keep working unchanged. The language switcher lives in the app header
+and on the login page.
+
+- Message catalogs live in `src/i18n/locales/{en,zh}/` as flat JSON files that
+  mirror the source tree: one `page.json` per `page.tsx`, one `*.json` per
+  shared component. A file's namespace is exactly its locale-relative path.
+- `loadMessages` (server-only) reads the JSON from disk and loads messages by
+  route directory; each route layout composes the shared `CORE_ROOTS` with its
+  own route directory, so a page only ships the messages its subtree renders.
+- Adding a language means mirroring `en/` under `locales/{code}/` and
+  registering the code in `src/i18n/routing.ts`. Any missing key falls back to
+  English, so a raw key never leaks to the UI.
+- `scripts/check-i18n.mjs` validates that `locales/` contains only JSON,
+  en/zh key parity, and that every message file is actually loaded by some
+  route layout.
+
+## Themes
+
+The UI ships three themes via [next-themes](https://github.com/pacocoursey/next-themes)
+(applied as a class on `<html>`), switchable from the app header:
+
+- **brand** (default) — white/navy palette (`#023795` primary, `#4690d2`
+  secondary), white top header, and a light-blue page background with a soft
+  glow gradient.
+- **light** — the original warm low-saturation light palette, flat background.
+- **dark** — a flat dark mode.
+
+The theme tokens live in `src/app/globals.css`; the brand palette and its page
+gradient are scoped to the `.brand` class so the original light/dark themes are
+byte-for-byte unchanged.
 
 ## Deployment
 
@@ -85,8 +123,12 @@ The backend enforcement half is tracked as a follow-up issue in the
 
 ```
 src/
-  app/           # Next.js App Router pages
+  app/           # Next.js App Router pages + globals.css (theme tokens)
   components/    # Reusable UI components
+  hooks/         # Client-side hooks
+  i18n/          # next-intl setup: routing, request, loadMessages, locales/
   lib/           # Utilities, API client, hooks
-  styles/        # Global styles, theme tokens
+  middleware.ts  # Security headers, AK_ENFORCE_HTTPS, locale handling
+  providers/     # Theme provider, next-intl provider, etc.
+  types/         # Shared TypeScript types
 ```
