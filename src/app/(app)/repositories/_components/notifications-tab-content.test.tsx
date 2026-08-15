@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import enMessages from "../../../../../messages/en.json";
+import enMessages from "../../../../../src/i18n/en.json";
 
 const en = enMessages as unknown as Record<string, Record<string, string>>;
 
@@ -13,7 +13,7 @@ const en = enMessages as unknown as Record<string, Record<string, string>>;
 // assertions below keep matching rendered output.
 const i18nFixture = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const en = require("../../../../../messages/en.json") as Record<
+  const en = require("../../../../../src/i18n/en.json") as Record<
     string,
     Record<string, string>
   >;
