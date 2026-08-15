@@ -532,7 +532,7 @@ export default function ServiceAccountsPage() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="svc-description">{t("description")}</Label>
+              <Label htmlFor="svc-description">{t("descriptionLabel")}</Label>
               <Input
                 id="svc-description"
                 value={createDescription}
@@ -586,7 +586,7 @@ export default function ServiceAccountsPage() {
             }}
           >
             <div className="space-y-2">
-              <Label htmlFor="edit-display-name">{t("description")}</Label>
+              <Label htmlFor="edit-display-name">{t("descriptionLabel")}</Label>
               <Input
                 id="edit-display-name"
                 value={editDisplayName}

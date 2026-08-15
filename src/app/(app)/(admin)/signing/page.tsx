@@ -200,7 +200,7 @@ export default function SigningPage() {
                   {key.is_active ? (
                     <Badge variant="secondary">{t("active")}</Badge>
                   ) : (
-                    <Badge variant="destructive">{t("revoked")}</Badge>
+                    <Badge variant="destructive">{t("revokedLabel")}</Badge>
                   )}
                 </div>
                 <p className="truncate font-mono text-xs text-muted-foreground">
