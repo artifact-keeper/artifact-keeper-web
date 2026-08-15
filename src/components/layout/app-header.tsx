@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import {
   Sun,
   Moon,
+  Palette,
   SearchIcon,
   User,
   LogOut,
@@ -100,18 +101,25 @@ export function AppHeader() {
           {/* Language switcher */}
           <LocaleSwitcher />
 
-          {/* Theme toggle */}
+          {/* Theme toggle — three themes, three states: light=Sun, dark=Moon,
+              brand=Palette (the white/navy brand theme). */}
           <Button
             variant="ghost"
             size="icon"
+            aria-label={t("toggleTheme")}
             onClick={() =>
               setTheme(
                 theme === "brand" ? "light" : theme === "light" ? "dark" : "brand",
               )
             }
           >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            {theme === "dark" ? (
+              <Moon className="size-4" />
+            ) : theme === "brand" ? (
+              <Palette className="size-4" />
+            ) : (
+              <Sun className="size-4" />
+            )}
             <span className="sr-only">{t("toggleTheme")}</span>
           </Button>
 
