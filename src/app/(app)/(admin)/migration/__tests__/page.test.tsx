@@ -381,16 +381,16 @@ let capturedMutations: Record<string, CapturedMutation> = {};
 
 function classifyMutation(opts: MutationOpts): string {
   const src = opts.onSuccess?.toString?.() ?? "";
-  if (src.includes("Connection created")) return "createConn";
-  if (src.includes("Connection deleted")) return "deleteConn";
-  if (src.includes("Connection verified") || src.includes("Connection failed"))
+  if (src.includes('t("toastConnCreated")')) return "createConn";
+  if (src.includes('t("toastConnDeleted")')) return "deleteConn";
+  if (src.includes('t("connVerified",') || src.includes('t("connFailed",'))
     return "testConn";
-  if (src.includes("Migration job created")) return "createMig";
-  if (src.includes("Migration started")) return "startMig";
-  if (src.includes("Migration paused")) return "pauseMig";
-  if (src.includes("Migration resumed")) return "resumeMig";
-  if (src.includes("Migration cancelled")) return "cancelMig";
-  if (src.includes("Migration deleted")) return "deleteMig";
+  if (src.includes('t("toastMigCreated")')) return "createMig";
+  if (src.includes('t("toastMigStarted")')) return "startMig";
+  if (src.includes('t("toastMigPaused")')) return "pauseMig";
+  if (src.includes('t("toastMigResumed")')) return "resumeMig";
+  if (src.includes('t("toastMigCancelled")')) return "cancelMig";
+  if (src.includes('t("toastMigDeleted")')) return "deleteMig";
   return "other";
 }
 

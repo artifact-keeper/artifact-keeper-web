@@ -160,7 +160,7 @@ describe("SyncPoliciesPage", () => {
     queryResponse = { data: [POLICY], isLoading: false };
     render(<SyncPoliciesPage />);
     expect(screen.getByText("mirror-releases")).toBeInTheDocument();
-    expect(screen.getByText("mirror")).toBeInTheDocument();
+    expect(screen.getByText("Mirror")).toBeInTheDocument();
     expect(screen.getByText(/priority 100/i)).toBeInTheDocument();
   });
 

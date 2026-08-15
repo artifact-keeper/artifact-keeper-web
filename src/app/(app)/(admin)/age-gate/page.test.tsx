@@ -232,14 +232,14 @@ describe("AgeGatePage", () => {
   it("adds a status to the server-side filter when its checkbox is ticked", async () => {
     const user = userEvent.setup();
     render(<AgeGatePage />);
-    await user.click(screen.getByLabelText("Show approved"));
+    await user.click(screen.getByLabelText("Show Approved"));
     expect(api.listReviews).toHaveBeenLastCalledWith({ statuses: ["pending", "approved"], perPage: 100 });
   });
 
   it("makes no request and says so when every status is unticked", async () => {
     const user = userEvent.setup();
     render(<AgeGatePage />);
-    await user.click(screen.getByLabelText("Show pending"));
+    await user.click(screen.getByLabelText("Show Pending"));
     expect(screen.getByText(/Select at least one status/i)).toBeInTheDocument();
     expect(api.listReviews).toHaveBeenCalledTimes(1); // only the initial pending fetch
   });

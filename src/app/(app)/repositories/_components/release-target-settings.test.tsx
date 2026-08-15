@@ -100,7 +100,9 @@ describe("ReleaseTargetSettings non-staging repo", () => {
 
   it("names the current repo type in the alert", () => {
     renderWith(makeRepo({ repo_type: "remote" }));
-    expect(screen.getByText("remote")).toBeInTheDocument();
+    expect(
+      screen.getByText(/This repository is a remote repository/i)
+    ).toBeInTheDocument();
   });
 });
 

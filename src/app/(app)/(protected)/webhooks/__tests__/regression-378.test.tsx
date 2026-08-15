@@ -264,7 +264,9 @@ function setupMutationMock() {
   createMutationCapture = null;
   mockUseMutation.mockImplementation(
     (opts: { onSuccess?: () => void; mutationFn?: (v: unknown) => unknown }) => {
-      const isCreate = opts.onSuccess?.toString?.().includes("Webhook created");
+      // The page reports success through the "created" message key
+      // (resolved to "Webhook created" from en.json by the next-intl mock).
+      const isCreate = opts.onSuccess?.toString?.().includes('t("created")');
       const mutate = vi.fn((values: unknown) => {
         opts.mutationFn?.(values);
       });

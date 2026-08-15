@@ -9,6 +9,16 @@ import {
   act,
 } from "@testing-library/react";
 
+// English message catalog for renderRepoAccess translation assertions.
+const i18nEn = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const en = require(process.cwd() + "/messages/en.json") as Record<
+    string,
+    Record<string, string>
+  >;
+  return en;
+});
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -591,7 +601,9 @@ describe("AccessTokensPage", () => {
     fireEvent.click(createBtn);
 
     expect(screen.getByTestId("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Create Access Token")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Create Token").length
+    ).toBeGreaterThanOrEqual(1);
   });
 
   // -------------------------------------------------------------------------
@@ -1608,6 +1620,19 @@ describe("renderRepoAccess", () => {
     cleanup();
   });
 
+  // renderRepoAccess takes a translation function; resolve from en.json so
+  // the expected English strings below keep matching rendered output.
+  const repoAccessT = (key: string, values?: Record<string, string | number>) => {
+    const ns = i18nEn["accessTokens"] as Record<string, string> | undefined;
+    let out = ns?.[key] ?? key;
+    if (values) {
+      for (const [k, v] of Object.entries(values)) {
+        out = out.split(`{${k}}`).join(String(v));
+      }
+    }
+    return out;
+  };
+
   it("renders 'Selector' fallback when repo_selector has no useful fields", () => {
     const token = {
       id: "t1",
@@ -1616,7 +1641,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repo_selector: {},
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toBe("Selector");
   });
 
@@ -1628,7 +1653,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repo_selector: { match_formats: ["docker", "npm", "maven"] },
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toContain("3 format(s)");
   });
 
@@ -1640,7 +1665,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repo_selector: { match_pattern: "staging-*" },
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toContain("staging-*");
   });
 
@@ -1652,7 +1677,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repo_selector: { match_labels: { env: "prod", tier: "backend" } },
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toContain("2 label(s)");
   });
 
@@ -1668,7 +1693,7 @@ describe("renderRepoAccess", () => {
         match_labels: { env: "production" },
       },
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toContain("1 format(s)");
     expect(container.textContent).toContain("prod-*");
     expect(container.textContent).toContain("1 label(s)");
@@ -1682,7 +1707,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repository_ids: ["r1", "r2"],
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toBe("2 repo(s)");
   });
 
@@ -1693,7 +1718,7 @@ describe("renderRepoAccess", () => {
       token_prefix: "at_x",
       created_at: "2026-01-01",
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toBe("All repos");
   });
 
@@ -1705,7 +1730,7 @@ describe("renderRepoAccess", () => {
       created_at: "2026-01-01",
       repository_ids: [],
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     expect(container.textContent).toBe("All repos");
   });
 
@@ -1718,7 +1743,7 @@ describe("renderRepoAccess", () => {
       repo_selector: { match_formats: ["npm"] },
       repository_ids: ["r1", "r2"],
     };
-    const { container } = render(<>{renderRepoAccess(token)}</>);
+    const { container } = render(<>{renderRepoAccess(token, repoAccessT)}</>);
     // Should show selector, not repo count
     expect(container.textContent).toContain("1 format(s)");
     expect(container.textContent).not.toContain("repo(s)");

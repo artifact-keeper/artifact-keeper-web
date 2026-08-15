@@ -56,7 +56,7 @@ describe("RepoListItem", () => {
     const rowAction = screen.getByRole("button", { name: /npm-proxy/i });
     // Anchored: the name must end after the storage size — any concatenated
     // "Repository actions ..." label fails this.
-    expect(rowAction).toHaveAccessibleName(/^npm-proxy\s*NPM Proxy\s*npm\s*·\s*remote\s*·\s*0 B$/);
+    expect(rowAction).toHaveAccessibleName(/^npm-proxy\s*NPM Proxy\s*npm\s*·\s*Remote\s*·\s*0 B$/);
   });
 
   it("activates onSelect on click and on keyboard Enter/Space", async () => {
