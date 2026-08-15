@@ -80,7 +80,9 @@ test.describe.serial('Service Account CRUD', () => {
     const descInput = dialog.getByRole('textbox', { name: /description/i });
     await descInput.fill('E2E test service account');
 
-    await dialog.getByRole('button', { name: /create$/i }).click();
+    // The dialog's submit button reads the full label "Create Service Account"
+    // (i18n), so anchor on that instead of a bare "create" suffix.
+    await dialog.getByRole('button', { name: /^create service account$/i }).click();
     await page.waitForTimeout(3000);
     await assertNoAppErrors(page);
   });
