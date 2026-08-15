@@ -402,6 +402,7 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
     ["rubygems", "gem"],
     ["cargo", "cargo"],
     ["generic", "curl"],
+    ["vscode", "extensionsGallery"],
   ])("renders %s steps with format-specific tooling", async (format, marker) => {
     await openRepoDialog(makeRepo({ format: format as Repository["format"], key: `my-${format}` }));
 
@@ -594,5 +595,64 @@ describe("SetupPage - Pub repos show Dart tooling, not the generic fallback (#74
     expect(text).toContain("dart pub");
     // Must not hand users the generic artifact-upload command.
     expect(text).not.toMatch(/curl -X PUT/);
+  });
+});
+
+describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it("interpolates the repo key into the VSCodium, code-server, and manifest URLs", async () => {
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const text = dialog.textContent ?? "";
+
+    expect(text).toContain("/vscode/openvsx/gallery");
+    expect(text).toContain("/vscode/openvsx/item");
+    expect(text).toContain("/vscode/openvsx/gallery/manifest");
+    // Flat step list, not client-variant tabs.
+    expect(within(dialog).queryAllByRole("tablist")).toHaveLength(0);
+  });
+
+  it("requires latestUrlTemplate on the VSCodium step, with a warning about leaking to open-vsx.org", async () => {
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const heading = within(dialog).getByRole("heading", {
+      name: /Configure VSCodium \(persistent\)/i,
+    });
+    const stepContainer = heading.parentElement as HTMLElement;
+    const stepText = stepContainer.textContent ?? "";
+
+    expect(stepText).toContain("latestUrlTemplate");
+    expect(stepText).toMatch(/omitting it can let an update lookup fall back to open-vsx\.org/i);
+  });
+
+  it("gives code-server the EXTENSIONS_GALLERY env block", async () => {
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const heading = within(dialog).getByRole("heading", { name: /Configure code-server/i });
+    const stepContainer = heading.parentElement as HTMLElement;
+    const stepText = stepContainer.textContent ?? "";
+
+    expect(stepText).toContain("EXTENSIONS_GALLERY");
+    expect(stepText).toContain("code-server");
+  });
+
+  it("states the official VS Code enterprise-policy constraint accurately, not as a general preference", async () => {
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const heading = within(dialog).getByRole("heading", {
+      name: /Official Visual Studio Code/i,
+    });
+    const stepContainer = heading.parentElement as HTMLElement;
+    const stepText = stepContainer.textContent ?? "";
+
+    expect(stepText).toMatch(/enterprise/i);
+    expect(stepText).toMatch(/ExtensionGalleryServiceUrl/);
+    expect(stepText).toMatch(/does not cover VS Code Server or VS Code for the Web/i);
   });
 });

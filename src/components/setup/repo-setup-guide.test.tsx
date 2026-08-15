@@ -36,6 +36,21 @@ describe("RepoSetupGuide", () => {
     expect(screen.queryAllByRole("tablist")).toHaveLength(0);
   });
 
+  it("renders vscode gateway steps for VSCodium, code-server, and official VS Code", () => {
+    const { container } = render(
+      <RepoSetupGuide repo={makeRepo({ format: "vscode", key: "openvsx" })} />,
+    );
+    expect(screen.queryAllByRole("tablist")).toHaveLength(0);
+    const text = container.textContent ?? "";
+    expect(text).toContain("extensionsGallery");
+    // VSCodium's persistent config must set latestUrlTemplate, not just
+    // extensionUrlTemplate — omitting it can leak update lookups to
+    // open-vsx.org directly.
+    expect(text).toContain("latestUrlTemplate");
+    expect(text).toContain("EXTENSIONS_GALLERY");
+    expect(text).toMatch(/enterprise policy only/i);
+  });
+
   it("interpolates the repo key and picks proxy-vs-scoped npm config by repo type", () => {
     // remote (proxy): default registry — every install flows through the repo.
     render(
