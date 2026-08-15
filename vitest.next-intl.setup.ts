@@ -99,3 +99,41 @@ vi.mock("next-intl", () => ({
     return t;
   },
 }));
+
+// next-intl/server is used by server components and layouts (e.g. the root
+// layout's generateMetadata + getLocale). Without a mock, tests that render
+// them hit next-intl's "getLocale is not supported in Client Components"
+// guard in the jsdom environment. getLocale returns the test default locale
+// ("en"); getTranslations resolves the same English catalog as useTranslations.
+vi.mock("next-intl/server", () => ({
+  getLocale: async () => "en",
+  getTranslations: async (ns: string) => {
+    const resolvePath = (obj: unknown, path: string): unknown => {
+      let cur: unknown = obj;
+      for (const p of path.split(".")) {
+        if (cur && typeof cur === "object" && p in (cur as object)) {
+          cur = (cur as Record<string, unknown>)[p];
+        } else {
+          return undefined;
+        }
+      }
+      return cur;
+    };
+    const nsObj = resolvePath(i18nFixture.en, ns) as
+      | Record<string, unknown>
+      | undefined;
+    const t = (key: string): string => {
+      const parts = key.split(".");
+      let cur: unknown = nsObj;
+      for (const p of parts) {
+        if (cur && typeof cur === "object" && p in (cur as object)) {
+          cur = (cur as Record<string, unknown>)[p];
+        } else {
+          return key;
+        }
+      }
+      return typeof cur === "string" ? cur : key;
+    };
+    return t;
+  },
+}));

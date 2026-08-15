@@ -17,7 +17,10 @@ describe("Dockerfile AK_ENFORCE_HTTPS wiring", () => {
   });
 
   it("documents the flag as runtime-evaluated, not build-time-only", () => {
-    const lines = dockerfile.split("\n");
+    // Normalize CRLF so the exact-line match works on Windows checkouts
+    // (the repo is cloned with autocrlf on some setups, leaving a trailing
+    // `\r` on every line after split("\n")).
+    const lines = dockerfile.replace(/\r\n/g, "\n").split("\n");
     const argIdx = lines.findIndex((l) => l === "ARG AK_ENFORCE_HTTPS");
     expect(argIdx).toBeGreaterThan(0);
     const comments: string[] = [];

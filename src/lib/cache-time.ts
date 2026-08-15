@@ -22,7 +22,11 @@
  * Returns the original string unchanged when it cannot be parsed as a
  * date — better to show a malformed timestamp than to swallow it.
  */
-export function formatRelativeTimestamp(iso: string, now: Date = new Date()): string {
+export function formatRelativeTimestamp(
+  iso: string,
+  now: Date = new Date(),
+  locale?: string,
+): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return iso;
   const deltaMs = t - now.getTime();
@@ -36,7 +40,7 @@ export function formatRelativeTimestamp(iso: string, now: Date = new Date()): st
     ["hour", 60 * 60],
     ["minute", 60],
   ];
-  const fmt = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const fmt = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   for (const [unit, secs] of units) {
     if (abs >= secs) {
       return fmt.format(Math.round(deltaSec / secs), unit);
@@ -54,11 +58,19 @@ export function formatRelativeTimestamp(iso: string, now: Date = new Date()): st
  * download" so operators reading the row know what'll happen without
  * checking docs.
  */
-export function formatCacheExpiry(iso: string, now: Date = new Date()): string {
+export function formatCacheExpiry(
+  iso: string,
+  now: Date = new Date(),
+  locale?: string,
+): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return iso;
   if (t <= now.getTime()) {
-    return `expired ${formatRelativeTimestamp(iso, now)}, will re-fetch on next download`;
+    return `expired ${formatRelativeTimestamp(
+      iso,
+      now,
+      locale,
+    )}, will re-fetch on next download`;
   }
-  return formatRelativeTimestamp(iso, now);
+  return formatRelativeTimestamp(iso, now, locale);
 }
