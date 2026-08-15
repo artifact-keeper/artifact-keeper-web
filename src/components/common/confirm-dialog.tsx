@@ -80,8 +80,11 @@ export function ConfirmDialog({
         )}
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>{resolvedCancel}</AlertDialogCancel>
+          <AlertDialogCancel data-testid="confirm-dialog-cancel" disabled={loading}>
+            {resolvedCancel}
+          </AlertDialogCancel>
           <Button
+            data-testid="confirm-dialog-confirm"
             variant={danger ? "destructive" : "default"}
             disabled={!canConfirm || loading}
             onClick={onConfirm}

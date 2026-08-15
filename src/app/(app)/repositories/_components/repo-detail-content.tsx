@@ -942,7 +942,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             {t("tabSetup")}
           </TabsTrigger>
           {isAuthenticated && (
-            <TabsTrigger value="upload">
+            <TabsTrigger value="upload" data-testid="repo-tab-upload">
               <Upload className="size-3.5 mr-1" />
               {t("tabUpload")}
             </TabsTrigger>
