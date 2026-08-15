@@ -8,6 +8,7 @@ import {
   Search,
   Filter,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { useRepositories } from "@/hooks/use-repositories";
 import type { Repository } from "@/types";
@@ -49,8 +50,8 @@ export { repoKeyToGradleId } from "@/components/setup/repo-setup-guide";
 
 interface CICDPlatform {
   key: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   steps: SetupStep[];
 }
 
@@ -59,8 +60,8 @@ interface CICDPlatform {
 const CICD_PLATFORMS: CICDPlatform[] = [
   {
     key: "github",
-    name: "GitHub Actions",
-    description: "GitHub CI/CD workflows",
+    nameKey: "platformGithubActions",
+    descriptionKey: "platformGithubActionsDescription",
     steps: [
       {
         title: "Add secrets",
@@ -88,8 +89,8 @@ jobs:
   },
   {
     key: "gitlab",
-    name: "GitLab CI",
-    description: "GitLab pipelines",
+    nameKey: "platformGitlabCi",
+    descriptionKey: "platformGitlabCiDescription",
     steps: [
       {
         title: "Configure .gitlab-ci.yml",
@@ -108,8 +109,8 @@ publish:
   },
   {
     key: "jenkins",
-    name: "Jenkins",
-    description: "Jenkins pipelines",
+    nameKey: "platformJenkins",
+    descriptionKey: "platformJenkinsDescription",
     steps: [
       {
         title: "Configure Jenkinsfile",
@@ -135,8 +136,8 @@ pipeline {
   },
   {
     key: "azure",
-    name: "Azure DevOps",
-    description: "Azure Pipelines",
+    nameKey: "platformAzureDevops",
+    descriptionKey: "platformAzureDevopsDescription",
     steps: [
       {
         title: "Configure azure-pipelines.yml",
@@ -164,35 +165,35 @@ steps:
 
 // -- format categories for filter --
 
-const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
+const FORMAT_CATEGORIES: { key: string; labelKey: string; formats: string[] }[] = [
   {
     key: "core",
-    label: "Core",
+    labelKey: "categoryCore",
     formats: ["maven", "gradle", "npm", "pypi", "nuget", "go", "cargo", "rubygems", "generic"],
   },
   {
     key: "container",
-    label: "Container",
+    labelKey: "categoryContainer",
     formats: ["docker", "helm", "helm_oci", "podman", "buildx", "oras", "wasm_oci", "incus", "lxc"],
   },
   {
     key: "linux",
-    label: "Linux",
+    labelKey: "categoryLinux",
     formats: ["debian", "rpm", "alpine", "opkg"],
   },
   {
     key: "ecosystem",
-    label: "Ecosystem",
+    labelKey: "categoryEcosystem",
     formats: ["poetry", "conda", "yarn", "pnpm", "composer", "cocoapods", "swift", "hex", "pub", "sbt", "cran"],
   },
   {
     key: "infra",
-    label: "Infrastructure",
+    labelKey: "categoryInfrastructure",
     formats: ["terraform", "opentofu", "chef", "puppet", "ansible", "vagrant"],
   },
   {
     key: "other",
-    label: "Other",
+    labelKey: "categoryOther",
     formats: ["generic", "gitlfs", "bazel", "p2", "protobuf", "huggingface", "mlmodel", "vscode", "jetbrains"],
   },
 ];
@@ -200,6 +201,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
 // -- page --
 
 export default function SetupPage() {
+  const t = useTranslations("setup");
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<CICDPlatform | null>(null);
   const [search, setSearch] = useState("");
@@ -248,19 +250,19 @@ export default function SetupPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Setup Guide"
-        description="Configure your build tools and CI/CD pipelines to work with Artifact Keeper."
+        title={t("title")}
+        description={t("description")}
       />
 
       <Tabs defaultValue="repositories">
         <TabsList>
           <TabsTrigger value="repositories">
             <Package className="size-4" />
-            Repositories
+            {t("repositoriesTab")}
           </TabsTrigger>
           <TabsTrigger value="cicd">
             <Rocket className="size-4" />
-            CI/CD Platforms
+            {t("cicdTab")}
           </TabsTrigger>
         </TabsList>
 
@@ -271,7 +273,7 @@ export default function SetupPage() {
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search repositories..."
+                placeholder={t("searchPlaceholder")}
                 className="pl-8"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -286,7 +288,7 @@ export default function SetupPage() {
               size="sm"
               onClick={() => setCategoryFilter("all")}
             >
-              All
+              {t("all")}
             </Button>
             {FORMAT_CATEGORIES.map((cat) => (
               <Button
@@ -297,7 +299,7 @@ export default function SetupPage() {
                   setCategoryFilter(categoryFilter === cat.key ? "all" : cat.key)
                 }
               >
-                {cat.label}
+                {t(cat.labelKey)}
               </Button>
             ))}
           </div>
@@ -309,8 +311,8 @@ export default function SetupPage() {
                 <Package className="size-10 text-muted-foreground/40 mx-auto mb-3" />
                 <p className="text-sm text-muted-foreground">
                   {repositories.length === 0
-                    ? "No repositories available. Create a repository first."
-                    : "No repositories match your filters."}
+                    ? t("noRepositories")
+                    : t("noMatch")}
                 </p>
               </CardContent>
             </Card>
@@ -323,7 +325,7 @@ export default function SetupPage() {
                       {format}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {repos.length} {repos.length === 1 ? "repository" : "repositories"}
+                      {t("repoCount", { count: repos.length })}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -373,12 +375,12 @@ export default function SetupPage() {
                       <Rocket className="size-6 text-primary" />
                     </div>
                   </div>
-                  <p className="font-semibold text-sm">{platform.name}</p>
+                  <p className="font-semibold text-sm">{t(platform.nameKey)}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {platform.description}
+                    {t(platform.descriptionKey)}
                   </p>
                   <Button className="mt-3" size="sm" variant="outline">
-                    Get Started
+                    {t("getStarted")}
                   </Button>
                 </CardContent>
               </Card>
@@ -397,15 +399,13 @@ export default function SetupPage() {
         <DialogContent className="sm:max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Set Up: {selectedRepo?.key}
+              {t("setUpTitle", { key: selectedRepo?.key ?? "" })}
               <Badge variant="secondary" className="text-xs uppercase">
                 {selectedRepo?.format}
               </Badge>
             </DialogTitle>
             <DialogDescription>
-              Configure your tools to work with the{" "}
-              <span className="font-medium text-foreground">{selectedRepo?.name}</span>{" "}
-              repository.
+              {t("setUpDescription", { name: selectedRepo?.name ?? "" })}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
@@ -424,10 +424,9 @@ export default function SetupPage() {
       >
         <DialogContent className="sm:max-w-4xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>{selectedPlatform?.name} Integration</DialogTitle>
+            <DialogTitle>{t("platformIntegrationTitle", { name: t(selectedPlatform?.nameKey ?? "") })}</DialogTitle>
             <DialogDescription>
-              Configure {selectedPlatform?.name} to publish and consume
-              artifacts from Artifact Keeper.
+              {t("platformIntegrationDescription", { name: t(selectedPlatform?.nameKey ?? "") })}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh] pr-4">
