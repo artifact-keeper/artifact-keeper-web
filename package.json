@@ -51,7 +51,7 @@
     "js-yaml": "^4.3.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-polly": "^3.1105.0",
+    "@aws-sdk/client-polly": "^3.1109.0",
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
