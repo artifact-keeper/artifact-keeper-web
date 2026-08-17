@@ -113,8 +113,10 @@ COPY --from=build --chown=root:root --chmod=555 /app/public ./public
 COPY --from=build --chown=root:root --chmod=555 /app/.next/standalone ./
 COPY --from=build --chown=root:root --chmod=555 /app/.next/static ./.next/static
 
-# Next.js needs a writable cache directory for image optimization at runtime
-RUN mkdir -p .next/cache && chown 1001:0 .next/cache
+# Next.js needs a writable cache directory for image optimization at runtime.
+# g=rwX keeps it writable for an arbitrary OpenShift UID (GID 0 under
+# restricted-v2), not just the numeric 1001 the USER directive names.
+RUN mkdir -p .next/cache && chown 1001:0 .next/cache && chmod g=rwX .next/cache
 
 USER 1001
 
