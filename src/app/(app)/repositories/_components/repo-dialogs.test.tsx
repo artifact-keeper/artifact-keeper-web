@@ -2068,6 +2068,7 @@ describe('RepoDialogs - WASM plugin layouts (#591)', () => {
     is_enabled: true,
     priority: 5,
     plugin_id: 'p1',
+    capabilities: null,
   };
 
   beforeEach(() => {

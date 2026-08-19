@@ -52,6 +52,12 @@ import {
   mavenGavcFromMetadata,
   parseMavenGav,
 } from "@/lib/maven";
+import {
+  downloadCountKind,
+  PROXY_DOWNLOADS_UNTRACKED_LABEL,
+  PROXY_DOWNLOADS_UNTRACKED_REASON,
+  PROXY_DOWNLOADS_UNTRACKED_SYMBOL,
+} from "@/lib/proxy-downloads";
 import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
@@ -542,6 +548,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
+  // Whether a download count is a real number or an unmeasured blank (#808).
+  // The repository is still loading on the first render pass; treat the count
+  // as real until it arrives rather than flashing "not tracked".
+  const downloadsKind = (a: Pick<Artifact, "download_count">) =>
+    repository
+      ? downloadCountKind(a.download_count, repository, formatHandlers)
+      : "count";
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
@@ -654,11 +667,30 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       header: "Downloads",
       accessor: (a) => a.download_count,
       sortable: true,
-      cell: (a) => (
-        <span className="text-sm text-muted-foreground">
-          {a.download_count.toLocaleString()}
-        </span>
-      ),
+      // Proxy-cached rows carry a real `download_count` since backend
+      // artifact-keeper#3388 (1.8.0), but only the instrumented formats ever
+      // increment it — the rest sit at 0 forever (artifact-keeper#3446). A
+      // bare "0" on those reads as "nothing is pulling through this proxy",
+      // which is how a busy repository gets deleted, so an unmeasured count
+      // renders as a dash instead (#808).
+      cell: (a) =>
+        downloadsKind(a) === "untracked" ? (
+          <span
+            className="text-sm text-muted-foreground"
+            title={PROXY_DOWNLOADS_UNTRACKED_REASON}
+          >
+            <span aria-hidden="true">{PROXY_DOWNLOADS_UNTRACKED_SYMBOL}</span>
+            {/* The dash alone is silence to a screen reader, and silence is
+                indistinguishable from an empty cell. */}
+            <span className="sr-only">
+              {PROXY_DOWNLOADS_UNTRACKED_LABEL}. {PROXY_DOWNLOADS_UNTRACKED_REASON}
+            </span>
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {a.download_count.toLocaleString()}
+          </span>
+        ),
     },
     {
       id: "created",
@@ -1348,9 +1380,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Content Type"
                     value={selectedArtifact.content_type}
                   />
+                  {/* Same measured-zero vs not-measured distinction as the
+                      Downloads column (#808); the dialog has room for words,
+                      so it says so rather than showing a dash. */}
                   <DetailRow
                     label="Downloads"
-                    value={selectedArtifact.download_count.toLocaleString()}
+                    value={
+                      downloadsKind(selectedArtifact) === "untracked"
+                        ? PROXY_DOWNLOADS_UNTRACKED_LABEL
+                        : selectedArtifact.download_count.toLocaleString()
+                    }
+                    title={
+                      downloadsKind(selectedArtifact) === "untracked"
+                        ? PROXY_DOWNLOADS_UNTRACKED_REASON
+                        : undefined
+                    }
                   />
                   {artifactStats?.last_downloaded && (
                     <DetailRow

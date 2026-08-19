@@ -21,6 +21,15 @@ export interface FormatHandler {
   is_enabled: boolean;
   priority: number;
   plugin_id: string | null;
+  /**
+   * Free-form capability bag the backend publishes per handler (declared for
+   * WASM plugins; `null` for built-in `Core` handlers today). Read through a
+   * named key rather than indexed ad hoc — see `PROXY_DOWNLOAD_CAPABILITY_KEY`
+   * in `@/lib/proxy-downloads`, which uses it to let the API state whether a
+   * format records proxied downloads instead of the frontend guessing from a
+   * hardcoded list (#808, backend artifact-keeper#3446).
+   */
+  capabilities: Record<string, unknown> | null;
 }
 
 /** Result of dry-running a handler against sample content. */
@@ -47,6 +56,7 @@ function adapt(sdk: FormatHandlerResponse): FormatHandler {
     is_enabled: sdk.is_enabled,
     priority: sdk.priority,
     plugin_id: sdk.plugin_id ?? null,
+    capabilities: sdk.capabilities ?? null,
   };
 }
 
