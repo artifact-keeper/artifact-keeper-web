@@ -716,6 +716,48 @@ gpgcheck=0`,
           code: `apk add <package-name>`,
         },
       ];
+    case "vscode": {
+      // The gateway serves the VSCodium/code-server gallery-service contract
+      // under /vscode/<repoKey>/... ; official VS Code additionally exposes
+      // a /gallery/manifest endpoint for its enterprise policy.
+      const galleryUrl = `${REGISTRY_URL}/vscode/${repoKey}/gallery`;
+      const itemUrl = `${REGISTRY_URL}/vscode/${repoKey}/item`;
+      const latestUrlTemplate = `${galleryUrl}/{publisher}/{name}/latest`;
+      const manifestUrl = `${galleryUrl}/manifest`;
+      return [
+        {
+          title: "Configure VSCodium (persistent)",
+          description:
+            "Create product.json in VSCodium's user configuration directory: ~/.config/VSCodium on Linux ($XDG_CONFIG_HOME/VSCodium when that is set), ~/Library/Application Support/VSCodium on macOS, or %APPDATA%\\VSCodium on Windows. latestUrlTemplate is required alongside extensionUrlTemplate: omitting it can let an update lookup fall back to open-vsx.org directly, bypassing this repository. Restart VSCodium after editing.",
+          code: `{
+  "extensionsGallery": {
+    "serviceUrl": "${galleryUrl}",
+    "itemUrl": "${itemUrl}",
+    "extensionUrlTemplate": "${latestUrlTemplate}",
+    "latestUrlTemplate": "${latestUrlTemplate}",
+    "controlUrl": ""
+  }
+}`,
+        },
+        {
+          title: "Configure code-server",
+          description:
+            "Set EXTENSIONS_GALLERY before starting code-server (shell, container env, or systemd unit), then restart the process:",
+          code: `export EXTENSIONS_GALLERY='{
+  "serviceUrl": "${galleryUrl}",
+  "itemUrl": "${itemUrl}",
+  "extensionUrlTemplate": "${latestUrlTemplate}"
+}'
+code-server`,
+        },
+        {
+          title: "Official Visual Studio Code (desktop, enterprise policy only)",
+          description:
+            "Official VS Code cannot be pointed at a third-party gallery without administrative setup: it requires the enterprise ExtensionGalleryServiceUrl policy, VS Code 1.99+, a signed-in account with the matching entitlement, and a supported desktop policy deployment (Windows Group Policy, a macOS configuration profile, or a Linux policy file). It does not cover VS Code Server or VS Code for the Web. Deploy the policy with this manifest URL, then run Developer: Policy Diagnostics to confirm it applied:",
+          code: manifestUrl,
+        },
+      ];
+    }
     case "protobuf":
       return [
         {
