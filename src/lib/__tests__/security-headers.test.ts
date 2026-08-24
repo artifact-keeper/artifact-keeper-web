@@ -175,6 +175,18 @@ describe("same-origin framable SSO callback routes (silent SSO probe)", () => {
     expect(strict["X-Frame-Options"]).toBe("DENY");
   });
 
+  it("allows the probe iframe to traverse the IdP redirect (frame-src 'self' https:)", () => {
+    // CSP checks frame-src against every URL in the iframe's redirect chain;
+    // without the https: allowance the IdP authorize hop is blocked and the
+    // silent probe can never complete.
+    for (const csp of [
+      buildContentSecurityPolicy(false, NONCE),
+      buildContentSecurityPolicy(true, NONCE),
+    ]) {
+      expect(csp).toContain("frame-src 'self' https:");
+    }
+  });
+
   it("marks exactly the SSO callback routes as framable", () => {
     expect(isSameOriginFramablePath("/callback")).toBe(true);
     expect(isSameOriginFramablePath("/auth/callback")).toBe(true);

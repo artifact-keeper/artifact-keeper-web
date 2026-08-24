@@ -123,6 +123,16 @@ export function buildContentSecurityPolicy(
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self' https:",
+    // The silent-SSO probe (src/lib/silent-sso.ts) navigates a hidden iframe
+    // through the OIDC login redirect: same-origin login URL → the IdP's
+    // HTTPS authorize endpoint → back. CSP evaluates frame-src against every
+    // URL in that redirect chain, so the fallback default-src 'self' would
+    // block the IdP hop and silently kill the probe. `https:` mirrors the
+    // connect-src rationale above (the IdP origin is deployment config, not
+    // knowable here); only same-origin scripts can create frames, so this
+    // does not widen any injection surface. Plain-http IdPs stay blocked —
+    // the probe then just times out and the visitor stays anonymous.
+    "frame-src 'self' https:",
     "object-src 'self'",
     "worker-src 'self'",
     `frame-ancestors ${frameAncestorsSelf ? "'self'" : "'none'"}`,
