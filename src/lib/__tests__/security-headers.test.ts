@@ -4,6 +4,7 @@ import {
   buildSecurityHeaders,
   generateNonce,
   isHttpsEnabled,
+  isSameOriginFramablePath,
 } from "../security-headers";
 
 const NONCE = "dGVzdC1ub25jZS0xMjM=";
@@ -149,6 +150,42 @@ describe("buildSecurityHeaders", () => {
         "camera=(), microphone=(), geolocation=()",
       );
       expect(map["X-DNS-Prefetch-Control"]).toBe("off");
+    }
+  });
+});
+
+describe("same-origin framable SSO callback routes (silent SSO probe)", () => {
+  it("frame-ancestors is 'none' by default and 'self' only when opted in", () => {
+    expect(buildContentSecurityPolicy(false, NONCE)).toContain(
+      "frame-ancestors 'none'",
+    );
+    const framable = buildContentSecurityPolicy(false, NONCE, {
+      frameAncestorsSelf: true,
+    });
+    expect(framable).toContain("frame-ancestors 'self'");
+    expect(framable).not.toContain("frame-ancestors 'none'");
+  });
+
+  it("X-Frame-Options relaxes to SAMEORIGIN (never off) when opted in", () => {
+    // Cross-origin framing must stay blocked even on the framable routes —
+    // the probe iframe is same-origin by construction.
+    const map = headerMap(buildSecurityHeaders(false, true));
+    expect(map["X-Frame-Options"]).toBe("SAMEORIGIN");
+    const strict = headerMap(buildSecurityHeaders(false));
+    expect(strict["X-Frame-Options"]).toBe("DENY");
+  });
+
+  it("marks exactly the SSO callback routes as framable", () => {
+    expect(isSameOriginFramablePath("/callback")).toBe(true);
+    expect(isSameOriginFramablePath("/auth/callback")).toBe(true);
+    for (const p of [
+      "/",
+      "/login",
+      "/callback/extra",
+      "/callbackish",
+      "/api/v1/auth/sso/exchange",
+    ]) {
+      expect(isSameOriginFramablePath(p)).toBe(false);
     }
   });
 });

@@ -6,6 +6,7 @@ import { ThemeProvider } from "./theme-provider";
 import { AuthProvider } from "./auth-provider";
 import { InstanceProvider } from "./instance-provider";
 import { SystemConfigProvider } from "./system-config-provider";
+import { SilentSsoBootstrap } from "@/components/auth/silent-sso-bootstrap";
 
 export function Providers({
   children,
@@ -20,7 +21,11 @@ export function Providers({
       <QueryProvider>
         <SystemConfigProvider>
           <ThemeProvider nonce={nonce}>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              {/* One-shot silent SSO auto-login probe; renders nothing. */}
+              <SilentSsoBootstrap />
+              {children}
+            </AuthProvider>
           </ThemeProvider>
         </SystemConfigProvider>
       </QueryProvider>

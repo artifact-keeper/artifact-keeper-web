@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/lib/sdk-client";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import {
+  clearSilentSsoAttempt,
+  isInIframe,
+  markSilentSsoAttempted,
+  postSilentSsoResult,
+} from "@/lib/silent-sso";
 
 function getSsoErrorMessage(errorCode: string | null): string {
   const messages: Record<string, string> = {
@@ -31,18 +37,55 @@ function CallbackHandler() {
 
   const code = searchParams.get("code");
   const urlError = searchParams.get("error");
+  // Set by the backend when a silent (`prompt=none`) check-sso probe found no
+  // live IdP session. That is the EXPECTED outcome for an anonymous visitor:
+  // never an error, never an error UI. See src/lib/silent-sso.ts.
+  const silentDenied = searchParams.get("silent_denied") === "1";
 
-  // Derive error state from URL params without calling setState in the effect
-  const immediateError = urlError
-    ? getSsoErrorMessage(urlError)
-    : !code
-      ? "Authentication failed. No authorization code received from the identity provider."
-      : null;
+  // Derive error state from URL params without calling setState in the
+  // effect. A silent-probe denial is NOT an error: it never renders anything.
+  const immediateError = silentDenied
+    ? null
+    : urlError
+      ? getSsoErrorMessage(urlError)
+      : !code
+        ? "Authentication failed. No authorization code received from the identity provider."
+        : null;
 
   const [error, setError] = useState<string | null>(immediateError);
 
+  // The iframe fork (`isInIframe(window)`) is a client-only fact and lives in
+  // the effect: inside the silent-SSO probe iframe every outcome is reported
+  // to the top window via postMessage, and nothing this hidden document
+  // renders is ever visible; at the top level the pre-existing behaviour is
+  // kept.
   useEffect(() => {
-    if (immediateError) return;
+    const inIframe = isInIframe(window);
+
+    if (silentDenied) {
+      // Remain anonymous: record the attempt (belt-and-braces — the probe
+      // initiator already recorded it) and hand control back without any
+      // error surface.
+      markSilentSsoAttempted();
+      if (inIframe) {
+        postSilentSsoResult("denied");
+      } else {
+        // Direct navigation (probe ran as a full-page redirect, or a stale
+        // URL): return to the app root, still anonymous.
+        router.replace("/");
+      }
+      return;
+    }
+
+    if (immediateError) {
+      // The error card is already rendering (derived state above). In the
+      // probe iframe additionally relay the failure so the initiator settles
+      // instead of waiting for its timeout.
+      if (inIframe) {
+        postSilentSsoResult("error");
+      }
+      return;
+    }
 
     // Exchange the single-use code for tokens via a secure POST request
     const exchangeCode = async () => {
@@ -69,21 +112,38 @@ function CallbackHandler() {
             (body?.error && ERROR_MESSAGES[body.error]) ||
             (body?.code && ERROR_MESSAGES[body.code]) ||
             "Authentication failed. Please try again.";
-          setError(message);
+          if (inIframe) {
+            postSilentSsoResult("error");
+          } else {
+            setError(message);
+          }
           return;
         }
 
         // Tokens are now set as httpOnly cookies by the backend.
         // No need to store them in localStorage.
+        // Signed in: the silent-SSO session guard resets so the next
+        // anonymous session can probe again.
+        clearSilentSsoAttempt();
+        if (inIframe) {
+          // The probe initiator (SilentSsoBootstrap) refreshes the user in
+          // the top window; this frame's job is done.
+          postSilentSsoResult("success");
+          return;
+        }
         await refreshUser();
         router.replace("/");
       } catch {
-        setError("Failed to complete sign-in. Please try again.");
+        if (inIframe) {
+          postSilentSsoResult("error");
+        } else {
+          setError("Failed to complete sign-in. Please try again.");
+        }
       }
     };
 
     exchangeCode();
-  }, [code, immediateError, refreshUser, router]);
+  }, [code, immediateError, silentDenied, refreshUser, router]);
 
   if (error) {
     return (
