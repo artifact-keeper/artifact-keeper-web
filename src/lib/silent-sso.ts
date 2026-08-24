@@ -5,42 +5,51 @@
  * operator has not disabled the feature (backend `OIDC_SILENT_SSO=false`,
  * surfaced as `auth.silent_sso_enabled`), and no prior attempt is recorded
  * for this browser session, the app probes the IdP once for an existing SSO
- * session — invisibly, inside a hidden same-origin iframe:
+ * session:
  *
- *   iframe → GET /api/v1/auth/sso/oidc/{id}/login?prompt=none
- *          → 307 to the IdP authorize endpoint with `prompt=none`
- *          → live IdP session:  302 back with a code → backend callback sets
- *            the auth cookies and 307s to `/callback?code=…` (inside the
- *            iframe), whose page posts a "success" message to this window;
- *          → no IdP session:    302 back with `error=login_required` → the
- *            backend 307s to `/callback?silent_denied=1`, whose page posts a
- *            "denied" message. No error UI, the visitor stays anonymous.
+ *   1. PREFLIGHT (the fail-open gate): a short-timeout same-origin fetch of
+ *      the provider's login URL with `prompt=none`, redirects NOT followed.
+ *      The backend answers 307 only after its own server-side fetch of the
+ *      IdP discovery document succeeded, so a down or unreachable IdP fails
+ *      this cheap probe and NOTHING further happens — the visitor keeps
+ *      browsing anonymously, never stranded on a browser error page.
+ *   2. Top-level redirect to the same URL. `prompt=none` (OIDC Core 3.1.2.1)
+ *      forbids the IdP from rendering any UI: a live IdP session completes
+ *      the code flow invisibly (the callback signs the user in and returns
+ *      them to the page they were on); no session comes back as
+ *      `login_required`, which the backend relays as
+ *      `/callback?silent_denied=1` — the callback page records the attempt
+ *      and quietly returns the still-anonymous visitor to where they were.
+ *      Either way the visitor NEVER sees an IdP login page they did not ask
+ *      for — that is what separates check-sso from a naive sole-provider
+ *      auto-redirect.
  *
- * The iframe is the FAIL-OPEN mechanism: the top-level page never navigates
- * away, so an unreachable or slow IdP can never strand an anonymous visitor
- * on a browser error page or a Keycloak login screen they did not ask for.
- * If no result message arrives within the timeout the attempt is abandoned
- * and browsing continues anonymously. Exactly one attempt is made per browser
- * session (sessionStorage guard); the guard is cleared on explicit sign-in
- * and sign-out so the next session starts fresh.
+ * A top-level navigation (rather than a hidden iframe) is deliberate: IdP
+ * session cookies are frequently `SameSite=Lax` (Keycloak issues Lax unless
+ * it is certain the deployment is HTTPS-proxied), and Lax cookies are never
+ * sent on a cross-site iframe navigation — an iframe probe would silently
+ * report "no session" for users who have one. Top-level navigations carry
+ * Lax cookies, so this works on both Lax and None IdPs.
+ *
+ * Exactly one attempt is made per browser session (sessionStorage guard,
+ * written BEFORE the redirect so an interrupted round trip can never loop);
+ * the guard is cleared on explicit sign-in and sign-out so the next session
+ * starts fresh.
  */
 
 /** sessionStorage key recording that this browser session already probed. */
 export const SILENT_SSO_ATTEMPTED_KEY = "ak.silent-sso.attempted";
 
+/** sessionStorage key holding the path to return to after the round trip. */
+export const SILENT_SSO_RETURN_KEY = "ak.silent-sso.return-to";
+
 /**
- * How long the hidden-iframe probe may take before it is abandoned. The
- * whole round trip is two redirects plus the callback page bootstrap; 5s is
- * generous for a healthy IdP while short enough that a downed IdP costs an
- * anonymous visitor nothing visible.
+ * How long the preflight may take before the attempt is abandoned. The
+ * preflight covers the backend AND (transitively, via the backend's
+ * server-side discovery fetch) the IdP, so this bound is what keeps a dead
+ * IdP from costing the visitor anything visible.
  */
-export const SILENT_SSO_TIMEOUT_MS = 5000;
-
-/** `type` field of the postMessage the callback page sends from the iframe. */
-export const SILENT_SSO_MESSAGE_TYPE = "ak-silent-sso-result";
-
-/** What the silent probe concluded. */
-export type SilentSsoOutcome = "success" | "denied" | "error" | "timeout";
+export const SILENT_SSO_PREFLIGHT_TIMEOUT_MS = 4000;
 
 /**
  * sessionStorage access is wrapped: it throws in some privacy modes, and a
@@ -91,118 +100,95 @@ export function buildSilentLoginUrl(loginUrl: string): string {
     : `${loginUrl}?prompt=none`;
 }
 
-/** Whether this document is running inside the silent-SSO probe iframe. */
-export function isInIframe(win: Pick<Window, "self" | "top">): boolean {
+/** Remember where the visitor was so the callback can put them back. */
+export function storeSilentSsoReturnTo(path: string): void {
   try {
-    return win.self !== win.top;
+    sessionStorage.setItem(SILENT_SSO_RETURN_KEY, path);
   } catch {
-    // Cross-origin `top` access throws — by definition we are framed.
-    return true;
+    // Losing the return path degrades to landing on "/" — acceptable.
   }
 }
 
 /**
- * Message payload the callback page posts to the top window when it is
- * loaded inside the probe iframe.
+ * Read-and-clear the stored return path. Only same-app absolute paths are
+ * honoured (must start with a single "/"): anything else — absolute URLs,
+ * protocol-relative "//host" — is discarded so a tampered sessionStorage
+ * value can never turn the callback into an open redirect.
  */
-export interface SilentSsoMessage {
-  type: typeof SILENT_SSO_MESSAGE_TYPE;
-  outcome: Extract<SilentSsoOutcome, "success" | "denied" | "error">;
-}
-
-/** Narrow an untrusted postMessage payload to a SilentSsoMessage. */
-export function isSilentSsoMessage(data: unknown): data is SilentSsoMessage {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    (data as { type?: unknown }).type === SILENT_SSO_MESSAGE_TYPE &&
-    ["success", "denied", "error"].includes(
-      (data as { outcome?: unknown }).outcome as string,
-    )
-  );
+export function consumeSilentSsoReturnTo(): string | null {
+  try {
+    const v = sessionStorage.getItem(SILENT_SSO_RETURN_KEY);
+    sessionStorage.removeItem(SILENT_SSO_RETURN_KEY);
+    if (v && v.startsWith("/") && !v.startsWith("//")) return v;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Run one silent check-sso probe in a hidden iframe and resolve with its
- * outcome. Never rejects and never navigates the top-level page:
- *
- *  - "success": the callback page completed the code exchange in the iframe;
- *    the auth cookies are now set and the caller should refresh the user.
- *  - "denied": the IdP answered `login_required` (no session) — stay
- *    anonymous.
- *  - "error": the callback page hit a real error (failed exchange, IdP
- *    error) — stay anonymous; the explicit login button remains available.
- *  - "timeout": no message arrived in time (IdP down/unreachable, an IdP
- *    that renders UI despite `prompt=none` and is blocked by frame-ancestors,
- *    …) — stay anonymous. This is the fail-open path.
- *
- * The caller is responsible for the sessionStorage guard (mark BEFORE
- * calling, so a crash mid-probe can never loop).
+ * The fail-open gate: verify — cheaply, with a hard timeout, and without
+ * navigating anywhere — that the silent login round trip has somewhere to
+ * go. Fetches the provider's `prompt=none` login URL with redirects
+ * disabled; the backend only answers with a redirect after ITS server-side
+ * fetch of the IdP discovery document succeeded, so this one same-origin
+ * request vouches for both the backend and the IdP. Any failure (timeout,
+ * network error, 4xx/5xx) means "do not navigate": the visitor stays
+ * anonymous and undisturbed.
  */
-export function runSilentSso(
+export async function preflightSilentLogin(
   loginUrl: string,
-  timeoutMs: number = SILENT_SSO_TIMEOUT_MS,
-): Promise<SilentSsoOutcome> {
-  return new Promise<SilentSsoOutcome>((resolve) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.setAttribute("aria-hidden", "true");
-    iframe.setAttribute("tabindex", "-1");
-    // The probe needs scripts (the callback page posts the result) and
-    // same-origin (the backend must see and set cookies) but nothing else.
-    iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
-
-    let settled = false;
-
-    // `timer` is initialized below, after the listener registration; settle
-    // only ever runs from the listener or the timer itself, both strictly
-    // after that line, so the closure never observes it uninitialized.
-    const settle = (outcome: SilentSsoOutcome) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
-      // Remove on the next tick: removing an iframe from inside its own
-      // message dispatch is legal, but deferring keeps the teardown out of
-      // the child's call stack entirely.
-      setTimeout(() => iframe.remove(), 0);
-      resolve(outcome);
-    };
-
-    const onMessage = (event: MessageEvent) => {
-      // Only trust our own origin AND our own probe iframe: any window can
-      // postMessage to us, and a same-origin message from elsewhere (another
-      // tab scripting us, a second iframe) must not settle the probe.
-      if (event.origin !== window.location.origin) return;
-      if (event.source !== iframe.contentWindow) return;
-      if (!isSilentSsoMessage(event.data)) return;
-      settle(event.data.outcome);
-    };
-
-    window.addEventListener("message", onMessage);
-    const timer = setTimeout(() => settle("timeout"), timeoutMs);
-
-    iframe.src = buildSilentLoginUrl(loginUrl);
-    document.body.appendChild(iframe);
-  });
+  timeoutMs: number = SILENT_SSO_PREFLIGHT_TIMEOUT_MS,
+): Promise<boolean> {
+  try {
+    const res = await fetch(buildSilentLoginUrl(loginUrl), {
+      method: "GET",
+      redirect: "manual",
+      // The probe needs no cookies and must not consume any state; it only
+      // asks "would a redirect happen".
+      credentials: "omit",
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    // With redirect:"manual" a redirect surfaces as an opaqueredirect
+    // response (status 0). A non-redirect answer (backend error, IdP
+    // discovery failure) is a real Response with an error status.
+    return res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Post a probe result from the callback page (inside the iframe) to the top
- * window. Same-origin only: the top window is this app itself.
+ * Run the silent sign-in attempt: preflight, remember where the visitor is,
+ * and start the top-level `prompt=none` round trip. Resolves `true` when the
+ * navigation was started, `false` when the preflight failed (fail open —
+ * nothing happened). The caller owns the once-per-session guard and must
+ * mark it BEFORE calling.
+ *
+ * `navigate` is injectable for tests; the default performs the real
+ * top-level navigation.
  */
-export function postSilentSsoResult(
-  outcome: SilentSsoMessage["outcome"],
-): void {
-  try {
-    window.parent.postMessage(
-      { type: SILENT_SSO_MESSAGE_TYPE, outcome } satisfies SilentSsoMessage,
-      window.location.origin,
-    );
-  } catch {
-    // A failed post means the parent times out and stays anonymous — the
-    // fail-open default.
+export async function startSilentSignIn(
+  loginUrl: string,
+  options?: {
+    timeoutMs?: number;
+    navigate?: (url: string) => void;
+  },
+): Promise<boolean> {
+  const timeoutMs = options?.timeoutMs ?? SILENT_SSO_PREFLIGHT_TIMEOUT_MS;
+  const navigate =
+    options?.navigate ?? ((url: string) => window.location.assign(url));
+
+  if (!(await preflightSilentLogin(loginUrl, timeoutMs))) {
+    return false;
   }
+
+  storeSilentSsoReturnTo(
+    window.location.pathname + window.location.search + window.location.hash,
+  );
+  navigate(buildSilentLoginUrl(loginUrl));
+  return true;
 }
 
 /**

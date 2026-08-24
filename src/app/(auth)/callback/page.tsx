@@ -11,9 +11,8 @@ import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/lib/sdk-client";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import {
   clearSilentSsoAttempt,
-  isInIframe,
+  consumeSilentSsoReturnTo,
   markSilentSsoAttempted,
-  postSilentSsoResult,
 } from "@/lib/silent-sso";
 
 function getSsoErrorMessage(errorCode: string | null): string {
@@ -43,7 +42,8 @@ function CallbackHandler() {
   const silentDenied = searchParams.get("silent_denied") === "1";
 
   // Derive error state from URL params without calling setState in the
-  // effect. A silent-probe denial is NOT an error: it never renders anything.
+  // effect. A silent-probe denial is NOT an error: it never renders anything
+  // beyond the transient spinner.
   const immediateError = silentDenied
     ? null
     : urlError
@@ -54,38 +54,17 @@ function CallbackHandler() {
 
   const [error, setError] = useState<string | null>(immediateError);
 
-  // The iframe fork (`isInIframe(window)`) is a client-only fact and lives in
-  // the effect: inside the silent-SSO probe iframe every outcome is reported
-  // to the top window via postMessage, and nothing this hidden document
-  // renders is ever visible; at the top level the pre-existing behaviour is
-  // kept.
   useEffect(() => {
-    const inIframe = isInIframe(window);
-
     if (silentDenied) {
       // Remain anonymous: record the attempt (belt-and-braces — the probe
-      // initiator already recorded it) and hand control back without any
-      // error surface.
+      // initiator already recorded it before navigating) and put the visitor
+      // back where they were, with no error surface of any kind.
       markSilentSsoAttempted();
-      if (inIframe) {
-        postSilentSsoResult("denied");
-      } else {
-        // Direct navigation (probe ran as a full-page redirect, or a stale
-        // URL): return to the app root, still anonymous.
-        router.replace("/");
-      }
+      router.replace(consumeSilentSsoReturnTo() ?? "/");
       return;
     }
 
-    if (immediateError) {
-      // The error card is already rendering (derived state above). In the
-      // probe iframe additionally relay the failure so the initiator settles
-      // instead of waiting for its timeout.
-      if (inIframe) {
-        postSilentSsoResult("error");
-      }
-      return;
-    }
+    if (immediateError) return;
 
     // Exchange the single-use code for tokens via a secure POST request
     const exchangeCode = async () => {
@@ -112,33 +91,22 @@ function CallbackHandler() {
             (body?.error && ERROR_MESSAGES[body.error]) ||
             (body?.code && ERROR_MESSAGES[body.code]) ||
             "Authentication failed. Please try again.";
-          if (inIframe) {
-            postSilentSsoResult("error");
-          } else {
-            setError(message);
-          }
+          setError(message);
           return;
         }
 
         // Tokens are now set as httpOnly cookies by the backend.
         // No need to store them in localStorage.
-        // Signed in: the silent-SSO session guard resets so the next
-        // anonymous session can probe again.
+        // Signed in: reset the silent-SSO once-per-session guard so the next
+        // anonymous session can probe again, and land back on the page a
+        // silent attempt started from (explicit logins have no stored return
+        // path and land on "/" as before).
         clearSilentSsoAttempt();
-        if (inIframe) {
-          // The probe initiator (SilentSsoBootstrap) refreshes the user in
-          // the top window; this frame's job is done.
-          postSilentSsoResult("success");
-          return;
-        }
+        const returnTo = consumeSilentSsoReturnTo() ?? "/";
         await refreshUser();
-        router.replace("/");
+        router.replace(returnTo);
       } catch {
-        if (inIframe) {
-          postSilentSsoResult("error");
-        } else {
-          setError("Failed to complete sign-in. Please try again.");
-        }
+        setError("Failed to complete sign-in. Please try again.");
       }
     };
 

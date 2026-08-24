@@ -5,7 +5,6 @@ import {
   buildSecurityHeaders,
   generateNonce,
   isHttpsEnabled,
-  isSameOriginFramablePath,
 } from "./lib/security-headers";
 
 /**
@@ -93,12 +92,8 @@ function withSecurityHeaders(
   response: NextResponse,
   contentSecurityPolicy: string,
   httpsEnabled: boolean,
-  sameOriginFramable: boolean,
 ): NextResponse {
-  for (const { key, value } of buildSecurityHeaders(
-    httpsEnabled,
-    sameOriginFramable,
-  )) {
+  for (const { key, value } of buildSecurityHeaders(httpsEnabled)) {
     response.headers.set(key, value);
   }
   response.headers.set("Content-Security-Policy", contentSecurityPolicy);
@@ -110,19 +105,12 @@ export function middleware(request: NextRequest) {
 
   const httpsEnabled = isHttpsEnabled();
   const nonce = generateNonce();
-  // The SSO callback routes (and only those) may be framed same-origin: the
-  // silent-SSO probe loads them in a hidden iframe. See
-  // isSameOriginFramablePath / src/lib/silent-sso.ts.
-  const sameOriginFramable = isSameOriginFramablePath(pathname);
   const contentSecurityPolicy = buildContentSecurityPolicy(
     httpsEnabled,
     nonce,
     // React dev mode uses eval to reconstruct server-side error stacks in the
     // browser; production uses neither eval nor unsafe-inline.
-    {
-      allowUnsafeEval: process.env.NODE_ENV !== "production",
-      frameAncestorsSelf: sameOriginFramable,
-    },
+    { allowUnsafeEval: process.env.NODE_ENV !== "production" },
   );
 
   // Forward the nonce (and the CSP carrying it) on the request so Next.js
@@ -143,7 +131,6 @@ export function middleware(request: NextRequest) {
       NextResponse.next(init),
       contentSecurityPolicy,
       httpsEnabled,
-      sameOriginFramable,
     );
   }
 
@@ -153,7 +140,6 @@ export function middleware(request: NextRequest) {
       NextResponse.next(init),
       contentSecurityPolicy,
       httpsEnabled,
-      sameOriginFramable,
     );
   }
 
@@ -164,7 +150,6 @@ export function middleware(request: NextRequest) {
     NextResponse.rewrite(new URL(`${pathname}${search}`, backendUrl), init),
     contentSecurityPolicy,
     httpsEnabled,
-    sameOriginFramable,
   );
 }
 

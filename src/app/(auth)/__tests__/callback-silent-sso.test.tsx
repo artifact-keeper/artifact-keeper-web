@@ -6,7 +6,7 @@ import React from "react";
 
 // ---------------------------------------------------------------------------
 // Mocks — the callback page's dependencies, silent-SSO helpers included so
-// each test can pick top-level vs in-iframe behaviour.
+// each test controls the guard/return-to behaviour.
 // ---------------------------------------------------------------------------
 
 const mockReplace = vi.fn();
@@ -40,22 +40,20 @@ vi.mock("@/lib/sdk-client", () => ({
 
 const mockMarkAttempted = vi.fn();
 const mockClearAttempt = vi.fn();
-const mockPostResult = vi.fn();
-const mockIsInIframe = vi.fn();
+const mockConsumeReturnTo = vi.fn();
 
 vi.mock("@/lib/silent-sso", () => ({
   markSilentSsoAttempted: () => mockMarkAttempted(),
   clearSilentSsoAttempt: () => mockClearAttempt(),
-  postSilentSsoResult: (o: string) => mockPostResult(o),
-  isInIframe: () => mockIsInIframe(),
+  consumeSilentSsoReturnTo: () => mockConsumeReturnTo(),
 }));
 
 import SsoCallbackPage from "../callback/page";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockIsInIframe.mockReturnValue(false);
   mockSearch = new URLSearchParams();
+  mockConsumeReturnTo.mockReturnValue(null);
   vi.stubGlobal("fetch", vi.fn());
 });
 
@@ -65,7 +63,7 @@ afterEach(() => {
 });
 
 describe("callback page — silent_denied (anonymous stays anonymous)", () => {
-  it("top-level: records the attempt and returns to the app with NO error UI", async () => {
+  it("records the attempt and returns to the app root with NO error UI", async () => {
     mockSearch = new URLSearchParams("silent_denied=1");
     render(<SsoCallbackPage />);
 
@@ -75,56 +73,40 @@ describe("callback page — silent_denied (anonymous stays anonymous)", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("in the probe iframe: posts 'denied' to the parent and stops", async () => {
-    mockIsInIframe.mockReturnValue(true);
+  it("returns the visitor to the page the silent attempt started from", async () => {
+    mockConsumeReturnTo.mockReturnValue("/packages/pypi/requests");
     mockSearch = new URLSearchParams("silent_denied=1");
     render(<SsoCallbackPage />);
 
-    await waitFor(() => expect(mockPostResult).toHaveBeenCalledWith("denied"));
-    expect(mockReplace).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/packages/pypi/requests"),
+    );
     expect(screen.queryByText("SSO Login Failed")).not.toBeInTheDocument();
   });
 });
 
 describe("callback page — code exchange", () => {
-  it("top-level success: clears the silent-SSO guard, refreshes, navigates home", async () => {
+  it("success: clears the silent-SSO guard, refreshes, returns to the stored page", async () => {
+    mockConsumeReturnTo.mockReturnValue("/repositories");
+    mockSearch = new URLSearchParams("code=xyz");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+    render(<SsoCallbackPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/repositories"));
+    expect(mockClearAttempt).toHaveBeenCalled();
+    expect(mockRefreshUser).toHaveBeenCalled();
+  });
+
+  it("success with no stored return path (explicit login): lands on / as before", async () => {
     mockSearch = new URLSearchParams("code=xyz");
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
     render(<SsoCallbackPage />);
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
     expect(mockClearAttempt).toHaveBeenCalled();
-    expect(mockRefreshUser).toHaveBeenCalled();
   });
 
-  it("iframe success: posts 'success' and leaves navigation to the parent", async () => {
-    mockIsInIframe.mockReturnValue(true);
-    mockSearch = new URLSearchParams("code=xyz");
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
-    render(<SsoCallbackPage />);
-
-    await waitFor(() => expect(mockPostResult).toHaveBeenCalledWith("success"));
-    expect(mockReplace).not.toHaveBeenCalled();
-    expect(mockRefreshUser).not.toHaveBeenCalled();
-  });
-
-  it("iframe exchange failure: posts 'error' so the initiator settles", async () => {
-    mockIsInIframe.mockReturnValue(true);
-    mockSearch = new URLSearchParams("code=xyz");
-    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "invalid_code" }),
-    });
-    render(<SsoCallbackPage />);
-
-    await waitFor(() => expect(mockPostResult).toHaveBeenCalledWith("error"));
-    // The probe iframe is hidden, so whatever it renders is invisible; the
-    // contract is the message, plus never navigating the (top-level) router.
-    expect(mockReplace).not.toHaveBeenCalled();
-    expect(mockRefreshUser).not.toHaveBeenCalled();
-  });
-
-  it("top-level exchange failure: keeps the pre-existing error card", async () => {
+  it("exchange failure: keeps the pre-existing error card and does not clear the guard", async () => {
     mockSearch = new URLSearchParams("code=xyz");
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
@@ -136,11 +118,12 @@ describe("callback page — code exchange", () => {
       expect(screen.getByText("SSO Login Failed")).toBeInTheDocument(),
     );
     expect(mockClearAttempt).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
 
 describe("callback page — IdP error param", () => {
-  it("top-level: renders the error card (pre-existing behaviour)", async () => {
+  it("renders the error card (pre-existing behaviour, silent family excluded server-side)", async () => {
     mockSearch = new URLSearchParams("error=access_denied");
     render(<SsoCallbackPage />);
     await waitFor(() =>
@@ -149,13 +132,6 @@ describe("callback page — IdP error param", () => {
     expect(
       screen.getByText("Access was denied by the identity provider."),
     ).toBeInTheDocument();
-  });
-
-  it("iframe: posts 'error' so the initiator settles instead of timing out", async () => {
-    mockIsInIframe.mockReturnValue(true);
-    mockSearch = new URLSearchParams("error=access_denied");
-    render(<SsoCallbackPage />);
-    await waitFor(() => expect(mockPostResult).toHaveBeenCalledWith("error"));
     expect(mockReplace).not.toHaveBeenCalled();
   });
 });

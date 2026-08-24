@@ -60,25 +60,6 @@ export interface CspOptions {
    * Never needed in production.
    */
   allowUnsafeEval?: boolean;
-  /**
-   * Emit `frame-ancestors 'self'` instead of the default `'none'`. Set only
-   * for the SSO callback routes (see `isSameOriginFramablePath`): the silent
-   * SSO probe loads the callback page in a hidden same-origin iframe, which
-   * `'none'` would block. Same-origin framing is not a clickjacking vector —
-   * an attacker who can frame from our own origin already executes script on
-   * it — and every other route keeps `'none'`.
-   */
-  frameAncestorsSelf?: boolean;
-}
-
-/**
- * Routes that may be framed by a same-origin page — exactly the SSO callback
- * routes the silent-SSO probe iframe lands on (`/auth/callback` is the
- * next.config.ts rewrite alias of `/callback`). Everything else stays
- * unframable (`frame-ancestors 'none'` / `X-Frame-Options: DENY`).
- */
-export function isSameOriginFramablePath(pathname: string): boolean {
-  return pathname === "/callback" || pathname === "/auth/callback";
 }
 
 /**
@@ -114,7 +95,7 @@ export function isSameOriginFramablePath(pathname: string): boolean {
 export function buildContentSecurityPolicy(
   httpsEnabled: boolean,
   nonce: string,
-  { allowUnsafeEval = false, frameAncestorsSelf = false }: CspOptions = {},
+  { allowUnsafeEval = false }: CspOptions = {},
 ): string {
   const directives = [
     "default-src 'self'",
@@ -123,19 +104,9 @@ export function buildContentSecurityPolicy(
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self' https:",
-    // The silent-SSO probe (src/lib/silent-sso.ts) navigates a hidden iframe
-    // through the OIDC login redirect: same-origin login URL → the IdP's
-    // HTTPS authorize endpoint → back. CSP evaluates frame-src against every
-    // URL in that redirect chain, so the fallback default-src 'self' would
-    // block the IdP hop and silently kill the probe. `https:` mirrors the
-    // connect-src rationale above (the IdP origin is deployment config, not
-    // knowable here); only same-origin scripts can create frames, so this
-    // does not widen any injection surface. Plain-http IdPs stay blocked —
-    // the probe then just times out and the visitor stays anonymous.
-    "frame-src 'self' https:",
     "object-src 'self'",
     "worker-src 'self'",
-    `frame-ancestors ${frameAncestorsSelf ? "'self'" : "'none'"}`,
+    "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
   ];
@@ -154,21 +125,10 @@ export function buildContentSecurityPolicy(
  *
  * When `httpsEnabled` is false (the default), HSTS is omitted; every other
  * header is unconditional.
- *
- * `sameOriginFramable` relaxes `X-Frame-Options` from `DENY` to `SAMEORIGIN`
- * for the SSO callback routes only (see `isSameOriginFramablePath`), matching
- * the CSP `frame-ancestors 'self'` those routes get so the silent-SSO probe
- * iframe can load them. Cross-origin framing stays blocked everywhere.
  */
-export function buildSecurityHeaders(
-  httpsEnabled: boolean,
-  sameOriginFramable = false,
-): SecurityHeader[] {
+export function buildSecurityHeaders(httpsEnabled: boolean): SecurityHeader[] {
   const headers: SecurityHeader[] = [
-    {
-      key: "X-Frame-Options",
-      value: sameOriginFramable ? "SAMEORIGIN" : "DENY",
-    },
+    { key: "X-Frame-Options", value: "DENY" },
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     {

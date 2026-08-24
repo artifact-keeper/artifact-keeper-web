@@ -2,17 +2,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   SILENT_SSO_ATTEMPTED_KEY,
-  SILENT_SSO_MESSAGE_TYPE,
-  SILENT_SSO_TIMEOUT_MS,
+  SILENT_SSO_PREFLIGHT_TIMEOUT_MS,
+  SILENT_SSO_RETURN_KEY,
   buildSilentLoginUrl,
   clearSilentSsoAttempt,
+  consumeSilentSsoReturnTo,
   hasAttemptedSilentSso,
-  isInIframe,
   isSilentSsoExcludedPath,
-  isSilentSsoMessage,
   markSilentSsoAttempted,
-  postSilentSsoResult,
-  runSilentSso,
+  preflightSilentLogin,
+  startSilentSignIn,
+  storeSilentSsoReturnTo,
 } from "../silent-sso";
 
 describe("session guard", () => {
@@ -32,9 +32,9 @@ describe("session guard", () => {
   });
 
   it("fails closed (reads as attempted) and never throws when sessionStorage is unavailable", () => {
-    // Privacy modes / storage-partitioned iframes throw on the accessor
-    // itself. A browser where the attempt cannot be recorded must never loop
-    // the probe, and none of the helpers may surface the exception.
+    // Privacy modes throw on the accessor itself. A browser where the
+    // attempt cannot be recorded must never loop the probe, and none of the
+    // helpers may surface the exception.
     const original = Object.getOwnPropertyDescriptor(window, "sessionStorage");
     Object.defineProperty(window, "sessionStorage", {
       configurable: true,
@@ -46,6 +46,8 @@ describe("session guard", () => {
       expect(hasAttemptedSilentSso()).toBe(true);
       expect(() => markSilentSsoAttempted()).not.toThrow();
       expect(() => clearSilentSsoAttempt()).not.toThrow();
+      expect(() => storeSilentSsoReturnTo("/x")).not.toThrow();
+      expect(consumeSilentSsoReturnTo()).toBeNull();
     } finally {
       if (original) {
         Object.defineProperty(window, "sessionStorage", original);
@@ -63,6 +65,24 @@ describe("buildSilentLoginUrl", () => {
 
   it("appends with & when the URL already has a query", () => {
     expect(buildSilentLoginUrl("/login?x=1")).toBe("/login?x=1&prompt=none");
+  });
+});
+
+describe("return-to round trip", () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it("stores and consumes (read-once) a same-app path", () => {
+    storeSilentSsoReturnTo("/packages/pypi/requests?tab=files#top");
+    expect(consumeSilentSsoReturnTo()).toBe("/packages/pypi/requests?tab=files#top");
+    expect(consumeSilentSsoReturnTo()).toBeNull();
+    expect(sessionStorage.getItem(SILENT_SSO_RETURN_KEY)).toBeNull();
+  });
+
+  it("rejects values that could be an open redirect", () => {
+    for (const bad of ["https://evil.example/x", "//evil.example/x", "javascript:alert(1)", ""]) {
+      sessionStorage.setItem(SILENT_SSO_RETURN_KEY, bad);
+      expect(consumeSilentSsoReturnTo(), bad).toBeNull();
+    }
   });
 });
 
@@ -85,177 +105,77 @@ describe("isSilentSsoExcludedPath", () => {
   });
 });
 
-describe("isSilentSsoMessage", () => {
-  it("accepts the three probe outcomes", () => {
-    for (const outcome of ["success", "denied", "error"]) {
-      expect(
-        isSilentSsoMessage({ type: SILENT_SSO_MESSAGE_TYPE, outcome }),
-      ).toBe(true);
+describe("preflightSilentLogin (the fail-open gate)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("passes on an opaqueredirect (redirect:manual view of the 307)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ type: "opaqueredirect", status: 0 });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(preflightSilentLogin("/api/v1/auth/sso/oidc/p1/login")).resolves.toBe(true);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/v1/auth/sso/oidc/p1/login?prompt=none");
+    expect(init.redirect).toBe("manual");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("fails open on a backend error status (IdP discovery failed server-side)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ type: "basic", status: 500 }));
+    await expect(preflightSilentLogin("/x")).resolves.toBe(false);
+  });
+
+  it("fails open on a network error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network down")));
+    await expect(preflightSilentLogin("/x")).resolves.toBe(false);
+  });
+
+  it("fails open on timeout (a hung backend/IdP never strands the visitor)", async () => {
+    vi.useFakeTimers();
+    try {
+      // fetch that honors the abort signal but never resolves on its own.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(
+          (_url: string, init: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              init.signal?.addEventListener("abort", () =>
+                reject(new DOMException("timeout", "TimeoutError")),
+              );
+            }),
+        ),
+      );
+      const p = preflightSilentLogin("/x", 100);
+      await vi.advanceTimersByTimeAsync(101);
+      await expect(p).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
     }
   });
 
-  it("rejects anything else (untrusted postMessage traffic)", () => {
-    expect(isSilentSsoMessage(null)).toBe(false);
-    expect(isSilentSsoMessage("ak-silent-sso-result")).toBe(false);
-    expect(isSilentSsoMessage({ type: "other", outcome: "success" })).toBe(
-      false,
-    );
-    expect(
-      isSilentSsoMessage({ type: SILENT_SSO_MESSAGE_TYPE, outcome: "timeout" }),
-    ).toBe(false);
-    expect(
-      isSilentSsoMessage({ type: SILENT_SSO_MESSAGE_TYPE }),
-    ).toBe(false);
+  it("has a bounded default timeout", () => {
+    expect(SILENT_SSO_PREFLIGHT_TIMEOUT_MS).toBeLessThanOrEqual(5000);
   });
 });
 
-describe("isInIframe", () => {
-  it("is false when self === top", () => {
-    const w = { self: window, top: window };
-    expect(isInIframe(w)).toBe(false);
+describe("startSilentSignIn", () => {
+  beforeEach(() => sessionStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("navigates top-level to the prompt=none URL after a passing preflight, remembering the location", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ type: "opaqueredirect", status: 0 }));
+    const navigate = vi.fn();
+    await expect(
+      startSilentSignIn("/api/v1/auth/sso/oidc/p1/login", { navigate }),
+    ).resolves.toBe(true);
+    expect(navigate).toHaveBeenCalledWith("/api/v1/auth/sso/oidc/p1/login?prompt=none");
+    // jsdom's default location is "/", which is what the callback restores.
+    expect(sessionStorage.getItem(SILENT_SSO_RETURN_KEY)).toBe("/");
   });
 
-  it("is true when self !== top", () => {
-    const w = { self: window, top: {} as Window };
-    expect(isInIframe(w)).toBe(true);
-  });
-
-  it("is true when touching top throws (cross-origin ancestor)", () => {
-    const w = {
-      self: window,
-      get top(): Window {
-        throw new Error("cross-origin");
-      },
-    };
-    expect(isInIframe(w)).toBe(true);
-  });
-});
-
-describe("runSilentSso", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    document
-      .querySelectorAll("iframe")
-      .forEach((f) => f.remove());
-  });
-
-  function mountedIframe(): HTMLIFrameElement {
-    const iframe = document.querySelector("iframe");
-    expect(iframe).not.toBeNull();
-    return iframe as HTMLIFrameElement;
-  }
-
-  /**
-   * Deliver a message event as if it came from the probe iframe. jsdom fires
-   * listeners synchronously.
-   */
-  function deliver(data: unknown, opts?: { origin?: string; source?: unknown }) {
-    const iframe = mountedIframe();
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data,
-        origin: opts?.origin ?? window.location.origin,
-        source: (opts && "source" in opts
-          ? opts.source
-          : iframe.contentWindow) as Window,
-      }),
-    );
-  }
-
-  it("mounts a hidden sandboxed iframe pointed at the silent login URL", async () => {
-    const promise = runSilentSso("/api/v1/auth/sso/oidc/p1/login");
-    const iframe = mountedIframe();
-    expect(iframe.src).toContain("/api/v1/auth/sso/oidc/p1/login?prompt=none");
-    expect(iframe.style.display).toBe("none");
-    expect(iframe.getAttribute("aria-hidden")).toBe("true");
-    expect(iframe.getAttribute("sandbox")).toBe(
-      "allow-scripts allow-same-origin",
-    );
-    deliver({ type: SILENT_SSO_MESSAGE_TYPE, outcome: "denied" });
-    await expect(promise).resolves.toBe("denied");
-  });
-
-  it("resolves success when the callback page reports it", async () => {
-    const promise = runSilentSso("/login-url");
-    deliver({ type: SILENT_SSO_MESSAGE_TYPE, outcome: "success" });
-    await expect(promise).resolves.toBe("success");
-    // Teardown happens on the next tick.
-    await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector("iframe")).toBeNull();
-  });
-
-  it("resolves timeout (fail open) when no result arrives", async () => {
-    // The IdP being down or unreachable must cost the anonymous visitor
-    // nothing: the probe gives up quietly after the timeout.
-    const promise = runSilentSso("/login-url");
-    await vi.advanceTimersByTimeAsync(SILENT_SSO_TIMEOUT_MS + 1);
-    await expect(promise).resolves.toBe("timeout");
-    expect(document.querySelector("iframe")).toBeNull();
-  });
-
-  it("honors a custom timeout", async () => {
-    const promise = runSilentSso("/login-url", 100);
-    await vi.advanceTimersByTimeAsync(101);
-    await expect(promise).resolves.toBe("timeout");
-  });
-
-  it("ignores messages from other origins", async () => {
-    const promise = runSilentSso("/login-url", 50);
-    deliver(
-      { type: SILENT_SSO_MESSAGE_TYPE, outcome: "success" },
-      { origin: "https://evil.example" },
-    );
-    await vi.advanceTimersByTimeAsync(51);
-    await expect(promise).resolves.toBe("timeout");
-  });
-
-  it("ignores same-origin messages that are not from the probe iframe", async () => {
-    const promise = runSilentSso("/login-url", 50);
-    deliver(
-      { type: SILENT_SSO_MESSAGE_TYPE, outcome: "success" },
-      { source: null },
-    );
-    await vi.advanceTimersByTimeAsync(51);
-    await expect(promise).resolves.toBe("timeout");
-  });
-
-  it("ignores unrelated message payloads", async () => {
-    const promise = runSilentSso("/login-url", 50);
-    deliver({ hello: "world" });
-    deliver("string message");
-    await vi.advanceTimersByTimeAsync(51);
-    await expect(promise).resolves.toBe("timeout");
-  });
-
-  it("settles only once (first result wins)", async () => {
-    const promise = runSilentSso("/login-url");
-    deliver({ type: SILENT_SSO_MESSAGE_TYPE, outcome: "denied" });
-    deliver({ type: SILENT_SSO_MESSAGE_TYPE, outcome: "success" });
-    await expect(promise).resolves.toBe("denied");
-  });
-});
-
-describe("postSilentSsoResult", () => {
-  it("posts the typed message to the parent window, origin-pinned", () => {
-    const spy = vi.spyOn(window.parent, "postMessage").mockImplementation(() => {});
-    postSilentSsoResult("denied");
-    expect(spy).toHaveBeenCalledWith(
-      { type: SILENT_SSO_MESSAGE_TYPE, outcome: "denied" },
-      window.location.origin,
-    );
-    spy.mockRestore();
-  });
-
-  it("swallows a failed post (parent gone) — fail open", () => {
-    const spy = vi
-      .spyOn(window.parent, "postMessage")
-      .mockImplementation(() => {
-        throw new Error("detached");
-      });
-    expect(() => postSilentSsoResult("error")).not.toThrow();
-    spy.mockRestore();
+  it("does NOT navigate when the preflight fails (fail open)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ type: "basic", status: 502 }));
+    const navigate = vi.fn();
+    await expect(startSilentSignIn("/x", { navigate })).resolves.toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(SILENT_SSO_RETURN_KEY)).toBeNull();
   });
 });

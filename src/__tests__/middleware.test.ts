@@ -334,41 +334,6 @@ describe("middleware security headers (#679)", () => {
     ) as unknown as MockResponse;
     expect(off.headers.get("Strict-Transport-Security")).toBeUndefined();
   });
-
-  it.each(["/callback", "/auth/callback"])(
-    "allows same-origin framing on the SSO callback route %s (silent SSO probe)",
-    async (path) => {
-      const { middleware } = await import("../middleware");
-      const result = middleware(
-        createMockNextRequest(path),
-      ) as unknown as MockResponse;
-
-      // Same-origin only: the silent-SSO probe iframe is same-origin by
-      // construction, cross-origin framing stays blocked.
-      expect(result.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
-      expect(result.headers.get("Content-Security-Policy")).toContain(
-        "frame-ancestors 'self'",
-      );
-      expect(result.headers.get("Content-Security-Policy")).not.toContain(
-        "frame-ancestors 'none'",
-      );
-    },
-  );
-
-  it("keeps every other route unframable", async () => {
-    const { middleware } = await import("../middleware");
-    for (const path of ["/", "/login", "/callback/nested", "/api/v1/users"]) {
-      mockNext.mockClear();
-      mockRewrite.mockClear();
-      const result = middleware(
-        createMockNextRequest(path),
-      ) as unknown as MockResponse;
-      expect(result.headers.get("X-Frame-Options")).toBe("DENY");
-      expect(result.headers.get("Content-Security-Policy")).toContain(
-        "frame-ancestors 'none'",
-      );
-    }
-  });
 });
 
 describe("middleware CSP nonce (#674)", () => {

@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import { useSystemConfig } from "@/providers/system-config-provider";
 import { ssoApi } from "@/lib/api/sso";
 import {
   hasAttemptedSilentSso,
-  isInIframe,
   isSilentSsoExcludedPath,
   markSilentSsoAttempted,
-  runSilentSso,
+  startSilentSignIn,
 } from "@/lib/silent-sso";
 
 /**
@@ -26,19 +24,20 @@ import {
  *  - at least one OIDC provider is enabled;
  *  - no prior attempt is recorded for this browser session;
  *  - the current page is not an auth flow page (login/callback/
- *    change-password) and this window is not itself a probe iframe.
+ *    change-password).
  *
- * The probe runs in a hidden iframe and NEVER navigates this page (see
- * src/lib/silent-sso.ts): a live IdP session signs the user in invisibly,
- * anything else — no session, IdP down, IdP slow — leaves the visitor
- * browsing anonymously with no error UI and no visible IdP login page.
- * Anonymous browsing is a first-class state for a registry; that is what
- * separates check-sso from a naive sole-provider auto-redirect.
+ * The attempt itself (see src/lib/silent-sso.ts) is a preflight-gated
+ * top-level `prompt=none` round trip: a dead or unreachable IdP fails the
+ * short-timeout preflight and nothing happens (fail open); a live IdP
+ * session signs the user in invisibly and returns them to this page; no
+ * session returns them here still anonymous, with no error UI and no
+ * visible IdP login page. Anonymous browsing is a first-class state for a
+ * registry — that is what separates check-sso from a naive sole-provider
+ * auto-redirect.
  */
 export function SilentSsoBootstrap() {
-  const { user, isLoading, setupRequired, refreshUser } = useAuth();
+  const { user, isLoading, setupRequired } = useAuth();
   const { config, isLoading: configLoading } = useSystemConfig();
-  const queryClient = useQueryClient();
   // Per-mount re-entry latch. The sessionStorage guard is the real
   // once-per-session gate; this only stops effect re-runs racing within a
   // single mount before storage is written.
@@ -52,11 +51,10 @@ export function SilentSsoBootstrap() {
     if (setupRequired) return;
     if (!silentSsoEnabled) return;
     if (isSilentSsoExcludedPath(window.location.pathname)) return;
-    if (isInIframe(window)) return;
     if (hasAttemptedSilentSso()) return;
 
     startedRef.current = true;
-    // Record the attempt BEFORE anything async: a crash or reload mid-probe
+    // Record the attempt BEFORE anything async: an interrupted round trip
     // must never produce a second attempt (or a loop) in this session.
     markSilentSsoAttempted();
 
@@ -68,31 +66,17 @@ export function SilentSsoBootstrap() {
         );
         if (!oidc) return;
 
-        const outcome = await runSilentSso(oidc.login_url);
-        if (outcome === "success") {
-          // The probe iframe completed the code exchange; the httpOnly auth
-          // cookies are set. Adopt the identity and refetch auth-scoped
-          // queries (same post-login invalidation as the explicit flows,
-          // #487).
-          await refreshUser();
-          await queryClient.invalidateQueries();
-        }
-        // "denied" / "error" / "timeout": stay anonymous, quietly. The
-        // explicit "Sign in with …" button on /login is unaffected.
+        // Preflight + top-level redirect; false means the preflight failed
+        // and nothing happened — the visitor stays anonymous, quietly. The
+        // explicit "Sign in with …" button on /login is unaffected either
+        // way.
+        await startSilentSignIn(oidc.login_url);
       } catch {
         // Fail open: a providers-list failure or any unexpected error leaves
         // the visitor anonymous and the app fully usable.
       }
     })();
-  }, [
-    user,
-    isLoading,
-    configLoading,
-    setupRequired,
-    silentSsoEnabled,
-    refreshUser,
-    queryClient,
-  ]);
+  }, [user, isLoading, configLoading, setupRequired, silentSsoEnabled]);
 
   return null;
 }
