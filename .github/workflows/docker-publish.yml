@@ -200,7 +200,12 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
-        continue-on-error: true
+        # Deliberately NOT continue-on-error. A soft-failed attestation step
+        # leaves the job result `success`, so `needs.merge.result` stays green
+        # and the image publishes with no provenance and no annotation --
+        # the failure mode that shipped backend 1.6.1 unsigned
+        # (artifact-keeper#2824). If provenance cannot be attached, the
+        # publish should fail loudly. See #815.
 
   # Run compatibility tests AFTER images are published. The gate is advisory:
   # it does not block the image publish. If the gate fails, investigate but
