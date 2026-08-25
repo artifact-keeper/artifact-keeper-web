@@ -32,6 +32,8 @@ export const QUERY_KEYS = {
   // findings, policies, scan-configs) gets invalidated. See #213.
   SECURITY: ["security"],
   PLUGINS: ["plugins"],
+  CI_OIDC: ["ci-oidc"],
+  CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
 } as const;
 
 // ---------------------------------------------------------------------------
