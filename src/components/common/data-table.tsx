@@ -16,7 +16,7 @@ import { DataTablePagination } from "@/components/common/data-table-pagination";
 
 export interface DataTableColumn<T> {
   id: string;
-  header: string;
+  header: React.ReactNode;
   accessor?: (row: T) => unknown;
   cell?: (row: T) => React.ReactNode;
   sortable?: boolean;

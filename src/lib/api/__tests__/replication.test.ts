@@ -243,11 +243,17 @@ describe("peersApi", () => {
     await expect(peersApi.triggerSync("p1")).rejects.toBe("fail");
   });
 
-  it("getRepositories returns repo IDs", async () => {
-    const data = ["repo1", "repo2"];
+  it("getRepositories returns subscriptions with replication mode", async () => {
+    const data = [
+      { repository_id: "repo1", replication_mode: "push", sync_enabled: true },
+      { repository_id: "repo2", replication_mode: null, sync_enabled: false },
+    ];
     mockGetAssignedRepos.mockResolvedValue({ data, error: undefined });
     const { peersApi } = await import("../replication");
-    expect(await peersApi.getRepositories("p1")).toEqual(data);
+    expect(await peersApi.getRepositories("p1")).toEqual([
+      { repository_id: "repo1", replication_mode: "push", sync_enabled: true },
+      { repository_id: "repo2", replication_mode: null, sync_enabled: false },
+    ]);
   });
 
   it("getRepositories throws on error", async () => {
