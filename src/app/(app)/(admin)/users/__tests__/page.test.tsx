@@ -1312,7 +1312,37 @@ describe("UsersPage", () => {
       expect(mockAdminListUsersPage).toHaveBeenCalledWith({
         page: 1,
         perPage: 20,
+        isServiceAccount: false,
       });
+    });
+
+    // #825 / artifact-keeper#3634: service accounts are rows in the `users`
+    // table, so without this filter they render here with Edit / Reset
+    // password / Force password change against them -- none of which apply to
+    // an identity that authenticates with API tokens -- and inflate the total.
+    //
+    // The filter MUST be server-side. This listing is paginated (#564), so
+    // dropping rows from the fetched page in the browser would leave `total`
+    // and `total_pages` counting rows the page no longer shows: a short page
+    // and, at the boundary, a phantom trailing one.
+    it("asks the server for people only, on every page", async () => {
+      mockAdminListUsersPage.mockResolvedValue({ items: [], total: 0 });
+      setupMocks();
+      render(<UsersPage />);
+
+      const usersQuery = capturedQueryConfigs.find(
+        (c) => c.queryKey[0] === "admin-users"
+      );
+      await usersQuery.queryFn();
+
+      expect(mockAdminListUsersPage).toHaveBeenCalledWith(
+        expect.objectContaining({ isServiceAccount: false })
+      );
+      // Not filtered client-side: whatever the server returns is rendered as
+      // the page, and the server's total is trusted verbatim.
+      expect(mockAdminListUsersPage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ isServiceAccount: undefined })
+      );
     });
 
     it("passes the server-reported total to the table", () => {
@@ -1343,6 +1373,7 @@ describe("UsersPage", () => {
       expect(mockAdminListUsersPage).toHaveBeenCalledWith({
         page: 2,
         perPage: 20,
+        isServiceAccount: false,
       });
     });
 
@@ -1366,6 +1397,7 @@ describe("UsersPage", () => {
       expect(mockAdminListUsersPage).toHaveBeenCalledWith({
         page: 1,
         perPage: 50,
+        isServiceAccount: false,
       });
     });
 

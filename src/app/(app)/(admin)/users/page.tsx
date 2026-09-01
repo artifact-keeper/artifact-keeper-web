@@ -129,9 +129,18 @@ export default function UsersPage() {
   const [pageSize, setPageSize] = useState(20);
 
   // -- queries --
+  // People only (#825). Service accounts are rows in the `users` table, so an
+  // unfiltered listing renders them here with person-only actions -- Edit,
+  // Reset password, Force password change -- none of which apply to an
+  // identity that authenticates with API tokens, and all of which are already
+  // offered in their applicable form on the Service Accounts page. The filter
+  // has to be server-side: this listing is paginated (#564), so dropping rows
+  // from a page in the browser would leave `total` counting rows the page no
+  // longer shows.
   const { data: usersData, isLoading } = useQuery({
     queryKey: ["admin-users", page, pageSize],
-    queryFn: () => adminApi.listUsersPage({ page, perPage: pageSize }),
+    queryFn: () =>
+      adminApi.listUsersPage({ page, perPage: pageSize, isServiceAccount: false }),
     enabled: !!currentUser?.is_admin,
   });
 
