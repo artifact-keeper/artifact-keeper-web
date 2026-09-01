@@ -8,6 +8,7 @@ import {
   Wifi,
   Globe,
   Loader2,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -103,13 +104,23 @@ export default function ReplicationPage() {
   const { data: reposData } = useRepositories({ per_page: 200 });
   const repositories = reposData?.items ?? [];
 
-  const { data: assignedRepos = [] } = useQuery({
+  const { data: assignedSubs = [] } = useQuery({
     queryKey: ["peer-repos", selectedPeerId],
     queryFn: () => peersApi.getRepositories(selectedPeerId),
     enabled: selectedPeerId !== "__none__",
   });
 
-  const assignedSet = new Set(assignedRepos);
+  // The endpoint lists every subscription row, sync on or off, so a repo counts
+  // as "assigned" only while its sync is enabled. The mode is read from the API
+  // (not guessed) so the displayed direction is the real one.
+  const activeSubs = assignedSubs.filter((s) => s.sync_enabled);
+  const assignedSet = new Set(activeSubs.map((s) => s.repository_id));
+  const modeByRepo = new Map<string, ReplicationModeOption>(
+    activeSubs.map((s) => [
+      s.repository_id,
+      (s.replication_mode ?? "none") as ReplicationModeOption,
+    ]),
+  );
 
   // Topology tab queries
   const { data: connections = [], isLoading: connectionsLoading } = useQuery({
@@ -166,9 +177,23 @@ export default function ReplicationPage() {
     },
     {
       id: "mode",
-      header: "Replication Mode",
+      header: (
+        <span className="inline-flex items-center gap-1">
+          Replication Mode
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Direction is relative to this instance. Push = this instance sends
+              the repo to the selected peer. Pull = this instance fetches it from
+              the peer.
+            </TooltipContent>
+          </Tooltip>
+        </span>
+      ),
       cell: (r) => {
-        const currentMode = repoModes[r.id] ?? (assignedSet.has(r.id) ? "pull" : "none");
+        const currentMode = repoModes[r.id] ?? modeByRepo.get(r.id) ?? "none";
         return (
           <Select
             value={currentMode}

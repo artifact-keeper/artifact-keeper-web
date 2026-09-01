@@ -92,6 +92,14 @@ export interface AssignRepoRequest {
   replication_schedule?: string;
 }
 
+// One (peer, repo) subscription from the assigned-repos list. Carries the real
+// replication_mode so the UI shows the stored direction instead of guessing.
+export interface AssignedSubscription {
+  repository_id: string;
+  replication_mode: ReplicationMode | null;
+  sync_enabled: boolean;
+}
+
 // SDK ⇄ local adapters. Status fields use narrowEnum; nullable fields
 // normalize undefined → null to match the local type.
 
@@ -225,10 +233,22 @@ export const peersApi = {
     await unwrap(sdkTriggerSync({ path: { id } }));
   },
 
-  /** Get repositories assigned to a peer */
-  getRepositories: async (id: string): Promise<string[]> => {
+  /** Get subscriptions (repo id + replication mode) assigned to a peer */
+  getRepositories: async (id: string): Promise<AssignedSubscription[]> => {
     const data = await unwrap(sdkGetAssignedRepos({ path: { id } }));
-    return assertData(data, 'peersApi.getRepositories');
+    // The endpoint now returns full subscriptions (repo id + mode), but the
+    // generated SDK type still says string[]; read via passthrough until the
+    // SDK is regenerated (same approach as admin.ts for health image_tag).
+    const subs = assertData(data, 'peersApi.getRepositories') as unknown as Array<{
+      repository_id: string;
+      replication_mode: string | null;
+      sync_enabled: boolean;
+    }>;
+    return subs.map((s) => ({
+      repository_id: s.repository_id,
+      replication_mode: (s.replication_mode ?? null) as ReplicationMode | null,
+      sync_enabled: s.sync_enabled,
+    }));
   },
 
   /** Assign a repository to a peer */
