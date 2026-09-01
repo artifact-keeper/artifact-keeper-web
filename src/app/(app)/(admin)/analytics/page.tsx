@@ -12,13 +12,16 @@ import {
   Clock,
   RefreshCw,
   Camera,
+  Columns3,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { analyticsApi } from "@/lib/api/analytics";
+import { adminApi } from "@/lib/api/admin";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
+import { StatBreakdown } from "@/components/common/stat-breakdown";
 import { EmptyState } from "@/components/common/empty-state";
 import {
   Card,
@@ -40,11 +43,93 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+/** Toggles a card between one combined column and separate local/remote ones. */
+function SplitToggle({
+  split,
+  onToggle,
+}: Readonly<{ split: boolean; onToggle: () => void }>) {
+  return (
+    <Button
+      variant={split ? "default" : "outline"}
+      size="sm"
+      aria-pressed={split}
+      onClick={onToggle}
+    >
+      <Columns3 className="size-4 mr-1.5" />
+      Split local/remote
+    </Button>
+  );
+}
+
+/** Column header: one combined column, or a local/remote pair. */
+function SplitHeads({
+  label,
+  split,
+}: Readonly<{ label: string; split: boolean }>) {
+  if (!split) return <TableHead className="text-right">{label}</TableHead>;
+  return (
+    <>
+      <TableHead className="text-right">{label} (Local)</TableHead>
+      <TableHead className="text-right">{label} (Remote)</TableHead>
+    </>
+  );
+}
+
+const formatCount = (n: number) => n.toLocaleString();
+
+/**
+ * Hosted + proxy figures. Combined by default (the split on hover), or as two
+ * columns when the card is toggled. Proxy-cached objects have no `artifacts`
+ * row, so the backend counts them separately.
+ */
+function SplitCells({
+  local,
+  remote,
+  split,
+  format = formatCount,
+}: Readonly<{
+  local: number;
+  remote: number;
+  split: boolean;
+  format?: (n: number) => string;
+}>) {
+  if (split) {
+    return (
+      <>
+        <TableCell className="text-right tabular-nums">
+          {format(local)}
+        </TableCell>
+        <TableCell className="text-right tabular-nums">
+          {format(remote)}
+        </TableCell>
+      </>
+    );
+  }
+  return (
+    <TableCell className="text-right tabular-nums">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{format(local + remote)}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <StatBreakdown local={format(local)} remote={format(remote)} />
+        </TooltipContent>
+      </Tooltip>
+    </TableCell>
+  );
+}
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [staleDays, setStaleDays] = useState(90);
+  const [split, setSplit] = useState(false);
 
   const { data: growth, isLoading: growthLoading } = useQuery({
     queryKey: ["analytics-growth"],
@@ -73,6 +158,14 @@ export default function AnalyticsPage() {
   const { data: downloadTrend, isLoading: downloadsLoading } = useQuery({
     queryKey: ["analytics-downloads"],
     queryFn: () => analyticsApi.getDownloadTrends(),
+    enabled: !!user?.is_admin,
+  });
+
+  // The daily snapshots behind `growth` count only `artifacts` rows, so they
+  // miss proxy-cached objects. Live instance stats carry both halves.
+  const { data: stats } = useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: () => adminApi.getStats(),
     enabled: !!user?.is_admin,
   });
 
@@ -138,8 +231,19 @@ export default function AnalyticsPage() {
           <StatCard
             icon={HardDrive}
             label="Total Storage"
-            value={formatBytes(growth.storage_bytes_end)}
+            value={formatBytes(
+              (stats?.total_storage_bytes ?? growth.storage_bytes_end) +
+                (stats?.proxy_storage_bytes ?? 0),
+            )}
             color="blue"
+            tooltip={
+              stats && (
+                <StatBreakdown
+                  local={formatBytes(stats.total_storage_bytes)}
+                  remote={formatBytes(stats.proxy_storage_bytes)}
+                />
+              )
+            }
           />
           <StatCard
             icon={TrendingUp}
@@ -154,8 +258,19 @@ export default function AnalyticsPage() {
           <StatCard
             icon={Package}
             label="Artifacts"
-            value={growth.artifacts_end.toLocaleString()}
+            value={(
+              (stats?.total_artifacts ?? growth.artifacts_end) +
+              (stats?.proxy_artifact_count ?? 0)
+            ).toLocaleString()}
             color="purple"
+            tooltip={
+              stats && (
+                <StatBreakdown
+                  local={stats.total_artifacts.toLocaleString()}
+                  remote={stats.proxy_artifact_count.toLocaleString()}
+                />
+              )
+            }
           />
           <StatCard
             icon={Clock}
@@ -192,12 +307,17 @@ export default function AnalyticsPage() {
         <TabsContent value="breakdown" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                Storage by Repository
-              </CardTitle>
-              <CardDescription>
-                Storage usage breakdown across all repositories.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">
+                    Storage by Repository
+                  </CardTitle>
+                  <CardDescription>
+                    Storage usage breakdown across all repositories.
+                  </CardDescription>
+                </div>
+                <SplitToggle split={split} onToggle={() => setSplit(!split)} />
+              </div>
             </CardHeader>
             <CardContent className="px-0">
               {breakdownLoading ? (
@@ -220,9 +340,9 @@ export default function AnalyticsPage() {
                     <TableRow>
                       <TableHead>Repository</TableHead>
                       <TableHead>Format</TableHead>
-                      <TableHead className="text-right">Artifacts</TableHead>
-                      <TableHead className="text-right">Storage</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <SplitHeads label="Artifacts" split={split} />
+                      <SplitHeads label="Storage" split={split} />
+                      <SplitHeads label="Downloads" split={split} />
                       <TableHead>Last Upload</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -235,15 +355,22 @@ export default function AnalyticsPage() {
                         <TableCell>
                           <Badge variant="outline">{row.format}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          {row.artifact_count.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatBytes(row.storage_bytes)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {row.download_count.toLocaleString()}
-                        </TableCell>
+                        <SplitCells
+                          local={row.artifact_count}
+                          remote={row.proxy_artifact_count}
+                          split={split}
+                        />
+                        <SplitCells
+                          local={row.storage_bytes}
+                          remote={row.proxy_storage_bytes}
+                          split={split}
+                          format={formatBytes}
+                        />
+                        <SplitCells
+                          local={row.download_count}
+                          remote={row.proxy_download_count}
+                          split={split}
+                        />
                         <TableCell className="text-muted-foreground">
                           {row.last_upload_at
                             ? formatDate(row.last_upload_at)
@@ -262,12 +389,19 @@ export default function AnalyticsPage() {
         <TabsContent value="trend" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                Storage Over Time
-              </CardTitle>
-              <CardDescription>
-                Daily snapshots of total storage usage.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">
+                    Storage Over Time
+                  </CardTitle>
+                  <CardDescription>
+                    Daily snapshots of total storage usage. Remote figures for
+                    snapshots predating proxy accounting are reconstructed from
+                    cache timestamps, so they read as lower bounds.
+                  </CardDescription>
+                </div>
+                <SplitToggle split={split} onToggle={() => setSplit(!split)} />
+              </div>
             </CardHeader>
             <CardContent className="px-0">
               {trendLoading ? (
@@ -290,9 +424,9 @@ export default function AnalyticsPage() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">Repos</TableHead>
-                      <TableHead className="text-right">Artifacts</TableHead>
-                      <TableHead className="text-right">Storage</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <SplitHeads label="Artifacts" split={split} />
+                      <SplitHeads label="Storage" split={split} />
+                      <SplitHeads label="Downloads" split={split} />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -304,15 +438,22 @@ export default function AnalyticsPage() {
                         <TableCell className="text-right">
                           {row.total_repositories}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {row.total_artifacts.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatBytes(row.total_storage_bytes)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {row.total_downloads.toLocaleString()}
-                        </TableCell>
+                        <SplitCells
+                          local={row.total_artifacts}
+                          remote={row.proxy_artifact_count}
+                          split={split}
+                        />
+                        <SplitCells
+                          local={row.total_storage_bytes}
+                          remote={row.proxy_storage_bytes}
+                          split={split}
+                          format={formatBytes}
+                        />
+                        <SplitCells
+                          local={row.total_downloads}
+                          remote={row.proxy_download_count}
+                          split={split}
+                        />
                       </TableRow>
                     ))}
                   </TableBody>
@@ -326,10 +467,15 @@ export default function AnalyticsPage() {
         <TabsContent value="downloads" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Download Trends</CardTitle>
-              <CardDescription>
-                Daily download counts over the selected period.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Download Trends</CardTitle>
+                  <CardDescription>
+                    Daily download counts over the selected period.
+                  </CardDescription>
+                </div>
+                <SplitToggle split={split} onToggle={() => setSplit(!split)} />
+              </div>
             </CardHeader>
             <CardContent className="px-0">
               {downloadsLoading ? (
@@ -351,7 +497,7 @@ export default function AnalyticsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Downloads</TableHead>
+                      <SplitHeads label="Downloads" split={split} />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -360,9 +506,11 @@ export default function AnalyticsPage() {
                         <TableCell className="font-medium">
                           {formatDate(row.date)}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {row.download_count.toLocaleString()}
-                        </TableCell>
+                        <SplitCells
+                          local={row.download_count}
+                          remote={row.proxy_download_count}
+                          split={split}
+                        />
                       </TableRow>
                     ))}
                   </TableBody>

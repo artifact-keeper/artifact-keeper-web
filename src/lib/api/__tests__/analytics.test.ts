@@ -87,6 +87,7 @@ const SDK_GROWTH: SdkGrowthSummary = {
 const SDK_DOWNLOAD_TREND: SdkDownloadTrend = {
   date: "2026-05-01",
   download_count: 5,
+  proxy_download_count: 3,
 };
 
 describe("analyticsApi", () => {
@@ -99,7 +100,37 @@ describe("analyticsApi", () => {
     });
     const mod = await import("../analytics");
     const out = await mod.analyticsApi.getStorageTrend();
-    expect(out).toEqual([SDK_STORAGE]);
+    expect(out).toEqual([
+      {
+        ...SDK_STORAGE,
+        proxy_artifact_count: 0,
+        proxy_storage_bytes: 0,
+        proxy_download_count: 0,
+      },
+    ]);
+  });
+
+  // The snapshot's proxy halves are newer than the installed SDK types, so the
+  // adapter reads them off the payload and defaults them to 0 (above).
+  it("getStorageTrend surfaces the snapshot proxy halves", async () => {
+    mockGetStorageTrend.mockResolvedValue({
+      data: [
+        {
+          ...SDK_STORAGE,
+          proxy_artifact_count: 12,
+          proxy_storage_bytes: 4096,
+          proxy_download_count: 9,
+        },
+      ],
+      error: undefined,
+    });
+    const mod = await import("../analytics");
+    const out = await mod.analyticsApi.getStorageTrend();
+    expect(out[0].proxy_artifact_count).toBe(12);
+    expect(out[0].proxy_storage_bytes).toBe(4096);
+    expect(out[0].proxy_download_count).toBe(9);
+    // Hosted totals stay untouched.
+    expect(out[0].total_artifacts).toBe(SDK_STORAGE.total_artifacts);
   });
 
   it("getStorageTrend throws on error", async () => {
@@ -117,6 +148,31 @@ describe("analyticsApi", () => {
     const out = await mod.analyticsApi.getStorageBreakdown();
     expect(out[0].repository_id).toBe("repo-a");
     expect(out[0].last_upload_at).toBe("2026-04-30T00:00:00Z");
+  });
+
+  it("getStorageBreakdown surfaces the proxy figures, defaulting to 0", async () => {
+    mockGetStorageBreakdown.mockResolvedValue({
+      data: [
+        {
+          ...SDK_BREAKDOWN,
+          proxy_artifact_count: 5,
+          proxy_storage_bytes: 2048,
+          proxy_download_count: 7,
+        },
+        { ...SDK_BREAKDOWN, repository_id: "repo-b" },
+      ],
+      error: undefined,
+    });
+    const mod = await import("../analytics");
+    const out = await mod.analyticsApi.getStorageBreakdown();
+    expect(out[0].proxy_artifact_count).toBe(5);
+    expect(out[0].proxy_storage_bytes).toBe(2048);
+    expect(out[0].proxy_download_count).toBe(7);
+    // Hosted figures unchanged, and an older payload reads as 0 remote.
+    expect(out[0].artifact_count).toBe(SDK_BREAKDOWN.artifact_count);
+    expect(out[1].proxy_artifact_count).toBe(0);
+    expect(out[1].proxy_storage_bytes).toBe(0);
+    expect(out[1].proxy_download_count).toBe(0);
   });
 
   it("getStorageBreakdown normalizes last_upload_at undefined to null (#359)", async () => {
@@ -192,6 +248,16 @@ describe("analyticsApi", () => {
     const mod = await import("../analytics");
     const out = await mod.analyticsApi.getDownloadTrends();
     expect(out).toEqual([SDK_DOWNLOAD_TREND]);
+  });
+
+  it("getDownloadTrends defaults proxy_download_count to 0 on older backends", async () => {
+    mockGetDownloadTrends.mockResolvedValue({
+      data: [{ date: "2026-05-02", download_count: 4 }],
+      error: undefined,
+    });
+    const mod = await import("../analytics");
+    const out = await mod.analyticsApi.getDownloadTrends();
+    expect(out[0].proxy_download_count).toBe(0);
   });
 
   it("getDownloadTrends throws on error", async () => {

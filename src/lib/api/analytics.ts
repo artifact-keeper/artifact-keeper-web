@@ -34,7 +34,16 @@ import { unwrap } from '@/lib/sdk-utils';
 // required-but-nullable (`: string | null`); these adapters normalize
 // undefined → null so callers see a stable contract (#206 / #359).
 
+// The snapshot's proxy_* halves are newer than the installed SDK types (as with
+// the `/admin/stats` proxy fields), so read them via cast and default to 0.
+type ProxyTotals = {
+  proxy_artifact_count?: number;
+  proxy_storage_bytes?: number;
+};
+
 function adaptStorageSnapshot(sdk: SdkStorageSnapshot): StorageSnapshot {
+  const s = sdk as SdkStorageSnapshot &
+    ProxyTotals & { proxy_download_count?: number };
   return {
     snapshot_date: sdk.snapshot_date,
     total_repositories: sdk.total_repositories,
@@ -42,6 +51,9 @@ function adaptStorageSnapshot(sdk: SdkStorageSnapshot): StorageSnapshot {
     total_storage_bytes: sdk.total_storage_bytes,
     total_downloads: sdk.total_downloads,
     total_users: sdk.total_users,
+    proxy_artifact_count: s.proxy_artifact_count ?? 0,
+    proxy_storage_bytes: s.proxy_storage_bytes ?? 0,
+    proxy_download_count: s.proxy_download_count ?? 0,
   };
 }
 
@@ -60,6 +72,7 @@ function adaptRepositorySnapshot(sdk: SdkRepositorySnapshot): RepositorySnapshot
 function adaptRepositoryStorageBreakdown(
   sdk: SdkRepositoryStorageBreakdown,
 ): RepositoryStorageBreakdown {
+  const s = sdk as SdkRepositoryStorageBreakdown & ProxyTotals;
   return {
     repository_id: sdk.repository_id,
     repository_key: sdk.repository_key,
@@ -68,6 +81,9 @@ function adaptRepositoryStorageBreakdown(
     artifact_count: sdk.artifact_count,
     storage_bytes: sdk.storage_bytes,
     download_count: sdk.download_count,
+    proxy_artifact_count: s.proxy_artifact_count ?? 0,
+    proxy_storage_bytes: s.proxy_storage_bytes ?? 0,
+    proxy_download_count: sdk.proxy_download_count ?? 0,
     last_upload_at: sdk.last_upload_at ?? null,
   };
 }
@@ -105,6 +121,7 @@ function adaptDownloadTrend(sdk: SdkDownloadTrend): DownloadTrend {
   return {
     date: sdk.date,
     download_count: sdk.download_count,
+    proxy_download_count: sdk.proxy_download_count ?? 0,
   };
 }
 
