@@ -160,14 +160,33 @@ export default function PermissionsPage() {
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
 
+  // `GET /api/v1/users` returns service accounts alongside people and exposes
+  // no discriminator to tell them apart (artifact-keeper#3634), so they land in
+  // the User branch below. Selecting one there is a guaranteed 400: the API
+  // accepts a service-account row only under `principal_type:
+  // "service_account"`. Subtract them by id from the list we already load.
+  const serviceAccountIds = useMemo(
+    () => new Set((serviceAccountsData ?? []).map((account: ServiceAccount) => account.id)),
+    [serviceAccountsData]
+  );
+
+  // Both non-group branches depend on that list -- one to build its options,
+  // the other to subtract them -- so neither is trustworthy until it resolves.
+  // Without this the User list renders unfiltered for a frame and the bug is
+  // reachable again in the gap.
+  const principalOptionsPending =
+    serviceAccountsLoading && form.principal_type !== "group";
+
   // principal options based on selected type
   const principalOptions = useMemo(() => {
     switch (form.principal_type) {
       case "user":
-        return users.map((u: User): PrincipalOption => ({
-          value: u.id,
-          label: u.display_name || u.username,
-        }));
+        return users
+          .filter((u: User) => !serviceAccountIds.has(u.id))
+          .map((u: User): PrincipalOption => ({
+            value: u.id,
+            label: u.display_name || u.username,
+          }));
       case "service_account":
         return (serviceAccountsData ?? []).map((account: ServiceAccount): PrincipalOption => ({
           value: account.id,
@@ -182,7 +201,7 @@ export default function PermissionsPage() {
           label: g.name,
         }));
     }
-  }, [form.principal_type, users, serviceAccountsData, groups]);
+  }, [form.principal_type, users, serviceAccountIds, serviceAccountsData, groups]);
 
   const selectedPrincipal = useMemo(
     () => principalOptions.find((principal) => principal.value === form.principal_id),
@@ -453,13 +472,10 @@ export default function PermissionsPage() {
                 aria-label="Principal"
                 aria-expanded={principalPickerOpen}
                 className="w-full justify-between font-normal"
-                disabled={
-                  editOpen ||
-                  (form.principal_type === "service_account" && serviceAccountsLoading)
-                }
+                disabled={editOpen || principalOptionsPending}
               >
-                {form.principal_type === "service_account" && serviceAccountsLoading
-                  ? "Loading service accounts..."
+                {principalOptionsPending
+                  ? "Loading principals..."
                   : selectedPrincipal?.label ??
                     (editOpen && selectedPermission
                       ? getPrincipalLabel(selectedPermission)
