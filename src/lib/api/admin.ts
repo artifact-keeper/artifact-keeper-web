@@ -9,6 +9,7 @@ import {
 import type {
   SystemStats,
   AdminUserResponse,
+  ListUsersData,
   HealthResponse as SdkHealthResponse,
   CheckStatus,
   ApiTokenResponse,
@@ -111,6 +112,19 @@ export interface ListUsersParams {
   perPage?: number;
   /** Server-side filter on username, email, or display name (ILIKE). */
   search?: string;
+  /**
+   * Server-side filter on the service-account discriminator (#825, backend
+   * artifact-keeper#3634).
+   *
+   * Service accounts are rows in the `users` table, so an unfiltered listing
+   * mixes them in with people. This has to be filtered by the SERVER, not by
+   * the caller: the listing is paginated, so dropping rows from a page in the
+   * browser leaves `total` counting rows that page no longer shows.
+   *
+   * Omit to keep the historical unfiltered listing -- the audit actor filter
+   * and the group member picker both want service accounts in their results.
+   */
+  isServiceAccount?: boolean;
 }
 
 export interface ListUsersResult {
@@ -131,12 +145,23 @@ export const adminApi = {
   },
 
   listUsersPage: async (params: ListUsersParams = {}): Promise<ListUsersResult> => {
+    // `is_service_account` is not in the generated SDK yet -- it ships with the
+    // backend release carrying artifact-keeper#3634 -- so the query is built as
+    // a plain object and cast once at the boundary, the same stopgap
+    // `versioning_enabled` uses (#571). It is included ONLY when the caller
+    // asks, leaving every existing call site's request unchanged on the wire,
+    // and a backend predating the filter ignores the unknown parameter, so this
+    // degrades to today's behavior rather than failing.
+    const query = {
+      page: params.page,
+      per_page: params.perPage,
+      search: params.search?.trim() || undefined,
+      ...(params.isServiceAccount === undefined
+        ? {}
+        : { is_service_account: params.isServiceAccount }),
+    };
     const data = await unwrap(listUsers({
-      query: {
-        page: params.page,
-        per_page: params.perPage,
-        search: params.search?.trim() || undefined,
-      },
+      query: query as ListUsersData['query'],
     }));
     const response = assertData(data, 'adminApi.listUsersPage');
     return {
