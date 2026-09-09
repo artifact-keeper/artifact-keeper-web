@@ -317,12 +317,15 @@ const NPM_DEFAULT_VARIANT: Record<"npm" | "yarn" | "pnpm", string> = {
   pnpm: "pnpm",
 };
 
-/** Build the PyPI-Simple client variants (pip, Poetry, uv, Pipenv, twine). All
- *  consume the same PyPI Simple wire format; twine is upload-only with its own
- *  .pypirc config so it gets its own tab rather than being mixed into pip. */
+/** Build the PyPI-Simple client variants (pip, Poetry, uv, Pipenv, twine,
+ *  JupyterLab). All consume the same PyPI Simple wire format; twine is
+ *  upload-only with its own .pypirc config so it gets its own tab rather than
+ *  being mixed into pip, and JupyterLab adds the Extension Manager config line
+ *  (#833) — shown as a secondary tab on plain `pypi` repos too. */
 function getPypiClientVariants(repoKey: string): SetupClientVariant[] {
   const simpleUrl = `${REGISTRY_URL}/pypi/${repoKey}/simple/`;
   const uploadUrl = `${REGISTRY_URL}/pypi/${repoKey}/`;
+  const extensionManagerUrl = `${REGISTRY_URL}/pypi/${repoKey}/pypi`;
   // uv reads UV_INDEX_<NAME>_USERNAME/PASSWORD where <NAME> uppercases the
   // index name and non-alphanumerics become underscores (e.g. "my-pypi" → MY_PYPI).
   const uvEnvName = repoKey.toUpperCase().replace(/[^A-Z0-9]/g, "_");
@@ -426,13 +429,42 @@ password = YOUR_TOKEN`,
         },
       ],
     },
+    {
+      // JupyterLab 4's Extension Manager sidebar talks to the legacy PyPI
+      // JSON API and XML-RPC `browse` under `<base>/pypi/<repo>/pypi`
+      // (artifact-keeper#3783); installs go through `/simple/` like pip.
+      key: "jupyter",
+      label: "JupyterLab",
+      steps: [
+        {
+          title: "Install a prebuilt extension",
+          description:
+            "Prebuilt JupyterLab extensions are pip wheels served from the PyPI Simple index:",
+          code: `pip install --index-url ${simpleUrl} <extension>`,
+        },
+        {
+          title: "Point the Extension Manager at this repository",
+          description:
+            "Add to jupyter_lab_config.py (jupyter lab --generate-config) so the Extension Manager sidebar discovers and installs from here:",
+          code: `c.PyPIExtensionManager.base_url = "${extensionManagerUrl}"`,
+        },
+        {
+          title: "Other extension kinds",
+          description:
+            "Source extensions come from an npm repository; classic nbextensions install via pip or conda.",
+          code: `npm install <extension>   # source extension, via an npm repository
+pip install <nbextension>  # or: conda install <nbextension>`,
+        },
+      ],
+    },
   ];
 }
 
 /** Default PyPI-variant tab keyed by the repo's declared format. */
-const PYPI_DEFAULT_VARIANT: Record<"pypi" | "poetry", string> = {
+const PYPI_DEFAULT_VARIANT: Record<"pypi" | "poetry" | "jupyter", string> = {
   pypi: "pip",
   poetry: "poetry",
+  jupyter: "jupyter",
 };
 
 /** Generate repo-specific setup content based on format. JVM, npm, and PyPI
@@ -453,7 +485,7 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
       defaultKey: NPM_DEFAULT_VARIANT[repo.format],
     };
   }
-  if (repo.format === "pypi" || repo.format === "poetry") {
+  if (repo.format === "pypi" || repo.format === "poetry" || repo.format === "jupyter") {
     return {
       kind: "variants",
       variants: getPypiClientVariants(repo.key),

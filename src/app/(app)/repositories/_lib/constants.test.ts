@@ -38,6 +38,24 @@ describe('FORMAT_OPTIONS', () => {
       expect(opt.group).toBeTruthy();
     }
   });
+
+  it('has unique values', () => {
+    const values = FORMAT_OPTIONS.map((o) => o.value);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  // JupyterLab Extensions is a PyPI alias (artifact-keeper#3784) listed with
+  // the other IDE extension formats so it is discoverable in the dropdown (#833).
+  it('lists JupyterLab Extensions in the Extensions group next to VS Code and JetBrains', () => {
+    const extensions = FORMAT_OPTIONS.filter((o) => o.group === 'Extensions').map(
+      (o) => [o.value, o.label],
+    );
+    expect(extensions).toEqual([
+      ['vscode', 'VS Code Extensions'],
+      ['jetbrains', 'JetBrains Plugins'],
+      ['jupyter', 'JupyterLab Extensions'],
+    ]);
+  });
 });
 
 describe('FORMAT_GROUPS', () => {

@@ -30,6 +30,15 @@ describe("RepoSetupGuide", () => {
     expect(screen.getByRole("tab", { name: "SBT" })).toBeTruthy();
   });
 
+  it("gives a jupyter repo the PyPI client tabs, opening on JupyterLab (#833)", () => {
+    render(<RepoSetupGuide repo={makeRepo({ format: "jupyter", key: "lab-ext" })} />);
+    expect(screen.getByRole("tab", { name: "Pip" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "JupyterLab", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
+    expect(panel.textContent).toContain("c.PyPIExtensionManager.base_url");
+    expect(panel.textContent).toContain("/pypi/lab-ext/pypi");
+  });
+
   it("renders a flat step list (no tabs) for formats without client variants", () => {
     render(<RepoSetupGuide repo={makeRepo({ format: "docker", key: "imgs" })} />);
     expect(screen.getByText(/docker login/i)).toBeTruthy();
