@@ -27,6 +27,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
 import { unwrap } from "@/lib/sdk-utils";
+import { clearSilentSsoAttempt } from "@/lib/silent-sso";
 
 interface AuthContextType {
   user: User | null;
@@ -81,6 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData);
       setPasswordExpiresAt(userData.password_expires_at ?? null);
       setMustChangePassword(!!userData.must_change_password);
+      // Signed in (any path: local, LDAP, TOTP, SSO exchange): reset the
+      // silent-SSO once-per-session guard so a later anonymous session can
+      // probe afresh.
+      clearSilentSsoAttempt();
     } catch {
       setUser(null);
       setPasswordExpiresAt(null);
@@ -151,6 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setMustChangePassword(false);
       setPasswordExpiresAt(null);
+      // Explicit sign-out resets the silent-SSO guard: if the IdP session is
+      // still alive, the next page load may sign the user straight back in —
+      // the standard check-sso semantic (Artifact Keeper sign-out is not IdP
+      // sign-out).
+      clearSilentSsoAttempt();
       // #487 / security: drop every cached query so the next (anonymous or
       // next-user) session never sees the previous identity's private data.
       queryClient.clear();

@@ -171,4 +171,26 @@ describe("systemConfigApi", () => {
     expect(VALID.auth).not.toHaveProperty("local_login_enabled");
     expect(config.auth.local_login_enabled).toBe(true);
   });
+
+  it("reads the auth.silent_sso_enabled kill switch from the response", async () => {
+    // Backend OIDC_SILENT_SSO=false: the operator disabled silent SSO and the
+    // app must never start the probe.
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig({
+      ...VALID,
+      auth: { ...VALID.auth, silent_sso_enabled: false },
+    });
+    expect(config.auth.silent_sso_enabled).toBe(false);
+  });
+
+  it("defaults silent_sso_enabled to true when the backend omits it", async () => {
+    // Silent SSO is default-on; a backend that predates the flag also
+    // predates prompt=none support, so the probe there fails invisibly inside
+    // the hidden iframe and the visitor stays anonymous.
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig(VALID);
+    expect(VALID.auth).not.toHaveProperty("silent_sso_enabled");
+    expect(config.auth.silent_sso_enabled).toBe(true);
+    expect(mod.DEFAULT_SYSTEM_CONFIG.auth.silent_sso_enabled).toBe(true);
+  });
 });

@@ -39,6 +39,16 @@ export interface AuthProvidersConfig {
    * its own: the login endpoint enforces its own policy server-side.
    */
   local_login_enabled: boolean;
+  /**
+   * Whether the app should attempt silent SSO auto-login (an invisible OIDC
+   * `prompt=none` check-sso probe) when nobody is signed in and an OIDC
+   * provider exists. Operator kill switch: backend `OIDC_SILENT_SSO=false`.
+   * Defaults to true on backends that predate the flag; a pre-flag backend
+   * also predates `prompt=none` support, so the probe there fails invisibly
+   * (rejected login request inside a hidden iframe → the visitor stays
+   * anonymous) and the once-per-session guard stops retries.
+   */
+  silent_sso_enabled: boolean;
 }
 
 export interface PermissionsConfig {
@@ -74,6 +84,12 @@ const AuthSchema = z.object({
   // while assuming it is disabled would hide the only form those deployments
   // have and lock the operator out.
   local_login_enabled: z.boolean().default(true),
+  // Silent SSO kill switch (backend `OIDC_SILENT_SSO`). Optional with a
+  // default of true: the feature is default-on, and on an older backend that
+  // omits the flag the worst case is one rejected `prompt=none` login
+  // request per session, invisible to the visitor (the probe fails open to
+  // anonymous).
+  silent_sso_enabled: z.boolean().default(true),
 });
 
 const PermissionsSchema = z.object({
@@ -151,6 +167,10 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     // Permissive for the same reason as the schema default: if the config
     // endpoint is unreachable the login page must still render a usable form.
     local_login_enabled: true,
+    // Default-on, matching the backend default. When the config endpoint is
+    // unreachable the SSO providers list is almost certainly unreachable too,
+    // so no probe starts anyway.
+    silent_sso_enabled: true,
   },
   permissions: ADMIN_ONLY_FALLBACKS.permissions(),
 };
