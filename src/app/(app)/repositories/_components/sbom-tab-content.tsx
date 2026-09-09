@@ -44,12 +44,22 @@ import {
 } from "@/components/ui/collapsible";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
+import { ProxySbomPanel } from "./proxy-sbom-panel";
 
 interface SbomTabContentProps {
   artifact: Artifact;
+  /**
+   * Repository format, used to decide whether a proxy-cached artifact can have
+   * a recorded SBOM at all. Optional so existing callers keep working; the
+   * proxy panel degrades to "not supported for this format" without it.
+   */
+  repositoryFormat?: string | null;
 }
 
-export function SbomTabContent({ artifact }: SbomTabContentProps) {
+export function SbomTabContent({
+  artifact,
+  repositoryFormat,
+}: SbomTabContentProps) {
   const queryClient = useQueryClient();
   // Proxy-cached remote artifacts have no artifacts row on the backend, so
   // SBOM generation returns 404 (artifact-keeper#2292). Gate the Generate /
@@ -189,6 +199,24 @@ export function SbomTabContent({ artifact }: SbomTabContentProps) {
         ),
     },
   ];
+
+  // Proxy-cached artifacts get the proxy SBOM instead of the hosted one.
+  //
+  // Everything above is artifact-keyed and therefore structurally empty for
+  // them, so the hosted UI could only ever render a permanently disabled
+  // Generate button over the "SBOM is unavailable" message. That message was
+  // also wrong: every inline proxy scan catalogs the archive it downloads, so
+  // there is a real inventory to show.
+  if (!analyzable) {
+    return (
+      <ProxySbomPanel
+        repositoryKey={artifact.repository_key}
+        path={artifact.path}
+        artifactName={artifact.name}
+        repositoryFormat={repositoryFormat}
+      />
+    );
+  }
 
   if (sbomsLoading) {
     return (

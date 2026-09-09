@@ -124,12 +124,14 @@ describe("SbomTabContent — analyzable gating (artifact-keeper#2292)", () => {
   });
   afterEach(() => cleanup());
 
-  it("disables every Generate action and explains why for a non-analyzable artifact", () => {
+  it("offers no Generate action at all for a non-analyzable artifact", () => {
+    // #2292's guarantee — never offer an action that 404s — is now met by
+    // removing the button rather than disabling it: proxy-cached artifacts get
+    // the proxy SBOM panel, which serves the inventory the download-time scan
+    // recorded and explains that it cannot be generated on demand.
     render(<SbomTabContent artifact={art({ analyzable: false })} />);
-    const generateButtons = screen.getAllByRole("button", { name: /generate/i });
-    expect(generateButtons.length).toBeGreaterThan(0);
-    for (const btn of generateButtons) expect(btn).toBeDisabled();
-    expect(screen.getByText(/proxy-cached remote artifacts/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /generate/i })).toHaveLength(0);
+    expect(screen.getByText(/Proxy Cache SBOM/i)).toBeInTheDocument();
     expect(mockMutate).not.toHaveBeenCalled();
   });
 
