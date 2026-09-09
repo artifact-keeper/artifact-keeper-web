@@ -14,6 +14,9 @@ describe("isPackageOrientedFormat", () => {
     ["gradle", true],
     ["npm", true],
     ["pypi", true],
+    // PyPI aliases resolve to the same tab set as pypi (#833).
+    ["poetry", true],
+    ["jupyter", true],
     ["cargo", true],
     ["nuget", true],
     ["rubygems", true],
@@ -39,6 +42,7 @@ describe("defaultRepoTab", () => {
     expect(defaultRepoTab("maven")).toBe("packages");
     expect(defaultRepoTab("npm")).toBe("packages");
     expect(defaultRepoTab("pypi")).toBe("packages");
+    expect(defaultRepoTab("jupyter")).toBe("packages");
   });
 
   it("defaults RAW/Generic and container formats to the Artifacts tab", () => {

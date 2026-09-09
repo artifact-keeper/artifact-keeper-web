@@ -193,7 +193,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
   {
     key: "other",
     label: "Other",
-    formats: ["generic", "gitlfs", "bazel", "p2", "protobuf", "huggingface", "mlmodel", "vscode", "jetbrains"],
+    formats: ["generic", "gitlfs", "bazel", "p2", "protobuf", "huggingface", "mlmodel", "vscode", "jetbrains", "jupyter"],
   },
 ];
 

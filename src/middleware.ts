@@ -38,7 +38,9 @@ import {
 const PROXY_PATH_PREFIXES: readonly string[] = [
   "/api",
   "/health",
-  // Native package format endpoints proxied to the backend
+  // Native package format endpoints proxied to the backend.
+  // `poetry` and `jupyter` repositories are aliases of the PyPI handler and
+  // are served under /pypi/* (artifact-keeper#3784) — no prefix of their own.
   "/pypi",
   "/npm",
   "/maven",
