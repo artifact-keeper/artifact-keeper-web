@@ -170,6 +170,34 @@ describe("adminApi", () => {
     });
   });
 
+  // #825 / artifact-keeper#3634: service accounts are rows in `users`, so the
+  // Users page needs to ask the SERVER for people only -- the listing is
+  // paginated, and filtering a page in the browser would leave `total`
+  // counting rows that page no longer shows.
+  it("listUsersPage forwards is_service_account only when the caller asks", async () => {
+    mockListUsers.mockResolvedValue({
+      data: { items: [], pagination: { total: 0 } },
+      error: undefined,
+    });
+    const { adminApi } = await import("../admin");
+
+    await adminApi.listUsersPage({ page: 1, perPage: 20, isServiceAccount: false });
+    expect(mockListUsers).toHaveBeenLastCalledWith({
+      query: {
+        page: 1,
+        per_page: 20,
+        search: undefined,
+        is_service_account: false,
+      },
+    });
+
+    // Omitted means unfiltered: the audit actor filter and the group member
+    // picker both want service accounts, so their request must not change.
+    await adminApi.listUsersPage({ page: 1, perPage: 20 });
+    const lastQuery = mockListUsers.mock.calls.at(-1)![0].query;
+    expect("is_service_account" in lastQuery).toBe(false);
+  });
+
   it("getHealth returns health response", async () => {
     const health = {
       status: "ok",
