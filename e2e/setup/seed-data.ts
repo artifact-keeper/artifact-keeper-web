@@ -112,6 +112,18 @@ export async function seedServiceAccount(request: APIRequestContext): Promise<vo
   });
 }
 
+/**
+ * Record one service health check so the Monitoring page renders its populated
+ * layout (alert card + health-log row) instead of the two empty states.
+ *
+ * The backend's own scheduler runs the first check 15-44s after boot, which
+ * races the visual screenshot (~40-50s after boot in CI) and made the
+ * `monitoring - desktop` baseline depend on scheduler jitter (#835).
+ */
+export async function seedHealthCheck(request: APIRequestContext): Promise<void> {
+  await api(request, 'POST', '/admin/monitoring/check');
+}
+
 /** Run all seed functions */
 export async function seedAll(request: APIRequestContext): Promise<void> {
   console.log('[seed] Creating test users...');
@@ -128,6 +140,8 @@ export async function seedAll(request: APIRequestContext): Promise<void> {
   await seedLifecyclePolicy(request);
   console.log('[seed] Creating test service account...');
   await seedServiceAccount(request);
+  console.log('[seed] Recording a service health check...');
+  await seedHealthCheck(request);
   console.log('[seed] Done.');
 }
 
