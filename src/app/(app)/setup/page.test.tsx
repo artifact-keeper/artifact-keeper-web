@@ -356,6 +356,7 @@ describe("SetupPage - PyPI client variants", () => {
     expect(text).toContain('c.PyPIExtensionManager.base_url = "');
     expect(text).toContain("/pypi/lab-ext/pypi");
     expect(text).toContain("jupyter_lab_config.py");
+    expect(text).toContain("must allow anonymous read");
     expect(text).toContain("npm repository");
   });
 

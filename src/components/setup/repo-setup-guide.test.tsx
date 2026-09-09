@@ -37,6 +37,35 @@ describe("RepoSetupGuide", () => {
     const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
     expect(panel.textContent).toContain("c.PyPIExtensionManager.base_url");
     expect(panel.textContent).toContain("/pypi/lab-ext/pypi");
+    // The manager has no credential setting, so the repo must allow anonymous read.
+    expect(panel.textContent).toContain("must allow anonymous read");
+    // Install side still gets pip's index config.
+    expect(panel.textContent).toContain("pip.conf");
+    expect(panel.textContent).toContain("index-url = ");
+    expect(panel.textContent).not.toContain("not available on remote");
+  });
+
+  // Backend faults XML-RPC `browse` (-32001) on remote repositories
+  // (artifact-keeper#3788), so the config line must not be offered there.
+  it("replaces the Extension Manager step with a note for a remote jupyter repo", () => {
+    render(
+      <RepoSetupGuide repo={makeRepo({ format: "jupyter", key: "lab-proxy", repo_type: "remote" })} />,
+    );
+    const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
+    expect(panel.textContent).not.toContain("PyPIExtensionManager");
+    expect(panel.textContent).toContain("not available on remote repositories");
+    expect(panel.textContent).toContain("hosted or virtual repository");
+    expect(panel.textContent).toContain("pip install --index-url");
+  });
+
+  it("keeps the Extension Manager step for a virtual jupyter repo with the hosted-members caveat", () => {
+    render(
+      <RepoSetupGuide repo={makeRepo({ format: "jupyter", key: "lab-all", repo_type: "virtual" })} />,
+    );
+    const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
+    expect(panel.textContent).toContain('c.PyPIExtensionManager.base_url = "');
+    expect(panel.textContent).toContain("/pypi/lab-all/pypi");
+    expect(panel.textContent).toContain("Members must be hosted repositories");
   });
 
   it("renders a flat step list (no tabs) for formats without client variants", () => {

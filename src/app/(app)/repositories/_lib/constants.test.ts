@@ -44,9 +44,10 @@ describe('FORMAT_OPTIONS', () => {
     expect(new Set(values).size).toBe(values.length);
   });
 
-  // JupyterLab Extensions is a PyPI alias (artifact-keeper#3784) listed with
-  // the other IDE extension formats so it is discoverable in the dropdown (#833).
-  it('lists JupyterLab Extensions in the Extensions group next to VS Code and JetBrains', () => {
+  // JupyterLab Extensions is a PyPI alias (artifact-keeper#3784) filed with the
+  // other IDE extension formats (#833). The group drives the list-page filter;
+  // the create dialog itself sorts formats alphabetically.
+  it('lists JupyterLab Extensions in the Extensions group with VS Code and JetBrains', () => {
     const extensions = FORMAT_OPTIONS.filter((o) => o.group === 'Extensions').map(
       (o) => [o.value, o.label],
     );

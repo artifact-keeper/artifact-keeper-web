@@ -317,6 +317,37 @@ describe("repositoriesApi.narrowFormat (via get)", () => {
     );
     warn.mockRestore();
   });
+
+  // `jupyter` is a PyPI alias (artifact-keeper#3784, #833). Dropping it from
+  // REPO_FORMATS would silently coerce every jupyter repo to 'generic' and
+  // lose the PyPI tabs, package rendering and set-me-up guide.
+  it("keeps the 'jupyter' alias format instead of coercing it to 'generic'", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetRepository.mockResolvedValue({
+      data: {
+        id: "r1",
+        key: "lab-ext",
+        name: "JupyterLab Extensions",
+        description: null,
+        format: "jupyter",
+        repo_type: "local",
+        is_public: true,
+        storage_used_bytes: 0,
+        quota_bytes: null,
+        upstream_url: null,
+        upstream_auth_type: null,
+        upstream_auth_configured: false,
+        created_at: "2025-01-01",
+        updated_at: "2025-01-01",
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.get("lab-ext");
+    expect(result.format).toBe("jupyter");
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------

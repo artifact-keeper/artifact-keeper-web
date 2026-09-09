@@ -14,7 +14,8 @@ import { CopyButton } from "@/components/common/copy-button";
 
 export interface SetupStep {
   title: string;
-  code: string;
+  /** Omitted for a plain note (e.g. a feature that is unavailable for this repo type). */
+  code?: string;
   description?: string;
 }
 
@@ -322,10 +323,48 @@ const NPM_DEFAULT_VARIANT: Record<"npm" | "yarn" | "pnpm", string> = {
  *  upload-only with its own .pypirc config so it gets its own tab rather than
  *  being mixed into pip, and JupyterLab adds the Extension Manager config line
  *  (#833) — shown as a secondary tab on plain `pypi` repos too. */
-function getPypiClientVariants(repoKey: string): SetupClientVariant[] {
+function getPypiClientVariants(
+  repoKey: string,
+  repoType: RepositoryType,
+): SetupClientVariant[] {
   const simpleUrl = `${REGISTRY_URL}/pypi/${repoKey}/simple/`;
   const uploadUrl = `${REGISTRY_URL}/pypi/${repoKey}/`;
   const extensionManagerUrl = `${REGISTRY_URL}/pypi/${repoKey}/pypi`;
+
+  const pipIndexStep: SetupStep = {
+    title: "Configure index",
+    description: "Add to ~/.pip/pip.conf:",
+    code: `[global]
+index-url = ${simpleUrl}
+trusted-host = ${REGISTRY_HOST}`,
+  };
+
+  // JupyterLab 4's Extension Manager sidebar talks to the legacy PyPI JSON
+  // API and XML-RPC `browse` under `<base>/pypi/<repo>/pypi`
+  // (artifact-keeper#3783, implemented in #3788). `browse` answers only for
+  // hosted repositories and virtual repositories over hosted members; on a
+  // remote repository the backend returns an XML-RPC fault (-32001), so the
+  // config line would point the sidebar at a catalogue that never lists
+  // anything — replace the step with a note there. The manager also has no
+  // credential setting, so the repository must allow anonymous read.
+  const anonymousReadNote =
+    "The Extension Manager has no credential setting, so this repository must allow anonymous read for the sidebar catalogue to load.";
+  const extensionManagerStep: SetupStep =
+    repoType === "remote"
+      ? {
+          title: "Extension Manager sidebar",
+          description:
+            "The sidebar catalogue is not available on remote repositories — use a hosted or virtual repository for the Extension Manager (pip install above still works).",
+        }
+      : {
+          title: "Point the Extension Manager at this repository",
+          description:
+            `Add to jupyter_lab_config.py (jupyter lab --generate-config). ${anonymousReadNote}` +
+            (repoType === "virtual"
+              ? " Members must be hosted repositories for the sidebar catalogue."
+              : ""),
+          code: `c.PyPIExtensionManager.base_url = "${extensionManagerUrl}"`,
+        };
   // uv reads UV_INDEX_<NAME>_USERNAME/PASSWORD where <NAME> uppercases the
   // index name and non-alphanumerics become underscores (e.g. "my-pypi" → MY_PYPI).
   const uvEnvName = repoKey.toUpperCase().replace(/[^A-Z0-9]/g, "_");
@@ -335,13 +374,7 @@ function getPypiClientVariants(repoKey: string): SetupClientVariant[] {
       key: "pip",
       label: "Pip",
       steps: [
-        {
-          title: "Configure index",
-          description: "Add to ~/.pip/pip.conf:",
-          code: `[global]
-index-url = ${simpleUrl}
-trusted-host = ${REGISTRY_HOST}`,
-        },
+        pipIndexStep,
         {
           title: "Install a package",
           code: `pip install --index-url ${simpleUrl} <package-name>`,
@@ -430,24 +463,24 @@ password = YOUR_TOKEN`,
       ],
     },
     {
-      // JupyterLab 4's Extension Manager sidebar talks to the legacy PyPI
-      // JSON API and XML-RPC `browse` under `<base>/pypi/<repo>/pypi`
-      // (artifact-keeper#3783); installs go through `/simple/` like pip.
+      // Installs (from the sidebar or by hand) go through `/simple/` like pip,
+      // so the credential story is pip's; see `extensionManagerStep` for the
+      // sidebar catalogue itself.
       key: "jupyter",
       label: "JupyterLab",
       steps: [
+        {
+          ...pipIndexStep,
+          description:
+            "Add to ~/.pip/pip.conf (the Extension Manager installs through pip). For a private repository, embed an access token in the URL: https://__token__:YOUR_TOKEN@<host>/pypi/<repo>/simple/",
+        },
         {
           title: "Install a prebuilt extension",
           description:
             "Prebuilt JupyterLab extensions are pip wheels served from the PyPI Simple index:",
           code: `pip install --index-url ${simpleUrl} <extension>`,
         },
-        {
-          title: "Point the Extension Manager at this repository",
-          description:
-            "Add to jupyter_lab_config.py (jupyter lab --generate-config) so the Extension Manager sidebar discovers and installs from here:",
-          code: `c.PyPIExtensionManager.base_url = "${extensionManagerUrl}"`,
-        },
+        extensionManagerStep,
         {
           title: "Other extension kinds",
           description:
@@ -488,7 +521,7 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
   if (repo.format === "pypi" || repo.format === "poetry" || repo.format === "jupyter") {
     return {
       kind: "variants",
-      variants: getPypiClientVariants(repo.key),
+      variants: getPypiClientVariants(repo.key, repo.repo_type),
       defaultKey: PYPI_DEFAULT_VARIANT[repo.format],
     };
   }
@@ -827,9 +860,11 @@ export function StepsList({ steps }: { steps: SetupStep[] }) {
               {step.description}
             </p>
           )}
-          <div className="ml-8">
-            <CodeBlock code={step.code} />
-          </div>
+          {step.code !== undefined && (
+            <div className="ml-8">
+              <CodeBlock code={step.code} />
+            </div>
+          )}
         </div>
       ))}
     </div>
