@@ -107,7 +107,7 @@ const REPO_VISIBILITIES = new Set<RepositoryVisibility>(['public', 'internal', '
  * `narrowEnum` cannot be used here because it must fall back to a value, and
  * every candidate fallback is wrong: `private` would hide a public repository,
  * `public` would widen a private one. `undefined` is the honest answer for a
- * backend that predates migration 212, and it routes the caller through
+ * backend that predates migration 217, and it routes the caller through
  * `resolveVisibility`'s documented `is_public` fallback. An unrecognised
  * string is treated the same way rather than trusted.
  */
@@ -217,7 +217,7 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     format_key:
       (sdk as RepositoryResponse & { format_key?: string | null }).format_key ?? null,
     is_public: sdk.is_public,
-    // `visibility` (backend migration 212) is the real state; `is_public` is
+    // `visibility` (backend migration 217) is the real state; `is_public` is
     // its deprecated boolean mirror and cannot express `internal`. The
     // generated SDK `RepositoryResponse` does not declare the field yet, so it
     // is read defensively the same way `format_key` is. A backend that omits

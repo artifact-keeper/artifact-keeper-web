@@ -1058,7 +1058,7 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Three-state visibility (backend migration 212)
+// Three-state visibility (backend migration 217)
 // ---------------------------------------------------------------------------
 //
 // Both body builders in `repositories.ts` are explicit allowlists rather than
@@ -1066,7 +1066,7 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
 // dropped field type-checks cleanly and fails silently: the dialogs would send
 // a visibility the client never forwards, and every `internal` repository
 // would read back as `private`. These tests pin both directions.
-describe("repositoriesApi — three-state visibility (backend migration 212)", () => {
+describe("repositoriesApi — three-state visibility (backend migration 217)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("forwards visibility on create", async () => {
