@@ -13,6 +13,9 @@ export function getInstallCommand(
       return `npm install ${packageName}@${v}`;
     case "pypi":
     case "poetry":
+    // JupyterLab prebuilt extensions are pip wheels served by the PyPI
+    // handler (artifact-keeper#3784), so they install like any PyPI project.
+    case "jupyter":
       return `pip install ${packageName}==${v}`;
     case "maven": {
       // Maven package names arrive colon-joined as `groupId:artifactId`
@@ -141,6 +144,7 @@ export const FORMAT_OPTIONS: string[] = [
   "wasm_oci",
   "helm_oci",
   "poetry",
+  "jupyter",
   "conda",
   "yarn",
   "bower",

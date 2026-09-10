@@ -302,7 +302,7 @@ const ACCESSIBLE_REPORT = {
 };
 
 const IDLE = {
-  data: undefined,
+  data: undefined as unknown,
   isLoading: false,
   isError: false,
   isFetching: false,

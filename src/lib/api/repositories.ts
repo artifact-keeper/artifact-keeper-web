@@ -158,6 +158,7 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
   'wasm_oci',
   'helm_oci',
   'poetry',
+  'jupyter',
   'conda',
   'yarn',
   'bower',
