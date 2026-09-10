@@ -189,7 +189,7 @@ const EVENT = {
 
 /** Route the two useQuery calls (audit list / admin users) by query key. */
 function queryState({
-  audit = { data: undefined, isLoading: false, isError: false, isFetching: false },
+  audit = { data: undefined as unknown, isLoading: false, isError: false, isFetching: false },
   users = [] as Array<{ id: string; username: string }>,
 } = {}) {
   mockUseQuery.mockImplementation((opts: any) => {

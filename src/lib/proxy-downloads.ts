@@ -29,7 +29,7 @@ import type { Repository, RepositoryFormat } from "@/types";
  * explicit call sites in `maven`, `npm` and `pypi`.
  *
  * Deliberately conservative: format ids that merely *resemble* an instrumented
- * handler (`gradle`, `yarn`, `pnpm`, `poetry`, `conda_native`, …) are left out
+ * handler (`gradle`, `yarn`, `pnpm`, `poetry`, `jupyter`, `conda_native`, …) are left out
  * because that issue lists backend handler modules, not repository format ids,
  * and this list is only ever consulted for a **zero** count (see
  * `downloadCountKind`). Under-claiming therefore shows "not tracked" on a

@@ -14,6 +14,7 @@ const FORMAT_EXPECTATIONS: [string, string, "exact" | "contains"][] = [
   // Python
   ["pypi", "pip install my-package==1.2.3", "exact"],
   ["poetry", "pip install my-package==1.2.3", "exact"],
+  ["jupyter", "pip install my-package==1.2.3", "exact"],
   // JVM — each format gets its own client snippet (#361). Pre-#361 all
   // three returned Maven XML, which was wrong for gradle/sbt repos.
   ["maven", "<artifactId>my-package</artifactId>", "contains"],

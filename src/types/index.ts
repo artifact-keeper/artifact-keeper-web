@@ -143,6 +143,7 @@ export type RepositoryFormat =
   | 'wasm_oci'
   | 'helm_oci'
   | 'poetry'
+  | 'jupyter'
   | 'conda'
   | 'yarn'
   | 'bower'

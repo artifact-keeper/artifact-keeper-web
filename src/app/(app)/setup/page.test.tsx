@@ -345,6 +345,31 @@ describe("SetupPage - PyPI client variants", () => {
     expect(panel.textContent).toContain("index-url");
   });
 
+  it("opens on the JupyterLab tab for a jupyter-format repo (#833)", async () => {
+    await openRepoDialog(makeRepo({ format: "jupyter", key: "lab-ext" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "JupyterLab", selected: true })).toBeTruthy();
+    const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
+    const text = panel.textContent ?? "";
+    expect(text).toContain("pip install --index-url");
+    expect(text).toContain("/pypi/lab-ext/simple/");
+    expect(text).toContain('c.PyPIExtensionManager.base_url = "');
+    expect(text).toContain("/pypi/lab-ext/pypi");
+    expect(text).toContain("jupyter_lab_config.py");
+    expect(text).toContain("must allow anonymous read");
+    expect(text).toContain("npm repository");
+  });
+
+  it("offers the JupyterLab Extension Manager snippet as a secondary tab on a plain pypi repo", async () => {
+    const user = await openRepoDialog(makeRepo({ format: "pypi", key: "my-pypi" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("tab", { name: "Pip", selected: true })).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "JupyterLab" }));
+    const panel = screen.getByRole("tabpanel", { name: "JupyterLab" });
+    expect(panel.textContent).toContain("c.PyPIExtensionManager.base_url");
+    expect(panel.textContent).toContain("/pypi/my-pypi/pypi");
+  });
+
   it("opens on the Poetry tab for a poetry-format repo", async () => {
     await openRepoDialog(makeRepo({ format: "poetry", key: "my-pypi" }));
     await screen.findByRole("dialog");

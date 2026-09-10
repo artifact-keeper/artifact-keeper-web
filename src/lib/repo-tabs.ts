@@ -32,9 +32,10 @@ const PACKAGE_ORIENTED_FORMATS = new Set<RepositoryFormat>([
   "yarn",
   "pnpm",
   "bower",
-  // Python
+  // Python (`jupyter` is a PyPI alias, artifact-keeper#3784)
   "pypi",
   "poetry",
+  "jupyter",
   // Rust / Go / Ruby / PHP
   "cargo",
   "go",
