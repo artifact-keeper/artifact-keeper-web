@@ -15,6 +15,11 @@ import type { Repository } from "@/types";
 
 // jsdom doesn't provide ResizeObserver
 beforeAll(() => {
+  // radix Select needs these in jsdom, same as `release-target-settings.test.tsx`
+  // and `promotion-dialog.test.tsx` do for their own Selects.
+  (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = () => {};
+  (Element.prototype as unknown as { hasPointerCapture: () => boolean }).hasPointerCapture = () => false;
+  (Element.prototype as unknown as { releasePointerCapture: () => void }).releasePointerCapture = () => {};
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -27,6 +32,18 @@ afterEach(() => {
 });
 
 // Mock sonner toast
+// The settings tab reads the server-wide guest-access policy to decide whether
+// the `public` visibility option is offered. Mocked the same way
+// `repo-dialogs.test.tsx` does, with a mutable object so a test can disable
+// guest access and a root-level reset so that never leaks into another suite.
+const mockFlags = { guestAccessEnabled: true };
+vi.mock("@/providers/system-config-provider", () => ({
+  useFeatureFlags: () => mockFlags,
+}));
+beforeEach(() => {
+  mockFlags.guestAccessEnabled = true;
+});
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -304,6 +321,23 @@ function createWrapper() {
   return TestWrapper;
 }
 
+/**
+ * The `@/components/ui/select` mock above renders every Select as a bare
+ * `<select data-testid="mock-select">`, so the visibility control has to be
+ * picked out by its options rather than by an accessible name.
+ */
+function visibilitySelect(): HTMLSelectElement {
+  const select = screen
+    .getAllByTestId("mock-select")
+    .find((el) =>
+      Array.from((el as HTMLSelectElement).options).some(
+        (o) => o.value === "internal"
+      )
+    );
+  if (!select) throw new Error("visibility select not rendered");
+  return select as HTMLSelectElement;
+}
+
 describe("RepoSettingsTab - General Section", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -327,9 +361,8 @@ describe("RepoSettingsTab - General Section", () => {
       "value",
       "Production Maven artifacts"
     );
-    expect(
-      screen.getByLabelText("Public Access").getAttribute("aria-checked")
-    ).toBe("true");
+    // `baseRepo` is public, so the control reflects that.
+    expect(visibilitySelect().value).toBe("public");
   });
 
   it("renders the General section heading", () => {
@@ -445,16 +478,16 @@ describe("RepoSettingsTab - General Section", () => {
     await user.clear(descInput);
     await user.type(descInput, "New description");
 
-    // Toggle visibility
-    const visSwitch = screen.getByLabelText("Public Access");
-    await user.click(visSwitch);
+    // Change visibility public -> internal. The patch must carry `visibility`,
+    // not the legacy boolean: `is_public: false` cannot express `internal`.
+    fireEvent.change(visibilitySelect(), { target: { value: "internal" } });
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith("maven-releases", {
         description: "New description",
-        is_public: false,
+        visibility: "internal",
       });
     });
   });
@@ -509,7 +542,7 @@ describe("RepoSettingsTab - General Section", () => {
 
     expect(
       screen.getByText(
-        /public repositories allow unauthenticated read access/i
+        /anyone can read, including unauthenticated callers/i
       )
     ).toBeTruthy();
   });

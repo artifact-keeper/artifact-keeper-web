@@ -43,10 +43,20 @@ test.describe('Repository - Edit and Actions', () => {
     const typeLabel = dialog.getByText(/type/i).first();
     await expect(typeLabel).toBeVisible({ timeout: 3000 });
 
-    // Public switch
-    const publicSwitch = dialog.getByText(/public/i).first();
-    const hasPublic = await publicSwitch.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(hasPublic).toBeTruthy();
+    // Visibility selector. This replaced the binary "Public repository"
+    // switch (backend migration 217); asserting on /public/i no longer works,
+    // because Radix renders only the SELECTED option in the trigger and the
+    // form seeds `private`.
+    const visibilityLabel = dialog.getByText(/^visibility$/i).first();
+    await expect(visibilityLabel).toBeVisible({ timeout: 3000 });
+    const visibilityTrigger = dialog.locator('#create-visibility');
+    await expect(visibilityTrigger).toBeVisible({ timeout: 3000 });
+    await visibilityTrigger.click();
+    // All three states are offered while guest access is enabled.
+    for (const state of [/^public$/i, /^internal$/i, /^private$/i]) {
+      await expect(page.getByRole('option', { name: state })).toBeVisible({ timeout: 3000 });
+    }
+    await page.keyboard.press('Escape');
 
     // Cancel
     await dialog.getByRole('button', { name: /cancel/i }).click();

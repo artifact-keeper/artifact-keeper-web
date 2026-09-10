@@ -26,7 +26,10 @@ import type {
   Repository,
   DebianRepoConfig,
   CreateRepositoryRequest,
+  RepositoryVisibility,
 } from "@/types";
+import { useFeatureFlags } from "@/providers/system-config-provider";
+import { VisibilitySelect, resolveVisibility } from "./visibility-select";
 import type { LifecyclePolicy, PolicyType } from "@/types/lifecycle";
 import { POLICY_TYPE_LABELS } from "@/types/lifecycle";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
@@ -149,7 +152,11 @@ export interface UpdateRepositoryFields {
   key?: string;
   name?: string;
   description?: string;
-  is_public?: boolean;
+  /**
+   * Baseline read audience. Sent instead of `is_public`, which cannot express
+   * `internal`.
+   */
+  visibility?: RepositoryVisibility;
   quota_bytes?: number | null;
   /** First-class artifact versioning opt-in (#571, Generic/Mlmodel only). */
   versioning_enabled?: boolean;
@@ -184,6 +191,7 @@ interface RepoSettingsTabProps {
 }
 
 export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
+  const { guestAccessEnabled } = useFeatureFlags();
   const queryClient = useQueryClient();
 
   // Installed format handlers — resolves the custom layout name when the
@@ -196,7 +204,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       key: repository.key,
       name: repository.name,
       description: repository.description ?? "",
-      is_public: repository.is_public,
+      visibility: resolveVisibility(repository),
       versioning_enabled: repository.versioning_enabled ?? false,
     }),
     [repository]
@@ -329,7 +337,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (form.key !== repository.key) return true;
     if (form.name !== repository.name) return true;
     if (form.description !== (repository.description ?? "")) return true;
-    if (form.is_public !== repository.is_public) return true;
+    if (form.visibility !== resolveVisibility(repository)) return true;
     if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
       return true;
     const currentQuotaBytes = quotaToBytes(quotaValue, quotaUnit);
@@ -397,8 +405,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (form.name !== repository.name) fields.name = form.name;
     if (form.description !== (repository.description ?? ""))
       fields.description = form.description;
-    if (form.is_public !== repository.is_public)
-      fields.is_public = form.is_public;
+    if (form.visibility !== resolveVisibility(repository))
+      fields.visibility = form.visibility;
     if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
       fields.versioning_enabled = form.versioning_enabled;
     if (keyChanged) fields.key = form.key;
@@ -756,21 +764,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="settings-visibility">Public Access</Label>
-              <p className="text-xs text-muted-foreground">
-                Public repositories allow unauthenticated read access.
-              </p>
-            </div>
-            <Switch
-              id="settings-visibility"
-              checked={form.is_public}
-              onCheckedChange={(v) =>
-                setOverrides((o) => ({ ...o, is_public: v }))
-              }
-            />
-          </div>
+          <VisibilitySelect
+            idPrefix="settings"
+            value={form.visibility}
+            onChange={(v) => setOverrides((o) => ({ ...o, visibility: v }))}
+            guestAccessEnabled={guestAccessEnabled}
+          />
         </div>
       </section>
 

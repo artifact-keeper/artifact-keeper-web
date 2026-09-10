@@ -1056,3 +1056,100 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
     expect(call.body).toMatchObject({ format: "generic", format_key: "unity" });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Three-state visibility (backend migration 217)
+// ---------------------------------------------------------------------------
+//
+// Both body builders in `repositories.ts` are explicit allowlists rather than
+// spreads, and the generated SDK types do not declare `visibility` yet, so a
+// dropped field type-checks cleanly and fails silently: the dialogs would send
+// a visibility the client never forwards, and every `internal` repository
+// would read back as `private`. These tests pin both directions.
+describe("repositoriesApi — three-state visibility (backend migration 217)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("forwards visibility on create", async () => {
+    mockCreateRepository.mockResolvedValue({
+      data: sdkRepo({ is_public: false, visibility: "internal" }),
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.create({
+      key: "internal-npm",
+      name: "Internal NPM",
+      format: "npm",
+      repo_type: "local",
+      visibility: "internal",
+    });
+
+    expect(mockCreateRepository).toHaveBeenCalledWith({
+      body: expect.objectContaining({ visibility: "internal" }),
+    });
+    expect(result.visibility).toBe("internal");
+  });
+
+  it("forwards visibility on update", async () => {
+    mockUpdateRepository.mockResolvedValue({
+      data: sdkRepo({ is_public: false, visibility: "internal" }),
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.update("maven-local", { visibility: "internal" });
+
+    expect(mockUpdateRepository).toHaveBeenCalledWith({
+      path: { key: "maven-local" },
+      body: expect.objectContaining({ visibility: "internal" }),
+    });
+    expect(result.visibility).toBe("internal");
+  });
+
+  it("omits visibility entirely when the caller did not supply it", async () => {
+    // A legacy `is_public`-only caller must keep working: sending
+    // `visibility: undefined` alongside `is_public` risks the backend's
+    // contradictory-input rejection, so the key is absent, not undefined.
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+
+    await repositoriesApi.update("maven-local", { is_public: true });
+
+    const body = mockUpdateRepository.mock.calls[0][0].body;
+    expect("visibility" in body).toBe(false);
+    expect(body.is_public).toBe(true);
+  });
+
+  it("adapts each visibility state off the response", async () => {
+    for (const state of ["public", "internal", "private"] as const) {
+      mockGetRepository.mockResolvedValue({
+        data: sdkRepo({ is_public: state === "public", visibility: state }),
+        error: undefined,
+      });
+      const repo = await repositoriesApi.get("maven-local");
+      expect(repo.visibility).toBe(state);
+    }
+  });
+
+  it("leaves visibility undefined for a backend that predates the field", async () => {
+    // `resolveVisibility` then falls back to `is_public`, which is the
+    // documented degradation — a boolean cannot express `internal`.
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+
+    const repo = await repositoriesApi.get("maven-local");
+
+    expect(repo.visibility).toBeUndefined();
+    expect(repo.is_public).toBe(true);
+  });
+
+  it("does not trust an unrecognised visibility state", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ is_public: false, visibility: "org-only" }),
+      error: undefined,
+    });
+
+    const repo = await repositoriesApi.get("maven-local");
+
+    expect(repo.visibility).toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});

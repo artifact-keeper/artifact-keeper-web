@@ -30,6 +30,7 @@ import type {
   VirtualMembersResponse,
   RepositoryFormat,
   RepositoryType,
+  RepositoryVisibility,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
 
@@ -96,6 +97,45 @@ export interface AgePolicyPayload {
 }
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
+
+const REPO_VISIBILITIES = new Set<RepositoryVisibility>(['public', 'internal', 'private']);
+
+/**
+ * Narrow a backend `visibility` value, keeping "absent" distinct from any
+ * concrete state.
+ *
+ * `narrowEnum` cannot be used here because it must fall back to a value, and
+ * every candidate fallback is wrong: `private` would hide a public repository,
+ * `public` would widen a private one. `undefined` is the honest answer for a
+ * backend that predates migration 217, and it routes the caller through
+ * `resolveVisibility`'s documented `is_public` fallback. An unrecognised
+ * string is treated the same way rather than trusted.
+ */
+function narrowVisibility(value: string | null | undefined): RepositoryVisibility | undefined {
+  if (value == null) return undefined;
+  if (REPO_VISIBILITIES.has(value as RepositoryVisibility)) return value as RepositoryVisibility;
+  console.warn(
+    `repositoriesApi: unknown repository visibility "${value}" — falling back to the ` +
+      `is_public boolean. This likely means the backend added a state the UI hasn't picked up yet.`,
+  );
+  return undefined;
+}
+
+/**
+ * Attach `visibility` to a create/update body.
+ *
+ * The SDK request types do not declare the field yet (it lands when the
+ * progenitor SDK is regenerated), and both body builders here are explicit
+ * allowlists rather than spreads, so an undeclared field is otherwise dropped
+ * on the floor — silently, since TypeScript is satisfied by the local request
+ * type that does declare it. The backend rejects a `visibility` that
+ * contradicts `is_public`, so the caller sends one or the other, never both;
+ * omitting the key entirely (rather than sending `undefined`) keeps a legacy
+ * `is_public`-only client working unchanged.
+ */
+function withVisibility<T extends object>(body: T, visibility?: RepositoryVisibility): T {
+  return visibility === undefined ? body : { ...body, visibility };
+}
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
   'maven',
@@ -177,6 +217,16 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     format_key:
       (sdk as RepositoryResponse & { format_key?: string | null }).format_key ?? null,
     is_public: sdk.is_public,
+    // `visibility` (backend migration 217) is the real state; `is_public` is
+    // its deprecated boolean mirror and cannot express `internal`. The
+    // generated SDK `RepositoryResponse` does not declare the field yet, so it
+    // is read defensively the same way `format_key` is. A backend that omits
+    // it yields `undefined`, and `resolveVisibility` falls back to the boolean
+    // — which is why this must be forwarded rather than dropped: without it
+    // every `internal` repository reads back as `private`.
+    visibility: narrowVisibility(
+      (sdk as RepositoryResponse & { visibility?: string | null }).visibility,
+    ),
     // `versioning_enabled` (artifact-keeper#2367) is now carried on the
     // generated SDK type; `?? false` stays defensive against a backend that
     // predates #2367 and omits the flag at runtime.
@@ -282,7 +332,7 @@ export const repositoriesApi = {
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
     };
-    const data = await unwrap(createRepository({ body }));
+    const data = await unwrap(createRepository({ body: withVisibility(body, input.visibility) }));
     return adaptRepository(assertData(data, 'repositoriesApi.create'));
   },
 
@@ -315,7 +365,9 @@ export const repositoriesApi = {
       // wire so update behavior is unchanged; the cast satisfies the
       // generated-required field without sending a spurious value.
     } as SdkUpdateRepositoryRequest;
-    const data = await unwrap(updateRepository({ path: { key }, body }));
+    const data = await unwrap(
+      updateRepository({ path: { key }, body: withVisibility(body, input.visibility) }),
+    );
     return adaptRepository(assertData(data, 'repositoriesApi.update'));
   },
 

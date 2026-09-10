@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
+import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, RepositoryVisibility, VirtualRepoMemberInput } from "@/types";
+import { VisibilitySelect, resolveVisibility } from "./visibility-select";
 import type { FormatHandler } from "@/lib/api/format-handlers";
 import {
   FORMAT_OPTIONS,
@@ -24,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectTrigger,
@@ -87,7 +87,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean; quota_bytes?: number }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; visibility: RepositoryVisibility; quota_bytes?: number }) => void;
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
   upstreamAuthPending?: boolean;
@@ -144,19 +144,20 @@ export function RepoDialogs({
     description: "",
     format: "generic",
     repo_type: "local",
-    is_public: false,
+    visibility: "private" as RepositoryVisibility,
     upstream_url: "",
     member_repos: [],
   });
 
-  // When guest access is disabled the backend silently coerces is_public to
-  // false, so offering the toggle would be misleading — show a note instead.
-  // While the config loads the provider falls back to DEFAULT_SYSTEM_CONFIG
-  // (guest access enabled), so the switch renders optimistically: briefly
-  // showing a switch that then disappears is harmless (the backend coerces
-  // anyway), whereas flashing "disabled by the operator" at operators who did
-  // not disable it would be actively wrong. This matches the provider's
-  // documented permissive-default philosophy.
+  // When guest access is disabled the backend coerces a request for `public`
+  // to `internal`, so the `public` OPTION is withdrawn — but the control stays,
+  // because choosing between `internal` and `private` is still meaningful and
+  // still the operator's call. While the config loads the provider falls back
+  // to DEFAULT_SYSTEM_CONFIG (guest access enabled), so `public` renders
+  // optimistically: briefly offering an option that then disappears is harmless
+  // (the backend coerces anyway), whereas flashing "disabled by the operator"
+  // at operators who did not disable it would be actively wrong. This matches
+  // the provider's documented permissive-default philosophy.
   const { guestAccessEnabled } = useFeatureFlags();
 
   // For virtual repos: selected member repo keys
@@ -259,13 +260,13 @@ export function RepoDialogs({
     key: editRepo?.key ?? "",
     name: editRepo?.name ?? "",
     description: editRepo?.description ?? "",
-    is_public: editRepo?.is_public ?? false,
+    visibility: editRepo ? resolveVisibility(editRepo) : ("private" as RepositoryVisibility),
   }), [editRepo]);
   const [editFormOverrides, setEditFormOverrides] = useState<{
     key?: string;
     name?: string;
     description?: string;
-    is_public?: boolean;
+    visibility?: RepositoryVisibility;
   }>({});
   const editForm = { ...editFormDefaults, ...editFormOverrides };
   const editKeyChanged = editRepo ? editForm.key !== editRepo.key : false;
@@ -277,7 +278,7 @@ export function RepoDialogs({
       description: "",
       format: "generic",
       repo_type: "local",
-      is_public: false,
+      visibility: "private" as RepositoryVisibility,
       upstream_url: "",
       member_repos: [],
     });
@@ -654,22 +655,15 @@ export function RepoDialogs({
               </div>
             )}
 
-            {guestAccessEnabled ? (
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="create-public"
-                  checked={createForm.is_public}
-                  onCheckedChange={(v) =>
-                    setCreateForm((f) => ({ ...f, is_public: v }))
-                  }
-                />
-                <Label htmlFor="create-public">Public repository</Label>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Public repositories are disabled by the operator.
-              </p>
-            )}
+            <VisibilitySelect
+              idPrefix="create"
+              // `visibility` is optional on the request type (a client may
+              // omit it and let the server default), but the control is always
+              // driven; the form seeds it to "private" on mount and on reset.
+              value={createForm.visibility ?? "private"}
+              onChange={(v) => setCreateForm((f) => ({ ...f, visibility: v }))}
+              guestAccessEnabled={guestAccessEnabled}
+            />
             <div className="space-y-2">
               <Label htmlFor="create-quota">Storage Quota</Label>
               <div className="flex gap-2">
@@ -795,22 +789,14 @@ export function RepoDialogs({
                 rows={2}
               />
             </div>
-            {guestAccessEnabled ? (
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="edit-public"
-                  checked={editForm.is_public}
-                  onCheckedChange={(v) =>
-                    setEditFormOverrides((f) => ({ ...f, is_public: v }))
-                  }
-                />
-                <Label htmlFor="edit-public">Public repository</Label>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Public repositories are disabled by the operator.
-              </p>
-            )}
+            <VisibilitySelect
+              idPrefix="edit"
+              value={editForm.visibility}
+              onChange={(v) =>
+                setEditFormOverrides((f) => ({ ...f, visibility: v }))
+              }
+              guestAccessEnabled={guestAccessEnabled}
+            />
             <div className="space-y-2">
               <Label htmlFor="edit-quota">Storage Quota</Label>
               <div className="flex gap-2">
