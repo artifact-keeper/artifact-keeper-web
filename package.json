@@ -39,7 +39,7 @@
     "react-qr-code": "^2.2.0",
     "react-resizable-panels": "^4.12.2",
     "shiki": "^4.4.2",
-    "sonner": "^2.0.7",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },
