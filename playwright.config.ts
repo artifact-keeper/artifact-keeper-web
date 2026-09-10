@@ -79,7 +79,7 @@ export default defineConfig({
     {
       name: 'roles-restricted',
       testDir: './e2e/suites/roles',
-      testMatch: /restricted\.spec\.ts/,
+      testMatch: /restricted\.spec\.ts|internal-repo-visibility-authenticated\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'e2e/.auth/restricted.json',
@@ -89,7 +89,7 @@ export default defineConfig({
     {
       name: 'roles-unauthenticated',
       testDir: './e2e/suites/roles',
-      testMatch: /unauthenticated\.spec\.ts|private-repo-visibility\.spec\.ts/,
+      testMatch: /unauthenticated\.spec\.ts|private-repo-visibility\.spec\.ts|internal-repo-visibility\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         // No storageState - unauthenticated

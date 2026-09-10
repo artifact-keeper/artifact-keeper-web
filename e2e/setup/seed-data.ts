@@ -40,8 +40,16 @@ export async function seedRepositories(request: APIRequestContext): Promise<void
     { key: 'e2e-npm-remote', name: 'E2E NPM Remote', format: 'npm', repo_type: 'remote', upstream_url: 'https://registry.npmjs.org' },
     { key: 'e2e-docker-virtual', name: 'E2E Docker Virtual', format: 'docker', repo_type: 'virtual' },
     // Visibility test repos: one public, one private (default)
-    { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', is_public: true },
-    { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', is_public: false },
+    { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', visibility: 'public' },
+    { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', visibility: 'private' },
+    // Readable by every signed-in user, never anonymously. Seeded so the
+    // role-visibility and search suites can assert the state that neither of
+    // the two above can stand in for.
+    { key: 'e2e-internal-pypi', name: 'E2E Internal PyPI', format: 'pypi', repo_type: 'local', visibility: 'internal' },
+    // OCI counterpart. `/v2/*` is mounted outside the repo-visibility
+    // middleware and was allowlisted wholesale by the guest-access guard, so
+    // the anonymous-pull assertions need a Docker repo of their own.
+    { key: 'e2e-internal-docker', name: 'E2E Internal Docker', format: 'docker', repo_type: 'local', visibility: 'internal' },
     // Pub (Dart) repo so the Dart-specific setup-guide snippets (#748) have a
     // real target in the repo detail Setup tab.
     { key: 'e2e-pub-local', name: 'E2E Pub Local', format: 'pub', repo_type: 'local' },
