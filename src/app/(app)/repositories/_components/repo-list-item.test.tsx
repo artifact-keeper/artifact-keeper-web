@@ -138,3 +138,67 @@ describe("RepoListItem - WASM plugin layout label (#592)", () => {
     expect(screen.getByText("generic")).toBeInTheDocument();
   });
 });
+
+describe("RepoListItem - visibility marker", () => {
+  // The whole point of the marker is that `internal` and `private` do NOT
+  // render the same: a padlock on both would hide the most consequential
+  // difference a list row can show — readable by everyone signed in versus
+  // readable by a named few.
+  const INTERNAL_LABEL = "Internal — readable by any signed-in user";
+  const PRIVATE_LABEL = "Private — readable only by users granted access";
+
+  it("renders no marker for a public repository", () => {
+    render(
+      <RepoListItem
+        repo={{ ...repo, visibility: "public" }}
+        isSelected={false}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByLabelText(INTERNAL_LABEL)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(PRIVATE_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("renders the internal marker, distinct from the private one", () => {
+    render(
+      <RepoListItem
+        repo={{ ...repo, is_public: false, visibility: "internal" }}
+        isSelected={false}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText(INTERNAL_LABEL)).toBeInTheDocument();
+    expect(screen.queryByLabelText(PRIVATE_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("renders the private marker, distinct from the internal one", () => {
+    render(
+      <RepoListItem
+        repo={{ ...repo, is_public: false, visibility: "private" }}
+        isSelected={false}
+        onSelect={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText(PRIVATE_LABEL)).toBeInTheDocument();
+    expect(screen.queryByLabelText(INTERNAL_LABEL)).not.toBeInTheDocument();
+  });
+
+  it("falls back to is_public when the backend predates the visibility field", () => {
+    const legacyPrivate: Repository = { ...repo, is_public: false };
+    delete (legacyPrivate as { visibility?: unknown }).visibility;
+    render(
+      <RepoListItem repo={legacyPrivate} isSelected={false} onSelect={vi.fn()} />
+    );
+    expect(screen.getByLabelText(PRIVATE_LABEL)).toBeInTheDocument();
+
+    cleanup();
+
+    // `repo` itself is legacy-shaped: is_public true, no visibility field.
+    render(<RepoListItem repo={repo} isSelected={false} onSelect={vi.fn()} />);
+    expect(screen.queryByLabelText(PRIVATE_LABEL)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(INTERNAL_LABEL)).not.toBeInTheDocument();
+  });
+});
