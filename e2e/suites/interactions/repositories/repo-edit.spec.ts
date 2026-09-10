@@ -44,7 +44,7 @@ test.describe('Repository - Edit and Actions', () => {
     await expect(typeLabel).toBeVisible({ timeout: 3000 });
 
     // Visibility selector. This replaced the binary "Public repository"
-    // switch (backend migration 212); asserting on /public/i no longer works,
+    // switch (backend migration 217); asserting on /public/i no longer works,
     // because Radix renders only the SELECTED option in the trigger and the
     // form seeds `private`.
     const visibilityLabel = dialog.getByText(/^visibility$/i).first();
