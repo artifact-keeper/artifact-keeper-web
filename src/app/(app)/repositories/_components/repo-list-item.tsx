@@ -1,7 +1,8 @@
 "use client";
 
-import { Lock, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
-import type { Repository } from "@/types";
+import { Lock, Users, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
+import type { Repository, RepositoryVisibility } from "@/types";
+import { resolveVisibility } from "./visibility-select";
 import { formatBytes, REPO_TYPE_COLORS, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +11,33 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/**
+ * Visibility marker for the repository row.
+ *
+ * `public` is unmarked, as it always was — an open repository is the state that
+ * needs no warning. The other two are now distinguished: a padlock no longer
+ * stands for "not public", because that would render `internal` (readable by
+ * everyone signed in) identically to `private` (readable by a named few), which
+ * is the single most consequential difference a list row can show.
+ */
+function VisibilityIcon({ visibility }: { visibility: RepositoryVisibility }) {
+  if (visibility === "public") return null;
+  if (visibility === "internal") {
+    return (
+      <Users
+        className="size-3 shrink-0 text-muted-foreground"
+        aria-label="Internal — readable by any signed-in user"
+      />
+    );
+  }
+  return (
+    <Lock
+      className="size-3 shrink-0 text-muted-foreground"
+      aria-label="Private — readable only by users granted access"
+    />
+  );
+}
 
 interface RepoListItemProps {
   repo: Repository;
@@ -48,7 +76,7 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-medium truncate">{repo.key}</span>
-              {!repo.is_public && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+              <VisibilityIcon visibility={resolveVisibility(repo)} />
             </div>
             <p className="text-xs text-muted-foreground truncate" aria-hidden={repo.name === repo.key}>
               {repo.name}
