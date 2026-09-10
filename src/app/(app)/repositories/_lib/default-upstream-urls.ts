@@ -19,4 +19,5 @@ export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
   alpine: "https://dl-cdn.alpinelinux.org/alpine",
   debian: "https://deb.debian.org/debian",
   rpm: "https://mirror.stream.centos.org",
+  vscode: "https://open-vsx.org/vscode/gallery",
 };
