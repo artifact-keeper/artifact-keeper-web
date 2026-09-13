@@ -89,3 +89,8 @@ describe("resolveInitialRepoTab", () => {
     expect(resolveInitialRepoTab(null, "", "maven")).toBe("packages");
   });
 });
+
+
+it.each(["github", "mise", "aqua"] as const)("uses the file browser for %s", (format) => {
+  expect(defaultRepoTab(format)).toBe("artifacts");
+});

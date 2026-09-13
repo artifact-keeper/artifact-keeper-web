@@ -96,3 +96,10 @@ describe('1.6.0 format-specific config gating (#602)', () => {
     expect(hasNpmScopePolicy('npm', 'virtual')).toBe(false);
   });
 });
+
+
+describe("GitHub mirror format options", () => {
+  it.each(["github", "mise", "aqua"])("offers %s as a distinct format", (value) => {
+    expect(FORMAT_OPTIONS.filter((option) => option.value === value)).toHaveLength(1);
+  });
+});
