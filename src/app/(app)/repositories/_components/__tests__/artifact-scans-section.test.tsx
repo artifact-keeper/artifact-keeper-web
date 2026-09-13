@@ -159,8 +159,27 @@ describe("ArtifactScansSection (#368)", () => {
       isError: false,
     });
     render(<ArtifactScansSection artifactId="a1" analyzable={false} />);
-    expect(screen.getByText(/cannot be scanned/i)).toBeDefined();
-    expect(screen.getByText(/proxy-cached remote artifacts/i)).toBeDefined();
+    // #3344: pin the exact new headline. Both this AND the pre-#3344
+    // headline ("This artifact cannot be scanned.") match a loose
+    // /cannot be scanned/i, so assert the full "on demand" phrasing to
+    // catch a silent revert of the headline copy.
+    expect(
+      screen.getByText(/cannot be scanned on demand/i),
+    ).toBeDefined();
+    // #3344 (finding 4): the subtext renders only the second sentence of
+    // ANALYZABLE_DISABLED_REASON (the headline already states the
+    // limitation) — pin that scan-on-proxy specific wording.
+    expect(
+      screen.getByText(
+        /can be scanned at download time when scan-on-proxy is enabled/i,
+      ),
+    ).toBeDefined();
+    // Must not have regressed to the pre-#3344 blanket claim that scanning
+    // (not just SBOM generation) is hosted-only — that's false for
+    // PyPI/npm/Docker proxy repos with scan-on-proxy enabled.
+    expect(
+      screen.queryByText(/SBOM and scanning are available only/i),
+    ).toBeNull();
     // Must NOT tell the user to trigger a scan they cannot run.
     expect(
       screen.queryByText(/Trigger a scan from the artifact actions menu/i),
