@@ -23,6 +23,24 @@ function makeRepo(overrides: Partial<Repository> = {}): Repository {
 describe("RepoSetupGuide", () => {
   afterEach(() => cleanup());
 
+  it.each(["github", "mise", "aqua"] as const)("provides authenticated finite-cache setup for %s", (format) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format, repo_type: "remote", key: "gh-mirror" })} />);
+    expect(container.textContent).toContain("/general/gh-mirror/$1/$2/releases/download/$3");
+    expect(container.textContent).toContain("YOUR_USERNAME:YOUR_TOKEN@");
+    expect(container.textContent).toContain("mise install --locked");
+    expect(container.textContent).toContain("seven days");
+    expect(container.textContent).toContain("does not add standalone aqua CLI integration");
+    expect(container.textContent).toContain("every reader of the mirror must be trusted");
+    expect(container.textContent).not.toContain("/github/gh-mirror");
+    expect(container.textContent).not.toContain("Push artifacts");
+  });
+
+  it("does not advertise pull-through installation for a local mirror format", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "github", repo_type: "local" })} />);
+    expect(container.textContent).toContain("Create a remote GitHub mirror");
+    expect(container.textContent).not.toContain("mise install --locked");
+  });
+
   it("renders client-variant tabs for JVM formats", () => {
     render(<RepoSetupGuide repo={makeRepo({ format: "maven" })} />);
     expect(screen.getByRole("tab", { name: "Maven" })).toBeTruthy();

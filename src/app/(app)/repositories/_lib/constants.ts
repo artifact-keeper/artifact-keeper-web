@@ -60,6 +60,10 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   // ML/AI
   { value: "huggingface", label: "HuggingFace", group: "ML/AI" },
   { value: "mlmodel", label: "ML Model", group: "ML/AI" },
+  // GitHub release mirrors share the generic download handler.
+  { value: "github", label: "GitHub Releases", group: "Other" },
+  { value: "mise", label: "mise", group: "Other" },
+  { value: "aqua", label: "aqua", group: "Other" },
   // Other
   { value: "gitlfs", label: "Git LFS", group: "Other" },
   { value: "bazel", label: "Bazel", group: "Other" },
