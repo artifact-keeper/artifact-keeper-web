@@ -1,5 +1,8 @@
 /** Common upstream registry URLs by package format. */
 export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
+  github: "https://github.com",
+  mise: "https://github.com",
+  aqua: "https://github.com",
   maven: "https://repo.maven.apache.org/maven2",
   gradle: "https://repo.maven.apache.org/maven2",
   npm: "https://registry.npmjs.org",

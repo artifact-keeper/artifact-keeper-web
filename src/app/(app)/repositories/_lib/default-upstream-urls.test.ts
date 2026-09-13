@@ -44,3 +44,8 @@ describe("DEFAULT_UPSTREAM_URLS", () => {
     }
   });
 });
+
+
+it.each(["github", "mise", "aqua"])("defaults %s to GitHub", (format) => {
+  expect(DEFAULT_UPSTREAM_URLS[format]).toBe("https://github.com");
+});
