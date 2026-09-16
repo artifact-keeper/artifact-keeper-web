@@ -174,16 +174,25 @@ describe("Repository cleanup assignments", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it("keeps the confirmation and membership on failed detach", async () => {
-    api.detach.mockRejectedValue({ message: "Permission denied" });
+  it.each([
+    "Permission denied",
+    "Lifecycle assignments changed concurrently; retry the request",
+  ])("preserves membership and permits detach retry after: %s", async (message) => {
+    api.detach.mockRejectedValueOnce({ message });
     renderSettings();
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Detach policy Shared cleanup" }));
     await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Detach policy" }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Permission denied"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(policies.find((p) => p.id === "shared")?.repository_ids).toEqual(["r1", "r2"]);
     expect(toast.success).not.toHaveBeenCalled();
+    const retry = within(screen.getByRole("alertdialog")).getByRole("button", { name: "Detach policy" });
+    expect(retry).toBeEnabled();
+    await user.click(retry);
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(api.detach).toHaveBeenCalledTimes(2);
+    expect(policies.find((p) => p.id === "shared")?.repository_ids).toEqual(["r2"]);
   });
 
   it("blocks duplicate attachment while a request is pending", async () => {

@@ -372,7 +372,7 @@ describe("lifecycleApi", () => {
     });
   });
 
-  it.each([403, 404, 422])("propagates assignment HTTP %s errors", async (status) => {
+  it.each([403, 404, 409, 422])("propagates assignment HTTP %s errors", async (status) => {
     const error = { message: `Assignment rejected ${status}` };
     mockAssignment.mockResolvedValue({ error, response: new Response(null, { status }) });
     const { lifecycleApi } = await import("../lifecycle");
