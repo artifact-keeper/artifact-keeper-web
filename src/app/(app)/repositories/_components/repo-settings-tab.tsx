@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -14,7 +14,6 @@ import { ageGateApi } from "@/lib/api/age-gate";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { useAuth } from "@/providers/auth-provider";
-import { lifecycleApi } from "@/lib/api/lifecycle";
 import {
   scanConfigApi,
   SEVERITY_THRESHOLDS,
@@ -31,8 +30,6 @@ import type {
   DebianRepoConfig,
   CreateRepositoryRequest,
 } from "@/types";
-import type { LifecyclePolicy, PolicyType } from "@/types/lifecycle";
-import { POLICY_TYPE_LABELS } from "@/types/lifecycle";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
 import {
   hasRpmTrustedKeyConfig,
@@ -43,6 +40,7 @@ import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ReleaseTargetSettings } from "./release-target-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
+import { CleanupPolicySettings } from "./cleanup-policy-settings";
 import {
   RpmTrustedKeyField,
   DebianConfigFields,
@@ -71,22 +69,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 
 type QuotaUnit = "MB" | "GB";
 
@@ -483,48 +465,6 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     setDebianOverrides({});
     setNpmOverrides({});
   }, []);
-
-  // -- Lifecycle policies --
-  const { data: policies, isLoading: policiesLoading } = useQuery({
-    queryKey: ["lifecycle-policies", repository.id],
-    queryFn: () => lifecycleApi.list({ repository_id: repository.id }),
-    enabled: !!repository.id,
-  });
-
-  const deletePolicyMutation = useMutation({
-    mutationFn: (id: string) => lifecycleApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["lifecycle-policies", repository.id],
-      });
-      toast.success("Cleanup policy deleted");
-    },
-    onError: mutationErrorToast("Failed to delete cleanup policy"),
-  });
-
-  const executePolicyMutation = useMutation({
-    mutationFn: (id: string) => lifecycleApi.execute(id),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({
-        queryKey: ["lifecycle-policies", repository.id],
-      });
-      queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
-      toast.success(
-        `Policy executed: ${result.artifacts_removed} artifact(s) removed, ${formatBytes(result.bytes_freed)} freed`
-      );
-    },
-    onError: mutationErrorToast("Failed to execute cleanup policy"),
-  });
-
-  const previewPolicyMutation = useMutation({
-    mutationFn: (id: string) => lifecycleApi.preview(id),
-    onSuccess: (result) => {
-      toast.info(
-        `Preview: ${result.artifacts_matched} artifact(s) would be removed (${formatBytes(result.bytes_freed)})`
-      );
-    },
-    onError: mutationErrorToast("Failed to preview cleanup policy"),
-  });
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
   // Seeded from the persisted `quarantine_enabled` / `quarantine_duration_minutes`
@@ -1588,50 +1528,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       )}
 
       {/* -- Cleanup Policies Section -- */}
-      <section aria-labelledby="settings-cleanup-heading">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 id="settings-cleanup-heading" className="text-base font-semibold">
-              Cleanup Policies
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Lifecycle policies that automatically remove old or unused artifacts.
-            </p>
-          </div>
-        </div>
-
-        {policiesLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        ) : !policies || policies.length === 0 ? (
-          <div className="rounded-md border border-dashed p-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              No cleanup policies configured for this repository.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Cleanup policies can be created from the Lifecycle section in
-              the administration panel.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {policies.map((policy) => (
-              <CleanupPolicyRow
-                key={policy.id}
-                policy={policy}
-                onPreview={() => previewPolicyMutation.mutate(policy.id)}
-                onExecute={() => executePolicyMutation.mutate(policy.id)}
-                onDelete={() => deletePolicyMutation.mutate(policy.id)}
-                previewPending={previewPolicyMutation.isPending}
-                executePending={executePolicyMutation.isPending}
-                deletePending={deletePolicyMutation.isPending}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      <CleanupPolicySettings key={repository.id} repositoryId={repository.id} />
 
       <Separator />
 
@@ -1708,125 +1605,6 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// -- Cleanup policy row sub-component --
-
-interface CleanupPolicyRowProps {
-  policy: LifecyclePolicy;
-  onPreview: () => void;
-  onExecute: () => void;
-  onDelete: () => void;
-  previewPending: boolean;
-  executePending: boolean;
-  deletePending: boolean;
-}
-
-function CleanupPolicyRow({
-  policy,
-  onPreview,
-  onExecute,
-  onDelete,
-  previewPending,
-  executePending,
-  deletePending,
-}: CleanupPolicyRowProps) {
-  const typeLabel =
-    POLICY_TYPE_LABELS[policy.policy_type as PolicyType] ?? policy.policy_type;
-
-  return (
-    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{policy.name}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <Badge variant="outline" className="text-xs font-normal">
-              {typeLabel}
-            </Badge>
-            <Badge
-              variant={policy.enabled ? "default" : "secondary"}
-              className="text-xs font-normal"
-            >
-              {policy.enabled ? "Active" : "Disabled"}
-            </Badge>
-            {policy.last_run_at && (
-              <span className="text-xs text-muted-foreground">
-                Last run: {new Date(policy.last_run_at).toLocaleDateString()}
-                {policy.last_run_items_removed != null &&
-                  ` (${policy.last_run_items_removed} removed)`}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0 ml-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onPreview}
-              disabled={previewPending}
-              aria-label={`Preview policy ${policy.name}`}
-            >
-              <Eye className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Preview (dry run)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={onExecute}
-              disabled={executePending}
-              aria-label={`Execute policy ${policy.name}`}
-            >
-              <Play className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Execute now</TooltipContent>
-        </Tooltip>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="text-destructive hover:text-destructive"
-                  disabled={deletePending}
-                  aria-label={`Delete policy ${policy.name}`}
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Delete policy</TooltipContent>
-            </Tooltip>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Cleanup Policy</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete the &quot;{policy.name}&quot; policy?
-                This will not affect any previously cleaned artifacts.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={onDelete}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
     </div>
   );
 }
