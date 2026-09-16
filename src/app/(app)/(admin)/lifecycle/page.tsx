@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -11,15 +11,13 @@ import {
   Trash2,
   RefreshCw,
   CheckCircle2,
-  Check,
-  ChevronsUpDown,
   XCircle,
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { lifecycleApi } from "@/lib/api/lifecycle";
-import { useRepositories } from "@/hooks/use-repositories";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { useLifecycleCapabilities } from "@/hooks/use-lifecycle-capabilities";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
   LifecyclePolicy,
@@ -28,7 +26,7 @@ import type {
 } from "@/types/lifecycle";
 import {
   POLICY_TYPE_LABELS,
-  policyTypeRequiresRepositoryId,
+  lifecycleScopeLabel,
   type PolicyType,
 } from "@/types/lifecycle";
 import { PageHeader } from "@/components/common/page-header";
@@ -72,19 +70,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { LifecycleCapabilityNotice } from "@/components/common/lifecycle-capability-notice";
+import { Checkbox } from "@/components/ui/checkbox";
 
 function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, {
@@ -119,50 +106,15 @@ export default function LifecyclePage() {
   const [formDescription, setFormDescription] = useState("");
   const [formType, setFormType] = useState<string>("max_age_days");
   const [formConfig, setFormConfig] = useState('{ "days": 90 }');
-  const [formRepositoryId, setFormRepositoryId] = useState("");
-  const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
-  const [repositorySearch, setRepositorySearch] = useState("");
-  const requiresRepositoryId = policyTypeRequiresRepositoryId(formType);
+  const [formAppliesToAll, setFormAppliesToAll] = useState(false);
+  const capabilities = useLifecycleCapabilities(!!user?.is_admin);
+  const canAssign = capabilities.data === true && !capabilities.isError;
 
-  const { data: policies, isLoading } = useQuery({
+  const { data: policies, isLoading, error: policiesError, refetch: refetchPolicies } = useQuery({
     queryKey: ["lifecycle-policies"],
     queryFn: () => lifecycleApi.list(),
     enabled: !!user?.is_admin,
   });
-
-  const {
-    data: repositoriesPage,
-    isLoading: isLoadingRepositories,
-    isError: repositoriesError,
-  } = useRepositories(
-    { per_page: 1000 },
-    { enabled: !!user?.is_admin && createOpen && requiresRepositoryId },
-  );
-
-  const repositories = useMemo(
-    () => repositoriesPage?.items ?? [],
-    [repositoriesPage?.items]
-  );
-  const selectedRepository = useMemo(
-    () => repositories.find((repository) => repository.id === formRepositoryId),
-    [formRepositoryId, repositories]
-  );
-  const filteredRepositories = useMemo(() => {
-    const search = repositorySearch.trim().toLowerCase();
-    if (!search) return repositories;
-
-    return repositories.filter((repository) =>
-      [
-        repository.key,
-        repository.name,
-        repository.format,
-        repository.repo_type,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(search)
-    );
-  }, [repositories, repositorySearch]);
 
   const createMutation = useMutation({
     mutationFn: (req: CreateLifecyclePolicyRequest) => lifecycleApi.create(req),
@@ -232,20 +184,19 @@ export default function LifecyclePage() {
     setFormDescription("");
     setFormType("max_age_days");
     setFormConfig('{ "days": 90 }');
-    setFormRepositoryId("");
-    setRepositoryPickerOpen(false);
-    setRepositorySearch("");
+    setFormAppliesToAll(false);
   }
 
   function handleCreateOpenChange(open: boolean) {
     setCreateOpen(open);
-    if (!open) {
-      setRepositoryPickerOpen(false);
-      setRepositorySearch("");
-    }
+    if (!open) resetForm();
   }
 
   function handleCreate() {
+    if (!canAssign) {
+      toast.error("Cleanup policy assignment support must be confirmed before creation.");
+      return;
+    }
     let config: Record<string, unknown>;
     try {
       config = JSON.parse(formConfig);
@@ -258,7 +209,8 @@ export default function LifecyclePage() {
       description: formDescription || undefined,
       policy_type: formType,
       config,
-      repository_id: requiresRepositoryId ? formRepositoryId : undefined,
+      applies_to_all: formAppliesToAll,
+      repository_ids: [],
     });
   }
 
@@ -309,6 +261,16 @@ export default function LifecyclePage() {
         }
       />
 
+      <LifecycleCapabilityNotice
+        pending={capabilities.isPending}
+        error={capabilities.error}
+        onRetry={() => capabilities.refetch()}
+      />
+      <p className="text-sm text-muted-foreground">
+        Preview and execution cover the policy&apos;s entire scope, not just one repository.
+        Unassigned policies have no effect. Scope changes affect the next run, not runs already in progress.
+      </p>
+
       {/* Stats */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
@@ -355,6 +317,14 @@ export default function LifecyclePage() {
                 <Skeleton key={i} className="h-12" />
               ))}
             </div>
+          ) : policiesError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Could not load cleanup policies</AlertTitle>
+              <AlertDescription>
+                {toUserMessage(policiesError, "Failed to load cleanup policies")}
+                <Button variant="outline" size="sm" onClick={() => refetchPolicies()}>Retry</Button>
+              </AlertDescription>
+            </Alert>
           ) : !policies?.length ? (
             <div className="px-6 pb-4">
               <EmptyState
@@ -375,6 +345,7 @@ export default function LifecyclePage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Scope</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Last Run</TableHead>
                   <TableHead className="text-right">Removed</TableHead>
@@ -400,6 +371,14 @@ export default function LifecyclePage() {
                           policy.policy_type as PolicyType
                         ] ?? policy.policy_type}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="whitespace-normal">
+                        {lifecycleScopeLabel(policy)}
+                      </Badge>
+                      {policy.scope_source === "legacy" && (
+                        <p className="text-xs text-muted-foreground">Legacy scope (read-only)</p>
+                      )}
                     </TableCell>
                     <TableCell>
                       <StatusBadge
@@ -525,11 +504,6 @@ export default function LifecyclePage() {
                 onValueChange={(v) => {
                   setFormType(v);
                   setFormConfig(POLICY_CONFIG_HINTS[v] ?? "{}");
-                  if (!policyTypeRequiresRepositoryId(v)) {
-                    setFormRepositoryId("");
-                    setRepositoryPickerOpen(false);
-                    setRepositorySearch("");
-                  }
                 }}
               >
                 <SelectTrigger id="lifecycle-type">
@@ -544,100 +518,30 @@ export default function LifecyclePage() {
                 </SelectContent>
               </Select>
             </div>
-            {requiresRepositoryId && (
-              <div className="space-y-2">
-                <Label htmlFor="lifecycle-repository">Repository</Label>
-                <Popover
-                  open={repositoryPickerOpen}
-                  onOpenChange={(open) => {
-                    setRepositoryPickerOpen(open);
-                    if (!open) setRepositorySearch("");
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="lifecycle-repository"
-                      variant="outline"
-                      role="combobox"
-                      aria-label="Repository"
-                      aria-expanded={repositoryPickerOpen}
-                      className="w-full justify-between font-normal"
-                      disabled={isLoadingRepositories}
-                    >
-                      {isLoadingRepositories
-                        ? "Loading repositories..."
-                        : selectedRepository
-                          ? `${selectedRepository.key} (${selectedRepository.format}, ${selectedRepository.repo_type})`
-                          : "Select a repository"}
-                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                  >
-                    <Command shouldFilter={false}>
-                      <CommandInput
-                        aria-label="Search repositories"
-                        placeholder="Search repositories..."
-                        value={repositorySearch}
-                        onValueChange={setRepositorySearch}
-                      />
-                      <CommandList>
-                        {filteredRepositories.length === 0 && (
-                          <CommandEmpty>
-                            No repositories match your search.
-                          </CommandEmpty>
-                        )}
-                        {filteredRepositories.length > 0 && (
-                          <CommandGroup heading="Repositories">
-                            {filteredRepositories.map((repository) => (
-                              <CommandItem
-                                key={repository.id}
-                                value={repository.id}
-                                onSelect={() => {
-                                  setFormRepositoryId(repository.id);
-                                  setRepositoryPickerOpen(false);
-                                  setRepositorySearch("");
-                                }}
-                              >
-                                <Check
-                                  className={`size-4 ${
-                                    formRepositoryId === repository.id
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  }`}
-                                />
-                                <span className="min-w-0 flex-1 truncate">
-                                  {repository.key}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {repository.format}, {repository.repo_type}
-                                </span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <p className="text-xs text-muted-foreground">
-                  Required for Max Versions and Size Quota policies.
-                </p>
-                {repositoriesError && (
-                  <p className="text-xs text-destructive">
-                    Couldn&apos;t load repositories. Close and reopen this dialog
-                    to retry.
-                  </p>
-                )}
-                {!isLoadingRepositories && !repositoriesError && repositories.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No repositories are available.
-                  </p>
-                )}
+            <div className="space-y-2">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="lifecycle-applies-to-all"
+                  checked={formAppliesToAll}
+                  onCheckedChange={(checked) => setFormAppliesToAll(checked === true)}
+                  aria-describedby="lifecycle-scope-help"
+                  disabled={!canAssign || createMutation.isPending}
+                />
+                <Label htmlFor="lifecycle-applies-to-all">
+                  Automatically apply to all current and future repositories
+                </Label>
               </div>
-            )}
+              <p id="lifecycle-scope-help" className="text-sm text-muted-foreground">
+                {formAppliesToAll
+                  ? "Global policy: cleanup applies to every repository, including repositories created later. Individual repositories cannot opt out."
+                  : "Created unassigned with no effect until attached from a repository's Settings > Cleanup Policies. You can reuse the same policy across selected repositories."}
+              </p>
+              {!canAssign && (
+                <p role="alert" className="text-sm text-destructive">
+                  Creation is blocked until backend assignment support is confirmed.
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="lifecycle-config">Config (JSON)</Label>
               <Textarea
@@ -656,10 +560,9 @@ export default function LifecyclePage() {
             <Button
               onClick={handleCreate}
               disabled={
-                !formName ||
+                !formName.trim() ||
                 createMutation.isPending ||
-                (requiresRepositoryId &&
-                  (!formRepositoryId || isLoadingRepositories))
+                !canAssign
               }
             >
               {createMutation.isPending && (

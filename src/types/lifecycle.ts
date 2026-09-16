@@ -1,6 +1,10 @@
 export interface LifecyclePolicy {
   id: string;
   repository_id: string | null;
+  applies_to_all: boolean;
+  repository_ids: string[];
+  /** Local adapter marker; legacy projections are for display, not assignment. */
+  scope_source: "explicit" | "legacy";
   name: string;
   description: string | null;
   enabled: boolean;
@@ -14,7 +18,8 @@ export interface LifecyclePolicy {
 }
 
 export interface CreateLifecyclePolicyRequest {
-  repository_id?: string | null;
+  applies_to_all: boolean;
+  repository_ids: string[];
   name: string;
   description?: string | null;
   policy_type: string;
@@ -23,6 +28,8 @@ export interface CreateLifecyclePolicyRequest {
 }
 
 export interface UpdateLifecyclePolicyRequest {
+  applies_to_all?: boolean;
+  repository_ids?: string[];
   name?: string;
   description?: string;
   enabled?: boolean;
@@ -52,17 +59,12 @@ export type PolicyType =
   | "tag_pattern_delete"
   | "size_quota_bytes";
 
-/**
- * Lifecycle policies that cannot run globally because their evaluation needs
- * a single repository scope. Keep this aligned with the backend validation.
- */
-export const POLICY_TYPES_REQUIRING_REPOSITORY_ID: readonly string[] = [
-  "max_versions",
-  "size_quota_bytes",
-] satisfies readonly PolicyType[];
-
-export function policyTypeRequiresRepositoryId(policyType: string): boolean {
-  return POLICY_TYPES_REQUIRING_REPOSITORY_ID.includes(policyType);
+export function lifecycleScopeLabel(policy: LifecyclePolicy): string {
+  if (policy.applies_to_all) return "Global - all current and future repositories";
+  const count = policy.repository_ids.length;
+  return count === 0
+    ? "Unassigned - no effect"
+    : `Selected - ${count} ${count === 1 ? "repository" : "repositories"}`;
 }
 
 export const POLICY_TYPE_LABELS: Record<PolicyType, string> = {

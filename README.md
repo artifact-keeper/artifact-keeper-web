@@ -81,6 +81,31 @@ so it relies on a CSRF contract with the backend:
 The backend enforcement half is tracked as a follow-up issue in the
 `artifact-keeper` repository (see issue #673 here for the full audit finding).
 
+## Cleanup policy scope
+
+Administrators create cleanup policies in **Lifecycle**. The **Automatically apply
+to all current and future repositories** checkbox is off by default: unchecked
+policies are unassigned and have no effect until attached under a repository's
+**Settings > Cleanup Policies**. One policy can be attached to multiple repositories.
+Global policies are inherited by every repository and cannot be detached individually.
+All six policy types support these scopes; quotas and version limits are evaluated
+separately within each repository.
+
+Detaching preserves the policy and its other assignments. Scope is snapshotted when
+a run starts, so detaching only affects subsequent runs and does not cancel cleanup
+already in progress. Preview, execution, and deletion in Lifecycle administration
+apply to the whole policy, not only the repository from which you navigated.
+
+The backend must support explicit assignment
+([artifact-keeper#3794](https://github.com/artifact-keeper/artifact-keeper/issues/3794)).
+The UI requires `GET /api/v1/admin/lifecycle/capabilities` to return
+`{"explicit_repository_assignment": true}` before enabling creation or assignment
+changes, and checks again before writing. Missing, denied, malformed, or failed
+capability responses block these writes with an error; legacy policy scopes remain
+viewable. **Upgrade all backend instances before enabling these controls**: a mixed
+old/new rolling deployment could route the capability check and write to different
+versions, and old backends interpret an omitted `repository_id` as global.
+
 ## Project Structure
 
 ```
