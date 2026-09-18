@@ -73,10 +73,14 @@ export function PackagesTabContent({
 
   const packages = packagesData?.items ?? [];
 
-  // Fetch selected package detail
+  // Fetch selected package detail. The repository key is passed as
+  // virtual-repo context so a package reached from a virtual repository
+  // reports the virtual key instead of the owning member's; the backend
+  // ignores it for non-virtual keys (artifact-keeper#3532).
   const { data: packageDetail } = useQuery({
-    queryKey: ["package-detail", selectedPackageId],
-    queryFn: () => packagesApi.get(selectedPackageId!),
+    queryKey: ["package-detail", selectedPackageId, repositoryKey],
+    queryFn: () =>
+      packagesApi.get(selectedPackageId!, { repository_key: repositoryKey }),
     enabled: !!selectedPackageId,
   });
 
