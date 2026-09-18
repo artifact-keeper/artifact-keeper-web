@@ -34,7 +34,7 @@ import {
 const ALL_MANAGERS: PackageManager[] = ["apt", "dnf", "microdnf", "yum", "apk", "pip", "conda"];
 
 export const MANAGER_LABELS: Record<PackageManager, string> = {
-  apt: "apt (Debian, Ubuntu, python:*, Ray)",
+  apt: "apt (Debian, Ubuntu, python:*)",
   dnf: "dnf (UBI, Fedora, RHEL)",
   microdnf: "microdnf (UBI minimal / micro)",
   yum: "yum (CentOS 7, Amazon Linux 2)",
@@ -288,12 +288,12 @@ export function ImageBuildWizard({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="ib-image">Image name</Label>
-                <Input id="ib-image" value={form.image} onChange={(e) => patch({ image: e.target.value })} placeholder="team/ray" />
+                <Input id="ib-image" value={form.image} onChange={(e) => patch({ image: e.target.value })} placeholder="team/app" />
                 <p className="text-xs text-muted-foreground">Path inside {repoKey}; lowercase segments.</p>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="ib-tag">Tag</Label>
-                <Input id="ib-tag" value={form.tag} onChange={(e) => patch({ tag: e.target.value })} placeholder="2.56.0-genomics" />
+                <Input id="ib-tag" value={form.tag} onChange={(e) => patch({ tag: e.target.value })} placeholder="1.0.0" />
               </div>
             </div>
 
@@ -307,7 +307,7 @@ export function ImageBuildWizard({
                   className="font-mono text-xs"
                   value={form.dockerfile}
                   onChange={(e) => patch({ dockerfile: e.target.value })}
-                  placeholder={"FROM rayproject/ray:2.56.0 AS build\nRUN pip install --no-cache-dir polars-lts-cpu==1.9.0\n\nFROM rayproject/ray:2.56.0\nCOPY --from=build /home/ray/anaconda3 /home/ray/anaconda3"}
+                  placeholder={"FROM python:3.12-slim AS build\nRUN pip install --no-cache-dir --target /opt/pkgs numpy==2.1.0\n\nFROM python:3.12-slim\nCOPY --from=build /opt/pkgs /opt/pkgs\nENV PYTHONPATH=/opt/pkgs"}
                 />
                 <p className="text-xs text-muted-foreground">
                   Every FROM must be under an allowed base
@@ -319,7 +319,7 @@ export function ImageBuildWizard({
               <>
                 <div className="space-y-1">
                   <Label htmlFor="ib-base">Base image</Label>
-                  <Input id="ib-base" className="font-mono text-xs" value={form.baseImage} onChange={(e) => patch({ baseImage: e.target.value })} placeholder="rayproject/ray:2.56.0" />
+                  <Input id="ib-base" className="font-mono text-xs" value={form.baseImage} onChange={(e) => patch({ baseImage: e.target.value })} placeholder="python:3.12-slim" />
                   <p className="text-xs text-muted-foreground">
                     {settings.base_allowlist.length > 0
                       ? `Allowed prefixes: ${settings.base_allowlist.join(", ")}`
@@ -378,7 +378,7 @@ export function ImageBuildWizard({
                         onChange={(e) => patchGroup(i, { packages: e.target.value })}
                         placeholder={
                           g.manager === "pip"
-                            ? "scanpy==1.10.2\npolars-lts-cpu==1.9.0"
+                            ? "numpy==2.1.0\npandas==2.2.3"
                             : g.manager === "conda"
                               ? "samtools=1.20"
                               : "libgomp1\ngit"
@@ -418,14 +418,14 @@ export function ImageBuildWizard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="ib-user">User</Label>
-                    <Input id="ib-user" value={form.user} onChange={(e) => patch({ user: e.target.value })} placeholder={probe?.user ?? "ray"} />
+                    <Input id="ib-user" value={form.user} onChange={(e) => patch({ user: e.target.value })} placeholder={probe?.user ?? "app"} />
                     {systemNeedsUser ? (
                       <p className="text-xs text-amber-700 dark:text-amber-400">System packages need the user the image runs as afterwards.</p>
                     ) : null}
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="ib-workdir">Working dir</Label>
-                    <Input id="ib-workdir" value={form.workdir} onChange={(e) => patch({ workdir: e.target.value })} placeholder="/home/ray" />
+                    <Input id="ib-workdir" value={form.workdir} onChange={(e) => patch({ workdir: e.target.value })} placeholder="/app" />
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">

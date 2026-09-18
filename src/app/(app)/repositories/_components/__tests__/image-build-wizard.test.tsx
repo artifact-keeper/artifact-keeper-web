@@ -60,7 +60,7 @@ const SETTINGS: ImageBuildSettings = {
   enabled: true,
   repository_buildable: true,
   push_registry: "registry:8080",
-  base_allowlist: ["rayproject/", "python:"],
+  base_allowlist: ["python:", "debian:"],
   allow_run: false,
   allow_dockerfile: false,
   supported_package_managers: ["apt", "dnf", "microdnf", "yum", "apk", "pip", "conda"],
@@ -86,7 +86,7 @@ afterEach(cleanup);
 describe("initialForm", () => {
   it("starts from the first allowed base with one pip group and two-stage on", () => {
     const f = initialForm(null, SETTINGS);
-    expect(f.baseImage).toBe("rayproject/");
+    expect(f.baseImage).toBe("python:");
     expect(f.mode).toBe("spec");
     expect(f.groups).toEqual([{ manager: "pip", packages: "", channels: "" }]);
     expect(f.multistage).toBe(true);
@@ -170,11 +170,11 @@ describe("ImageBuildWizard", () => {
   };
 
   it("renders the spec through the dry-run endpoint and shows the Containerfile", async () => {
-    renderResponse = { data: { containerfile: "FROM rayproject/ray:2.56.0\nRUN pip install x", warnings: ["pip requirement \"x\" is not pinned to an exact version"] }, isError: false, isLoading: false, isFetching: false };
+    renderResponse = { data: { containerfile: "FROM python:3.12-slim\nRUN pip install x", warnings: ["pip requirement \"x\" is not pinned to an exact version"] }, isError: false, isLoading: false, isFetching: false };
     renderWizard();
     expect(screen.getByRole("heading", { name: /New image/ })).toBeInTheDocument();
-    expect(api.render).toHaveBeenCalledWith("ray", expect.objectContaining({ base_image: "rayproject/" }));
-    expect(screen.getByTestId("containerfile-preview")).toHaveTextContent("FROM rayproject/ray:2.56.0");
+    expect(api.render).toHaveBeenCalledWith("ray", expect.objectContaining({ base_image: "python:" }));
+    expect(screen.getByTestId("containerfile-preview")).toHaveTextContent("FROM python:3.12-slim");
     expect(screen.getByText(/not pinned to an exact version/)).toBeInTheDocument();
     // Structured spec only: no Dockerfile mode switch unless the instance allows it.
     expect(screen.queryByRole("radiogroup", { name: "Build from" })).not.toBeInTheDocument();
@@ -184,12 +184,17 @@ describe("ImageBuildWizard", () => {
     const user = userEvent.setup();
     renderWizard();
     const select = screen.getByRole("combobox", { name: "Package manager 1" });
-    // The bare allowlist prefix says nothing about a distro: every manager is offered.
+    // The first allowed prefix, "python:", reads as apt from its name: apt + pip + conda.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(
-      SETTINGS.supported_package_managers!.map((m) => MANAGER_LABELS[m]),
+      ["apt", "pip", "conda"].map((m) => MANAGER_LABELS[m as keyof typeof MANAGER_LABELS]),
     );
-    expect(screen.queryByTestId("base-detected")).not.toBeInTheDocument();
+    expect(screen.getByTestId("base-detected")).toHaveTextContent("from the image name");
     const base = screen.getByLabelText("Base image");
+    // A prefix that says nothing offers every manager and shows no badge.
+    await user.clear(base);
+    await user.type(base, "ghcr.io/acme/");
+    expect(within(select).getAllByRole("option")).toHaveLength(SETTINGS.supported_package_managers!.length);
+    expect(screen.queryByTestId("base-detected")).not.toBeInTheDocument();
     await user.clear(base);
     await user.type(base, "registry.access.redhat.com/ubi9/ubi-minimal:9.4");
     // Read from the name: microdnf, so the list narrows to microdnf + pip + conda…
@@ -218,22 +223,22 @@ describe("ImageBuildWizard", () => {
 
   it("uses the registry's probe of the base image over the name, and offers its user", async () => {
     baseInfoResponse = {
-      data: { found: true, reference: "ray/ray-groups:2.56.0", digest: "sha256:abc", os: "linux", architecture: "amd64", user: "ray", system_manager: "apt", has_pip: true, has_conda: true },
+      data: { found: true, reference: "images/base:1.0", digest: "sha256:abc", os: "linux", architecture: "amd64", user: "app", system_manager: "apt", has_pip: true, has_conda: true },
       isError: false, isLoading: false, isFetching: false,
     };
     const user = userEvent.setup();
-    renderWizard({ ...SETTINGS, base_allowlist: ["registry:8080/ray/"] });
+    renderWizard({ ...SETTINGS, base_allowlist: ["registry:8080/images/"] });
     const base = screen.getByLabelText("Base image");
     await user.clear(base);
-    await user.type(base, "registry:8080/ray/ray-groups:2.56.0");
-    await waitFor(() => expect(api.baseInfo).toHaveBeenCalledWith("ray", "registry:8080/ray/ray-groups:2.56.0"));
+    await user.type(base, "registry:8080/images/base:1.0");
+    await waitFor(() => expect(api.baseInfo).toHaveBeenCalledWith("ray", "registry:8080/images/base:1.0"));
     const detected = screen.getByTestId("base-detected");
     expect(detected).toHaveTextContent("apt");
     expect(detected).toHaveTextContent("from the image's own build history");
     expect(detected).toHaveTextContent("linux/amd64");
-    expect(detected).toHaveTextContent("runs as ray");
+    expect(detected).toHaveTextContent("runs as app");
     expect(detected).toHaveTextContent("conda present");
-    expect(screen.getByLabelText("User")).toHaveAttribute("placeholder", "ray");
+    expect(screen.getByLabelText("User")).toHaveAttribute("placeholder", "app");
     const select = screen.getByRole("combobox", { name: "Package manager 1" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(
       ["apt", "pip", "conda"].map((m) => MANAGER_LABELS[m as keyof typeof MANAGER_LABELS]),
@@ -269,7 +274,7 @@ describe("ImageBuildWizard", () => {
     expect(screen.getByTestId("containerfile-preview")).toHaveTextContent("Paste a Dockerfile");
     await user.type(screen.getByLabelText("Dockerfile"), "FROM python:3.12");
     await waitFor(() => expect(lastSpec()).toMatchObject({ dockerfile: "FROM python:3.12", base_image: "" }));
-    expect(screen.getByText(/Every FROM must be under an allowed base \(rayproject\/, python:\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Every FROM must be under an allowed base \(python:, debian:\)/)).toBeInTheDocument();
   });
 
   it("surfaces the server's validation error and keeps Build disabled until name, tag and a clean render exist", async () => {
@@ -293,7 +298,7 @@ describe("ImageBuildWizard", () => {
     api.create.mockResolvedValue({ reference: "ray/team/ray:1.0" });
     const m = mutations[mutations.length - 1];
     await m.mutationFn();
-    expect(api.create).toHaveBeenCalledWith("ray", expect.objectContaining({ image: "team/ray", tag: "1.0", spec: expect.objectContaining({ base_image: "rayproject/" }) }));
+    expect(api.create).toHaveBeenCalledWith("ray", expect.objectContaining({ image: "team/ray", tag: "1.0", spec: expect.objectContaining({ base_image: "python:" }) }));
     m.onSuccess?.({ reference: "ray/team/ray:1.0" });
     expect(toast.success).toHaveBeenCalledWith("Build queued: ray/team/ray:1.0");
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["image-builds", "ray"] });

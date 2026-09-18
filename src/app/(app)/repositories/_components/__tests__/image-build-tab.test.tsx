@@ -53,7 +53,7 @@ const SETTINGS: ImageBuildSettings = {
   enabled: true,
   repository_buildable: true,
   push_registry: "registry:8080",
-  base_allowlist: ["rayproject/"],
+  base_allowlist: ["python:"],
   allow_run: false,
   allow_dockerfile: false,
   supported_package_managers: ["apt", "pip", "conda"],
@@ -71,8 +71,8 @@ const BUILD: ImageBuild = {
   tag: "1.0",
   reference: "ray/team/ray:1.0",
   status: "succeeded",
-  spec: { ...emptySpec("rayproject/ray:2.56.0"), packages: [{ manager: "pip", packages: ["polars-lts-cpu==1.9.0"] }] },
-  containerfile: "FROM rayproject/ray:2.56.0\nRUN pip install polars-lts-cpu==1.9.0",
+  spec: { ...emptySpec("python:3.12-slim"), packages: [{ manager: "pip", packages: ["polars-lts-cpu==1.9.0"] }] },
+  containerfile: "FROM python:3.12-slim\nRUN pip install polars-lts-cpu==1.9.0",
   digest: `sha256:${"cd".repeat(32)}`,
   error: null,
   requested_by: "local-admin",
@@ -106,7 +106,7 @@ describe("ImageBuildTab", () => {
     render(<ImageBuildTab repoKey="ray" canBuild={false} />);
     expect(api.settings).toHaveBeenCalledWith("ray");
     expect(api.list).toHaveBeenCalledWith("ray");
-    expect(screen.getByText(/Base images under rayproject\//)).toBeInTheDocument();
+    expect(screen.getByText(/Base images under python:/)).toBeInTheDocument();
     expect(screen.getByText(/administrators only/)).toBeInTheDocument();
     expect(screen.getByText(/No builds yet\. Start with New image\./)).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "New image" });
@@ -114,7 +114,7 @@ describe("ImageBuildTab", () => {
     await user.click(button);
     expect(screen.getByRole("heading", { name: /New image/ })).toBeInTheDocument();
     // The wizard posts a dry run for the first allowed base as soon as it opens.
-    expect(api.render).toHaveBeenCalledWith("ray", expect.objectContaining({ base_image: "rayproject/" }));
+    expect(api.render).toHaveBeenCalledWith("ray", expect.objectContaining({ base_image: "python:" }));
   });
 
   it.each([
@@ -153,7 +153,7 @@ describe("ImageBuildTab", () => {
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByText("team/ray:1.0")).toBeInTheDocument();
     expect(within(rows[0]).getByText("succeeded")).toBeInTheDocument();
-    expect(within(rows[0]).getByText("rayproject/ray:2.56.0")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("python:3.12-slim")).toBeInTheDocument();
     expect(within(rows[0]).getByText("21s")).toBeInTheDocument();
     expect(within(rows[1]).getByText("—")).toBeInTheDocument();
 
@@ -172,7 +172,7 @@ describe("ImageBuildTab", () => {
     // Rebuild with changes reopens the wizard pre-filled from this build's spec.
     await user.click(within(dialog).getByRole("button", { name: /Rebuild with changes/ }));
     expect(screen.getByRole("heading", { name: /New image/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("Base image")).toHaveValue("rayproject/ray:2.56.0");
+    expect(screen.getByLabelText("Base image")).toHaveValue("python:3.12-slim");
     expect(screen.getByRole("textbox", { name: "Packages 1" })).toHaveValue("polars-lts-cpu==1.9.0");
   });
 

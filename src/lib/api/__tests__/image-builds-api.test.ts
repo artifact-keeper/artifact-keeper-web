@@ -23,9 +23,9 @@ describe("imageBuildsApi", () => {
   });
 
   it("asks the registry about a base image", async () => {
-    await imageBuildsApi.baseInfo("ray", "registry:8080/ray/base:1.0");
+    await imageBuildsApi.baseInfo("ray", "registry:8080/images/base:1.0");
     expect(mockApiFetch).toHaveBeenCalledWith(
-      "/api/v1/repositories/ray/image-builds/base-info?image=registry%3A8080%2Fray%2Fbase%3A1.0",
+      "/api/v1/repositories/ray/image-builds/base-info?image=registry%3A8080%2Fimages%2Fbase%3A1.0",
     );
   });
 
@@ -112,7 +112,6 @@ describe("suggestSystemManager", () => {
     ["ubuntu:24.04", "apt"],
     ["python:3.12-slim", "apt"],
     ["docker.io/library/python:3.12", "apt"],
-    ["rayproject/ray:2.56.0", "apt"],
     ["ghcr.io/acme/mystery:1", null],
     ["", null],
   ])("%s → %s", (base, expected) => {

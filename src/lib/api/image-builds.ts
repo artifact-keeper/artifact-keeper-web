@@ -149,7 +149,7 @@ export function specGroups(spec: ImageBuildSpec): PackageGroup[] {
 /**
  * The system package manager a base image most likely carries, from its
  * name: UBI and other RPM families → microdnf/dnf, Alpine → apk, Debian,
- * Ubuntu, the official Python images and Ray → apt. Null when unsure.
+ * Ubuntu and the official Python images → apt. Null when unsure.
  */
 /**
  * The managers worth offering for a base whose system manager is known:
@@ -171,7 +171,7 @@ export function suggestSystemManager(baseImage: string): PackageManager | null {
   if (b.includes("ubi-minimal") || b.includes("-minimal")) return "microdnf";
   if (b.includes("ubi") || b.includes("fedora") || b.includes("rockylinux") || b.includes("almalinux") || b.includes("rhel")) return "dnf";
   if (b.includes("centos:7") || b.includes("amazonlinux:2")) return "yum";
-  if (b.includes("debian") || b.includes("ubuntu") || b.startsWith("python") || b.includes("/python") || b.includes("rayproject/ray")) return "apt";
+  if (b.includes("debian") || b.includes("ubuntu") || b.startsWith("python") || b.includes("/python")) return "apt";
   return null;
 }
 
