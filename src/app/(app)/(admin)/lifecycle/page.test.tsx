@@ -2,7 +2,7 @@
 import React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 beforeAll(() => {
@@ -18,6 +18,8 @@ beforeAll(() => {
 
 interface MutationConfig {
   mutationFn: (...args: unknown[]) => unknown;
+  onSuccess?: (data: never) => void;
+  onError?: (error: unknown) => void;
 }
 
 const mutationConfigs: MutationConfig[] = [];
@@ -86,7 +88,16 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
-vi.mock("@/lib/api/lifecycle", () => ({ lifecycleApi: lifecycleApi }));
+// Only the network surface is mocked: `withExclusions` and
+// `parseLifecycleConfigError` are pure helpers the page is under test with.
+vi.mock("@/lib/api/lifecycle", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/lifecycle")>()),
+  lifecycleApi,
+}));
+
+vi.mock("@/lib/sdk-client", () => ({}));
+
+vi.mock("@artifact-keeper/sdk", () => ({}));
 
 vi.mock("@/lib/api/repositories", () => ({ repositoriesApi }));
 
@@ -202,6 +213,12 @@ import LifecyclePage from "./page";
 // The component declares mutations in this fixed order: create, delete,
 // toggle, execute, preview, execute-all. State changes produce a new set.
 const createMutate = () => mutateFns[mutateFns.length - 6];
+const createConfig = () => mutationConfigs[mutationConfigs.length - 6];
+
+/** Drive the create mutation's onError the way TanStack Query would. */
+function rejectCreate(message: string) {
+  act(() => createConfig().onError?.({ code: "VALIDATION_ERROR", message }));
+}
 
 beforeEach(() => {
   mutationConfigs.length = 0;
@@ -350,5 +367,138 @@ describe("LifecyclePage repository scope", () => {
     await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
 
     expect(screen.getByText("No repositories are available.")).toBeInTheDocument();
+  });
+});
+
+describe("LifecyclePage exclusions (#855)", () => {
+  it("sends config.exclude alongside the policy config", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.type(screen.getByLabelText("Name"), "Keep release tags");
+    await user.type(screen.getByLabelText("Keep these versions"), "latest");
+    await user.click(screen.getByRole("button", { name: "Add version" }));
+    await user.type(screen.getByLabelText("Keep versions matching"), "^v\\d+$");
+    await user.click(screen.getByRole("button", { name: "Add pattern" }));
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(createMutate()).toHaveBeenCalledWith({
+      name: "Keep release tags",
+      description: undefined,
+      policy_type: "max_age_days",
+      config: {
+        days: 90,
+        exclude: { versions: ["latest"], version_patterns: ["^v\\d+$"] },
+      },
+      repository_id: undefined,
+    });
+  });
+
+  it("offers the editor for every policy type", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    for (const policyType of [
+      "max_versions",
+      "no_downloads_days",
+      "tag_pattern_keep",
+      "tag_pattern_delete",
+      "size_quota_bytes",
+    ]) {
+      await user.selectOptions(screen.getByLabelText("Policy Type"), policyType);
+      expect(screen.getByLabelText("Keep these versions")).toBeInTheDocument();
+      expect(screen.getByLabelText("Keep versions matching")).toBeInTheDocument();
+    }
+  });
+
+  it("clears the exclusions after a successful create", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await user.type(screen.getByLabelText("Keep these versions"), "latest");
+    await user.click(screen.getByRole("button", { name: "Add version" }));
+    act(() => createConfig().onSuccess?.(undefined as never));
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    expect(
+      screen.queryByRole("button", { name: "Remove version latest" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("attaches a rejected config key to the config field", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    rejectCreate(
+      "unknown config key 'schedule' for policy_type 'max_age_days'. Allowed: days, max_age_days, exclude"
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "unknown config key 'schedule'"
+    );
+    expect(screen.getByLabelText("Config (JSON)")).toHaveAttribute(
+      "aria-invalid",
+      "true"
+    );
+  });
+
+  it("attaches a rejected exclusion pattern to the patterns list", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("unclosed group");
+    expect(screen.getByLabelText("Keep versions matching")).toHaveAttribute(
+      "aria-invalid",
+      "true"
+    );
+    expect(screen.getByLabelText("Config (JSON)")).not.toHaveAttribute(
+      "aria-invalid"
+    );
+  });
+
+  it("clears the field error when the dialog is reopened", async () => {
+    const user = userEvent.setup();
+    render(<LifecyclePage />);
+
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("LifecyclePage preview figure (#855)", () => {
+  it("reports the reclaimable size from bytes_matched, not the dry run's zero bytes_freed", () => {
+    render(<LifecyclePage />);
+
+    // Mutations are declared in a fixed order (create, delete, toggle,
+    // execute, preview, execute-all), so the preview is 2nd from last.
+    const previewConfig = mutationConfigs[mutationConfigs.length - 2];
+    act(() =>
+      previewConfig.onSuccess?.({
+        policy_id: "p1",
+        policy_name: "Drop old snapshots",
+        dry_run: true,
+        artifacts_matched: 12,
+        artifacts_removed: 0,
+        bytes_matched: 1572864,
+        bytes_freed: 0,
+        errors: [],
+      } as never)
+    );
+
+    expect(
+      screen.getByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/free 0 B/)).not.toBeInTheDocument();
   });
 });
