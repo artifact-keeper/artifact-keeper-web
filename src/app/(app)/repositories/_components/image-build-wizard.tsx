@@ -167,7 +167,7 @@ export function ImageBuildWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[min(72rem,calc(100vw-2rem))] max-w-none overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100%-2rem)] sm:max-w-none overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Hammer className="size-4" aria-hidden />

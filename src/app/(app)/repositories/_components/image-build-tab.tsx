@@ -236,7 +236,7 @@ export function ImageBuildTab({ repoKey, canBuild }: { repoKey: string; canBuild
       ) : null}
 
       <Dialog open={selected != null} onOpenChange={(o) => (!o ? setSelected(null) : undefined)}>
-        <DialogContent className="max-h-[90vh] w-[min(64rem,calc(100vw-2rem))] max-w-none overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[min(64rem,calc(100vw-2rem))] max-w-[calc(100%-2rem)] sm:max-w-none overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-mono text-base">{selected?.reference}</DialogTitle>
             <DialogDescription>Build {selected?.id}</DialogDescription>
