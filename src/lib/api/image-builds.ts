@@ -4,6 +4,8 @@ import type {
   ImageBuildSettings,
   ImageBuildSpec,
   ImageInspect,
+  PackageGroup,
+  PackageManager,
   RenderImageBuildResponse,
 } from "@/types/image-builds";
 
@@ -13,6 +15,8 @@ export type {
   ImageBuildSpec,
   ImageBuildStatus,
   ImageInspect,
+  PackageGroup,
+  PackageManager,
   RenderImageBuildResponse,
 } from "@/types/image-builds";
 
@@ -115,16 +119,39 @@ export function dockerfileLines(history: ImageInspect["history"]): DockerfileLin
 export function emptySpec(baseImage = ""): ImageBuildSpec {
   return {
     base_image: baseImage,
-    apt: [],
-    conda: [],
-    conda_channels: [],
-    pip: [],
+    packages: [],
+    multistage: false,
     env: {},
     labels: {},
     user: null,
     workdir: null,
     run: [],
   };
+}
+
+/** Legacy shorthand fields (apt/conda/pip) folded into groups, oldest first, then explicit groups. */
+export function specGroups(spec: ImageBuildSpec): PackageGroup[] {
+  const groups: PackageGroup[] = [];
+  if (spec.apt?.length) groups.push({ manager: "apt", packages: spec.apt });
+  if (spec.conda?.length) groups.push({ manager: "conda", packages: spec.conda, channels: spec.conda_channels ?? [] });
+  if (spec.pip?.length) groups.push({ manager: "pip", packages: spec.pip });
+  return [...groups, ...(spec.packages ?? [])];
+}
+
+/**
+ * The system package manager a base image most likely carries, from its
+ * name: UBI and other RPM families → microdnf/dnf, Alpine → apk, Debian,
+ * Ubuntu, the official Python images and Ray → apt. Null when unsure.
+ */
+export function suggestSystemManager(baseImage: string): PackageManager | null {
+  const b = baseImage.toLowerCase();
+  if (b.includes("alpine")) return "apk";
+  if (b.includes("ubi-micro") || b.includes("ubi9-micro") || b.includes("ubi8-micro")) return "microdnf";
+  if (b.includes("ubi-minimal") || b.includes("-minimal")) return "microdnf";
+  if (b.includes("ubi") || b.includes("fedora") || b.includes("rockylinux") || b.includes("almalinux") || b.includes("rhel")) return "dnf";
+  if (b.includes("centos:7") || b.includes("amazonlinux:2")) return "yum";
+  if (b.includes("debian") || b.includes("ubuntu") || b.startsWith("python") || b.includes("/python") || b.includes("rayproject/ray")) return "apt";
+  return null;
 }
 
 /** One entry per non-empty, non-comment line. */

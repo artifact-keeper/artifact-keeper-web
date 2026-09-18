@@ -57,17 +57,42 @@ export interface ImageInspect {
   source: string;
 }
 
+export type PackageManager = "apt" | "dnf" | "microdnf" | "yum" | "apk" | "pip" | "conda";
+
+export const SYSTEM_PACKAGE_MANAGERS: ReadonlySet<PackageManager> = new Set<PackageManager>([
+  "apt",
+  "dnf",
+  "microdnf",
+  "yum",
+  "apk",
+]);
+
+/** One install step; groups render in order. */
+export interface PackageGroup {
+  manager: PackageManager;
+  packages: string[];
+  /** conda only. */
+  channels?: string[];
+}
+
 export interface ImageBuildSpec {
   base_image: string;
-  apt: string[];
-  conda: string[];
-  conda_channels: string[];
-  pip: string[];
+  /** Install steps, in order. */
+  packages: PackageGroup[];
+  /** Build pip groups in a separate stage and copy only the installed packages. */
+  multistage: boolean;
+  /** A whole Dockerfile instead of the structured fields (admin-enabled). */
+  dockerfile?: string | null;
   env: Record<string, string>;
   labels: Record<string, string>;
   user?: string | null;
   workdir?: string | null;
   run: string[];
+  /** Legacy shorthand fields older builds recorded; folded into groups by the server. */
+  apt?: string[];
+  conda?: string[];
+  conda_channels?: string[];
+  pip?: string[];
 }
 
 export type ImageBuildStatus = "queued" | "running" | "succeeded" | "failed";
@@ -95,6 +120,10 @@ export interface ImageBuildSettings {
   repository_buildable: boolean;
   base_allowlist: string[];
   allow_run: boolean;
+  /** Whole-Dockerfile specs are accepted on this instance. */
+  allow_dockerfile?: boolean;
+  /** Package managers a spec may install with. */
+  supported_package_managers?: PackageManager[];
   /** Building is restricted to administrators on this instance (the default). */
   admin_only?: boolean;
   /** Server-side verdict for the caller: write access on the repo, plus admin when admin_only. */
