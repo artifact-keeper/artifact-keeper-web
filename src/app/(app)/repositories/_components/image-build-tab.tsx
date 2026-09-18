@@ -144,7 +144,10 @@ export function ImageBuildTab({ repoKey, canBuild }: { repoKey: string; canBuild
     },
   });
   const s: ImageBuildSettings | undefined = settings.data;
-  const buildable = !!s && s.enabled && s.repository_buildable && canBuild;
+  // The server's verdict wins when it gives one (admin-only policy, write
+  // access); older backends without the field fall back to the client's.
+  const callerMayBuild = s?.caller_may_build ?? canBuild;
+  const buildable = !!s && s.enabled && s.repository_buildable && callerMayBuild;
 
   return (
     <div className="space-y-4">
@@ -175,13 +178,17 @@ export function ImageBuildTab({ repoKey, canBuild }: { repoKey: string; canBuild
             "Builds are not configured on this instance (AK_BUILDKIT_ADDR / AK_IMAGE_BUILD_PUSH_REGISTRY). Inspection still works."
           ) : !s.repository_buildable ? (
             "Builds push into local container repositories; this repository is remote or virtual."
-          ) : !canBuild ? (
-            "You need write access to this repository to build into it."
+          ) : !callerMayBuild ? (
+            s.admin_only
+              ? "Image builds are restricted to administrators on this instance (AK_IMAGE_BUILD_ADMIN_ONLY)."
+              : "You need write access to this repository to build into it."
           ) : (
             <span>
               Base images{s.base_allowlist.length ? ` under ${s.base_allowlist.join(", ")}` : ": any"} ·
-              {s.allow_run ? " raw RUN lines allowed" : " no raw RUN lines"} · up to {s.max_concurrent} concurrent ·
+              {s.allow_run ? " raw RUN lines allowed" : " no raw RUN lines"} ·
+              {s.admin_only ? " administrators only" : " repository writers"} · up to {s.max_concurrent} concurrent ·
               {" "}{Math.round(s.timeout_secs / 60)} min timeout · pushes via {s.push_registry ?? "?"}
+              {s.pip_index_url ? ` · pip via ${s.pip_index_url}` : ""}
             </span>
           )}
         </CardContent>

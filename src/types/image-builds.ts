@@ -95,6 +95,12 @@ export interface ImageBuildSettings {
   repository_buildable: boolean;
   base_allowlist: string[];
   allow_run: boolean;
+  /** Building is restricted to administrators on this instance (the default). */
+  admin_only?: boolean;
+  /** Server-side verdict for the caller: write access on the repo, plus admin when admin_only. */
+  caller_may_build?: boolean;
+  /** The pip index every generated `pip install` uses, when the instance pins one. */
+  pip_index_url?: string | null;
   timeout_secs: number;
   max_concurrent: number;
   push_registry?: string | null;
