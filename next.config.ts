@@ -17,6 +17,11 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_GIT_SHA: getGitSha(),
+    // The git ref the image was built from (Docker build arg APP_VERSION:
+    // `vX.Y.Z` for a release, `main` or a branch otherwise). The sidebar
+    // shows the commit hash instead of the version when this is not a
+    // release tag. Empty for local builds.
+    NEXT_PUBLIC_BUILD_REF: process.env.APP_VERSION ?? "",
   },
   output: "standalone",
   devIndicators: false,

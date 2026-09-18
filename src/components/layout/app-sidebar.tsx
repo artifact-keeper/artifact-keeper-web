@@ -63,6 +63,7 @@ import {
   SidebarFooter,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { currentWebBuildLabel } from "@/lib/build-version";
 
 interface NavItem {
   title: string;
@@ -195,6 +196,7 @@ export function AppSidebar() {
     return true;
   });
 
+  const webBuild = currentWebBuildLabel();
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -211,13 +213,8 @@ export function AppSidebar() {
                 />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
-                  <span className="text-xs text-muted-foreground">
-                    Web {process.env.NEXT_PUBLIC_APP_VERSION}
-                    {process.env.NEXT_PUBLIC_APP_VERSION?.includes("-") &&
-                    process.env.NEXT_PUBLIC_GIT_SHA &&
-                    process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-                      ? ` (${process.env.NEXT_PUBLIC_GIT_SHA.slice(0, 7)})`
-                      : ""}
+                  <span className="text-xs text-muted-foreground" title={webBuild.title}>
+                    Web {webBuild.label}
                     {health?.version ? ` / Server ${health.version}` : ""}
                     {health?.dirty && health?.commit
                       ? ` (${health.commit.slice(0, 7)})`

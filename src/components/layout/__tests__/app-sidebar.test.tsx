@@ -155,8 +155,35 @@ describe("AppSidebar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
+    delete process.env.NEXT_PUBLIC_BUILD_REF;
     mockUseQuery.mockReturnValue({ data: undefined });
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
+  });
+
+  it("shows the commit hash instead of the version for a build that is not a release tag", () => {
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
+    process.env.NEXT_PUBLIC_GIT_SHA = "cf1b0d2abc1234567890";
+    process.env.NEXT_PUBLIC_BUILD_REF = "main";
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({ data: { version: "1.1.0" } });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Web cf1b0d2/);
+    expect(versionEl.textContent).not.toContain("1.1.0 /");
+    expect(versionEl.textContent).toContain("/ Server 1.1.0");
+    expect(versionEl.getAttribute("title")).toContain("main build cf1b0d2abc1234567890");
+  });
+
+  it("shows the version for a build made from a release tag", () => {
+    process.env.NEXT_PUBLIC_GIT_SHA = "cf1b0d2abc1234567890";
+    process.env.NEXT_PUBLIC_BUILD_REF = "v1.1.0";
+    authState({ isAuthenticated: true });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByText(/Web 1\.1\.0/);
+    expect(versionEl.textContent).not.toContain("cf1b0d2");
   });
 
   it("shows web version only when health data is not available", () => {

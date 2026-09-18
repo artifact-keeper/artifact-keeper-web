@@ -31,6 +31,7 @@ import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-car
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
+import { currentWebBuildLabel } from "@/lib/build-version";
 
 // -- helpers --
 
@@ -445,14 +446,8 @@ export default function SettingsPage() {
               <Separator />
               <SettingRow
                 label="Web Version"
-                value={
-                  process.env.NEXT_PUBLIC_APP_VERSION?.includes("-") &&
-                  process.env.NEXT_PUBLIC_GIT_SHA &&
-                  process.env.NEXT_PUBLIC_GIT_SHA !== "unknown"
-                    ? `${process.env.NEXT_PUBLIC_APP_VERSION} (${process.env.NEXT_PUBLIC_GIT_SHA.slice(0, 7)})`
-                    : process.env.NEXT_PUBLIC_APP_VERSION ?? "..."
-                }
-                description="Current web frontend version."
+                value={currentWebBuildLabel().label}
+                description={`Current web frontend build: ${currentWebBuildLabel().title}.`}
               />
               <Separator />
               <div className="space-y-2">
