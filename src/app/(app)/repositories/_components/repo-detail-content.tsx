@@ -244,6 +244,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // Container-image repositories get the image builder/inspector (Build tab
   // and the Image tab of a manifest's detail dialog) whatever the view mode.
   const isContainerRepo = isContainerImageFormat(repoFormat);
+  // Builds push into local repositories only, so remote and virtual
+  // container repositories do not get the tab (it would only say so, and
+  // the tab strip is full enough already).
+  const showBuildTab = isContainerRepo && repository.repo_type === "local";
   // Folder-tree view for RAW/Generic repos (#2791): the tree is grouped
   // client-side from the flat artifact list, so it needs the whole listing
   // on one page (bounded) rather than a paginated slice.
@@ -993,7 +997,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Upload
             </TabsTrigger>
           )}
-          {isContainerRepo && (
+          {showBuildTab && (
             <TabsTrigger value="build">
               <Hammer className="size-3.5 mr-1" />
               Build
@@ -1181,12 +1185,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         </TabsContent>
 
         {/* --- Setup Tab (#560): same format-aware guide as the central Setup page. --- */}
-        {isContainerRepo && (
+        {showBuildTab && (
           <TabsContent value="build" className="mt-4">
-            <ImageBuildTab
-              repoKey={repoKey}
-              canBuild={isAuthenticated && repository.repo_type === "local"}
-            />
+            <ImageBuildTab repoKey={repoKey} canBuild={isAuthenticated} />
           </TabsContent>
         )}
 
