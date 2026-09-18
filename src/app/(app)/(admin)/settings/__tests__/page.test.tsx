@@ -40,6 +40,12 @@ vi.mock("@/lib/api/settings", () => ({
   },
 }));
 
+// The Maintenance card (#859) is covered by its own test; stubbing it here
+// keeps this page test focused on the page and out of the card's Radix Select.
+vi.mock("@/components/settings/maintenance-card", () => ({
+  MaintenanceCard: () => <div data-testid="maintenance-card" />,
+}));
+
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
@@ -480,6 +486,15 @@ describe("SettingsPage", () => {
     expect(screen.getByText("npm Upstream Change-Feed")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_ENABLED")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_URL")).toBeDefined();
+  });
+
+  it("mounts the admin Maintenance card (#859)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings();
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId("maintenance-card")).toBeDefined();
   });
 
   it("renders SMTP Configuration heading", () => {

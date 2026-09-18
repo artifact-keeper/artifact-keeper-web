@@ -28,6 +28,7 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
+import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
@@ -542,6 +543,7 @@ export default function SettingsPage() {
           <NpmUpstreamFeedCard />
         </TabsContent>
       </Tabs>
+      <MaintenanceCard />
     </div>
   );
 }
