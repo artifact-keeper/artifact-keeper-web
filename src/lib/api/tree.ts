@@ -109,10 +109,13 @@ function adaptTreeNode(sdk: TreeNodeResponse): TreeNode {
       }
     : metadata;
 
+  // Backend /api/v1/tree uses 'file' for artifact leaves, while the UI
+  // canonical TreeNodeType calls those nodes 'artifact'.
+  const rawType = sdk.type === 'file' ? 'artifact' : sdk.type;
   return {
     id: sdk.id,
     name: sdk.name,
-    type: narrowEnum(sdk.type, TREE_NODE_TYPES, 'folder'),
+    type: narrowEnum(rawType, TREE_NODE_TYPES, 'folder'),
     path: sdk.path,
     has_children: sdk.has_children,
     children_count: sdk.children_count ?? undefined,

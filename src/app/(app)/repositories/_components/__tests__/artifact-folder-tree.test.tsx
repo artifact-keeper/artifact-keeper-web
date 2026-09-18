@@ -1,165 +1,375 @@
 // @vitest-environment jsdom
 import React from "react";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ArtifactFolderTree } from "../artifact-folder-tree";
-import type { Artifact } from "@/types";
+import { treeApi, type TreeNode } from "@/lib/api/tree";
 
-function makeArtifact(path: string, overrides: Partial<Artifact> = {}): Artifact {
-  const name = path.split("/").filter(Boolean).pop() ?? path;
+vi.mock("@/lib/api/tree", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/tree")>(
+    "@/lib/api/tree",
+  );
+
   return {
-    id: `id-${path}`,
-    repository_key: "raw-repo",
-    path,
+    ...actual,
+    treeApi: {
+      ...actual.treeApi,
+      getChildren: vi.fn(),
+    },
+  };
+});
+
+const getChildrenMock = vi.mocked(treeApi.getChildren);
+
+function makeFolder(
+  path: string,
+  overrides: Partial<TreeNode> = {},
+): TreeNode {
+  const name = path.split("/").filter(Boolean).pop() ?? path;
+
+  return {
+    id: `folder-${path}`,
     name,
-    size_bytes: 1024,
-    checksum_sha256: "abc",
-    content_type: "application/octet-stream",
-    download_count: 0,
-    created_at: "2026-01-01T00:00:00Z",
+    type: "folder",
+    path,
+    has_children: true,
+    children_count: 1,
     ...overrides,
   };
 }
 
-const NOOP = () => {};
+function makeFile(
+  path: string,
+  overrides: Partial<TreeNode> = {},
+): TreeNode {
+  const name = path.split("/").filter(Boolean).pop() ?? path;
+
+  return {
+    id: `file-${path}`,
+    name,
+    type: "artifact",
+    path,
+    has_children: false,
+    children_count: 0,
+    ...overrides,
+  };
+}
+
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+}
+
+function renderTree(
+  props: Partial<React.ComponentProps<typeof ArtifactFolderTree>> = {},
+) {
+  const queryClient = makeQueryClient();
+
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <ArtifactFolderTree
+        repositoryKey="raw-repo"
+        onFileSelect={() => {}}
+        {...props}
+      />
+    </QueryClientProvider>,
+  );
+
+  return { ...result, queryClient };
+}
 
 describe("ArtifactFolderTree", () => {
-  afterEach(cleanup);
-
-  it("renders a loading skeleton when loading", () => {
-    render(
-      <ArtifactFolderTree artifacts={[]} onFileSelect={NOOP} loading />,
-    );
-    expect(screen.getByTestId("artifact-tree-loading")).toBeInTheDocument();
-    expect(screen.queryByTestId("artifact-folder-tree")).not.toBeInTheDocument();
+  beforeEach(() => {
+    getChildrenMock.mockReset();
   });
 
-  it("renders the empty state with a custom message when there are no artifacts", () => {
-    render(
-      <ArtifactFolderTree
-        artifacts={[]}
-        onFileSelect={NOOP}
-        emptyMessage="Nothing here yet."
-      />,
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders a loading skeleton while the root is loading", () => {
+    getChildrenMock.mockImplementation(
+      () => new Promise<TreeNode[]>(() => {}),
     );
-    expect(screen.getByTestId("artifact-tree-empty")).toBeInTheDocument();
+
+    renderTree();
+
+    expect(screen.getByTestId("artifact-tree-loading")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("artifact-folder-tree"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the empty state with a custom message", async () => {
+    getChildrenMock.mockResolvedValue([]);
+
+    renderTree({ emptyMessage: "Nothing here yet." });
+
+    expect(
+      await screen.findByTestId("artifact-tree-empty"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Nothing here yet.")).toBeInTheDocument();
   });
 
-  it("renders top-level files and folders", () => {
-    render(
-      <ArtifactFolderTree
-        artifacts={[
-          makeArtifact("top.txt"),
-          makeArtifact("builds/app.tar.gz"),
-        ]}
-        onFileSelect={NOOP}
-      />,
-    );
-    expect(screen.getByRole("tree", { name: /repository folder tree/i })).toBeInTheDocument();
-    expect(screen.getByText("builds")).toBeInTheDocument();
+  it("loads only the repository root initially", async () => {
+    getChildrenMock.mockResolvedValue([
+      makeFolder("raw-repo/builds", { children_count: 1000 }),
+      makeFile("raw-repo/top.txt"),
+    ]);
+
+    renderTree();
+
+    expect(await screen.findByText("builds")).toBeInTheDocument();
     expect(screen.getByText("top.txt")).toBeInTheDocument();
+    expect(screen.getByText("1000 files")).toBeInTheDocument();
+
+    expect(getChildrenMock).toHaveBeenCalledTimes(1);
+    expect(getChildrenMock).toHaveBeenCalledWith({
+      repository_key: "raw-repo",
+    });
   });
 
-  it("expands top-level folders by default so their children are visible", () => {
-    render(
-      <ArtifactFolderTree
-        artifacts={[makeArtifact("builds/app.tar.gz")]}
-        onFileSelect={NOOP}
-      />,
-    );
-    // Top-level folder auto-expands; child file is visible without a click.
-    expect(screen.getByText("app.tar.gz")).toBeInTheDocument();
-    const folder = screen.getByRole("treeitem", { name: /folder builds/i });
-    expect(folder).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("collapses and re-expands a folder on click", async () => {
+  it("does not fetch a folder until it is expanded", async () => {
     const user = userEvent.setup();
-    render(
-      <ArtifactFolderTree
-        artifacts={[makeArtifact("builds/app.tar.gz")]}
-        onFileSelect={NOOP}
-      />,
+
+    getChildrenMock.mockImplementation(async (params) => {
+      if (!params?.path) {
+        return [makeFolder("raw-repo/builds")];
+      }
+
+      if (params?.path === "builds") {
+        return [makeFile("raw-repo/builds/app.tar.gz")];
+      }
+
+      return [];
+    });
+
+    renderTree();
+
+    const folder = await screen.findByRole("treeitem", {
+      name: /folder builds/i,
+    });
+
+    expect(folder).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("app.tar.gz")).not.toBeInTheDocument();
+    expect(getChildrenMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByTestId("artifact-tree-folder"));
+
+    expect(await screen.findByText("app.tar.gz")).toBeInTheDocument();
+    expect(getChildrenMock).toHaveBeenCalledTimes(2);
+    expect(getChildrenMock).toHaveBeenLastCalledWith({
+      repository_key: "raw-repo",
+      path: "builds",
+    });
+  });
+
+  it("lazy-loads nested folders using repository-relative paths", async () => {
+    const user = userEvent.setup();
+
+    getChildrenMock.mockImplementation(async (params) => {
+      switch (params?.path) {
+        case undefined:
+          return [makeFolder("raw-repo/builds")];
+        case "builds":
+          return [makeFolder("raw-repo/builds/2026")];
+        case "builds/2026":
+          return [makeFile("raw-repo/builds/2026/app.tar.gz")];
+        default:
+          return [];
+      }
+    });
+
+    renderTree();
+
+    await user.click(await screen.findByTestId("artifact-tree-folder"));
+
+    const nested = await screen.findByRole("treeitem", {
+      name: /folder builds\/2026/i,
+    });
+
+    expect(screen.queryByText("app.tar.gz")).not.toBeInTheDocument();
+
+    await user.click(
+      nested.querySelector<HTMLButtonElement>(
+        '[data-testid="artifact-tree-folder"]',
+      )!,
     );
-    const folderButton = screen.getByTestId("artifact-tree-folder");
 
-    // Starts expanded -> child visible
-    expect(screen.getByText("app.tar.gz")).toBeInTheDocument();
+    expect(await screen.findByText("app.tar.gz")).toBeInTheDocument();
+    expect(getChildrenMock).toHaveBeenCalledWith({
+      repository_key: "raw-repo",
+      path: "builds/2026",
+    });
+  });
 
-    // Collapse -> child hidden
+  it("does not refetch a fresh folder when collapsed and re-expanded", async () => {
+    const user = userEvent.setup();
+
+    getChildrenMock.mockImplementation(async (params) => {
+      if (!params?.path) {
+        return [makeFolder("raw-repo/builds")];
+      }
+
+      return [makeFile("raw-repo/builds/app.tar.gz")];
+    });
+
+    renderTree();
+
+    const folderButton = await screen.findByTestId("artifact-tree-folder");
+
+    await user.click(folderButton);
+    expect(await screen.findByText("app.tar.gz")).toBeInTheDocument();
+
     await user.click(folderButton);
     expect(screen.queryByText("app.tar.gz")).not.toBeInTheDocument();
 
-    // Re-expand -> child visible again
     await user.click(folderButton);
-    expect(screen.getByText("app.tar.gz")).toBeInTheDocument();
+    expect(await screen.findByText("app.tar.gz")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(getChildrenMock).toHaveBeenCalledTimes(2);
+    });
   });
 
-  it("keeps a nested folder collapsed until expanded", async () => {
-    const user = userEvent.setup();
-    render(
-      <ArtifactFolderTree
-        artifacts={[makeArtifact("builds/2026/app.tar.gz")]}
-        onFileSelect={NOOP}
-      />,
-    );
-    // 'builds' auto-expands and reveals the nested '2026' folder, but the deep
-    // file is hidden until '2026' is expanded.
-    expect(screen.getByText("2026")).toBeInTheDocument();
-    expect(screen.queryByText("app.tar.gz")).not.toBeInTheDocument();
-
-    const nested = screen.getByRole("treeitem", { name: /folder builds\/2026/i });
-    await user.click(within(nested).getByTestId("artifact-tree-folder"));
-    expect(screen.getByText("app.tar.gz")).toBeInTheDocument();
-  });
-
-  it("invokes onFileSelect with the artifact when a file is clicked", async () => {
+  it("invokes onFileSelect with repository-relative path and filename", async () => {
     const user = userEvent.setup();
     const onFileSelect = vi.fn();
-    const artifact = makeArtifact("builds/app.tar.gz", { id: "target" });
-    render(
-      <ArtifactFolderTree artifacts={[artifact]} onFileSelect={onFileSelect} />,
-    );
-    await user.click(screen.getByTestId("artifact-tree-file"));
+
+    getChildrenMock.mockResolvedValue([
+      makeFile("raw-repo/top.txt", { id: "target" }),
+    ]);
+
+    renderTree({ onFileSelect });
+
+    await user.click(await screen.findByTestId("artifact-tree-file"));
+
     expect(onFileSelect).toHaveBeenCalledTimes(1);
-    expect(onFileSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "target" }),
-    );
+    expect(onFileSelect).toHaveBeenCalledWith("top.txt", "top.txt");
   });
 
-  it("renders a download count and a generic-file glyph, and highlights the selected file", () => {
-    const artifact = makeArtifact("dir/LICENSE", {
-      download_count: 1234,
-    });
-    render(
-      <ArtifactFolderTree
-        artifacts={[artifact]}
-        onFileSelect={NOOP}
-        selectedPath="dir/LICENSE"
-      />,
-    );
-    // download_count > 0 renders the compact-formatted count (formatNumber)
-    expect(screen.getByText("1.2K")).toBeInTheDocument();
-    // selected file carries aria-selected=true
-    const file = screen.getByTestId("artifact-tree-file");
+  it("highlights the selected repository-relative file", async () => {
+    getChildrenMock.mockResolvedValue([makeFile("raw-repo/LICENSE")]);
+
+    renderTree({ selectedPath: "LICENSE" });
+
+    const file = await screen.findByTestId("artifact-tree-file");
     expect(file).toHaveAttribute("aria-selected", "true");
   });
 
-  it("shows a recursive file total in the header", () => {
-    render(
-      <ArtifactFolderTree
-        artifacts={[
-          makeArtifact("a.txt"),
-          makeArtifact("dir/b.txt"),
-          makeArtifact("dir/sub/c.txt"),
-        ]}
-        onFileSelect={NOOP}
-      />,
-    );
-    expect(screen.getByText("3 files")).toBeInTheDocument();
+  it("works with arbitrary folder names and does not hardcode rke2", async () => {
+    const user = userEvent.setup();
+
+    getChildrenMock.mockImplementation(async (params) => {
+      if (!params?.path) {
+        return [makeFolder("raw-repo/audio-data")];
+      }
+
+      if (params?.path === "audio-data") {
+        return [makeFile("raw-repo/audio-data/sample.wav")];
+      }
+
+      return [];
+    });
+
+    renderTree();
+
+    await user.click(await screen.findByTestId("artifact-tree-folder"));
+
+    expect(await screen.findByText("sample.wav")).toBeInTheDocument();
+    expect(getChildrenMock).toHaveBeenCalledWith({
+      repository_key: "raw-repo",
+      path: "audio-data",
+    });
+  });
+
+  it("sorts folders before files using case-insensitive natural ordering", async () => {
+    getChildrenMock.mockResolvedValue([
+      makeFile("raw-repo/file10.bin"),
+      makeFolder("raw-repo/zeta"),
+      makeFile("raw-repo/file2.bin"),
+      makeFolder("raw-repo/Alpha"),
+      makeFile("raw-repo/Beta.bin"),
+      makeFile("raw-repo/alpha.bin"),
+    ]);
+
+    renderTree();
+
+    await screen.findByText("file10.bin");
+
+    const items = screen.getAllByRole("treeitem");
+
+    expect(items.map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Folder Alpha",
+      "Folder zeta",
+      "File alpha.bin",
+      "File Beta.bin",
+      "File file2.bin",
+      "File file10.bin",
+    ]);
+  });
+
+  it("shows a root error and retries loading the tree", async () => {
+    const user = userEvent.setup();
+
+    getChildrenMock
+      .mockRejectedValueOnce(new Error("root failed"))
+      .mockResolvedValueOnce([makeFile("raw-repo/recovered.txt")]);
+
+    renderTree();
+
+    expect(
+      await screen.findByText("Could not load repository tree."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(await screen.findByText("recovered.txt")).toBeInTheDocument();
+    expect(getChildrenMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a folder error and retries loading that folder", async () => {
+    const user = userEvent.setup();
+    let buildsAttempts = 0;
+
+    getChildrenMock.mockImplementation(async (params) => {
+      if (!params?.path) {
+        return [makeFolder("raw-repo/builds")];
+      }
+
+      if (params.path === "builds") {
+        buildsAttempts += 1;
+
+        if (buildsAttempts === 1) {
+          throw new Error("folder failed");
+        }
+
+        return [makeFile("raw-repo/builds/app.tar.gz")];
+      }
+
+      return [];
+    });
+
+    renderTree();
+
+    await user.click(await screen.findByTestId("artifact-tree-folder"));
+
+    expect(
+      await screen.findByText("Failed to load folder."),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /retry/i }));
+
+    expect(await screen.findByText("app.tar.gz")).toBeInTheDocument();
+    expect(buildsAttempts).toBe(2);
   });
 });

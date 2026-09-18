@@ -246,12 +246,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     !!repository?.versioning_enabled &&
     !!repoFormat &&
     supportsVersioning(repoFormat);
-  // The tree view still aggregates client-side, so it needs all artifacts on
-  // one page.  Bound by a high cap to avoid runaway responses on huge
-  // repositories.  (Docker grouping used to need this too; it is server-side
-  // now — see `isDockerGrouped` above.)
-  const effectivePageSize = isTreeView ? 500 : pageSize;
-  const effectivePage = isTreeView ? 1 : page;
+  // The lazy tree uses /api/v1/tree and does not need the artifact list.
+  // If the user searches while in tree mode, reuse the normal server-side
+  // artifact search with ordinary pagination.
+  const effectivePageSize = pageSize;
+  const effectivePage = page;
 
   const handleViewModeChange = useCallback(
     (next: ArtifactViewMode) => {
@@ -287,7 +286,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         ...(useServerGrouping ? { group_by: "maven_component" as const } : {}),
         ...(isDockerGrouped ? { group_by: "docker_tag" as const } : {}),
       }),
-    enabled: !!repoKey,
+    enabled: !!repoKey && (!isTreeView || searchQuery.trim().length > 0),
   });
 
   // --- quarantine state for the artifact in the detail dialog ---
@@ -351,6 +350,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     mutationFn: (path: string) => artifactsApi.delete(repoKey, path),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
       setDetailOpen(false);
       setSelectedArtifact(null);
@@ -381,6 +381,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       // fetch goes back to upstream (the underlying download endpoint will
       // re-populate the proxy cache on the next access).
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
       // The open dialog holds a stale copy of the artifact whose
       // cache_cached_at / cache_expires_at fields no longer reflect reality.
@@ -416,6 +417,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       // The listing row for this artifact now carries a stale verdict, as does
       // any cached status lookup for it.
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["quarantine-status", artifactId] });
       // Apply the same transition the backend just wrote to the copy the open
       // dialog holds: both transitions clear `quarantine_until`, a release
@@ -508,6 +510,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     async (file: File, path?: string) => {
       await artifactsApi.upload(repoKey, file, path);
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
     },
     [repoKey, queryClient]
@@ -515,6 +518,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   const handleChunkedComplete = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+    queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
     queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
   }, [repoKey, queryClient]);
 
@@ -1099,13 +1103,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               emptyMessage="No Maven components could be grouped — switch to flat view to see raw files."
             />
           ) : isTreeView ? (
-            <ArtifactFolderTree
-              artifacts={artifactsData?.items ?? []}
-              loading={artifactsLoading}
-              onFileSelect={showDetail}
-              selectedPath={selectedArtifact?.path ?? null}
-              emptyMessage="No artifacts in this repository."
-            />
+            searchQuery.trim().length > 0 ? (
+              <DataTable
+                columns={artifactColumns}
+                data={artifactsData?.items ?? []}
+                total={artifactsData?.pagination?.total}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(s) => {
+                  setPageSize(s);
+                  setPage(1);
+                }}
+                loading={artifactsLoading}
+                emptyMessage="No artifacts match your search."
+                rowKey={(a) => a.id}
+                onRowClick={showDetail}
+              />
+            ) : (
+              <ArtifactFolderTree
+                repositoryKey={repoKey}
+                onFileSelect={showDetailByPath}
+                selectedPath={selectedArtifact?.path ?? null}
+                emptyMessage="No artifacts in this repository."
+              />
+            )
           ) : isDockerGrouped ? (
             <DockerTagList
               tags={artifactsData?.docker_tags ?? []}
