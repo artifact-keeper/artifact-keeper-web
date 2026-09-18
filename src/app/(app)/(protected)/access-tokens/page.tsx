@@ -11,7 +11,8 @@ import {
 import { toast } from "sonner";
 
 import { profileApi } from "@/lib/api/profile";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { apiErrorMessage } from "@/lib/api/fetch";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import type {
   ApiKey,
   AccessToken,
@@ -48,6 +49,16 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
+
+/**
+ * A refused mint is shown with the backend's own words: since backend 1.10.0
+ * an out-of-range `expires_in_days` is a 400 whose message names the range the
+ * instance policy permits (artifact-keeper#3460, #854), which is the only text
+ * that tells the user what to type instead.
+ */
+function mintErrorMessage(error: unknown, fallback: string): string {
+  return apiErrorMessage(error) ?? toUserMessage(error, fallback);
+}
 
 function DateCell({ value }: { value?: string | null }) {
   if (!value) return <span className="text-sm text-muted-foreground">Never</span>;
@@ -121,7 +132,11 @@ export default function AccessTokensPage() {
   const [keyName, setKeyName] = useState("");
   const [keyExpiry, setKeyExpiry] = useState("90");
   const [keyScopes, setKeyScopes] = useState<string[]>(["read:artifacts"]);
-  const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
+  // The whole create response, not just the secret: the reveal also reports
+  // the expiry the server stamped and whether the instance policy set it
+  // (backend artifact-keeper#3460, #854).
+  const [newlyCreatedKey, setNewlyCreatedKey] =
+    useState<CreateApiKeyResponse | null>(null);
   const [revokeKeyId, setRevokeKeyId] = useState<string | null>(null);
 
   // Access Token state
@@ -130,9 +145,8 @@ export default function AccessTokensPage() {
   const [tokenExpiry, setTokenExpiry] = useState("90");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["read:artifacts"]);
   const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
-  const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(
-    null
-  );
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreateAccessTokenResponse | null>(null);
   const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
 
   // Queries
@@ -151,13 +165,13 @@ export default function AccessTokensPage() {
     mutationFn: (data: CreateApiKeyRequest) => profileApi.createApiKey(data),
     onSuccess: (result: CreateApiKeyResponse) => {
       queryClient.invalidateQueries({ queryKey: ["profile", "api-keys"] });
-      setNewlyCreatedKey(result.token);
+      setNewlyCreatedKey(result);
       setKeyName("");
       setKeyScopes(["read:artifacts"]);
       setKeyExpiry("90");
       toast.success("API key created");
     },
-    onError: mutationErrorToast("Failed to create API key"),
+    onError: (err: unknown) => toast.error(mintErrorMessage(err, "Failed to create API key")),
   });
 
   const revokeKeyMutation = useMutation({
@@ -177,14 +191,15 @@ export default function AccessTokensPage() {
       queryClient.invalidateQueries({
         queryKey: ["profile", "access-tokens"],
       });
-      setNewlyCreatedToken(result.token);
+      setNewlyCreatedToken(result);
       setTokenName("");
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
       setTokenRepoSelector({});
       toast.success("Access token created");
     },
-    onError: mutationErrorToast("Failed to create access token"),
+    onError: (err: unknown) =>
+      toast.error(mintErrorMessage(err, "Failed to create access token")),
   });
 
   const revokeTokenMutation = useMutation({
@@ -385,7 +400,9 @@ export default function AccessTokensPage() {
             <TokenCreatedAlert
               title="API Key Created"
               description="Copy your API key now. You will not be able to see it again."
-              token={newlyCreatedKey}
+              token={newlyCreatedKey.token}
+              expiresAt={newlyCreatedKey.expires_at}
+              policyApplied={newlyCreatedKey.policy_applied}
               onDone={() => {
                 setCreateKeyOpen(false);
                 setNewlyCreatedKey(null);
@@ -438,7 +455,9 @@ export default function AccessTokensPage() {
             <TokenCreatedAlert
               title="Access Token Created"
               description="Copy your access token now. You will not be able to see it again."
-              token={newlyCreatedToken}
+              token={newlyCreatedToken.token}
+              expiresAt={newlyCreatedToken.expires_at}
+              policyApplied={newlyCreatedToken.policy_applied}
               onDone={() => {
                 setCreateTokenOpen(false);
                 setNewlyCreatedToken(null);

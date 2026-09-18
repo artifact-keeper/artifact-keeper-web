@@ -27,6 +27,7 @@ import type { Repository } from "@/types";
 import type { CveTrends } from "@/types/sbom";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
+import { StatBreakdown } from "@/components/common/stat-breakdown";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -166,25 +167,6 @@ function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
         {formatBytes(repo.storage_used_bytes)}
       </TableCell>
     </TableRow>
-  );
-}
-
-// Local/remote breakdown shown on hover; the card total is local + remote.
-function StatBreakdown({
-  local,
-  remote,
-}: Readonly<{ local: string | number; remote: string | number }>) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-6">
-        <span className="opacity-70">Local</span>
-        <span className="font-medium tabular-nums">{local}</span>
-      </div>
-      <div className="flex items-center justify-between gap-6">
-        <span className="opacity-70">Remote</span>
-        <span className="font-medium tabular-nums">{remote}</span>
-      </div>
-    </div>
   );
 }
 

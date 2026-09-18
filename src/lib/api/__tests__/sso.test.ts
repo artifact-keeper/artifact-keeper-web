@@ -571,6 +571,26 @@ describe("ssoApi", () => {
     expect(out[0].map_groups_to_groups).toBe(false);
   });
 
+  it("adaptSaml propagates slug when present (#856)", async () => {
+    mockListSaml.mockResolvedValue({
+      data: [{ ...SDK_SAML, slug: "okta-prod" }],
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].slug).toBe("okta-prod");
+  });
+
+  it("adaptSaml defaults slug to null when absent (#856)", async () => {
+    // The SDK response type predates migration 218, and a backend older
+    // than artifact-keeper#2583 never emits the field. The provider is then
+    // addressable by id only, which `null` — not `undefined` — represents.
+    mockListSaml.mockResolvedValue({ data: [SDK_SAML], error: undefined });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.listSaml();
+    expect(out[0].slug).toBeNull();
+  });
+
   it("getSaml returns config", async () => {
     mockGetSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
     const { ssoApi } = await import("../sso");
@@ -594,6 +614,26 @@ describe("ssoApi", () => {
       certificate: "PEM",
     });
     expect(out.id).toBe("s1");
+  });
+
+  it("createSaml forwards the slug the SDK request type does not declare (#856)", async () => {
+    mockCreateSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.createSaml({
+      name: "Corp SAML",
+      slug: "okta-prod",
+      entity_id: "x",
+      sso_url: "x",
+      certificate: "PEM",
+    });
+    expect(mockCreateSaml.mock.calls[0][0].body.slug).toBe("okta-prod");
+  });
+
+  it("updateSaml forwards the slug (#856)", async () => {
+    mockUpdateSaml.mockResolvedValue({ data: SDK_SAML, error: undefined });
+    const { ssoApi } = await import("../sso");
+    await ssoApi.updateSaml("s1", { slug: "okta-prod" });
+    expect(mockUpdateSaml.mock.calls[0][0].body.slug).toBe("okta-prod");
   });
 
   it("createSaml throws on error", async () => {

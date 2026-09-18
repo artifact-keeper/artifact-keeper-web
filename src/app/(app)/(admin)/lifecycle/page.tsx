@@ -17,13 +17,19 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import { lifecycleApi } from "@/lib/api/lifecycle";
+import {
+  lifecycleApi,
+  parseLifecycleConfigError,
+  withExclusions,
+  type LifecycleConfigError,
+} from "@/lib/api/lifecycle";
 import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import type {
   LifecyclePolicy,
   CreateLifecyclePolicyRequest,
+  PolicyExclusions,
   PolicyExecutionResult,
 } from "@/types/lifecycle";
 import {
@@ -70,7 +76,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   Command,
@@ -85,6 +91,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ExclusionsEditor } from "./_components/exclusions-editor";
+import { PreviewResultAlert } from "./_components/preview-result-alert";
 
 function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, {
@@ -101,7 +109,7 @@ const POLICY_CONFIG_HINTS: Record<string, string> = {
   no_downloads_days: '{ "days": 180 }',
   tag_pattern_keep: '{ "pattern": "^release-" }',
   tag_pattern_delete: '{ "pattern": "^snapshot-" }',
-  size_quota_bytes: '{ "max_bytes": 10737418240 }',
+  size_quota_bytes: '{ "quota_bytes": 10737418240 }',
 };
 
 export default function LifecyclePage() {
@@ -120,6 +128,15 @@ export default function LifecyclePage() {
   const [formType, setFormType] = useState<string>("max_age_days");
   const [formConfig, setFormConfig] = useState('{ "days": 90 }');
   const [formRepositoryId, setFormRepositoryId] = useState("");
+  const [formExclusions, setFormExclusions] = useState<PolicyExclusions>({
+    versions: [],
+    version_patterns: [],
+  });
+  // Field-level rejection of a `config` key, kept beside the toast so the
+  // operator can see which control the backend refused.
+  const [configError, setConfigError] = useState<LifecycleConfigError | null>(
+    null
+  );
   const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
   const [repositorySearch, setRepositorySearch] = useState("");
   const requiresRepositoryId = policyTypeRequiresRepositoryId(formType);
@@ -172,7 +189,10 @@ export default function LifecyclePage() {
       setCreateOpen(false);
       resetForm();
     },
-    onError: mutationErrorToast("Failed to create policy"),
+    onError: (err) => {
+      setConfigError(parseLifecycleConfigError(err));
+      mutationErrorToast("Failed to create policy")(err);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -233,6 +253,8 @@ export default function LifecyclePage() {
     setFormType("max_age_days");
     setFormConfig('{ "days": 90 }');
     setFormRepositoryId("");
+    setFormExclusions({ versions: [], version_patterns: [] });
+    setConfigError(null);
     setRepositoryPickerOpen(false);
     setRepositorySearch("");
   }
@@ -242,6 +264,7 @@ export default function LifecyclePage() {
     if (!open) {
       setRepositoryPickerOpen(false);
       setRepositorySearch("");
+      setConfigError(null);
     }
   }
 
@@ -253,11 +276,14 @@ export default function LifecyclePage() {
       toast.error("Invalid JSON in config field");
       return;
     }
+    // Only clear a standing rejection — an unconditional reset would
+    // re-render the form on every submit.
+    if (configError) setConfigError(null);
     createMutation.mutate({
       name: formName,
       description: formDescription || undefined,
       policy_type: formType,
-      config,
+      config: withExclusions(config, formExclusions),
       repository_id: requiresRepositoryId ? formRepositoryId : undefined,
     });
   }
@@ -470,29 +496,14 @@ export default function LifecyclePage() {
       </Card>
 
       {/* Preview Result */}
-      {previewResult && (
-        <Alert>
-          <Eye className="size-4" />
-          <AlertTitle>
-            Preview: {previewResult.policy_name}
-          </AlertTitle>
-          <AlertDescription>
-            Would match {previewResult.artifacts_matched} artifacts, remove{" "}
-            {previewResult.artifacts_removed}, free{" "}
-            {formatBytes(previewResult.bytes_freed)}.
-            {previewResult.errors.length > 0 && (
-              <span className="text-destructive">
-                {" "}
-                {previewResult.errors.length} error(s).
-              </span>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      {previewResult && <PreviewResultAlert result={previewResult} />}
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
-        <DialogContent>
+        {/* Bounded height + scroll: the form is taller than a short viewport
+            once the exclusion lists fill up, and the footer has to stay
+            reachable. Same treatment as the other admin create dialogs. */}
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Lifecycle Policy</DialogTitle>
             <DialogDescription>
@@ -646,8 +657,37 @@ export default function LifecyclePage() {
                 onChange={(e) => setFormConfig(e.target.value)}
                 className="font-mono text-sm"
                 rows={3}
+                aria-describedby={
+                  configError?.field === "config"
+                    ? "lifecycle-config-error"
+                    : undefined
+                }
+                aria-invalid={configError?.field === "config" || undefined}
               />
+              {configError?.field === "config" && (
+                <p
+                  id="lifecycle-config-error"
+                  role="alert"
+                  className="text-xs text-destructive"
+                >
+                  {configError.message}
+                </p>
+              )}
             </div>
+            <ExclusionsEditor
+              value={formExclusions}
+              onChange={setFormExclusions}
+              versionsError={
+                configError?.field === "exclude_versions"
+                  ? configError.message
+                  : null
+              }
+              patternsError={
+                configError?.field === "exclude_version_patterns"
+                  ? configError.message
+                  : null
+              }
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>

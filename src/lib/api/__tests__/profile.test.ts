@@ -251,7 +251,32 @@ describe("profileApi", () => {
     expect(mockCreateApiToken).toHaveBeenCalledWith({
       body: { name: "CI Key", expires_in_days: 90, scopes: ["read:artifacts"] },
     });
-    expect(result).toEqual(mockResponse);
+    // A pre-1.10.0 mint carries neither expiry field; both normalize rather
+    // than surfacing as undefined on the reveal (#854).
+    expect(result).toEqual({
+      ...mockResponse,
+      expires_at: null,
+      policy_applied: false,
+    });
+  });
+
+  it("createApiKey carries the policy-applied expiry through (#854)", async () => {
+    mockCreateApiToken.mockResolvedValue({
+      data: {
+        id: "key-2",
+        name: "CI Key",
+        token: "ak_secret",
+        expires_at: "2026-12-17T09:30:00Z",
+        policy_applied: true,
+      },
+      error: undefined,
+    });
+
+    const { profileApi } = await import("../profile");
+    const result = await profileApi.createApiKey({ name: "CI Key" });
+
+    expect(result.expires_at).toBe("2026-12-17T09:30:00Z");
+    expect(result.policy_applied).toBe(true);
   });
 
   it("createApiKey throws on SDK error", async () => {
@@ -383,7 +408,32 @@ describe("profileApi", () => {
     expect(mockCreateApiToken).toHaveBeenCalledWith({
       body: { name: "Dev Token", expires_in_days: 30 },
     });
-    expect(result).toEqual(mockResponse);
+    // A pre-1.10.0 mint carries neither expiry field; both normalize rather
+    // than surfacing as undefined on the reveal (#854).
+    expect(result).toEqual({
+      ...mockResponse,
+      expires_at: null,
+      policy_applied: false,
+    });
+  });
+
+  it("createAccessToken carries the policy-applied expiry through (#854)", async () => {
+    mockCreateApiToken.mockResolvedValue({
+      data: {
+        id: "tok-2",
+        name: "Dev Token",
+        token: "ak_secret",
+        expires_at: "2027-01-05T00:00:00Z",
+        policy_applied: true,
+      },
+      error: undefined,
+    });
+
+    const { profileApi } = await import("../profile");
+    const result = await profileApi.createAccessToken({ name: "Dev Token" });
+
+    expect(result.expires_at).toBe("2027-01-05T00:00:00Z");
+    expect(result.policy_applied).toBe(true);
   });
 
   it("createAccessToken throws on SDK error", async () => {
@@ -433,7 +483,13 @@ describe("profileApi", () => {
         },
       },
     });
-    expect(result).toEqual(mockResponse);
+    // A pre-1.10.0 mint carries neither expiry field; both normalize rather
+    // than surfacing as undefined on the reveal (#854).
+    expect(result).toEqual({
+      ...mockResponse,
+      expires_at: null,
+      policy_applied: false,
+    });
   });
 
   // ---- deleteAccessToken ----

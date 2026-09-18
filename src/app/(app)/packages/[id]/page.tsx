@@ -2,8 +2,8 @@
 
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
-import { useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useState, useCallback } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -124,10 +124,16 @@ function MetadataItem({ label, value }: { label: string; value: string }) {
 
 // ---- Main Page ----
 
-export default function PackageDetailPage() {
+function PackageDetailContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const packageId = params.id as string;
+
+  // Virtual-repo context carried over from the listing that linked here, so
+  // the detail view reports the virtual key rather than the owning member's
+  // (artifact-keeper#3532). Absent for links that never had one.
+  const repositoryKey = searchParams.get("repository_key") ?? undefined;
 
   // Fetch package
   const {
@@ -135,8 +141,8 @@ export default function PackageDetailPage() {
     isLoading: pkgLoading,
     error: pkgError,
   } = useQuery({
-    queryKey: ["package-detail", packageId],
-    queryFn: () => packagesApi.get(packageId),
+    queryKey: ["package-detail", packageId, repositoryKey],
+    queryFn: () => packagesApi.get(packageId, { repository_key: repositoryKey }),
     enabled: !!packageId,
   });
 
@@ -421,5 +427,20 @@ export default function PackageDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary for static prerendering.
+export default function PackageDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-[50vh]">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <PackageDetailContent />
+    </Suspense>
   );
 }

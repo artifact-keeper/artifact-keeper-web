@@ -5,6 +5,11 @@ export interface StorageSnapshot {
   total_storage_bytes: number;
   total_downloads: number;
   total_users: number;
+  // The proxy-cache half of the totals above. 0 for snapshots taken before the
+  // backend started recording them.
+  proxy_artifact_count: number;
+  proxy_storage_bytes: number;
+  proxy_download_count: number;
 }
 
 export interface RepositorySnapshot {
@@ -25,6 +30,12 @@ export interface RepositoryStorageBreakdown {
   artifact_count: number;
   storage_bytes: number;
   download_count: number;
+  // The proxy-cache half of the three figures above. Proxy-cached objects have
+  // no `artifacts` row, so the backend counts them separately; 0 on older
+  // backends.
+  proxy_artifact_count: number;
+  proxy_storage_bytes: number;
+  proxy_download_count: number;
   last_upload_at: string | null;
 }
 
@@ -56,6 +67,7 @@ export interface GrowthSummary {
 export interface DownloadTrend {
   date: string;
   download_count: number;
+  proxy_download_count: number;
 }
 
 export interface DateRangeQuery {

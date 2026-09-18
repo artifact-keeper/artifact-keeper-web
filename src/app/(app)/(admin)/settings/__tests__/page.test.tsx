@@ -40,6 +40,12 @@ vi.mock("@/lib/api/settings", () => ({
   },
 }));
 
+// The Maintenance card (#859) is covered by its own test; stubbing it here
+// keeps this page test focused on the page and out of the card's Radix Select.
+vi.mock("@/components/settings/maintenance-card", () => ({
+  MaintenanceCard: () => <div data-testid="maintenance-card" />,
+}));
+
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
@@ -49,6 +55,7 @@ vi.mock("lucide-react", () => {
     Info: icon,
     Mail: icon,
     Rss: icon,
+    Shield: icon,
     ExternalLink: icon,
     Loader2: icon,
   };
@@ -126,6 +133,13 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ children, value }: any) => (
     <option value={value}>{children}</option>
   ),
+}));
+
+// The token-policy card owns its own query, mutation and form; it is covered
+// by its own suite (token-expiry-policy-card.test.tsx). Stub it here so this
+// page suite stays about the page's tabs and rows.
+vi.mock("@/components/settings/token-expiry-policy-card", () => ({
+  TokenExpiryPolicyCard: () => <div>API token expiry policy</div>,
 }));
 
 vi.mock("@/components/common/page-header", () => ({
@@ -471,6 +485,15 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Email")).toBeDefined();
   });
 
+  it("renders the Security tab and its token expiry policy card (#810)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Security")).toBeDefined();
+    expect(screen.getByText("API token expiry policy")).toBeDefined();
+  });
+
   it("renders the npm Upstream tab and its read-only feed card (#702)", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
 
@@ -480,6 +503,15 @@ describe("SettingsPage", () => {
     expect(screen.getByText("npm Upstream Change-Feed")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_ENABLED")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_URL")).toBeDefined();
+  });
+
+  it("mounts the admin Maintenance card (#859)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings();
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId("maintenance-card")).toBeDefined();
   });
 
   it("renders SMTP Configuration heading", () => {

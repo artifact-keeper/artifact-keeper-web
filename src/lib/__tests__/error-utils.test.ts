@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   toUserMessage,
+  apiErrorHint,
   isAccountLocked,
   isForbiddenError,
   isPasswordReuseError,
@@ -517,5 +518,67 @@ describe("isForbiddenError", () => {
     expect(isForbiddenError("Repository is locked for maintenance")).toBe(false);
     expect(isForbiddenError(null)).toBe(false);
     expect(isForbiddenError(undefined)).toBe(false);
+  });
+});
+
+// Statuses backend 1.10.0 introduced whose raw body is either structured JSON
+// or too terse to act on (web #861).
+describe("apiErrorHint", () => {
+  const FALLBACK = "Something went wrong";
+
+  it("explains a 423 fail-closed scan hold", () => {
+    const hint = apiErrorHint({ status: 423 });
+    expect(hint).toMatch(/fail closed/i);
+    // ApiError renders the structured body inline; the hint replaces it.
+    const apiError = Object.assign(new Error('API error 423: {"scan":"pending"}'), {
+      status: 423,
+    });
+    expect(toUserMessage(apiError, FALLBACK)).toBe(hint);
+  });
+
+  it("explains a 451 publish-age hold", () => {
+    expect(apiErrorHint({ status: 451 })).toMatch(/publish-age/i);
+  });
+
+  it("explains the Maven unique-snapshot republish conflict", () => {
+    expect(
+      toUserMessage({ status: 409, error: "Artifact already exists" }, FALLBACK),
+    ).toMatch(/immutable/i);
+  });
+
+  it("explains a duplicate SAML name or slug", () => {
+    expect(
+      toUserMessage(
+        { status: 409, error: "a SAML configuration named 'Okta' already exists" },
+        FALLBACK,
+      ),
+    ).toMatch(/name or slug/i);
+    expect(
+      apiErrorHint({
+        status: 409,
+        body: { message: "SAML slug 'okta' is already used by another SAML configuration" },
+      }),
+    ).toMatch(/name or slug/i);
+  });
+
+  it("explains an env-pinned token expiry policy", () => {
+    expect(
+      apiErrorHint({
+        status: 409,
+        error:
+          "The API token expiration policy is pinned by the API_TOKEN_EXPIRATION_* " +
+          "environment variables and cannot be changed through the API.",
+      }),
+    ).toMatch(/environment variables/i);
+  });
+
+  it("leaves every other conflict and status untouched", () => {
+    expect(apiErrorHint({ status: 409, error: "Permission already exists" })).toBeUndefined();
+    expect(
+      toUserMessage({ status: 409, error: "Permission already exists" }, FALLBACK),
+    ).toBe("Permission already exists");
+    expect(apiErrorHint({ status: 500 })).toBeUndefined();
+    expect(apiErrorHint(new Error("network down"))).toBeUndefined();
+    expect(apiErrorHint("locked")).toBeUndefined();
   });
 });

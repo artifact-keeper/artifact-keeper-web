@@ -14,7 +14,8 @@ import {
 import { toast } from "sonner";
 
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { apiErrorMessage } from "@/lib/api/fetch";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import type {
   ServiceAccount,
   ServiceAccountToken,
@@ -115,9 +116,11 @@ export default function ServiceAccountsPage() {
   const [tokenName, setTokenName] = useState("");
   const [tokenExpiry, setTokenExpiry] = useState("90");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["read:artifacts"]);
-  const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(
-    null
-  );
+  // The whole create response, not just the secret: the reveal also reports
+  // the expiry the server stamped and whether the instance policy set it
+  // (backend artifact-keeper#3460, #854).
+  const [newlyCreatedToken, setNewlyCreatedToken] =
+    useState<CreateTokenResponse | null>(null);
   const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
   const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
 
@@ -187,14 +190,18 @@ export default function ServiceAccountsPage() {
         queryKey: ["service-account-tokens", tokenAccount?.id],
       });
       queryClient.invalidateQueries({ queryKey: ["service-accounts"] });
-      setNewlyCreatedToken(result.token);
+      setNewlyCreatedToken(result);
       setTokenName("");
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
       setTokenRepoSelector({});
       toast.success("Token created");
     },
-    onError: mutationErrorToast("Failed to create token"),
+    // Backend 1.10.0 refuses an out-of-range `expires_in_days` with a 400 whose
+    // message names the range the instance policy permits
+    // (artifact-keeper#3460, #854) — show that text, not the ApiError envelope.
+    onError: (err: unknown) =>
+      toast.error(apiErrorMessage(err) ?? toUserMessage(err, "Failed to create token")),
   });
 
   const revokeTokenMutation = useMutation({
@@ -627,7 +634,9 @@ export default function ServiceAccountsPage() {
             <TokenCreatedAlert
               title="Token Created"
               description="Copy this token now. You will not be able to see it again."
-              token={newlyCreatedToken}
+              token={newlyCreatedToken.token}
+              expiresAt={newlyCreatedToken.expires_at}
+              policyApplied={newlyCreatedToken.policy_applied}
               onDone={() => setNewlyCreatedToken(null)}
             />
           ) : createTokenOpen ? (

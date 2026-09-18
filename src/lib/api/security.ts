@@ -61,15 +61,37 @@ export interface FindingListResponse {
   total: number;
 }
 
+// The scan-type and finding filters below are not in the generated SDK yet
+// (backend 1.10.0, artifact-keeper#3410). They still go through the SDK
+// functions rather than `apiFetch`: the generated query serializer forwards
+// every key of the `query` object it is handed, so the extra parameters reach
+// the wire unchanged and the response shape is the one the SDK already models.
+// Drop these declarations when the SDK is regenerated against 1.10.0.
+
 export interface ListScansParams {
   repository_id?: string;
   artifact_id?: string;
   status?: string;
+  /**
+   * Restrict the listing to one scan engine, e.g. `grype` or `external`.
+   * `total` comes back as the filtered count. An unknown value is a backend
+   * 400 naming the accepted set, never an unfiltered listing.
+   */
+  scan_type?: string;
   page?: number;
   per_page?: number;
 }
 
 export interface ListFindingsParams {
+  /**
+   * One of `critical` / `high` / `medium` / `low` / `info`. Anything else is
+   * a backend 400 naming the accepted set.
+   */
+  severity?: string;
+  /** Exact match on a finding's `source` (the scanner that reported it). */
+  source?: string;
+  /** Exact match on a finding's `cve_id`. */
+  cve_id?: string;
   page?: number;
   per_page?: number;
 }

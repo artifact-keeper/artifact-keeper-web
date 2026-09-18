@@ -64,6 +64,16 @@ function formatBytes(bytes: number | undefined): string {
   return formatBytesUtil(bytes);
 }
 
+/**
+ * Detail-page href that carries the listing row's repository key as
+ * virtual-repo context. A virtual repository aggregates its members and its
+ * rows report the virtual key, so the detail lookup needs the same key to
+ * report it too instead of the owning member's (artifact-keeper#3532).
+ */
+function packageDetailHref(pkg: Package): string {
+  return `/packages/${pkg.id}?repository_key=${encodeURIComponent(pkg.repository_key)}`;
+}
+
 type SortBy = "name" | "downloads" | "updated";
 type ViewMode = "list" | "grid";
 
@@ -101,7 +111,7 @@ function PackageListItem({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <Link
-              href={`/packages/${pkg.id}`}
+              href={packageDetailHref(pkg)}
               className="font-medium text-sm truncate hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
@@ -153,7 +163,7 @@ function PackageListItem({
     >
       <div className="flex items-center justify-between gap-2">
         <Link
-          href={`/packages/${pkg.id}`}
+          href={packageDetailHref(pkg)}
           className="font-medium text-sm truncate hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
@@ -238,7 +248,7 @@ function PackageDetailPanel({
               <span className="text-sm text-muted-foreground">{homepageUrl}</span>
             ) : null}
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/packages/${pkg.id}`} className="gap-1.5">
+              <Link href={packageDetailHref(pkg)} className="gap-1.5">
                 <ExternalLink className="size-3.5" />
                 View Details
               </Link>
@@ -469,11 +479,17 @@ function PackagesContent() {
   const selectedPackage =
     packages.find((p) => p.id === effectiveSelectedId) || null;
 
-  // Fetch package details
+  // Fetch package details. The row's repository key travels with the lookup
+  // so a package listed under a virtual repository keeps reporting that key.
+  const selectedRepositoryKey = selectedPackage?.repository_key;
   const { data: packageDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ["package-detail", effectiveSelectedId],
+    queryKey: ["package-detail", effectiveSelectedId, selectedRepositoryKey],
     queryFn: () =>
-      effectiveSelectedId ? packagesApi.get(effectiveSelectedId) : null,
+      effectiveSelectedId
+        ? packagesApi.get(effectiveSelectedId, {
+            repository_key: selectedRepositoryKey,
+          })
+        : null,
     enabled: !!effectiveSelectedId,
   });
 
@@ -499,7 +515,7 @@ function PackagesContent() {
   const handleSelectPackage = useCallback(
     (pkg: Package) => {
       if (isMobile) {
-        router.push(`/packages/${pkg.id}`);
+        router.push(packageDetailHref(pkg));
       } else {
         setSelectedPackageId(pkg.id);
       }

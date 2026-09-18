@@ -47,6 +47,10 @@ vi.mock("@/lib/api/repositories", () => ({
     getCacheTtl: (...args: unknown[]) => mockGetCacheTtl(...args),
     setCacheTtl: (...args: unknown[]) => mockSetCacheTtl(...args),
   },
+  // Mirrors the real predicate (#853): only the hosted types may enable the
+  // package age policy. Kept inline so the mock stays free of SDK imports.
+  supportsAgePolicy: (repoType: string) =>
+    repoType === "local" || repoType === "staging",
 }));
 
 // Mock the shared admin-settings hook (used for the read-only upload limit, #189)
@@ -1014,6 +1018,142 @@ describe("RepoSettingsTab - Package Age Policy (#265)", () => {
 
     const saveBtn = screen.getByRole("button", { name: /save age policy/i });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("RepoSettingsTab - Package Age Policy on proxy types (#853)", () => {
+  // Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true`
+  // on remote/virtual repositories, so the editable form must not be offered
+  // there; disabling an inherited policy must keep working.
+  const proxyRepo: Repository = { ...baseRepo, key: "npm-proxy", repo_type: "remote" };
+  const proxyRepoEnabled: Repository = {
+    ...proxyRepo,
+    quarantine_enabled: true,
+    quarantine_duration_minutes: 10080, // 7 days
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("replaces the form with an explanation when the policy is off", () => {
+    render(<RepoSettingsTab repository={proxyRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByText("Package Age Policy")).toBeTruthy();
+    expect(screen.queryByLabelText("Enable age policy")).toBeNull();
+    expect(screen.queryByLabelText("Cooldown period")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /save age policy/i })
+    ).toBeNull();
+    // The e2e spec selects this panel by test id, so keep it pinned here too.
+    expect(screen.getByTestId("age-policy-proxy-note")).toBeTruthy();
+    expect(
+      screen.getByText(/not supported on remote \(proxy\) or virtual/i)
+    ).toBeTruthy();
+  });
+
+  it("hides the form on virtual repositories too", () => {
+    render(
+      <RepoSettingsTab repository={{ ...proxyRepo, repo_type: "virtual" }} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByLabelText("Enable age policy")).toBeNull();
+    expect(
+      screen.getByText(/not supported on remote \(proxy\) or virtual/i)
+    ).toBeTruthy();
+  });
+
+  it("offers no disable action when nothing is enabled", () => {
+    render(<RepoSettingsTab repository={proxyRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /disable age policy/i })
+    ).toBeNull();
+  });
+
+  it("shows the inherited policy read-only with its cooldown", () => {
+    render(<RepoSettingsTab repository={proxyRepoEnabled} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByLabelText("Enable age policy")).toBeNull();
+    expect(screen.getByText("Enabled")).toBeTruthy();
+    expect(screen.getByText(/7\s+days/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /disable age policy/i })
+    ).toBeTruthy();
+  });
+
+  it("disables an inherited policy through the still-allowed PATCH", async () => {
+    mockUpdateAgePolicy.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(<RepoSettingsTab repository={proxyRepoEnabled} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /disable age policy/i })
+    );
+
+    await waitFor(() => {
+      expect(mockUpdateAgePolicy).toHaveBeenCalledWith("npm-proxy", {
+        enabled: false,
+        duration_minutes: 10080,
+      });
+    });
+  });
+
+  // The rejection text itself comes from `mutationErrorToast` ->
+  // `toUserMessage`, which is stubbed to the fallback label here and covered
+  // for real in error-utils.test.ts; what this pins is that the disable path
+  // routes its failure through that shared handler at all.
+  it("toasts through the shared error handler when the PATCH is refused", async () => {
+    const { toast } = await import("sonner");
+    mockUpdateAgePolicy.mockRejectedValue(
+      new Error("quarantine is not supported on remote (proxy) or virtual repositories")
+    );
+    const user = userEvent.setup();
+
+    render(<RepoSettingsTab repository={proxyRepoEnabled} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /disable age policy/i })
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to save package age policy"
+      );
+    });
+  });
+
+  it("leaves the editable form in place for local repositories", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getByLabelText("Enable age policy")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /disable age policy/i })
+    ).toBeNull();
+  });
+
+  it("leaves the editable form in place for staging repositories", () => {
+    render(
+      <RepoSettingsTab repository={{ ...baseRepo, repo_type: "staging" }} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByLabelText("Enable age policy")).toBeTruthy();
   });
 });
 

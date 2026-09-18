@@ -36,8 +36,32 @@ export interface PolicyExecutionResult {
   dry_run: boolean;
   artifacts_matched: number;
   artifacts_removed: number;
+  /**
+   * Bytes held by the matched artifacts — what a run *would* reclaim, and the
+   * only size figure a dry run can report (`bytes_freed` is legitimately 0
+   * there). `null` when the backend predates the field (backend 1.10.0,
+   * artifact-keeper#2024) so callers can omit the figure instead of showing a
+   * fabricated 0.
+   */
+  bytes_matched: number | null;
   bytes_freed: number;
   errors: string[];
+}
+
+/**
+ * A policy's "never delete these" list, carried inside `config.exclude`
+ * (backend 1.10.0, artifact-keeper#2024). Both fields select on the
+ * artifact's version, which is the tag for OCI/Docker formats — so one
+ * editor covers "keep the `latest` tag" and "keep release 1.4.2".
+ *
+ * Accepted by every policy type. The backend treats an absent `exclude`
+ * block and empty lists identically, so the form omits empty lists.
+ */
+export interface PolicyExclusions {
+  /** Exact versions/tags that are never deleted. */
+  versions: string[];
+  /** Regexes matched against the version; a match protects the artifact. */
+  version_patterns: string[];
 }
 
 export interface ListPoliciesQuery {

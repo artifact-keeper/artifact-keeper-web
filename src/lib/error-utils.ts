@@ -98,6 +98,100 @@ function extractHttpStatus(error: Record<string, unknown>): number | undefined {
 }
 
 /**
+ * Pull the backend's own message out of an unknown thrown value, in the order
+ * of the shapes we encounter. Returns undefined when none of them carries
+ * text — the caller decides what to show instead.
+ */
+function extractDetail(error: unknown): string | undefined {
+  if (typeof error === 'string') return nonEmptyString(error);
+
+  if (error instanceof Error) return nonEmptyString(error.message);
+
+  if (!isPlainObject(error)) return undefined;
+
+  // SDK errors often carry { error: "some message" }
+  const errorField = nonEmptyString(error.error);
+  if (errorField) return errorField;
+
+  // Some SDK responses use { message: "..." }
+  const messageField = nonEmptyString(error.message);
+  if (messageField) return messageField;
+
+  // FastAPI's default error shape is { detail: "..." }. The plugins install
+  // path on the backend uses this; without explicit handling the toast falls
+  // through to the fallback even when the backend supplied a useful message.
+  const detailField = nonEmptyString(error.detail);
+  if (detailField) return detailField;
+
+  // Wrapped HTTP errors: { body: { message | error | detail: "..." } }
+  if (isPlainObject(error.body)) {
+    return (
+      nonEmptyString(error.body.message) ??
+      nonEmptyString(error.body.error) ??
+      nonEmptyString(error.body.detail)
+    );
+  }
+
+  return undefined;
+}
+
+/**
+ * Statuses backend 1.10.0 added whose raw body is a dead end for the reader:
+ * 423 is a structured JSON scan verdict and 451 a review-queue envelope, and
+ * `ApiError` renders both as `API error <status>: {…}` (web #861).
+ */
+const STATUS_MESSAGES: Readonly<Record<number, string>> = {
+  423: 'Download withheld: the security scan for this package is inconclusive ' +
+    'and this instance is configured to fail closed. Try again once the scan finishes.',
+  451: 'Download withheld by the publish-age policy: this version is newer than ' +
+    'the repository requires and is held for review. Older versions are unaffected.',
+};
+
+/**
+ * The three 409s worth explaining, matched on the backend's own wording.
+ * A conflict that matches none of them keeps its original message, so
+ * unrelated "already exists" conflicts are not mislabelled.
+ */
+const CONFLICT_MESSAGES: ReadonlyArray<readonly [RegExp, string]> = [
+  [
+    /\bartifact already exists\b/i,
+    'This Maven snapshot is already published at these exact coordinates and is ' +
+      'immutable. Publish a new timestamped snapshot instead of overwriting it.',
+  ],
+  [
+    /\bsaml\b/i,
+    'A SAML configuration already uses that name or slug. Pick a different one — ' +
+      'slugs are compared in lowercase.',
+  ],
+  [
+    /pinned by the .*environment variables/i,
+    'The API token expiry policy is pinned by environment variables on this ' +
+      'server, so it cannot be changed here. Unset them and restart to manage it ' +
+      'from the UI.',
+  ],
+];
+
+/**
+ * Friendly replacement copy for an error whose status (or conflict wording)
+ * the UI knows how to explain. Returns undefined for everything else, which
+ * leaves `toUserMessage` behaving exactly as before.
+ */
+export function apiErrorHint(error: unknown): string | undefined {
+  const status = isPlainObject(error) ? extractHttpStatus(error) : undefined;
+  if (status === undefined) return undefined;
+
+  const known = STATUS_MESSAGES[status];
+  if (known) return known;
+
+  if (status === 409) {
+    const detail = extractDetail(error) ?? '';
+    return CONFLICT_MESSAGES.find(([pattern]) => pattern.test(detail))?.[1];
+  }
+
+  return undefined;
+}
+
+/**
  * Extract a human-readable message from an unknown thrown value.
  *
  * When the error carries an HTTP status (e.g. `error.status === 409`) but
@@ -106,53 +200,25 @@ function extractHttpStatus(error: Record<string, unknown>): number | undefined {
  * toast text. If the backend already supplied a message, that message is
  * shown verbatim (no double-decoration). See #355.
  *
+ * A handful of statuses (423, 451, and three specific 409s) get author-written
+ * copy instead of the backend body, which for those is either structured JSON
+ * or too terse to act on — see `apiErrorHint`.
+ *
  * @param error  - The caught value (could be anything)
  * @param fallback - Fallback message when the error shape is unrecognized
  * @returns A string suitable for display in a toast or error banner
  */
 export function toUserMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'string' && error.length > 0) {
-    return truncateForToast(error);
-  }
+  const hint = apiErrorHint(error);
+  if (hint) return hint;
 
-  if (error instanceof Error) {
-    return truncateForToast(error.message);
-  }
-
-  if (!isPlainObject(error)) {
-    return fallback;
-  }
-
-  // SDK errors often carry { error: "some message" }
-  const errorField = nonEmptyString(error.error);
-  if (errorField) return truncateForToast(errorField);
-
-  // Some SDK responses use { message: "..." }
-  const messageField = nonEmptyString(error.message);
-  if (messageField) return truncateForToast(messageField);
-
-  // FastAPI's default error shape is { detail: "..." }. The plugins install
-  // path on the backend uses this; without explicit handling the toast falls
-  // through to the fallback even when the backend supplied a useful message.
-  const detailField = nonEmptyString(error.detail);
-  if (detailField) return truncateForToast(detailField);
-
-  // Wrapped HTTP errors: { body: { message | error | detail: "..." } }
-  if (isPlainObject(error.body)) {
-    const bodyMessage = nonEmptyString(error.body.message);
-    if (bodyMessage) return truncateForToast(bodyMessage);
-
-    const bodyError = nonEmptyString(error.body.error);
-    if (bodyError) return truncateForToast(bodyError);
-
-    const bodyDetail = nonEmptyString(error.body.detail);
-    if (bodyDetail) return truncateForToast(bodyDetail);
-  }
+  const detail = extractDetail(error);
+  if (detail) return truncateForToast(detail);
 
   // No useful body message — prefix the fallback with the HTTP status when
   // we can determine one, so different errors don't render identically.
   // Fallback is author-controlled and not truncated.
-  const status = extractHttpStatus(error);
+  const status = isPlainObject(error) ? extractHttpStatus(error) : undefined;
   if (status !== undefined) {
     return `(HTTP ${status}) ${fallback}`;
   }

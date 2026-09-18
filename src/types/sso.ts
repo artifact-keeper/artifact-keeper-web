@@ -58,6 +58,14 @@ export interface LdapConfig {
 export interface SamlConfig {
   id: string;
   name: string;
+  /**
+   * Optional URL-safe alias the public SAML login and ACS routes accept in
+   * place of `id` (backend migration 218, artifact-keeper#2583), so the ACS
+   * URL registered at the IdP survives a deployment rebuilt from scratch.
+   * `null` for every provider that predates the column and for any whose
+   * operator has not opted in; those stay addressable by `id` only.
+   */
+  slug: string | null;
   entity_id: string;
   sso_url: string;
   slo_url: string | null;
@@ -158,6 +166,13 @@ export interface UpdateLdapConfigRequest {
 
 export interface CreateSamlConfigRequest {
   name: string;
+  /**
+   * URL-safe alias for the public SAML routes (artifact-keeper#2583). Must
+   * match `^[a-z0-9][a-z0-9_-]*$`, be at most 64 characters, not look like
+   * a UUID, and be unique across SAML providers — a collision is a 409.
+   * Omit to keep the provider addressable by its id only.
+   */
+  slug?: string;
   entity_id: string;
   sso_url: string;
   slo_url?: string;
@@ -174,6 +189,13 @@ export interface CreateSamlConfigRequest {
 
 export interface UpdateSamlConfigRequest {
   name?: string;
+  /**
+   * Set or change the alias (artifact-keeper#2583). Omitting it preserves
+   * the stored value, so a slug can be replaced but never cleared through
+   * this endpoint — an ACS URL the IdP is already configured with cannot be
+   * removed by an update that simply forgot to mention it.
+   */
+  slug?: string;
   entity_id?: string;
   sso_url?: string;
   slo_url?: string;

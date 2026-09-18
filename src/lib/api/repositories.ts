@@ -47,10 +47,37 @@ export interface ReorderMemberInput {
   priority: number;
 }
 
+/**
+ * Non-secret provider settings for the dynamic AWS upstream auth types
+ * (`aws_ecr` / `aws_codeartifact`, backend 1.10.0, artifact-keeper#1559).
+ *
+ * Deliberately carries no credential: the token is minted per request from the
+ * server's own AWS identity (IRSA / EKS Pod Identity / instance profile /
+ * `AWS_*` environment keys), and is never returned on a read.
+ */
+export interface AwsUpstreamAuthConfig {
+  /** AWS region of the registry or domain, e.g. `us-east-1`. Required. */
+  region: string;
+  /** ECR only: 12-digit registry (account) id, used to pin the upstream host. */
+  registry_id?: string;
+  /** CodeArtifact only: domain name. Required for `aws_codeartifact`. */
+  domain?: string;
+  /** CodeArtifact only: 12-digit account id owning the domain. */
+  domain_owner?: string;
+  /** CodeArtifact only: requested token lifetime (0, or 900..=43200 seconds). */
+  duration_seconds?: number;
+}
+
 export interface UpstreamAuthPayload {
   auth_type: string;
   username?: string;
   password?: string;
+  /**
+   * Required for `aws_ecr` / `aws_codeartifact`, ignored otherwise. Not
+   * accepted on the repository-create body — the AWS types can only be set
+   * through this endpoint.
+   */
+  aws?: AwsUpstreamAuthConfig;
 }
 
 /**
@@ -93,6 +120,23 @@ export interface ReleaseTargetInfo {
 export interface AgePolicyPayload {
   enabled: boolean;
   duration_minutes: number;
+}
+
+/**
+ * Whether the package age policy can be *enabled* on a repository of this type.
+ *
+ * Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true` on
+ * `remote` and `virtual` repositories with a 400: proxied content is recorded
+ * in `proxy_cache_artifacts`, which carries no quarantine identity, so the hold
+ * has no release path and degrades into a total block on everything not already
+ * cached. Only the hosted types (`local` / `staging`) qualify.
+ *
+ * Disabling is still accepted on every type, which is the escape hatch for rows
+ * written before the gate existed — so callers must gate the enable path on
+ * this, not the whole panel.
+ */
+export function supportsAgePolicy(repoType: RepositoryType): boolean {
+  return repoType === 'local' || repoType === 'staging';
 }
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
@@ -425,6 +469,10 @@ export const repositoriesApi = {
    *
    * When `enabled` is false, the duration is still sent so the stored value is
    * preserved and re-enabling does not lose the previously configured window.
+   *
+   * Backend 1.10.0 (artifact-keeper#3647) answers 400 when `enabled` is true on
+   * a `remote` or `virtual` repository; callers must check `supportsAgePolicy`
+   * first and surface the rejection message when a request is sent anyway.
    */
   updateAgePolicy: async (repoKey: string, payload: AgePolicyPayload): Promise<void> => {
     await apiFetch<void>(`/api/v1/repositories/${encodeURIComponent(repoKey)}`, {

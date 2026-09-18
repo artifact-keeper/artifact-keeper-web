@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CalendarClock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,15 +18,36 @@ interface TokenCreatedAlertProps {
   title: string;
   description: string;
   token: string;
+  /**
+   * The expiry the server actually stamped on the mint (`expires_at`), or
+   * null/undefined when the token never expires. Backend artifact-keeper#3460
+   * made this authoritative, so it is reported here rather than echoing back
+   * whatever the form asked for (web #854).
+   */
+  expiresAt?: string | null;
+  /**
+   * True when the instance token expiration policy set or clamped that
+   * expiry, so the reveal can say why the date is not the one requested.
+   */
+  policyApplied?: boolean;
   onDone: () => void;
+}
+
+/** Format an ISO-8601 instant, or null when it isn't one. */
+function formatExpiry(value: string): string | null {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString();
 }
 
 export function TokenCreatedAlert({
   title,
   description,
   token,
+  expiresAt,
+  policyApplied,
   onDone,
 }: TokenCreatedAlertProps) {
+  const expiryLabel = expiresAt ? formatExpiry(expiresAt) : null;
   return (
     <>
       <DialogHeader>
@@ -46,6 +67,19 @@ export function TokenCreatedAlert({
       <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
         <code className="flex-1 break-all text-sm">{token}</code>
         <CopyButton value={token} />
+      </div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CalendarClock className="size-3.5 shrink-0" />
+        <span>
+          {expiryLabel ? (
+            <>
+              Expires <span title={expiresAt ?? undefined}>{expiryLabel}</span>
+              {policyApplied ? " \u00b7 set by instance policy" : null}
+            </>
+          ) : (
+            "Never expires"
+          )}
+        </span>
       </div>
       <DialogFooter>
         <Button onClick={onDone}>Done</Button>

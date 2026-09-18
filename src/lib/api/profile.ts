@@ -17,6 +17,7 @@ import type {
 import type { User } from '@/types';
 import type { RepoSelector } from '@/lib/api/service-accounts';
 import { assertData } from '@/lib/api/fetch';
+import { readTokenExpiryInfo, type TokenExpiryInfo } from '@/lib/api/token-policy';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface UpdateProfileRequest {
@@ -42,7 +43,13 @@ export interface CreateApiKeyRequest {
   scopes?: string[];
 }
 
-export interface CreateApiKeyResponse {
+/**
+ * A freshly minted credential. `expires_at` / `policy_applied` come from the
+ * instance token expiration policy (backend artifact-keeper#3460) and are what
+ * the one-time reveal reports; the pinned SDK response type predates both, so
+ * they are read off the raw response (web #854).
+ */
+export interface CreateApiKeyResponse extends TokenExpiryInfo {
   id: string;
   token: string; // Full key, only shown once
   name: string;
@@ -67,7 +74,7 @@ export interface CreateAccessTokenRequest {
   repo_selector?: RepoSelector;
 }
 
-export interface CreateAccessTokenResponse {
+export interface CreateAccessTokenResponse extends TokenExpiryInfo {
   id: string;
   token: string; // Full token, only shown once
   name: string;
@@ -121,7 +128,12 @@ function adaptAccessToken(sdk: ApiTokenResponse): AccessToken {
 }
 
 function adaptCreateApiKey(sdk: SdkCreateApiTokenResponse): CreateApiKeyResponse {
-  return { id: sdk.id, token: sdk.token, name: sdk.name };
+  return {
+    id: sdk.id,
+    token: sdk.token,
+    name: sdk.name,
+    ...readTokenExpiryInfo(sdk),
+  };
 }
 
 export const profileApi = {
@@ -211,7 +223,12 @@ export const profileApi = {
     } satisfies Partial<SdkCreateApiTokenRequest> & { repo_selector?: unknown };
     const data = await unwrap(sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest }));
     const result = assertData(data, 'profileApi.createAccessToken');
-    return { id: result.id, token: result.token, name: result.name };
+    return {
+      id: result.id,
+      token: result.token,
+      name: result.name,
+      ...readTokenExpiryInfo(result),
+    };
   },
 
   deleteAccessToken: async (tokenId: string): Promise<void> => {

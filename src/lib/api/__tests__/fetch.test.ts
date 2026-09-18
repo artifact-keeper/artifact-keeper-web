@@ -9,7 +9,7 @@ vi.mock("@/lib/sdk-client", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-import { ApiError, apiFetch, assertData } from "../fetch";
+import { ApiError, apiErrorMessage, apiFetch, assertData } from "../fetch";
 
 function mockResponse(options: {
   ok?: boolean;
@@ -331,5 +331,41 @@ describe("assertData", () => {
   it("returns empty arrays unchanged", () => {
     const arr: number[] = [];
     expect(assertData(arr, "ctx")).toBe(arr);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// apiErrorMessage — the backend's own text out of an ApiError body
+// ---------------------------------------------------------------------------
+
+describe("apiErrorMessage", () => {
+  it("extracts the message from the backend's {code, message} envelope", () => {
+    const err = new ApiError(
+      400,
+      '{"code":"VALIDATION_ERROR","message":"expires_in_days (5000) violates this instance\'s token expiration policy: it must be between 7 and 365 days"}'
+    );
+    expect(apiErrorMessage(err)).toBe(
+      "expires_in_days (5000) violates this instance's token expiration policy: it must be between 7 and 365 days"
+    );
+  });
+
+  it("returns null for a body that is not the JSON error envelope", () => {
+    expect(apiErrorMessage(new ApiError(502, "<html>bad gateway</html>"))).toBeNull();
+    expect(apiErrorMessage(new ApiError(502, ""))).toBeNull();
+    expect(apiErrorMessage(new ApiError(400, '{"code":"X"}'))).toBeNull();
+    expect(apiErrorMessage(new ApiError(400, '{"message":""}'))).toBeNull();
+    expect(apiErrorMessage(new ApiError(400, "null"))).toBeNull();
+  });
+
+  it("returns null for anything that is not an ApiError", () => {
+    expect(apiErrorMessage(new Error('API error 400: {"message":"x"}'))).toBeNull();
+    expect(apiErrorMessage({ status: 400, body: '{"message":"x"}' })).toBeNull();
+    expect(apiErrorMessage(undefined)).toBeNull();
+  });
+
+  it("leaves ApiError.message's envelope intact for callers that match on it", () => {
+    const err = new ApiError(400, '{"code":"X","message":"boom"}');
+    expect(err.message).toBe('API error 400: {"code":"X","message":"boom"}');
+    expect(apiErrorMessage(err)).toBe("boom");
   });
 });

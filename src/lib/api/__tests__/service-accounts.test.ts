@@ -242,7 +242,31 @@ describe("serviceAccountsApi", () => {
         body: JSON.stringify(req),
       }
     );
-    expect(result).toEqual(response);
+    // A pre-1.10.0 mint carries neither expiry field; both normalize rather
+    // than surfacing as undefined on the reveal (#854).
+    expect(result).toEqual({
+      ...response,
+      expires_at: null,
+      policy_applied: false,
+    });
+  });
+
+  it("createToken carries the policy-applied expiry through (#854)", async () => {
+    mockApiFetch.mockResolvedValue({
+      id: "tok-p",
+      token: "akt_secret",
+      name: "CI",
+      expires_at: "2026-12-17T09:30:00Z",
+      policy_applied: true,
+    });
+
+    const result = await serviceAccountsApi.createToken("sa-1", {
+      name: "CI",
+      scopes: ["read:artifacts"],
+    });
+
+    expect(result.expires_at).toBe("2026-12-17T09:30:00Z");
+    expect(result.policy_applied).toBe(true);
   });
 
   it("createToken sends POST with minimal required fields", async () => {

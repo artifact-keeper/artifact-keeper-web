@@ -527,4 +527,104 @@ describe("securityApi", () => {
     const mod = await import("../security");
     await expect(mod.securityApi.listArtifactScans("a1")).rejects.toBe("fail");
   });
+
+  // -------------------------------------------------------------------------
+  // 1.10.0 filters (#858, backend artifact-keeper#3410). The generated SDK
+  // 1.7.0 doesn't declare these query parameters; the wrappers hand them to
+  // the SDK's query serializer, which forwards every key it is given. These
+  // tests are the guard that the passthrough keeps working across SDK bumps.
+  // -------------------------------------------------------------------------
+
+  it("listScans forwards scan_type to the SDK query", async () => {
+    mockListScans.mockResolvedValue({
+      data: { items: [SDK_SCAN], total: 1 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.listScans({
+      page: 2,
+      per_page: 20,
+      scan_type: "external",
+    });
+    expect(mockListScans).toHaveBeenCalledWith({
+      query: { page: 2, per_page: 20, scan_type: "external" },
+    });
+  });
+
+  it("listRepoScans forwards scan_type alongside the repo key", async () => {
+    mockListRepoScans.mockResolvedValue({
+      data: { items: [SDK_SCAN], total: 1 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.listRepoScans("repo-key", { scan_type: "grype" });
+    expect(mockListRepoScans).toHaveBeenCalledWith({
+      path: { key: "repo-key" },
+      query: { scan_type: "grype" },
+    });
+  });
+
+  it("listArtifactScans forwards scan_type alongside the artifact id", async () => {
+    mockListArtifactScans.mockResolvedValue({
+      data: { items: [SDK_SCAN], total: 1 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.listArtifactScans("a1", { scan_type: "external" });
+    expect(mockListArtifactScans).toHaveBeenCalledWith({
+      path: { artifact_id: "a1" },
+      query: { scan_type: "external" },
+    });
+  });
+
+  it("listFindings forwards severity, source and cve_id to the SDK query", async () => {
+    mockListFindings.mockResolvedValue({
+      data: { items: [SDK_FINDING], total: 1 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.listFindings("s1", {
+      page: 1,
+      per_page: 50,
+      severity: "critical",
+      source: "acme-scanner",
+      cve_id: "CVE-2024-3094",
+    });
+    expect(mockListFindings).toHaveBeenCalledWith({
+      path: { id: "s1" },
+      query: {
+        page: 1,
+        per_page: 50,
+        severity: "critical",
+        source: "acme-scanner",
+        cve_id: "CVE-2024-3094",
+      },
+    });
+  });
+
+  it("listFindings returns the backend's filtered total, not the page length", async () => {
+    mockListFindings.mockResolvedValue({
+      data: { items: [SDK_FINDING], total: 137 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const out = await mod.securityApi.listFindings("s1", {
+      severity: "critical",
+    });
+    expect(out.total).toBe(137);
+    expect(out.items).toHaveLength(1);
+  });
+
+  it("surfaces the backend 400 body when a filter value is rejected", async () => {
+    const rejection = {
+      code: "VALIDATION_ERROR",
+      message:
+        'Invalid severity: \'critcal\'. Allowed values: ["critical", "high", "medium", "low", "info"]',
+    };
+    mockListFindings.mockResolvedValue({ data: undefined, error: rejection });
+    const mod = await import("../security");
+    await expect(
+      mod.securityApi.listFindings("s1", { severity: "critcal" }),
+    ).rejects.toBe(rejection);
+  });
 });

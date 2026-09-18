@@ -21,6 +21,12 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { ssoApi } from "@/lib/api/sso";
 import { toUserMessage, mutationErrorToast } from "@/lib/error-utils";
+import {
+  SAML_SLUG_MAX_LENGTH,
+  samlAuthUrls,
+  samlConflictField,
+  validateSamlSlug,
+} from "@/lib/saml-slug";
 import type {
   OidcConfig,
   LdapConfig,
@@ -30,6 +36,7 @@ import type {
   UpdateSamlConfigRequest,
 } from "@/types/sso";
 
+import { CopyButton } from "@/components/common/copy-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -1146,6 +1153,20 @@ function LdapTab() {
 // SAML Tab
 // ---------------------------------------------------------------------------
 
+/**
+ * One read-only, copyable endpoint URL. Extracted so the login and ACS rows,
+ * which differ only in label and value, don't repeat the markup.
+ */
+function SamlUrlRow({ label, url }: { label: string; url: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <code className="min-w-0 flex-1 truncate font-mono text-xs">{url}</code>
+      <CopyButton value={url} label={`Copy ${label}`} />
+    </div>
+  );
+}
+
 function SamlTab() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1153,10 +1174,17 @@ function SamlTab() {
   const [deleteTarget, setDeleteTarget] = useState<SamlConfig | null>(null);
 
   const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
   const [entityId, setEntityId] = useState("");
   const [ssoUrl, setSsoUrl] = useState("");
   const [sloUrl, setSloUrl] = useState("");
   const [certificate, setCertificate] = useState("");
+  // Field-scoped error for the 409 a duplicate name or slug now returns
+  // (artifact-keeper#2583); cleared on every new submit.
+  const [conflict, setConflict] = useState<{
+    field: "name" | "slug";
+    message: string;
+  } | null>(null);
   const [spEntityId, setSpEntityId] = useState("artifact-keeper");
   const [nameIdFormat, setNameIdFormat] = useState("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
   const [signRequests, setSignRequests] = useState(false);
@@ -1181,7 +1209,7 @@ function SamlTab() {
       toast.success("SAML provider created successfully");
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to create SAML provider"),
+    onError: samlWriteError("Failed to create SAML provider"),
   });
 
   const updateMutation = useMutation({
@@ -1192,7 +1220,7 @@ function SamlTab() {
       toast.success("SAML provider updated successfully");
       closeDialog();
     },
-    onError: mutationErrorToast("Failed to update SAML provider"),
+    onError: samlWriteError("Failed to update SAML provider"),
   });
 
   const deleteMutation = useMutation({
@@ -1215,12 +1243,32 @@ function SamlTab() {
     onError: mutationErrorToast("Failed to toggle SAML provider"),
   });
 
+  /**
+   * onError handler for the SAML writes: a duplicate name or slug answers
+   * 409 since artifact-keeper#2583, so pin the backend's message to the
+   * field that actually collided instead of raising a toast the operator
+   * has to interpret. Anything else keeps the shared toast behaviour.
+   */
+  function samlWriteError(fallback: string) {
+    const toastError = mutationErrorToast(fallback);
+    return (err: unknown) => {
+      const field = samlConflictField(err);
+      if (!field) {
+        toastError(err);
+        return;
+      }
+      setConflict({ field, message: toUserMessage(err, fallback) });
+    };
+  }
+
   function resetForm() {
     setName("");
+    setSlug("");
     setEntityId("");
     setSsoUrl("");
     setSloUrl("");
     setCertificate("");
+    setConflict(null);
     setSpEntityId("artifact-keeper");
     setNameIdFormat("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress");
     setSignRequests(false);
@@ -1249,6 +1297,8 @@ function SamlTab() {
   function openEdit(config: SamlConfig) {
     setEditTarget(config);
     setName(config.name);
+    setSlug(config.slug || "");
+    setConflict(null);
     setEntityId(config.entity_id);
     setSsoUrl(config.sso_url);
     setSloUrl(config.slo_url || "");
@@ -1282,9 +1332,19 @@ function SamlTab() {
       groups: groupsClaim,
     };
 
+    // A stale 409 from the previous attempt must not outlive it.
+    setConflict(null);
+
+    // An empty slug is omitted rather than sent: on create it means "no
+    // alias", and on update the backend preserves the stored value for an
+    // absent slug, so an operator who never touches the field cannot drop
+    // an alias the IdP is already configured with.
+    const trimmedSlug = slug.trim() || undefined;
+
     if (editTarget) {
       const data: UpdateSamlConfigRequest = {
         name,
+        slug: trimmedSlug,
         entity_id: entityId,
         sso_url: ssoUrl,
         slo_url: sloUrl || undefined,
@@ -1304,6 +1364,7 @@ function SamlTab() {
     } else {
       createMutation.mutate({
         name,
+        slug: trimmedSlug,
         entity_id: entityId,
         sso_url: ssoUrl,
         slo_url: sloUrl || undefined,
@@ -1321,6 +1382,11 @@ function SamlTab() {
   }
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
+  const slugError = validateSamlSlug(slug.trim());
+  // Previewed from the slug being typed, so the operator sees the URL the
+  // save is about to produce; falls back to the provider id, which is the
+  // only address a provider without a slug has.
+  const authUrls = samlAuthUrls({ id: editTarget?.id, slug: slug.trim() });
 
   if (isLoading) {
     return (
@@ -1353,6 +1419,7 @@ function SamlTab() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Slug</TableHead>
                   <TableHead>Entity ID</TableHead>
                   <TableHead>SSO URL</TableHead>
                   <TableHead>Status</TableHead>
@@ -1363,6 +1430,13 @@ function SamlTab() {
                 {configs.map((config) => (
                   <TableRow key={config.id}>
                     <TableCell className="font-medium">{config.name}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {config.slug ? (
+                        <code className="font-mono">{config.slug}</code>
+                      ) : (
+                        "--"
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-[180px] truncate text-muted-foreground text-xs">
                       {config.entity_id}
                     </TableCell>
@@ -1457,8 +1531,69 @@ function SamlTab() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Okta"
                 aria-required="true"
+                aria-invalid={conflict?.field === "name" || undefined}
+                aria-describedby={
+                  conflict?.field === "name" ? "saml-name-error" : undefined
+                }
               />
+              {conflict?.field === "name" && (
+                <p id="saml-name-error" role="alert" className="text-xs text-destructive">
+                  {conflict.message}
+                </p>
+              )}
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="saml-slug">Slug (optional)</Label>
+              <Input
+                id="saml-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="okta-prod"
+                maxLength={SAML_SLUG_MAX_LENGTH}
+                className="font-mono"
+                aria-invalid={
+                  !!slugError || conflict?.field === "slug" || undefined
+                }
+                aria-describedby={
+                  slugError || conflict?.field === "slug"
+                    ? "saml-slug-help saml-slug-error"
+                    : "saml-slug-help"
+                }
+              />
+              <p id="saml-slug-help" className="text-xs text-muted-foreground">
+                A stable alias the login and ACS URLs accept in place of the
+                provider id, so the URLs registered at the IdP survive this
+                deployment being rebuilt. Lowercase letters, digits, hyphens
+                and underscores, starting with a letter or digit; at most{" "}
+                {SAML_SLUG_MAX_LENGTH} characters. Matching is exact, so
+                &quot;Okta&quot; is not a second spelling of &quot;okta&quot;.
+                {editTarget
+                  ? " Leaving it blank keeps the stored slug — a slug can be changed but not removed."
+                  : " Leave blank to address this provider by its id only."}
+              </p>
+              {(slugError || conflict?.field === "slug") && (
+                <p id="saml-slug-error" role="alert" className="text-xs text-destructive">
+                  {slugError ?? conflict?.message}
+                </p>
+              )}
+            </div>
+
+            {authUrls && (
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-xs font-medium">
+                  IdP endpoints (
+                  {slug.trim() ? "addressed by slug" : "addressed by provider id"}
+                  )
+                </p>
+                <SamlUrlRow label="Login URL" url={authUrls.loginUrl} />
+                <SamlUrlRow label="ACS URL" url={authUrls.acsUrl} />
+                <p className="text-xs text-muted-foreground">
+                  Register the ACS URL with the IdP. These reflect the slug in
+                  the field above and are live once the provider is saved.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="saml-entity-id">Entity ID</Label>
@@ -1679,6 +1814,7 @@ function SamlTab() {
                 !name ||
                 !entityId ||
                 !ssoUrl ||
+                !!slugError ||
                 (!editTarget && !certificate) ||
                 isSaving
               }

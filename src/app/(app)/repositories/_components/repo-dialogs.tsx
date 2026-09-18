@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import type { Repository, CreateRepositoryRequest, RepositoryFormat, RepositoryType, VirtualRepoMemberInput } from "@/types";
 import type { FormatHandler } from "@/lib/api/format-handlers";
+import type { UpstreamAuthPayload } from "@/lib/api/repositories";
 import {
   FORMAT_OPTIONS,
   TYPE_OPTIONS,
@@ -57,6 +58,15 @@ import {
   type DebianConfigValue,
   type NpmScopePolicyValue,
 } from "./format-config-fields";
+import {
+  AwsUpstreamAuthFields,
+  UPSTREAM_AUTH_TYPE_OPTIONS,
+  buildUpstreamAuthPayload,
+  isUpstreamAuthComplete,
+  upstreamAuthTypeLabel,
+  EMPTY_AWS_UPSTREAM_AUTH,
+  type AwsUpstreamAuthValue,
+} from "./upstream-auth-fields";
 
 type QuotaUnit = "MB" | "GB";
 
@@ -89,7 +99,7 @@ interface RepoDialogsProps {
   editRepo: Repository | null;
   onEditSubmit: (key: string, data: { key?: string; name: string; description: string; is_public: boolean; quota_bytes?: number }) => void;
   editPending: boolean;
-  onUpstreamAuthUpdate?: (key: string, payload: { auth_type: string; username?: string; password?: string }) => void;
+  onUpstreamAuthUpdate?: (key: string, payload: UpstreamAuthPayload) => void;
   upstreamAuthPending?: boolean;
   /**
    * Result of the most recent upstream-auth save, surfaced to a live region
@@ -201,7 +211,23 @@ export function RepoDialogs({
   const [editAuthType, setEditAuthType] = useState<string>("none");
   const [editAuthUsername, setEditAuthUsername] = useState("");
   const [editAuthPassword, setEditAuthPassword] = useState("");
+  // Provider settings for the dynamic AWS auth types (#857). The backend never
+  // returns them on a read, so they always start empty.
+  const [editAuthAws, setEditAuthAws] = useState<AwsUpstreamAuthValue>(
+    EMPTY_AWS_UPSTREAM_AUTH,
+  );
   const [removeAuthConfirm, setRemoveAuthConfirm] = useState(false);
+
+  // The upstream-auth form as one value, so the completeness check and the
+  // request builder read the same inputs.
+  const editAuthFormValue = useMemo(
+    () => ({
+      username: editAuthUsername,
+      password: editAuthPassword,
+      aws: editAuthAws,
+    }),
+    [editAuthUsername, editAuthPassword, editAuthAws],
+  );
 
   // Focus management for the upstream-auth view <-> edit toggle (#412).
   // When the user switches modes the previously focused control unmounts, so
@@ -878,7 +904,7 @@ export function RepoDialogs({
                     {editRepo.upstream_auth_configured ? (
                       <div className="flex items-center justify-between">
                         <p className="text-sm text-muted-foreground">
-                          Authentication configured ({editRepo.upstream_auth_type === "basic" ? "Basic Auth" : editRepo.upstream_auth_type === "bearer" ? "Bearer Token" : editRepo.upstream_auth_type})
+                          Authentication configured ({upstreamAuthTypeLabel(editRepo.upstream_auth_type)})
                         </p>
                         <div className="flex gap-2">
                           <Button
@@ -889,6 +915,7 @@ export function RepoDialogs({
                             onClick={() => {
                               setEditAuthMode("edit");
                               setEditAuthType(editRepo.upstream_auth_type ?? "basic");
+                              setEditAuthAws(EMPTY_AWS_UPSTREAM_AUTH);
                             }}
                           >
                             Change
@@ -961,9 +988,11 @@ export function RepoDialogs({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="basic">Basic (username + password)</SelectItem>
-                        <SelectItem value="bearer">Bearer token</SelectItem>
+                        {UPSTREAM_AUTH_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
@@ -1006,6 +1035,13 @@ export function RepoDialogs({
                       </>
                     )}
 
+                    <AwsUpstreamAuthFields
+                      authType={editAuthType}
+                      value={editAuthAws}
+                      onChange={setEditAuthAws}
+                      idPrefix="edit-upstream"
+                    />
+
                     <div className="flex gap-2">
                       <Button
                         type="button"
@@ -1016,6 +1052,7 @@ export function RepoDialogs({
                           setEditAuthType("none");
                           setEditAuthUsername("");
                           setEditAuthPassword("");
+                          setEditAuthAws(EMPTY_AWS_UPSTREAM_AUTH);
                         }}
                       >
                         Cancel
@@ -1025,21 +1062,14 @@ export function RepoDialogs({
                         size="sm"
                         disabled={
                           upstreamAuthPending ||
-                          (editAuthType !== "none" && !editAuthPassword) ||
-                          (editAuthType === "basic" && !editAuthUsername)
+                          !isUpstreamAuthComplete(editAuthType, editAuthFormValue)
                         }
                         onClick={() => {
                           if (onUpstreamAuthUpdate && editRepo) {
-                            const payload: { auth_type: string; username?: string; password?: string } = {
-                              auth_type: editAuthType,
-                            };
-                            if (editAuthType === "basic") {
-                              payload.username = editAuthUsername;
-                              payload.password = editAuthPassword;
-                            } else if (editAuthType === "bearer") {
-                              payload.password = editAuthPassword;
-                            }
-                            onUpstreamAuthUpdate(editRepo.key, payload);
+                            onUpstreamAuthUpdate(
+                              editRepo.key,
+                              buildUpstreamAuthPayload(editAuthType, editAuthFormValue),
+                            );
                           }
                         }}
                       >
