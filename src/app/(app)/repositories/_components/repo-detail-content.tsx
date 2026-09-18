@@ -247,7 +247,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // Builds push into local repositories only, so remote and virtual
   // container repositories do not get the tab (it would only say so, and
   // the tab strip is full enough already).
-  const showBuildTab = isContainerRepo && repository.repo_type === "local";
+  const showBuildTab = isContainerRepo && repository?.repo_type === "local";
   // Folder-tree view for RAW/Generic repos (#2791): the tree is grouped
   // client-side from the flat artifact list, so it needs the whole listing
   // on one page (bounded) rather than a paginated slice.
