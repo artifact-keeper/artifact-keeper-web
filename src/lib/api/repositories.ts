@@ -47,10 +47,37 @@ export interface ReorderMemberInput {
   priority: number;
 }
 
+/**
+ * Non-secret provider settings for the dynamic AWS upstream auth types
+ * (`aws_ecr` / `aws_codeartifact`, backend 1.10.0, artifact-keeper#1559).
+ *
+ * Deliberately carries no credential: the token is minted per request from the
+ * server's own AWS identity (IRSA / EKS Pod Identity / instance profile /
+ * `AWS_*` environment keys), and is never returned on a read.
+ */
+export interface AwsUpstreamAuthConfig {
+  /** AWS region of the registry or domain, e.g. `us-east-1`. Required. */
+  region: string;
+  /** ECR only: 12-digit registry (account) id, used to pin the upstream host. */
+  registry_id?: string;
+  /** CodeArtifact only: domain name. Required for `aws_codeartifact`. */
+  domain?: string;
+  /** CodeArtifact only: 12-digit account id owning the domain. */
+  domain_owner?: string;
+  /** CodeArtifact only: requested token lifetime (0, or 900..=43200 seconds). */
+  duration_seconds?: number;
+}
+
 export interface UpstreamAuthPayload {
   auth_type: string;
   username?: string;
   password?: string;
+  /**
+   * Required for `aws_ecr` / `aws_codeartifact`, ignored otherwise. Not
+   * accepted on the repository-create body — the AWS types can only be set
+   * through this endpoint.
+   */
+  aws?: AwsUpstreamAuthConfig;
 }
 
 /**

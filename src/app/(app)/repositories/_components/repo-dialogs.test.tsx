@@ -945,6 +945,110 @@ describe('RepoDialogs - Upstream Auth (Edit)', () => {
     });
   });
 
+  // #857 / backend 1.10.0 artifact-keeper#1559
+  it('shows the conditional AWS section and saves an aws_ecr payload', async () => {
+    const onUpstreamAuthUpdate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={{ ...mockRemoteEditRepo, upstream_auth_configured: false, upstream_auth_type: null }}
+        onUpstreamAuthUpdate={onUpstreamAuthUpdate}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /configure/i }));
+
+    const selects = within(dialog).getAllByTestId('mock-select');
+    const authSelect = selects[selects.length - 1];
+    fireEvent.change(authSelect, { target: { value: 'aws_ecr' } });
+
+    // The AWS block appears; the password/username inputs do not.
+    expect(within(dialog).getByTestId('aws-upstream-auth-fields')).toBeTruthy();
+    expect(within(dialog).queryByPlaceholderText('Bearer token')).toBeNull();
+    expect(within(dialog).queryByPlaceholderText('Username')).toBeNull();
+
+    // Region is required: without it the save button stays disabled.
+    const save = within(dialog).getByRole('button', { name: /save authentication/i });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+
+    await user.type(within(dialog).getByLabelText('AWS region'), 'us-east-1');
+    await user.type(within(dialog).getByLabelText('Registry ID (optional)'), '123456789012');
+    await user.click(within(dialog).getByRole('button', { name: /save authentication/i }));
+
+    expect(onUpstreamAuthUpdate).toHaveBeenCalledWith('remote-repo', {
+      auth_type: 'aws_ecr',
+      aws: { region: 'us-east-1', registry_id: '123456789012' },
+    });
+  });
+
+  it('requires a domain before saving an aws_codeartifact payload', async () => {
+    const onUpstreamAuthUpdate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={{ ...mockRemoteEditRepo, upstream_auth_configured: false, upstream_auth_type: null }}
+        onUpstreamAuthUpdate={onUpstreamAuthUpdate}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /configure/i }));
+
+    const selects = within(dialog).getAllByTestId('mock-select');
+    fireEvent.change(selects[selects.length - 1], { target: { value: 'aws_codeartifact' } });
+
+    await user.type(within(dialog).getByLabelText('AWS region'), 'us-east-1');
+    expect(
+      (within(dialog).getByRole('button', { name: /save authentication/i }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+
+    await user.type(within(dialog).getByLabelText('CodeArtifact domain'), 'my-domain');
+    await user.click(within(dialog).getByRole('button', { name: /save authentication/i }));
+
+    expect(onUpstreamAuthUpdate).toHaveBeenCalledWith('remote-repo', {
+      auth_type: 'aws_codeartifact',
+      aws: { region: 'us-east-1', domain: 'my-domain' },
+    });
+  });
+
+  it('labels a configured aws_codeartifact repository by its provider name', () => {
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={{ ...mockRemoteEditRepo, upstream_auth_type: 'aws_codeartifact' }}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/authentication configured \(AWS CodeArtifact\)/i)).toBeTruthy();
+  });
+
+  it('does not offer the AWS auth types in the create dialog', () => {
+    render(<RepoDialogs {...defaultProps} createOpen={true} editOpen={false} />);
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], {
+      target: { value: 'remote' },
+    });
+    const createAuthSelect = within(dialog)
+      .getAllByTestId('mock-select')
+      .find((el) => el.querySelector('option[value="bearer"]'));
+    const values = Array.from(
+      createAuthSelect!.querySelectorAll('option')
+    ).map((o) => (o as HTMLOptionElement).value);
+    expect(values).toEqual(['none', 'basic', 'bearer']);
+  });
+
   it('returns to view mode and resets fields when cancel is clicked in edit auth form', async () => {
     const user = userEvent.setup();
     render(

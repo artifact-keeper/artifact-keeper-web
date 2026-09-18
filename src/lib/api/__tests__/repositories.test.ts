@@ -109,6 +109,48 @@ describe("repositoriesApi.updateUpstreamAuth", () => {
     );
   });
 
+  // #857 / backend 1.10.0 artifact-keeper#1559: the dynamic AWS auth types
+  // carry a non-secret `aws` provider block and no password at all.
+  it("sends the aws block for aws_ecr and no credential", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+
+    await repositoriesApi.updateUpstreamAuth("ecr-proxy", {
+      auth_type: "aws_ecr",
+      aws: { region: "us-east-1", registry_id: "123456789012" },
+    });
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/ecr-proxy/upstream-auth",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          auth_type: "aws_ecr",
+          aws: { region: "us-east-1", registry_id: "123456789012" },
+        }),
+      }
+    );
+  });
+
+  it("drops undefined optional aws fields from the aws_codeartifact body", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+
+    await repositoriesApi.updateUpstreamAuth("ca-proxy", {
+      auth_type: "aws_codeartifact",
+      aws: {
+        region: "us-east-1",
+        domain: "my-domain",
+        domain_owner: undefined,
+        duration_seconds: undefined,
+      },
+    });
+
+    const [, init] = mockApiFetch.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(init.body)).toEqual({
+      auth_type: "aws_codeartifact",
+      aws: { region: "us-east-1", domain: "my-domain" },
+    });
+  });
+
   it("sends none auth type to remove authentication", async () => {
     mockApiFetch.mockResolvedValue(undefined);
 
