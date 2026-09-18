@@ -10,7 +10,11 @@ import type {
   ArtifactListResponse,
   ArtifactStatsResponse,
 } from '@artifact-keeper/sdk';
-import { getActiveInstanceBaseUrl } from '@/lib/sdk-client';
+import {
+  getActiveInstanceBaseUrl,
+  CSRF_HEADER_NAME,
+  CSRF_HEADER_VALUE,
+} from '@/lib/sdk-client';
 import type {
   Artifact,
   DockerTag,
@@ -293,7 +297,10 @@ export const artifactsApi = {
     onProgress?: (percent: number) => void
   ): Promise<Artifact> => {
     // Keep using XMLHttpRequest for upload progress tracking since
-    // fetch doesn't support upload progress callbacks
+    // fetch doesn't support upload progress callbacks. That also puts this
+    // request outside every layer that attaches the CSRF header (the SDK
+    // interceptor, `apiFetch`, and the hand-patched raw fetches), so it has to
+    // set the header itself below — see #821.
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const formData = new FormData();
@@ -304,6 +311,13 @@ export const artifactsApi = {
 
       xhr.open('POST', `${getActiveInstanceBaseUrl()}/api/v1/repositories/${repoKey}/artifacts`);
       xhr.withCredentials = true;
+      // CSRF defense-in-depth (#821): this cookie-authenticated, browser-shaped
+      // POST is exactly what the backend contract (artifact-keeper#3065) gates
+      // on. Browsers never add `X-Requested-With` themselves, so without this
+      // line small uploads were refused with 403 while chunked uploads — which
+      // set it in `uploads.ts` — went through. Must follow `open()`; setting a
+      // header before it throws InvalidStateError.
+      xhr.setRequestHeader(CSRF_HEADER_NAME, CSRF_HEADER_VALUE);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {

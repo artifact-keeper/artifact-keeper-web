@@ -860,6 +860,7 @@ describe("artifactsApi", () => {
       xhrInstances = [];
       function FakeXHR(this: Record<string, any>) {
         this.open = vi.fn();
+        this.setRequestHeader = vi.fn();
         this.send = vi.fn();
         this.withCredentials = false;
         this.upload = { onprogress: null as any };
@@ -1011,6 +1012,48 @@ describe("artifactsApi", () => {
       await expect(promise).rejects.toThrow(
         "Upload failed. Check your network connection and try again."
       );
+    });
+
+    // #821: this XHR bypasses the SDK interceptor and `apiFetch`, so it is the
+    // only place the CSRF header can be attached. Without it the backend's
+    // cookie-CSRF contract refuses the POST with a 403.
+    it("sends the CSRF header on the upload request", async () => {
+      const { artifactsApi } = await import("../artifacts");
+      const file = new File(["data"], "test.jar");
+
+      const promise = artifactsApi.upload("my-repo", file);
+      const xhr = xhrInstances[0];
+
+      expect(xhr.setRequestHeader).toHaveBeenCalledWith(
+        "X-Requested-With",
+        "XMLHttpRequest"
+      );
+
+      xhr.status = 201;
+      xhr.responseText = JSON.stringify({ id: "a4" });
+      xhr.onload();
+      await promise;
+    });
+
+    it("sets the CSRF header after open() and before send()", async () => {
+      const { artifactsApi } = await import("../artifacts");
+      const file = new File(["data"], "test.jar");
+
+      const promise = artifactsApi.upload("my-repo", file);
+      const xhr = xhrInstances[0];
+
+      // setRequestHeader throws InvalidStateError before open() and is ignored
+      // after send(), so the ordering is part of the contract.
+      const openOrder = xhr.open.mock.invocationCallOrder[0];
+      const headerOrder = xhr.setRequestHeader.mock.invocationCallOrder[0];
+      const sendOrder = xhr.send.mock.invocationCallOrder[0];
+      expect(headerOrder).toBeGreaterThan(openOrder);
+      expect(headerOrder).toBeLessThan(sendOrder);
+
+      xhr.status = 201;
+      xhr.responseText = JSON.stringify({ id: "a5" });
+      xhr.onload();
+      await promise;
     });
   });
 });
