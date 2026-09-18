@@ -42,6 +42,16 @@ vi.mock("lucide-react", () => {
     Link2: icon,
     Link2Off: icon,
     Activity: icon,
+    // Scan-type glyphs, pulled in via ScanTypeBadge (#858).
+    Boxes: icon,
+    Bug: icon,
+    ClipboardCheck: icon,
+    Container: icon,
+    FolderSearch: icon,
+    Scale: icon,
+    ScanLine: icon,
+    Server: icon,
+    Upload: icon,
   };
 });
 
@@ -58,8 +68,11 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 vi.mock("@/components/ui/badge", () => ({
-  Badge: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <span className={className}>{children}</span>
+  // Spreads the remaining props so `title` / `data-testid` survive the stub.
+  Badge: ({ children, className, ...rest }: React.ComponentProps<"span">) => (
+    <span className={className} {...rest}>
+      {children}
+    </span>
   ),
 }));
 
@@ -262,6 +275,42 @@ describe("ArtifactScansSection (#368)", () => {
     render(<ArtifactScansSection artifactId="a1" />);
     expect(screen.queryByText(/crit/i)).toBeNull();
     expect(screen.queryByText(/high/i)).toBeNull();
+  });
+
+  it("labels an external scan type instead of printing it raw (#858)", () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: "scan-3",
+            artifact_id: "a1",
+            artifact_name: "lib.jar",
+            artifact_version: "1.0",
+            repository_id: "r1",
+            scan_type: "external",
+            status: "completed",
+            findings_count: 0,
+            critical_count: 0,
+            high_count: 0,
+            medium_count: 0,
+            low_count: 0,
+            info_count: 0,
+            scanner_version: "acme-4.2",
+            error_message: null,
+            started_at: null,
+            completed_at: null,
+            created_at: "2026-05-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ArtifactScansSection artifactId="a1" />);
+    const badge = screen.getByTestId("scan-type-badge");
+    expect(badge.textContent).toContain("External");
+    expect(badge.getAttribute("title")).toContain("acme-4.2");
   });
 
   it("calls listArtifactScans with the supplied artifactId (#368)", async () => {

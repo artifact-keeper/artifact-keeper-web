@@ -10,6 +10,10 @@ import type { ScanResult } from "@/types/security";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import {
+  ScanTypeBadge,
+  scanTypeLabel,
+} from "@/components/common/scan-type-badge";
 
 const SCAN_STATUS_BADGE: Record<string, string> = {
   completed: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40",
@@ -71,8 +75,13 @@ export function ArtifactScansSection({
     {
       id: "scan_type",
       header: "Type",
-      accessor: (s) => s.scan_type,
-      cell: (s) => <span className="text-sm">{s.scan_type}</span>,
+      accessor: (s) => scanTypeLabel(s.scan_type),
+      cell: (s) => (
+        <ScanTypeBadge
+          scanType={s.scan_type}
+          scannerVersion={s.scanner_version}
+        />
+      ),
     },
     {
       id: "findings",

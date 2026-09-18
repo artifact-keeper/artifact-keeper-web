@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Zap } from "lucide-react";
+import { AlertTriangle, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import "@/lib/sdk-client";
 import { listScanConfigs } from "@artifact-keeper/sdk";
 import { securityApi } from "@/lib/api/security";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
 import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
@@ -18,6 +18,7 @@ import type { ScanResult } from "@/types/security";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectTrigger,
@@ -37,6 +38,11 @@ import {
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import {
+  ScanTypeBadge,
+  SCAN_TYPES,
+  scanTypeLabel,
+} from "@/components/common/scan-type-badge";
 import { unwrap } from "@/lib/sdk-utils";
 
 // -- status & severity color maps --
@@ -100,6 +106,7 @@ export default function SecurityScansPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
+  const [scanTypeFilter, setScanTypeFilter] = useState<string>("__all__");
 
   // -- trigger scan dialog --
   const [triggerOpen, setTriggerOpen] = useState(false);
@@ -112,20 +119,22 @@ export default function SecurityScansPage() {
   );
 
   // -- queries --
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: [
-      "security",
-      "scans",
-      page,
-      pageSize,
-      statusFilter === "__all__" ? undefined : statusFilter,
-    ],
+  // `__all__` is the Select's stand-in for "no filter" (Radix rejects an empty
+  // item value); it must never reach the query string — the backend answers an
+  // unknown scan_type with a 400, not an unfiltered list.
+  const status = statusFilter === "__all__" ? undefined : statusFilter;
+  const scanType = scanTypeFilter === "__all__" ? undefined : scanTypeFilter;
+
+  const { data, isLoading, isFetching, isError, error } = useQuery({
+    queryKey: ["security", "scans", page, pageSize, status, scanType],
     queryFn: () =>
       securityApi.listScans({
         page,
         per_page: pageSize,
-        status: statusFilter === "__all__" ? undefined : statusFilter,
+        status,
+        scan_type: scanType,
       }),
+    retry: false,
   });
 
   const { data: reposPage } = useRepositories(
@@ -189,11 +198,12 @@ export default function SecurityScansPage() {
     {
       id: "scan_type",
       header: "Scanner",
-      accessor: (r) => r.scan_type,
+      accessor: (r) => scanTypeLabel(r.scan_type),
       cell: (r) => (
-        <Badge variant="secondary" className="text-xs font-normal">
-          {r.scan_type}
-        </Badge>
+        <ScanTypeBadge
+          scanType={r.scan_type}
+          scannerVersion={r.scanner_version}
+        />
       ),
     },
     {
@@ -345,12 +355,33 @@ export default function SecurityScansPage() {
           </SelectContent>
         </Select>
 
-        {statusFilter !== "__all__" && (
+        <Select
+          value={scanTypeFilter}
+          onValueChange={(v) => {
+            setScanTypeFilter(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-[190px]" aria-label="Scan type">
+            <SelectValue placeholder="Scan type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All scan types</SelectItem>
+            {SCAN_TYPES.map((t) => (
+              <SelectItem key={t} value={t}>
+                {scanTypeLabel(t)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(statusFilter !== "__all__" || scanTypeFilter !== "__all__") && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               setStatusFilter("__all__");
+              setScanTypeFilter("__all__");
               setPage(1);
             }}
           >
@@ -359,10 +390,22 @@ export default function SecurityScansPage() {
         )}
       </div>
 
+      {/* A rejected filter value comes back as a 400 naming the accepted set —
+          show the backend's own text rather than an empty table. */}
+      {isError && (
+        <Alert variant="destructive" data-testid="scans-error">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Could not load scans</AlertTitle>
+          <AlertDescription>
+            {toUserMessage(error, "The scan list could not be loaded.")}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Data table */}
       <DataTable
         columns={columns}
-        data={data?.items ?? []}
+        data={isError ? [] : (data?.items ?? [])}
         total={data?.total}
         page={page}
         pageSize={pageSize}

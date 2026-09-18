@@ -21,14 +21,16 @@ import { toast } from "sonner";
 
 import { securityApi } from "@/lib/api/security";
 import { blastRadiusHref } from "@/lib/api/blast-radius";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { isScanIncomplete } from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -50,6 +52,7 @@ import {
 import { StatCard } from "@/components/common/stat-card";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
+import { ScanTypeBadge } from "@/components/common/scan-type-badge";
 import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 // -- constants --
@@ -106,10 +109,18 @@ export default function SecurityScanDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // -- pagination & filter --
+  // -- pagination & filters --
+  // Severity / source / CVE are applied by the backend (artifact-keeper#3410)
+  // so `total` counts the matching findings, not the ones that happened to
+  // land on the current page. The text filters are committed on submit rather
+  // than per keystroke: each one is a request.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [severityFilter, setSeverityFilter] = useState<string>("__all__");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [cveFilter, setCveFilter] = useState("");
+  const [sourceInput, setSourceInput] = useState("");
+  const [cveInput, setCveInput] = useState("");
 
   // -- acknowledge dialog --
   const [ackOpen, setAckOpen] = useState(false);
@@ -128,11 +139,36 @@ export default function SecurityScanDetailPage() {
     enabled: !!id,
   });
 
-  const { data: findingsData, isLoading: findingsLoading } = useQuery({
-    queryKey: ["security", "findings", id, page, pageSize],
+  // `__all__` is the Select's stand-in for "no filter"; it must never reach
+  // the query string, which only accepts the canonical severity vocabulary.
+  const severity = severityFilter === "__all__" ? undefined : severityFilter;
+
+  const {
+    data: findingsData,
+    isLoading: findingsLoading,
+    isError: findingsError,
+    error: findingsErrorValue,
+  } = useQuery({
+    queryKey: [
+      "security",
+      "findings",
+      id,
+      page,
+      pageSize,
+      severity,
+      sourceFilter || undefined,
+      cveFilter || undefined,
+    ],
     queryFn: () =>
-      securityApi.listFindings(id!, { page, per_page: pageSize }),
+      securityApi.listFindings(id!, {
+        page,
+        per_page: pageSize,
+        severity,
+        source: sourceFilter || undefined,
+        cve_id: cveFilter || undefined,
+      }),
     enabled: !!id,
+    retry: false,
   });
 
   // -- mutations --
@@ -172,12 +208,24 @@ export default function SecurityScanDetailPage() {
     onError: mutationErrorToast("Failed to revoke acknowledgment"),
   });
 
-  // -- filter findings by severity locally --
-  const allFindings = findingsData?.items ?? [];
-  const filteredFindings =
-    severityFilter === "__all__"
-      ? allFindings
-      : allFindings.filter((f) => f.severity === severityFilter);
+  const findings = findingsError ? [] : (findingsData?.items ?? []);
+  const hasFilters =
+    severityFilter !== "__all__" || sourceFilter !== "" || cveFilter !== "";
+
+  function applyTextFilters() {
+    setSourceFilter(sourceInput.trim());
+    setCveFilter(cveInput.trim());
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setSeverityFilter("__all__");
+    setSourceFilter("");
+    setCveFilter("");
+    setSourceInput("");
+    setCveInput("");
+    setPage(1);
+  }
 
   // -- table columns --
   const columns: DataTableColumn<ScanFinding>[] = [
@@ -263,6 +311,20 @@ export default function SecurityScanDetailPage() {
               <Crosshair className="size-3.5" />
             </Link>
           </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">-</span>
+        ),
+    },
+    {
+      id: "source",
+      header: "Source",
+      accessor: (r) => r.source ?? "",
+      sortable: true,
+      // The vendor identity of an `external` scan lives here, not in
+      // `scan_type` (artifact-keeper#3411), so it needs its own column.
+      cell: (r) =>
+        r.source ? (
+          <span className="text-sm">{r.source}</span>
         ) : (
           <span className="text-sm text-muted-foreground">-</span>
         ),
@@ -368,9 +430,10 @@ export default function SecurityScanDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Scanner</p>
-                <Badge variant="secondary" className="text-xs font-normal">
-                  {scan.scan_type}
-                </Badge>
+                <ScanTypeBadge
+                  scanType={scan.scan_type}
+                  scannerVersion={scan.scanner_version}
+                />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
@@ -477,14 +540,17 @@ export default function SecurityScanDetailPage() {
         </div>
       )}
 
-      {/* Findings filter */}
-      <div className="flex items-center gap-3">
+      {/* Findings filters */}
+      <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Findings</h2>
         <Select
           value={severityFilter}
-          onValueChange={setSeverityFilter}
+          onValueChange={(v) => {
+            setSeverityFilter(v);
+            setPage(1);
+          }}
         >
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[150px]" aria-label="Severity">
             <SelectValue placeholder="Severity" />
           </SelectTrigger>
           <SelectContent>
@@ -496,26 +562,58 @@ export default function SecurityScanDetailPage() {
             <SelectItem value="info">Info</SelectItem>
           </SelectContent>
         </Select>
-        {severityFilter !== "__all__" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSeverityFilter("__all__")}
-          >
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            applyTextFilters();
+          }}
+        >
+          <Input
+            aria-label="Source"
+            placeholder="Source (e.g. grype)"
+            className="h-9 w-[180px]"
+            value={sourceInput}
+            onChange={(e) => setSourceInput(e.target.value)}
+          />
+          <Input
+            aria-label="CVE"
+            placeholder="CVE (e.g. CVE-2024-3094)"
+            className="h-9 w-[200px]"
+            value={cveInput}
+            onChange={(e) => setCveInput(e.target.value)}
+          />
+          <Button type="submit" variant="outline" size="sm">
+            Apply
+          </Button>
+        </form>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
             Clear
           </Button>
         )}
       </div>
 
+      {/* A rejected filter value comes back as a 400 naming the accepted set —
+          show the backend's own text rather than an empty findings table. */}
+      {findingsError && (
+        <Alert variant="destructive" data-testid="findings-error">
+          <AlertCircle className="size-4" />
+          <AlertTitle>Could not load findings</AlertTitle>
+          <AlertDescription>
+            {toUserMessage(
+              findingsErrorValue,
+              "The findings could not be loaded.",
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Findings table */}
       <DataTable
         columns={columns}
-        data={filteredFindings}
-        total={
-          severityFilter === "__all__"
-            ? findingsData?.total
-            : filteredFindings.length
-        }
+        data={findings}
+        total={findingsError ? 0 : findingsData?.total}
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
@@ -529,7 +627,9 @@ export default function SecurityScanDetailPage() {
             ? scan.status === "failed" || scan.status === "error"
               ? "No findings available. The scan did not complete successfully."
               : "Scan is still in progress."
-            : "No findings for this scan."
+            : hasFilters
+              ? "No findings match these filters."
+              : "No findings for this scan."
         }
         rowKey={(r) => r.id}
       />
