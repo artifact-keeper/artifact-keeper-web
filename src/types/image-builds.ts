@@ -95,6 +95,21 @@ export interface ImageBuildSpec {
   pip?: string[];
 }
 
+/** What the registry knows about a base image stored here; `found: false` otherwise. */
+export interface BaseImageInfo {
+  found: boolean;
+  reference?: string;
+  digest?: string;
+  os?: string;
+  architecture?: string;
+  /** The user the base runs as. */
+  user?: string;
+  /** apt | dnf | microdnf | yum | apk, from the image's own build history and labels. */
+  system_manager?: PackageManager;
+  has_pip: boolean;
+  has_conda: boolean;
+}
+
 export type ImageBuildStatus = "queued" | "running" | "succeeded" | "failed";
 
 export interface ImageBuild {

@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/fetch";
 import type {
+  BaseImageInfo,
   ImageBuild,
   ImageBuildSettings,
   ImageBuildSpec,
@@ -15,10 +16,12 @@ export type {
   ImageBuildSpec,
   ImageBuildStatus,
   ImageInspect,
+  BaseImageInfo,
   PackageGroup,
   PackageManager,
   RenderImageBuildResponse,
 } from "@/types/image-builds";
+import { SYSTEM_PACKAGE_MANAGERS } from "@/types/image-builds";
 
 /**
  * Image builder + inspector for container repositories. Not in the
@@ -33,6 +36,11 @@ export const imageBuildsApi = {
   settings: (repoKey: string) =>
     apiFetch<ImageBuildSettings>(
       `/api/v1/repositories/${encodeURIComponent(repoKey)}/image-builds/settings`,
+    ),
+  /** What this registry knows about a base image (distro family, user, pip/conda). */
+  baseInfo: (repoKey: string, image: string) =>
+    apiFetch<BaseImageInfo>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/image-builds/base-info?image=${encodeURIComponent(image)}`,
     ),
   render: (repoKey: string, spec: ImageBuildSpec) =>
     apiFetch<RenderImageBuildResponse>(
@@ -143,6 +151,19 @@ export function specGroups(spec: ImageBuildSpec): PackageGroup[] {
  * name: UBI and other RPM families → microdnf/dnf, Alpine → apk, Debian,
  * Ubuntu, the official Python images and Ray → apt. Null when unsure.
  */
+/**
+ * The managers worth offering for a base whose system manager is known:
+ * that manager plus pip and conda. Unknown → everything the instance
+ * supports.
+ */
+export function managersFor(
+  supported: PackageManager[],
+  systemManager: PackageManager | null | undefined,
+): PackageManager[] {
+  if (!systemManager || !supported.includes(systemManager)) return supported;
+  return supported.filter((m) => m === systemManager || !SYSTEM_PACKAGE_MANAGERS.has(m));
+}
+
 export function suggestSystemManager(baseImage: string): PackageManager | null {
   const b = baseImage.toLowerCase();
   if (b.includes("alpine")) return "apk";

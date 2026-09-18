@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   imageBuildsApi,
   emptySpec,
+  managersFor,
   parsePairs,
   specGroups,
   splitLines,
@@ -186,16 +187,31 @@ export function ImageBuildWizard({
   // The initial form is derived once per mount; the parent remounts the
   // wizard (a fresh `key`) each time it opens, so no effect is needed.
   const [form, setForm] = useState<WizardForm>(() => initialForm(initialSpec ?? null, settings));
-  const managers: PackageManager[] = settings.supported_package_managers?.length
+  const supported: PackageManager[] = settings.supported_package_managers?.length
     ? settings.supported_package_managers
     : ALL_MANAGERS;
+  const [showAllManagers, setShowAllManagers] = useState(false);
+  const debouncedBase = useDebounced(form.baseImage.trim(), 400);
+  // What the registry knows about the base when it is stored here; the name
+  // heuristic covers everything else.
+  const baseInfo = useQuery({
+    queryKey: ["image-build-base-info", repoKey, debouncedBase],
+    queryFn: () => imageBuildsApi.baseInfo(repoKey, debouncedBase),
+    enabled: open && form.mode === "spec" && debouncedBase !== "",
+    retry: false,
+    staleTime: 60_000,
+  });
+  const probe = baseInfo.data?.found ? baseInfo.data : null;
+  const detected: PackageManager | null = probe?.system_manager ?? suggestSystemManager(form.baseImage);
+  const detectedFrom = probe?.system_manager ? "the image's own build history" : detected ? "the image name" : null;
+  const managers = showAllManagers ? supported : managersFor(supported, detected);
 
   const patch = (p: Partial<WizardForm>) => setForm((f) => ({ ...f, ...p }));
   const patchGroup = (i: number, p: Partial<GroupRow>) =>
     setForm((f) => ({ ...f, groups: f.groups.map((g, j) => (j === i ? { ...g, ...p } : g)) }));
   const addGroup = () => {
     const hasSystem = form.groups.some((g) => SYSTEM_PACKAGE_MANAGERS.has(g.manager));
-    const suggested = hasSystem ? null : suggestSystemManager(form.baseImage);
+    const suggested = hasSystem ? null : detected;
     const manager: PackageManager = suggested && managers.includes(suggested) ? suggested : "pip";
     patch({ groups: [...form.groups, { manager, packages: "", channels: "" }] });
   };
@@ -308,8 +324,21 @@ export function ImageBuildWizard({
                     {settings.base_allowlist.length > 0
                       ? `Allowed prefixes: ${settings.base_allowlist.join(", ")}`
                       : "Any base image; pin a tag so the build is reproducible."}
-                    {suggestSystemManager(form.baseImage) ? ` System packages: ${suggestSystemManager(form.baseImage)}.` : ""}
                   </p>
+                  {detected ? (
+                    <p className="text-xs" data-testid="base-detected">
+                      <Badge variant="secondary" className="mr-1 font-mono">{detected}</Badge>
+                      system packages, from {detectedFrom}
+                      {probe?.architecture ? ` · ${probe.os}/${probe.architecture}` : ""}
+                      {probe?.user ? ` · runs as ${probe.user}` : ""}
+                      {probe && !probe.has_pip ? " · no pip in the image" : ""}
+                      {probe?.has_conda ? " · conda present" : ""}
+                      {" "}
+                      <button type="button" className="underline text-muted-foreground" onClick={() => setShowAllManagers((v) => !v)}>
+                        {showAllManagers ? "only matching managers" : "show all managers"}
+                      </button>
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -329,7 +358,7 @@ export function ImageBuildWizard({
                           onChange={(e) => patchGroup(i, { manager: e.target.value as PackageManager })}
                           className={SELECT_CLASS}
                         >
-                          {managers.map((m) => (
+                          {(managers.includes(g.manager) ? managers : [g.manager, ...managers]).map((m) => (
                             <option key={m} value={m}>
                               {MANAGER_LABELS[m] ?? m}
                             </option>
@@ -369,6 +398,12 @@ export function ImageBuildWizard({
                       ) : null}
                     </div>
                   ))}
+                  {form.groups.length > 1 ? (
+                    <Button type="button" size="sm" variant="ghost" className="w-full" onClick={addGroup}>
+                      <Plus className="size-3.5 mr-1" aria-hidden />
+                      Add another package group
+                    </Button>
+                  ) : null}
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -383,7 +418,7 @@ export function ImageBuildWizard({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="ib-user">User</Label>
-                    <Input id="ib-user" value={form.user} onChange={(e) => patch({ user: e.target.value })} placeholder="ray" />
+                    <Input id="ib-user" value={form.user} onChange={(e) => patch({ user: e.target.value })} placeholder={probe?.user ?? "ray"} />
                     {systemNeedsUser ? (
                       <p className="text-xs text-amber-700 dark:text-amber-400">System packages need the user the image runs as afterwards.</p>
                     ) : null}

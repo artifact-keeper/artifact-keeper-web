@@ -20,12 +20,13 @@ const mutations: MutationConfig[] = [];
 const mutate = vi.fn();
 const invalidate = vi.fn();
 let renderResponse: Record<string, unknown> = { data: undefined, isError: false, isLoading: false, isFetching: false };
+let baseInfoResponse: Record<string, unknown> = { data: undefined, isError: false, isLoading: false, isFetching: false };
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: QueryOpts) => {
     queries.push(opts);
     if (opts.enabled) opts.queryFn();
-    return renderResponse;
+    return opts.queryKey[0] === "image-build-base-info" ? baseInfoResponse : renderResponse;
   },
   useMutation: (config: MutationConfig) => {
     mutations.push(config);
@@ -36,7 +37,7 @@ vi.mock("@tanstack/react-query", () => ({
 const toast = { success: vi.fn(), error: vi.fn() };
 vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => toast.success(...a), error: (...a: unknown[]) => toast.error(...a) } }));
 
-const api = { render: vi.fn(), create: vi.fn() };
+const api = { render: vi.fn(), create: vi.fn(), baseInfo: vi.fn() };
 vi.mock("@/lib/api/image-builds", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/api/image-builds")>();
   return {
@@ -45,6 +46,7 @@ vi.mock("@/lib/api/image-builds", async (importOriginal) => {
       ...real.imageBuildsApi,
       render: (...a: unknown[]) => api.render(...a),
       create: (...a: unknown[]) => api.create(...a),
+      baseInfo: (...a: unknown[]) => api.baseInfo(...a),
     },
   };
 });
@@ -69,14 +71,15 @@ const SETTINGS: ImageBuildSettings = {
   pip_index_url: null,
 };
 
-const lastQuery = () => queries[queries.length - 1];
-const lastSpec = () => lastQuery().queryKey[2] as ImageBuildSpec;
+const lastRenderQuery = () => [...queries].reverse().find((q) => q.queryKey[0] === "image-build-render")!;
+const lastSpec = () => lastRenderQuery().queryKey[2] as ImageBuildSpec;
 
 beforeEach(() => {
   queries.length = 0;
   mutations.length = 0;
   vi.clearAllMocks();
   renderResponse = { data: undefined, isError: false, isLoading: false, isFetching: false };
+  baseInfoResponse = { data: undefined, isError: false, isLoading: false, isFetching: false };
 });
 afterEach(cleanup);
 
@@ -181,13 +184,24 @@ describe("ImageBuildWizard", () => {
     const user = userEvent.setup();
     renderWizard();
     const select = screen.getByRole("combobox", { name: "Package manager 1" });
+    // The bare allowlist prefix says nothing about a distro: every manager is offered.
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(
       SETTINGS.supported_package_managers!.map((m) => MANAGER_LABELS[m]),
     );
+    expect(screen.queryByTestId("base-detected")).not.toBeInTheDocument();
     const base = screen.getByLabelText("Base image");
     await user.clear(base);
     await user.type(base, "registry.access.redhat.com/ubi9/ubi-minimal:9.4");
-    expect(screen.getByText(/System packages: microdnf/)).toBeInTheDocument();
+    // Read from the name: microdnf, so the list narrows to microdnf + pip + conda…
+    expect(screen.getByTestId("base-detected")).toHaveTextContent("microdnf");
+    expect(screen.getByTestId("base-detected")).toHaveTextContent("from the image name");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(
+      ["microdnf", "pip", "conda"].map((m) => MANAGER_LABELS[m as keyof typeof MANAGER_LABELS]),
+    );
+    // …until "show all managers" is clicked.
+    await user.click(screen.getByRole("button", { name: "show all managers" }));
+    expect(within(select).getAllByRole("option")).toHaveLength(SETTINGS.supported_package_managers!.length);
+    await user.click(screen.getByRole("button", { name: "only matching managers" }));
     await user.click(screen.getByRole("button", { name: /Add package group/ }));
     expect(screen.getByRole("combobox", { name: "Package manager 2" })).toHaveValue("microdnf");
     expect(screen.getByText(/Installs as root in the final stage/)).toBeInTheDocument();
@@ -200,6 +214,36 @@ describe("ImageBuildWizard", () => {
     expect(screen.getByRole("combobox", { name: "Package manager 3" })).toHaveValue("pip");
     await user.click(screen.getByRole("button", { name: "Remove group 3" }));
     expect(screen.queryByRole("combobox", { name: "Package manager 3" })).not.toBeInTheDocument();
+  });
+
+  it("uses the registry's probe of the base image over the name, and offers its user", async () => {
+    baseInfoResponse = {
+      data: { found: true, reference: "ray/ray-groups:2.56.0", digest: "sha256:abc", os: "linux", architecture: "amd64", user: "ray", system_manager: "apt", has_pip: true, has_conda: true },
+      isError: false, isLoading: false, isFetching: false,
+    };
+    const user = userEvent.setup();
+    renderWizard({ ...SETTINGS, base_allowlist: ["registry:8080/ray/"] });
+    const base = screen.getByLabelText("Base image");
+    await user.clear(base);
+    await user.type(base, "registry:8080/ray/ray-groups:2.56.0");
+    await waitFor(() => expect(api.baseInfo).toHaveBeenCalledWith("ray", "registry:8080/ray/ray-groups:2.56.0"));
+    const detected = screen.getByTestId("base-detected");
+    expect(detected).toHaveTextContent("apt");
+    expect(detected).toHaveTextContent("from the image's own build history");
+    expect(detected).toHaveTextContent("linux/amd64");
+    expect(detected).toHaveTextContent("runs as ray");
+    expect(detected).toHaveTextContent("conda present");
+    expect(screen.getByLabelText("User")).toHaveAttribute("placeholder", "ray");
+    const select = screen.getByRole("combobox", { name: "Package manager 1" });
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(
+      ["apt", "pip", "conda"].map((m) => MANAGER_LABELS[m as keyof typeof MANAGER_LABELS]),
+    );
+    // A group already set to a manager outside the filter stays selectable.
+    await user.click(screen.getByRole("button", { name: "show all managers" }));
+    await user.selectOptions(select, "apk");
+    await user.click(screen.getByRole("button", { name: "only matching managers" }));
+    expect(select).toHaveValue("apk");
+    expect(within(select).getAllByRole("option")).toHaveLength(4);
   });
 
   it("shows conda channels only for conda groups and carries the two-stage toggle into the spec", async () => {

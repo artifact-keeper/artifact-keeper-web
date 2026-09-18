@@ -7,7 +7,7 @@ vi.mock("@/lib/api/fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
-import { imageBuildsApi, emptySpec, specGroups, suggestSystemManager } from "@/lib/api/image-builds";
+import { imageBuildsApi, emptySpec, managersFor, specGroups, suggestSystemManager } from "@/lib/api/image-builds";
 
 beforeEach(() => {
   mockApiFetch.mockReset();
@@ -19,6 +19,13 @@ describe("imageBuildsApi", () => {
     await imageBuildsApi.inspect("my repo", "team/ray", "1.0+build");
     expect(mockApiFetch).toHaveBeenCalledWith(
       "/api/v1/repositories/my%20repo/image-inspect?image=team%2Fray&reference=1.0%2Bbuild",
+    );
+  });
+
+  it("asks the registry about a base image", async () => {
+    await imageBuildsApi.baseInfo("ray", "registry:8080/ray/base:1.0");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/repositories/ray/image-builds/base-info?image=registry%3A8080%2Fray%2Fbase%3A1.0",
     );
   });
 
@@ -78,6 +85,15 @@ describe("specGroups", () => {
       { manager: "apk", packages: ["curl"] },
     ]);
     expect(specGroups({ ...emptySpec("x"), conda: ["samtools"] })).toEqual([{ manager: "conda", packages: ["samtools"], channels: [] }]);
+  });
+});
+
+describe("managersFor", () => {
+  const all = ["apt", "dnf", "microdnf", "yum", "apk", "pip", "conda"] as const;
+  it("keeps the detected system manager plus pip and conda, or everything when unknown", () => {
+    expect(managersFor([...all], "microdnf")).toEqual(["microdnf", "pip", "conda"]);
+    expect(managersFor([...all], null)).toEqual([...all]);
+    expect(managersFor(["pip", "conda"], "apt")).toEqual(["pip", "conda"]);
   });
 });
 
