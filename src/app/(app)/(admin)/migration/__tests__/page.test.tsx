@@ -928,8 +928,37 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     expect(screen.getByText(/5\/10/)).toBeInTheDocument();
     // failed_items annotation
     expect(screen.getByText(/\(2 failed\)/)).toBeInTheDocument();
-    // 50% progress label rendered in cell
-    expect(screen.getByText("50%")).toBeInTheDocument();
+    // 50% progress label rendered in cell. A running job is still enumerating,
+    // so the figure is marked provisional (artifact-keeper#3590).
+    const progress = screen.getByText("~50%");
+    expect(progress).toBeInTheDocument();
+    expect(progress).toHaveAttribute(
+      "title",
+      expect.stringMatching(/still being enumerated/i),
+    );
+  });
+
+  it("drops the provisional marker once the job reaches a terminal state", async () => {
+    // `total_items` only stops moving when enumeration ends, so a finished job
+    // is the one case where the percentage is a measured figure (#3590).
+    const job = makeJob({
+      id: "donejob12345",
+      status: "completed",
+      completed_items: 10,
+      total_items: 10,
+      progress_percent: 100,
+    });
+    configureQueries({
+      connections: { data: [makeConnection()], isLoading: false },
+      migrations: { data: { items: [job], pagination: {} }, isLoading: false },
+    });
+    await renderPage();
+    await switchToJobsTab();
+
+    const progress = screen.getByText("100%");
+    expect(progress).toBeInTheDocument();
+    expect(progress).not.toHaveAttribute("title");
+    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
   });
 
   it("falls back to the source-id slice when the connection is unknown", async () => {

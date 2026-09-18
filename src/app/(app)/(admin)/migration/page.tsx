@@ -141,6 +141,35 @@ function jobProgress(job: MigrationJob): number {
   return Math.round(job.progress_percent ?? 0);
 }
 
+// Statuses in which the backend is still enumerating work, so `total_items` is
+// "how many items have been found so far", not a known total (artifact-keeper
+// #3590). The percentage computed against it is provisional and can move
+// *down* as enumeration finds more, so it is labelled "~" and explained on
+// hover rather than presented as a measured figure. `effectiveTotal` below
+// already keeps the items ratio sane while that is happening.
+const ENUMERATING_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
+  "pending",
+  "assessing",
+  "ready",
+  "running",
+  "paused",
+]);
+
+const PROVISIONAL_PROGRESS_HINT =
+  "The source is still being enumerated, so this percentage is an estimate " +
+  "and can go down as more items are found.";
+
+function jobProgressLabel(job: MigrationJob): string {
+  const provisional = ENUMERATING_STATUSES.has(job.status);
+  return `${provisional ? "~" : ""}${jobProgress(job)}%`;
+}
+
+function jobProgressHint(job: MigrationJob): string | undefined {
+  return ENUMERATING_STATUSES.has(job.status)
+    ? PROVISIONAL_PROGRESS_HINT
+    : undefined;
+}
+
 // Denominator for the items ratio. The backend leaves total_items at 0 on some
 // jobs (it doesn't always pre-count), which renders as "102/0"; fall back to
 // what was actually processed so the ratio makes sense.
@@ -758,8 +787,11 @@ export default function MigrationPage() {
             value={jobProgress(j)}
             className="flex-1 h-1.5"
           />
-          <span className="text-xs text-muted-foreground w-10 text-right">
-            {jobProgress(j)}%
+          <span
+            className="text-xs text-muted-foreground w-10 text-right"
+            title={jobProgressHint(j)}
+          >
+            {jobProgressLabel(j)}
           </span>
         </div>
       ),
@@ -1629,8 +1661,8 @@ export default function MigrationPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Progress</p>
-                  <p className="font-semibold">
-                    {jobProgress(detailJob)}%
+                  <p className="font-semibold" title={jobProgressHint(detailJob)}>
+                    {jobProgressLabel(detailJob)}
                   </p>
                 </div>
                 <div>
