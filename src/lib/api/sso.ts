@@ -142,6 +142,10 @@ function adaptSamlConfig(sdk: SdkSamlConfigResponse): SamlConfig {
   return {
     id: sdk.id,
     name: sdk.name,
+    // `slug` is not in the generated SDK yet (backend 1.10.0,
+    // artifact-keeper#2583). Read it through a cast and fall back to null —
+    // the pre-2583 state, where the provider is addressable by id only.
+    slug: (sdk as { slug?: string | null }).slug ?? null,
     entity_id: sdk.entity_id,
     sso_url: sdk.sso_url,
     slo_url: sdk.slo_url ?? null,
@@ -198,6 +202,11 @@ function adaptTokenPair(
 // `satisfies` instead of writing 6 near-identical 12-field forwarders —
 // keeps the boundary typed without ballooning duplication, and a future
 // local-type addition surfaces here when the SDK type drifts.
+//
+// The SAML `slug` (artifact-keeper#2583) rides through on that same path:
+// `satisfies` is not an excess-property check on a parameter, and the SDK
+// serializes the body it is handed, so the field reaches the backend even
+// though the 1.7.0 SDK request types don't declare it.
 
 export const ssoApi = {
   // --- Providers (public) ---
