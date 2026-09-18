@@ -47,7 +47,7 @@ vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
 }));
 
-import { repositoriesApi } from "../repositories";
+import { repositoriesApi, supportsAgePolicy } from "../repositories";
 
 describe("repositoriesApi.updateUpstreamAuth", () => {
   beforeEach(() => {
@@ -1005,6 +1005,18 @@ describe("repositoriesApi.updateAgePolicy", () => {
     await expect(
       repositoriesApi.updateAgePolicy("npm-proxy", { enabled: true, duration_minutes: 10 })
     ).rejects.toThrow("age policy boom");
+  });
+});
+
+describe("supportsAgePolicy (#853, backend artifact-keeper#3647)", () => {
+  it("allows the hosted types that own their artifact rows", () => {
+    expect(supportsAgePolicy("local")).toBe(true);
+    expect(supportsAgePolicy("staging")).toBe(true);
+  });
+
+  it("refuses the proxying types the backend now rejects", () => {
+    expect(supportsAgePolicy("remote")).toBe(false);
+    expect(supportsAgePolicy("virtual")).toBe(false);
   });
 });
 

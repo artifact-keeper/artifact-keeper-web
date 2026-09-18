@@ -5,7 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, AlertTriangle, Trash2, Play, Eye } from "lucide-react";
 import { toast } from "sonner";
 
-import { repositoriesApi } from "@/lib/api/repositories";
+import {
+  repositoriesApi,
+  supportsAgePolicy,
+  type AgePolicyPayload,
+} from "@/lib/api/repositories";
 import { ageGateApi } from "@/lib/api/age-gate";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
@@ -546,21 +550,28 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const ageMinutes = ageToMinutes(ageValue, ageUnit);
   const ageInvalid = ageEnabled && ageMinutes <= 0;
 
+  // Backend 1.10.0 (artifact-keeper#3647) answers 400 to
+  // `quarantine_enabled: true` on the proxying types, because proxied content
+  // has no quarantine identity to release. Disabling stays accepted everywhere,
+  // so remote/virtual repositories get a read-only panel that still offers the
+  // turn-off path for a policy enabled before the gate existed.
+  const ageConfigurable = supportsAgePolicy(repository.repo_type);
+  const ageLegacyEnabled = !ageConfigurable && ageDefaults.enabled;
+
   const ageMutation = useMutation({
-    mutationFn: () =>
-      repositoriesApi.updateAgePolicy(repository.key, {
-        enabled: ageEnabled,
-        duration_minutes: ageMinutes,
-      }),
-    onSuccess: () => {
+    mutationFn: (payload: AgePolicyPayload) =>
+      repositoriesApi.updateAgePolicy(repository.key, payload),
+    onSuccess: (_result, payload) => {
       queryClient.invalidateQueries({ queryKey: ["repository", repository.key] });
       setAgeOverrides({});
       toast.success(
-        ageEnabled
+        payload.enabled
           ? "Package age policy enabled"
           : "Package age policy disabled"
       );
     },
+    // Surfaces the backend's own rejection text (artifact-keeper#3647) rather
+    // than the generic label when a proxy repository is patched anyway.
     onError: mutationErrorToast("Failed to save package age policy"),
   });
 
@@ -999,93 +1010,161 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         </>
       )}
 
-      {/* -- Package Age Policy Section (#265) -- */}
+      {/* -- Package Age Policy Section (#265, proxy gate #853) -- */}
       <section aria-labelledby="settings-age-heading">
         <div className="mb-4">
           <h3 id="settings-age-heading" className="text-base font-semibold">
             Package Age Policy
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Hold freshly published packages in quarantine for a cooldown period
-            after their release. New releases pulled from upstream are not served
-            until the window passes, giving time to flag a compromised release
-            before it reaches clients.
-          </p>
-        </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="settings-age-enabled">Enable age policy</Label>
-              <p className="text-xs text-muted-foreground">
-                Quarantine packages released within the cooldown window.
-              </p>
-            </div>
-            <Switch
-              id="settings-age-enabled"
-              checked={ageEnabled}
-              onCheckedChange={setAgeEnabled}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="settings-age-duration">Cooldown period</Label>
-            <div className="flex gap-2">
-              <Input
-                id="settings-age-duration"
-                type="number"
-                min="1"
-                step="1"
-                value={ageValue}
-                onChange={(e) => setAgeValue(e.target.value)}
-                disabled={!ageEnabled}
-                className="flex-1"
-                aria-invalid={ageInvalid}
-                aria-describedby="settings-age-error"
-              />
-              <Select
-                value={ageUnit}
-                onValueChange={(v) => setAgeUnit(v as AgeUnit)}
-                disabled={!ageEnabled}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hours">Hours</SelectItem>
-                  <SelectItem value="days">Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Persistent live region so the validation error is announced and
-                stays associated with the input via aria-describedby. */}
-            <p id="settings-age-error" role="alert" className="text-sm text-destructive empty:hidden">
-              {ageInvalid
-                ? `Enter a cooldown period of at least one ${ageUnit === "days" ? "day" : "hour"}.`
-                : ""}
+          {ageConfigurable ? (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Hold freshly published packages in quarantine for a cooldown
+              period after their release. New releases pulled from upstream are
+              not served until the window passes, giving time to flag a
+              compromised release before it reaches clients.
             </p>
-            {!ageInvalid && (
-              <p id="settings-age-hint" className="text-xs text-muted-foreground">
-                Packages released less than this long ago are quarantined.
+          ) : (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Not available on repositories that serve proxied content.
+            </p>
+          )}
+        </div>
+        {!ageConfigurable ? (
+          <div className="space-y-4">
+            <div
+              className="flex items-start gap-2 rounded-md border p-3"
+              data-testid="age-policy-proxy-note"
+            >
+              <AlertTriangle className="size-4 shrink-0 text-yellow-500 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                Quarantine is not supported on remote (proxy) or virtual
+                repositories. What they serve is recorded in the proxy cache,
+                which carries no quarantine identity, so a hold has no release
+                path and becomes a total block on everything not already
+                cached. Enable the policy on the local or staging repository
+                the content lands in instead.
               </p>
+            </div>
+            {ageLegacyEnabled && (
+              <>
+                <dl className="grid grid-cols-2 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Current state</dt>
+                  <dd>Enabled</dd>
+                  <dt className="text-muted-foreground">Cooldown period</dt>
+                  <dd>
+                    {ageValue} {ageUnit}
+                  </dd>
+                </dl>
+                <p className="text-xs text-muted-foreground">
+                  This repository still carries a policy enabled before the
+                  restriction shipped. Turning it off is the only change the
+                  server accepts here, and it cannot be switched back on.
+                </p>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      ageMutation.mutate({
+                        enabled: false,
+                        duration_minutes: ageMinutes,
+                      })
+                    }
+                    disabled={ageMutation.isPending}
+                  >
+                    {ageMutation.isPending ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Disabling...
+                      </>
+                    ) : (
+                      "Disable Age Policy"
+                    )}
+                  </Button>
+                </div>
+              </>
             )}
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="settings-age-enabled">Enable age policy</Label>
+                <p className="text-xs text-muted-foreground">
+                  Quarantine packages released within the cooldown window.
+                </p>
+              </div>
+              <Switch
+                id="settings-age-enabled"
+                checked={ageEnabled}
+                onCheckedChange={setAgeEnabled}
+              />
+            </div>
 
-          <div className="flex justify-end">
-            <Button
-              onClick={() => ageMutation.mutate()}
-              disabled={ageMutation.isPending || ageInvalid || !ageDirty}
-            >
-              {ageMutation.isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Age Policy"
+            <div className="space-y-2">
+              <Label htmlFor="settings-age-duration">Cooldown period</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="settings-age-duration"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={ageValue}
+                  onChange={(e) => setAgeValue(e.target.value)}
+                  disabled={!ageEnabled}
+                  className="flex-1"
+                  aria-invalid={ageInvalid}
+                  aria-describedby="settings-age-error"
+                />
+                <Select
+                  value={ageUnit}
+                  onValueChange={(v) => setAgeUnit(v as AgeUnit)}
+                  disabled={!ageEnabled}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Persistent live region so the validation error is announced and
+                  stays associated with the input via aria-describedby. */}
+              <p id="settings-age-error" role="alert" className="text-sm text-destructive empty:hidden">
+                {ageInvalid
+                  ? `Enter a cooldown period of at least one ${ageUnit === "days" ? "day" : "hour"}.`
+                  : ""}
+              </p>
+              {!ageInvalid && (
+                <p id="settings-age-hint" className="text-xs text-muted-foreground">
+                  Packages released less than this long ago are quarantined.
+                </p>
               )}
-            </Button>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                onClick={() =>
+                  ageMutation.mutate({
+                    enabled: ageEnabled,
+                    duration_minutes: ageMinutes,
+                  })
+                }
+                disabled={ageMutation.isPending || ageInvalid || !ageDirty}
+              >
+                {ageMutation.isPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Age Policy"
+                )}
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <Separator />
