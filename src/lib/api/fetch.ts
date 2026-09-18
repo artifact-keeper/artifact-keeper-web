@@ -60,6 +60,29 @@ export class ApiError extends Error {
 }
 
 /**
+ * The backend's own message text out of an `ApiError` body, which is the
+ * `{ code, message }` JSON every `AppError` serializes to. Returns null for
+ * anything else (an HTML error page, an empty body, a non-`ApiError`).
+ *
+ * `ApiError.message` deliberately keeps its `API error <status>: <raw body>`
+ * envelope for the callers that match on it, so a surface that wants to show
+ * the server's refusal verbatim — an out-of-range token expiry, a policy the
+ * backend rejected as inconsistent — reads it through here instead.
+ */
+export function apiErrorMessage(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(error.body);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const message = (parsed as { message?: unknown }).message;
+  return typeof message === 'string' && message.length > 0 ? message : null;
+}
+
+/**
  * Shared fetch wrapper for API modules that don't use the generated SDK.
  * Adds base URL resolution, JSON headers, credentials, and error handling.
  */

@@ -197,8 +197,12 @@ vi.mock("@/components/common/empty-state", () => ({
 }));
 
 vi.mock("@/components/common/token-created-alert", () => ({
-  TokenCreatedAlert: ({ title, token, onDone }: any) => (
-    <div data-testid="token-created-alert">
+  TokenCreatedAlert: ({ title, token, expiresAt, policyApplied, onDone }: any) => (
+    <div
+      data-testid="token-created-alert"
+      data-expires-at={expiresAt ?? ""}
+      data-policy-applied={String(!!policyApplied)}
+    >
       <span>
         {title}: {token}
       </span>
@@ -389,6 +393,7 @@ function setupDefaultMocks(
 // ---------------------------------------------------------------------------
 
 import AccessTokensPage, { renderRepoAccess } from "../page";
+import { ApiError } from "@/lib/api/fetch";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -1722,5 +1727,89 @@ describe("renderRepoAccess", () => {
     // Should show selector, not repo count
     expect(container.textContent).toContain("1 format(s)");
     expect(container.textContent).not.toContain("repo(s)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Token expiry policy (#854, backend artifact-keeper#3460)
+// ---------------------------------------------------------------------------
+
+describe("AccessTokensPage — minted expiry", () => {
+  afterEach(() => cleanup());
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mutationConfigs = [];
+  });
+
+  it("hands the reveal the expiry the server stamped on an API key", () => {
+    setupDefaultMocks();
+    render(<AccessTokensPage />);
+
+    const apiKeysTab = screen.getByTestId("tab-content-api-keys");
+    fireEvent.click(apiKeysTab.querySelector("button")!);
+    act(() => {
+      mutationConfigs[0].onSuccess({
+        id: "k1",
+        name: "ci",
+        token: "ak_key",
+        expires_at: "2026-12-17T09:30:00Z",
+        policy_applied: true,
+      });
+    });
+
+    const alert = screen.getByTestId("token-created-alert");
+    expect(alert).toHaveAttribute("data-expires-at", "2026-12-17T09:30:00Z");
+    expect(alert).toHaveAttribute("data-policy-applied", "true");
+  });
+
+  it("hands the reveal the expiry the server stamped on an access token", () => {
+    setupDefaultMocks();
+    render(<AccessTokensPage />);
+
+    const tokenTab = screen.getByTestId("tab-content-access-tokens");
+    fireEvent.click(tokenTab.querySelector("button")!);
+    act(() => {
+      mutationConfigs[2].onSuccess({
+        id: "t1",
+        name: "laptop",
+        token: "ak_tok",
+        expires_at: null,
+        policy_applied: false,
+      });
+    });
+
+    const alert = screen.getByTestId("token-created-alert");
+    expect(alert).toHaveAttribute("data-expires-at", "");
+    expect(alert).toHaveAttribute("data-policy-applied", "false");
+  });
+
+  it("shows the backend's out-of-range refusal verbatim", async () => {
+    const { toast } = await import("sonner");
+    setupDefaultMocks();
+    render(<AccessTokensPage />);
+
+    const message =
+      "expires_in_days (5000) violates this instance's token expiration " +
+      "policy: it must be between 7 and 365 days";
+    act(() => {
+      mutationConfigs[2].onError(
+        new ApiError(400, JSON.stringify({ code: "VALIDATION_ERROR", message })),
+      );
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(message);
+  });
+
+  it("still falls back to the generic label for an opaque failure", async () => {
+    const { toast } = await import("sonner");
+    setupDefaultMocks();
+    render(<AccessTokensPage />);
+
+    act(() => {
+      mutationConfigs[0].onError(undefined);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith("Failed to create API key");
   });
 });

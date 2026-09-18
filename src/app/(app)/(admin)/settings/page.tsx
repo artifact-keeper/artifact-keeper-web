@@ -8,7 +8,7 @@ import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { Server, HardDrive, Lock, Info, Mail, Rss, Loader2 } from "lucide-react";
+import { Server, HardDrive, Lock, Info, Mail, Rss, Shield, Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ import {
 import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
+import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 
 // -- helpers --
@@ -397,6 +398,10 @@ export default function SettingsPage() {
             <Lock className="size-4 mr-1.5" />
             Authentication
           </TabsTrigger>
+          <TabsTrigger value="security">
+            <Shield className="size-4 mr-1.5" />
+            Security
+          </TabsTrigger>
           <TabsTrigger value="email">
             <Mail className="size-4 mr-1.5" />
             Email
@@ -533,6 +538,10 @@ export default function SettingsPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="mt-4">
+          <TokenExpiryPolicyCard />
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">

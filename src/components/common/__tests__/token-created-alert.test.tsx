@@ -5,6 +5,7 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 vi.mock("lucide-react", () => ({
   AlertTriangle: () => null,
+  CalendarClock: () => null,
 }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: any) => (
@@ -130,5 +131,60 @@ describe("TokenCreatedAlert", () => {
     );
     const desc = screen.getByText("Some description");
     expect(desc.tagName).toBe("P");
+  });
+
+  // -------------------------------------------------------------------------
+  // Token expiry policy (#854, backend artifact-keeper#3460)
+  // -------------------------------------------------------------------------
+
+  it("reports 'Never expires' when the mint carries no expiry", () => {
+    render(<TokenCreatedAlert {...defaultProps({ expiresAt: null })} />);
+    expect(screen.getByText("Never expires")).toBeInTheDocument();
+  });
+
+  it("reports 'Never expires' when the backend omits expires_at entirely", () => {
+    render(<TokenCreatedAlert {...defaultProps()} />);
+    expect(screen.getByText("Never expires")).toBeInTheDocument();
+  });
+
+  it("shows the expiry the server stamped, with the raw instant as a title", () => {
+    const expiresAt = "2026-12-17T09:30:00Z";
+    render(<TokenCreatedAlert {...defaultProps({ expiresAt })} />);
+
+    const expected = new Date(expiresAt).toLocaleDateString();
+    const dateEl = screen.getByTitle(expiresAt);
+    expect(dateEl).toHaveTextContent(expected);
+    expect(screen.getByText(/Expires/)).toBeInTheDocument();
+  });
+
+  it("notes the instance policy when it set or clamped the expiry", () => {
+    render(
+      <TokenCreatedAlert
+        {...defaultProps({
+          expiresAt: "2026-12-17T09:30:00Z",
+          policyApplied: true,
+        })}
+      />
+    );
+    expect(
+      screen.getByText(/set by instance policy/)
+    ).toBeInTheDocument();
+  });
+
+  it("omits the policy note when the mint used the requested expiry", () => {
+    render(
+      <TokenCreatedAlert
+        {...defaultProps({
+          expiresAt: "2026-12-17T09:30:00Z",
+          policyApplied: false,
+        })}
+      />
+    );
+    expect(screen.queryByText(/set by instance policy/)).toBeNull();
+  });
+
+  it("falls back to 'Never expires' for an unparseable expires_at", () => {
+    render(<TokenCreatedAlert {...defaultProps({ expiresAt: "not-a-date" })} />);
+    expect(screen.getByText("Never expires")).toBeInTheDocument();
   });
 });

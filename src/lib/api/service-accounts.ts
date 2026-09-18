@@ -1,4 +1,5 @@
 import { apiFetch } from './fetch';
+import { readTokenExpiryInfo, type TokenExpiryInfo } from './token-policy';
 
 export interface ServiceAccount {
   id: string;
@@ -69,7 +70,13 @@ export interface CreateTokenRequest {
   repo_selector?: RepoSelector;
 }
 
-export interface CreateTokenResponse {
+/**
+ * A freshly minted service-account token. `expires_at` / `policy_applied` come
+ * from the instance token expiration policy (backend artifact-keeper#3460) —
+ * service accounts are exempt from it unless `apply_to_service_accounts` is
+ * set — and are what the one-time reveal reports (web #854).
+ */
+export interface CreateTokenResponse extends TokenExpiryInfo {
   id: string;
   token: string;
   name: string;
@@ -123,13 +130,14 @@ export const serviceAccountsApi = {
     id: string,
     req: CreateTokenRequest
   ): Promise<CreateTokenResponse> => {
-    return apiFetch<CreateTokenResponse>(
+    const raw = await apiFetch<CreateTokenResponse>(
       `/api/v1/service-accounts/${id}/tokens`,
       {
         method: 'POST',
         body: JSON.stringify(req),
       }
     );
+    return { ...raw, ...readTokenExpiryInfo(raw) };
   },
 
   revokeToken: async (id: string, tokenId: string): Promise<void> => {
