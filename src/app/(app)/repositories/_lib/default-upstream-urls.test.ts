@@ -23,6 +23,16 @@ describe("DEFAULT_UPSTREAM_URLS", () => {
     expect(DEFAULT_UPSTREAM_URLS.docker).toBeDefined();
   });
 
+  it("vscode upstream is the Open VSX gallery adapter root, not the site root or API path", () => {
+    // The backend's vscode gateway rejects any Remote upstream_url that
+    // doesn't end in /vscode/gallery (backend/src/api/handlers/vscode.rs —
+    // the gallery gate's upstream_url check and openvsx_asset_url both
+    // require this suffix). The Open VSX site root and its native /api path
+    // are both wrong values here.
+    expect(DEFAULT_UPSTREAM_URLS.vscode).toBe("https://open-vsx.org/vscode/gallery");
+    expect(DEFAULT_UPSTREAM_URLS.vscode).toMatch(/\/vscode\/gallery$/);
+  });
+
   it("each URL is a non-empty string", () => {
     for (const [key, url] of Object.entries(DEFAULT_UPSTREAM_URLS)) {
       expect(typeof url, `value for "${key}" should be a string`).toBe(
