@@ -28,6 +28,8 @@ import {
   Upload,
   Tag,
   Rocket,
+  Hammer,
+  FileCode2,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -83,6 +85,12 @@ import {
 } from "./artifact-browser-toggle";
 import { MavenComponentList } from "./maven-component-list";
 import { DockerTagList } from "./docker-tag-list";
+import { ImageBuildTab } from "./image-build-tab";
+import {
+  ImageInspectPanel,
+  isContainerImageFormat,
+  manifestPathParts,
+} from "./image-inspect-panel";
 import { ArtifactFolderTree } from "./artifact-folder-tree";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
@@ -240,6 +248,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     viewMode === "grouped" &&
     !!repoFormat &&
     DOCKER_FAMILY_FORMATS.has(repoFormat);
+  // Container-image repositories get the image builder/inspector (Build tab
+  // and the Image tab of a manifest's detail dialog) whatever the view mode.
+  const isContainerRepo = isContainerImageFormat(repoFormat);
+  // Builds push into local repositories only, so remote and virtual
+  // container repositories do not get the tab (it would only say so, and
+  // the tab strip is full enough already).
+  const showBuildTab = isContainerRepo && repository?.repo_type === "local";
   // Folder-tree view for RAW/Generic repos (#2791): the tree is grouped
   // client-side from the flat artifact list, so it needs the whole listing
   // on one page (bounded) rather than a paginated slice.
@@ -997,6 +1012,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Upload
             </TabsTrigger>
           )}
+          {showBuildTab && (
+            <TabsTrigger value="build">
+              <Hammer className="size-3.5 mr-1" />
+              Build
+            </TabsTrigger>
+          )}
           {repository.repo_type === "virtual" && (
             <TabsTrigger value="members">
               <Layers className="size-3.5 mr-1" />
@@ -1179,6 +1200,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         </TabsContent>
 
         {/* --- Setup Tab (#560): same format-aware guide as the central Setup page. --- */}
+        {showBuildTab && (
+          <TabsContent value="build" className="mt-4">
+            <ImageBuildTab repoKey={repoKey} canBuild={isAuthenticated} />
+          </TabsContent>
+        )}
+
         <TabsContent value="setup" className="mt-4">
           <div className="max-w-3xl space-y-4">
             <p className="text-sm text-muted-foreground">
@@ -1388,7 +1415,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <HeartPulse className="size-3.5 mr-1" />
                   Health
                 </TabsTrigger>
+                {isContainerRepo && manifestPathParts(selectedArtifact.path) && (
+                  <TabsTrigger value="image">
+                    <FileCode2 className="size-3.5 mr-1" />
+                    Image
+                  </TabsTrigger>
+                )}
               </TabsList>
+
+              {isContainerRepo && manifestPathParts(selectedArtifact.path) && (
+                <TabsContent value="image" className="flex-1 overflow-y-auto mt-4">
+                  <ImageInspectPanel
+                    repoKey={repoKey}
+                    image={manifestPathParts(selectedArtifact.path)!.image}
+                    reference={manifestPathParts(selectedArtifact.path)!.reference}
+                  />
+                </TabsContent>
+              )}
 
               <TabsContent value="details" className="flex-1 overflow-y-auto mt-4">
                 <div className="space-y-3 text-sm">
