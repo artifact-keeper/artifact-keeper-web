@@ -329,3 +329,91 @@ describe("packageAnalysisApi", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Contract regression: the fixtures above carry a `path` on every vendored
+// component, so they passed while the real endpoint was being rejected.
+//
+// The backend's `VendoredComponentResponse` has no `path` field at all --
+// a recipe-derived component describes an upstream source, not a file -- and
+// the schema required it, so zod failed the WHOLE response and the Analysis
+// tab rendered "Package-analysis response did not match the expected shape"
+// for every conda package.
+//
+// This payload is copied verbatim from a running deployment
+// (GET /api/v1/artifacts/{id}/package-analysis for conda-forge
+// libwebp-1.6.0-hb3daedd_2.conda). Do not add fields to it to make a test
+// pass: if it diverges from what the server sends, the test is worthless.
+// ---------------------------------------------------------------------------
+const REAL_CONDA_RESPONSE_FROM_A_DEPLOYMENT = {
+  format: "conda",
+  analyzed_at: "2026-09-20T20:48:54.800558+00:00",
+  completeness: {
+    status: "complete",
+    reason: null,
+    files_total: null,
+    files_read: null,
+  },
+  vendored_components: [
+    {
+      name: "libwebp",
+      version: "1.6.0",
+      purl: "pkg:generic/libwebp@1.6.0",
+      source_url:
+        "http://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+      git_url: null,
+      git_rev: null,
+      sha256:
+        "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+      confidence: "declared",
+      detection_method: "recipe:meta.yaml",
+      applied_patches: [],
+      soname: null,
+      abi_version: null,
+      advisories: null,
+    },
+  ],
+  install_scripts: [],
+  advisory_scan: {
+    status: "not_run",
+    reason:
+      "No dependency scan has completed for this artifact yet, so its bundled libraries have not been checked against an advisory feed.",
+  },
+};
+
+describe("package-analysis contract against a real deployment", () => {
+  beforeEach(() => {
+    mockApiFetch.mockReset();
+  });
+
+  it("parses a vendored component that has no path", async () => {
+    const { packageAnalysisApi } = await import("@/lib/api/package-analysis");
+    mockApiFetch.mockResolvedValueOnce(REAL_CONDA_RESPONSE_FROM_A_DEPLOYMENT);
+
+    const result = await packageAnalysisApi.get("some-artifact-id");
+
+    // `get` returns null only on 404; a schema mismatch THROWS. So reaching a
+    // non-null result is itself the assertion that the payload validated.
+    expect(result).not.toBeNull();
+    const analysis = result!;
+
+    expect(analysis.vendored_components).toHaveLength(1);
+    expect(analysis.vendored_components[0].name).toBe("libwebp");
+    expect(analysis.vendored_components[0].path ?? null).toBeNull();
+  });
+
+  it("keeps advisories null rather than flattening it to an empty list", async () => {
+    const { packageAnalysisApi } = await import("@/lib/api/package-analysis");
+    mockApiFetch.mockResolvedValueOnce(REAL_CONDA_RESPONSE_FROM_A_DEPLOYMENT);
+
+    const result = await packageAnalysisApi.get("some-artifact-id");
+    expect(result).not.toBeNull();
+    const analysis = result!;
+
+    // `null` means "no advisory answer for this component"; `[]` would mean
+    // "the feeds were queried and matched nothing". Collapsing the former
+    // into the latter reports an unchecked component as clean.
+    expect(analysis.vendored_components[0].advisories).toBeNull();
+    expect(analysis.advisory_scan?.status).toBe("not_run");
+  });
+});

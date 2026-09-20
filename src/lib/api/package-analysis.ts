@@ -75,7 +75,7 @@ const VendoredComponentSchema = z
     source_url: z.string().nullish(),
     confidence: z.string(),
     detection_method: z.string().nullish(),
-    path: z.string(),
+    path: z.string().nullish(),
     purl: z.string().nullish(),
     applied_patches: z.array(AppliedPatchSchema).nullish(),
     abi_version: z.string().nullish(),

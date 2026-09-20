@@ -105,8 +105,18 @@ export interface VendoredComponent {
   source_url: string | null;
   confidence: VendoredConfidence | string;
   detection_method: string | null;
-  /** Path inside the package; unique per component and used as the row key. */
-  path: string;
+  /**
+   * Path inside the package, when the component was located by reading a file
+   * (a vendored `.so` found in a wheel). A component derived from a recipe
+   * has NO path -- the recipe declares an upstream source, not a file -- so
+   * the backend omits the field entirely for those.
+   *
+   * Never synthesise one to fill this in. A fabricated path is a lie rendered
+   * in a column a reviewer reads as fact, the same reason npm install hooks
+   * are reported as `package.json#scripts.postinstall` rather than an
+   * invented filename. Use `vendoredComponentKey()` for row identity.
+   */
+  path?: string | null;
   purl: string | null;
   applied_patches: AppliedPatch[];
   /**

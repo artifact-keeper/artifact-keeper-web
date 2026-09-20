@@ -188,3 +188,24 @@ export function summarizeVendoredAdvisories(
 export const ABI_VERSION_EXPLANATION =
   "The number in a library's file name or soname is an ELF/libtool ABI version, not an upstream release (libwebp.so.7 ships in libwebp 1.2.4). It is not promoted to a version because a wrong version matches the wrong advisories.";
 
+
+/**
+ * Stable per-row identity for a vendored component.
+ *
+ * `path` used to serve this purpose, but the backend only sends it for
+ * components located by reading a file; a recipe-derived component has no
+ * path, and inventing one to act as a key would put a fabricated value in a
+ * column reviewers read as fact.
+ *
+ * `path` stays first so components that HAVE one keep the identity they
+ * already had -- only the previously-broken path-less case changes. `purl` is
+ * the next-best real identifier, and the `name@version#index` fallback is
+ * stable across re-renders while the index disambiguates the genuinely
+ * ambiguous case of one package vendoring the same library twice.
+ */
+export function vendoredComponentKey(
+  c: { purl?: string | null; path?: string | null; name: string; version?: string | null },
+  index: number
+): string {
+  return c.path ?? c.purl ?? `${c.name}@${c.version ?? "unknown"}#${index}`;
+}

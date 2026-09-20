@@ -25,6 +25,7 @@ import {
   advisoryGapFor,
   sortAdvisoriesBySeverity,
   summarizeVendoredAdvisories,
+  vendoredComponentKey,
 } from "@/lib/vendored-advisories";
 
 import { Badge } from "@/components/ui/badge";
@@ -104,6 +105,16 @@ export function VendoredComponentsPanel({
     completeness.status === "complete" || completeness.status === "partial";
   const summary = summarizeVendoredAdvisories(components, advisoryScan);
 
+  // Row identity. `c.path` used to serve this role, but the backend omits it
+  // for recipe-derived components (a recipe declares an upstream source, not
+  // a file), so every such row collapsed to the key `undefined` -- one shared
+  // expansion state for all of them. Keyed by object reference so the `cell`
+  // callbacks, which receive no index, can still resolve it.
+  const keyOf = new Map(
+    components.map((c, i) => [c, vendoredComponentKey(c, i)] as const)
+  );
+  const idOf = (c: VendoredComponent) => keyOf.get(c) ?? c.name;
+
   const toggleIn =
     (set: Dispatch<SetStateAction<Set<string>>>) =>
     (path: string) => {
@@ -129,9 +140,14 @@ export function VendoredComponentsPanel({
           <Package className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="min-w-0">
             <div className="text-sm font-medium">{c.name}</div>
-            <div className="truncate font-mono text-xs text-muted-foreground" title={c.path}>
-              {c.path}
-            </div>
+            {c.path && (
+              <div
+                className="truncate font-mono text-xs text-muted-foreground"
+                title={c.path}
+              >
+                {c.path}
+              </div>
+            )}
           </div>
         </div>
       ),
@@ -215,13 +231,13 @@ export function VendoredComponentsPanel({
         }
         const count = c.advisories.length;
         const worst = maxSeverity(c.advisories.map((a) => a.severity));
-        const isOpen = expandedAdvisories.has(c.path);
+        const isOpen = expandedAdvisories.has(idOf(c));
         return (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              toggleAdvisories(c.path);
+              toggleAdvisories(idOf(c));
             }}
             aria-expanded={isOpen}
             aria-label={`${isOpen ? "Hide" : "Show"} ${count} advisor${count === 1 ? "y" : "ies"} for ${c.name}`}
@@ -265,13 +281,13 @@ export function VendoredComponentsPanel({
       cell: (c) => {
         const count = c.applied_patches.length;
         if (count === 0) return <span className="text-muted-foreground">0</span>;
-        const isOpen = expanded.has(c.path);
+        const isOpen = expanded.has(idOf(c));
         return (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              toggle(c.path);
+              toggle(idOf(c));
             }}
             aria-expanded={isOpen}
             aria-label={`${isOpen ? "Hide" : "Show"} ${count} patch${count === 1 ? "" : "es"} for ${c.name}`}
@@ -290,10 +306,10 @@ export function VendoredComponentsPanel({
   ];
 
   const expandedComponents = components.filter(
-    (c) => expanded.has(c.path) && c.applied_patches.length > 0
+    (c) => expanded.has(idOf(c)) && c.applied_patches.length > 0
   );
   const advisoryComponents = components.filter(
-    (c) => expandedAdvisories.has(c.path) && (c.advisories?.length ?? 0) > 0
+    (c) => expandedAdvisories.has(idOf(c)) && (c.advisories?.length ?? 0) > 0
   );
 
   return (
@@ -393,7 +409,7 @@ export function VendoredComponentsPanel({
               total={components.length}
               onPageChange={() => {}}
               emptyMessage="No vendored components"
-              rowKey={(c) => c.path}
+              rowKey={(c) => idOf(c)}
             />
           )}
 
@@ -460,9 +476,9 @@ export function VendoredComponentsPanel({
 
           {advisoryComponents.map((c) => (
             <div
-              key={`advisories-${c.path}`}
+              key={`advisories-${idOf(c)}`}
               className="rounded-lg border bg-card p-3"
-              data-testid={`advisories-${c.path}`}
+              data-testid={`advisories-${idOf(c)}`}
             >
               <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{c.name}</span>
@@ -494,9 +510,9 @@ export function VendoredComponentsPanel({
 
           {expandedComponents.map((c) => (
             <div
-              key={c.path}
+              key={idOf(c)}
               className="rounded-lg border bg-card p-3"
-              data-testid={`patches-${c.path}`}
+              data-testid={`patches-${idOf(c)}`}
             >
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{c.name}</span>
