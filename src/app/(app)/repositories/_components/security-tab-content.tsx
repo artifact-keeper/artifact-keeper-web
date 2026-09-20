@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { VulnIdLink } from "@/components/common/vuln-id-link";
+import { VendoredAdvisoriesSummary } from "./vendored-advisories-summary";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -49,6 +50,14 @@ import { VulnIdLink } from "@/components/common/vuln-id-link";
 
 interface SecurityTabContentProps {
   artifact: Artifact;
+  /**
+   * Whether the repository's format participates in package analysis
+   * (`supportsPackageAnalysis`). Gates the vendored-advisories roll-up — the
+   * artifact payload carries no format, so the caller has to say.
+   */
+  packageAnalysisSupported?: boolean;
+  /** Switch the artifact dialog to its Analysis tab. */
+  onOpenAnalysis?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +128,11 @@ function resolveDtProjectUuid(
 // Component
 // ---------------------------------------------------------------------------
 
-export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
+export function SecurityTabContent({
+  artifact,
+  packageAnalysisSupported = false,
+  onOpenAnalysis,
+}: SecurityTabContentProps) {
   const queryClient = useQueryClient();
   // Proxy-cached remote artifacts can't be scanned (artifact-keeper#2292);
   // used below to give honest guidance instead of "run a scan".
@@ -486,6 +499,11 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
+        <VendoredAdvisoriesSummary
+          artifact={artifact}
+          enabled={packageAnalysisSupported}
+          onOpenAnalysis={onOpenAnalysis}
+        />
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-32 w-full" />
@@ -499,6 +517,19 @@ export function SecurityTabContent({ artifact }: SecurityTabContentProps) {
 
   return (
     <div className="space-y-6">
+      {/* -----------------------------------------------------------------
+          Vendored native libraries. Above everything else on purpose: the
+          CVE history and Dependency-Track findings below are both driven by
+          the package's DECLARED components, so a CVE inside a statically
+          linked libwebp shows up in neither — including in the "No
+          vulnerabilities detected" empty state.
+          ----------------------------------------------------------------- */}
+      <VendoredAdvisoriesSummary
+        artifact={artifact}
+        enabled={packageAnalysisSupported}
+        onOpenAnalysis={onOpenAnalysis}
+      />
+
       {/* ----------------------------------------------------------------- */}
       {/* Dependency-Track Integration Status */}
       {/* ----------------------------------------------------------------- */}

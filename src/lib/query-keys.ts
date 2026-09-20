@@ -34,6 +34,16 @@ export const QUERY_KEYS = {
   PLUGINS: ["plugins"],
 } as const;
 
+/**
+ * Per-artifact package-analysis query (vendored components + install
+ * scripts). Lives under the ["security", ...] prefix on purpose: the analysis
+ * is refreshed by a scan, so the existing `scan.completed` SSE invalidation
+ * of QUERY_KEYS.SECURITY reaches it without a new event mapping.
+ */
+export function packageAnalysisKey(artifactId: string) {
+  return ["security", "package-analysis", artifactId] as const;
+}
+
 // ---------------------------------------------------------------------------
 // Invalidation groups - which keys to invalidate per domain
 // ---------------------------------------------------------------------------

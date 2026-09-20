@@ -45,6 +45,7 @@ export { qualityChecksApi } from './quality-checks';
 export type { QualityCheck, QualityIssue } from './quality-checks';
 export { repoLabelsApi } from './repo-labels';
 export type { RepoLabel } from './repo-labels';
+export { packageAnalysisApi } from './package-analysis';
 
 export type { ListRepositoriesParams } from './repositories';
 export type { ListArtifactsParams } from './artifacts';

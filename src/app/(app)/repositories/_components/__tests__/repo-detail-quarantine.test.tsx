@@ -162,6 +162,7 @@ vi.mock("@/lib/api/security", () => ({
 vi.mock("../artifact-versions-section", () => ({ ArtifactVersionsSection: () => <div /> }));
 vi.mock("../sbom-tab-content", () => ({ SbomTabContent: () => <div /> }));
 vi.mock("../security-tab-content", () => ({ SecurityTabContent: () => <div /> }));
+vi.mock("../package-analysis-tab-content", () => ({ PackageAnalysisTabContent: () => <div /> }));
 vi.mock("../health-tab-content", () => ({ HealthTabContent: () => <div /> }));
 vi.mock("../notifications-tab-content", () => ({ NotificationsTabContent: () => <div /> }));
 vi.mock("../virtual-members-panel", () => ({ VirtualMembersPanel: () => <div /> }));

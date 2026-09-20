@@ -177,6 +177,7 @@ vi.mock("@/lib/api/security", () => ({
 vi.mock("./artifact-versions-section", () => ({ ArtifactVersionsSection: () => <div data-stub="versions-section" /> }));
 vi.mock("./sbom-tab-content", () => ({ SbomTabContent: () => <div data-stub="sbom" /> }));
 vi.mock("./security-tab-content", () => ({ SecurityTabContent: () => <div data-stub="security" /> }));
+vi.mock("./package-analysis-tab-content", () => ({ PackageAnalysisTabContent: () => <div data-stub="analysis" /> }));
 vi.mock("./health-tab-content", () => ({ HealthTabContent: () => <div data-stub="health" /> }));
 vi.mock("./notifications-tab-content", () => ({ NotificationsTabContent: () => <div data-stub="notifications" /> }));
 vi.mock("./virtual-members-panel", () => ({ VirtualMembersPanel: () => <div data-stub="members" /> }));
@@ -451,6 +452,44 @@ describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () 
     await openDetailDialog();
     expect(screen.queryByRole("tab", { name: /versions/i })).toBeNull();
   });
+});
+
+describe("RepoDetailContent artifact detail dialog — Analysis tab (#4033)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
+    row.click();
+    return await screen.findByText("Artifact Details", {}, { timeout: 2000 }).catch(() => null);
+  }
+
+  it.each(["conda", "conda_native", "npm", "pypi", "rpm", "debian"] as const)(
+    "offers an Analysis tab in a %s repository",
+    async (format) => {
+      repository.format = format;
+      await openDetailDialog();
+      expect(screen.getByRole("tab", { name: /analysis/i })).toBeTruthy();
+    },
+  );
+
+  it.each(["maven", "generic", "docker"] as const)(
+    "hides the Analysis tab in a %s repository — the existing dialog is unchanged",
+    async (format) => {
+      repository.format = format;
+      await openDetailDialog();
+      expect(screen.queryByRole("tab", { name: /analysis/i })).toBeNull();
+      expect(screen.getAllByRole("tab", { name: /details/i }).length).toBeGreaterThan(0);
+    },
+  );
 });
 
 describe("RepoDetailContent flat view classifier column (#474)", () => {

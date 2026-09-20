@@ -21,6 +21,7 @@ import {
   History,
   Layers,
   Package as PackageIcon,
+  PackageSearch,
   Settings,
   RotateCcw,
   Link2,
@@ -62,9 +63,11 @@ import { formatRelativeTimestamp, formatCacheExpiry } from "@/lib/cache-time";
 import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { supportsVersioning } from "@/lib/api/versions";
+import { supportsPackageAnalysis } from "@/lib/package-analysis-formats";
 import { ArtifactVersionsSection } from "./artifact-versions-section";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
+import { PackageAnalysisTabContent } from "./package-analysis-tab-content";
 import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
@@ -182,6 +185,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // artifact detail dialog
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+  // Controlled so the Security tab's vendored-advisories roll-up can hand the
+  // reader straight to the Analysis tab. Reset to "details" on every open,
+  // which is what the previously uncontrolled Tabs did by unmounting.
+  const [artifactTab, setArtifactTab] = useState("details");
 
   // Which quarantine decision the admin is confirming, and the optional reason
   // recorded with a rejection (#650).
@@ -246,6 +253,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     !!repository?.versioning_enabled &&
     !!repoFormat &&
     supportsVersioning(repoFormat);
+  // Package analysis (vendored components + install scripts) is only
+  // produced for the formats the backend unpacks (`PACKAGE_ANALYSIS_FORMATS`:
+  // conda, npm, pypi, rpm, debian), so the Analysis tab is format-gated the
+  // same way the Versions tab is.
+  const packageAnalysisActive =
+    !!repoFormat && supportsPackageAnalysis(repoFormat);
   // The tree view still aggregates client-side, so it needs all artifacts on
   // one page.  Bound by a high cap to avoid runaway responses on huge
   // repositories.  (Docker grouping used to need this too; it is server-side
@@ -520,6 +533,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   const showDetail = useCallback((artifact: Artifact) => {
     setSelectedArtifact(artifact);
+    setArtifactTab("details");
     setDetailOpen(true);
   }, []);
 
@@ -531,6 +545,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       try {
         const artifact = await artifactsApi.get(repoKey, filePath);
         setSelectedArtifact(artifact);
+        setArtifactTab("details");
         setDetailOpen(true);
       } catch {
         toast.error(`Could not load details for ${filename}`);
@@ -1339,7 +1354,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             />
           )}
           {selectedArtifact && (
-            <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
+            <Tabs
+              value={artifactTab}
+              onValueChange={setArtifactTab}
+              className="flex-1 overflow-hidden flex flex-col"
+            >
               <TabsList variant="line" className="shrink-0">
                 <TabsTrigger value="details">
                   <Info className="size-3.5 mr-1" />
@@ -1359,6 +1378,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Shield className="size-3.5 mr-1" />
                   Security
                 </TabsTrigger>
+                {packageAnalysisActive && (
+                  <TabsTrigger value="analysis">
+                    <PackageSearch className="size-3.5 mr-1" />
+                    Analysis
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="health">
                   <HeartPulse className="size-3.5 mr-1" />
                   Health
@@ -1503,8 +1528,22 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </TabsContent>
 
               <TabsContent value="security" className="flex-1 overflow-y-auto mt-4">
-                <SecurityTabContent artifact={selectedArtifact} />
+                <SecurityTabContent
+                  artifact={selectedArtifact}
+                  packageAnalysisSupported={packageAnalysisActive}
+                  onOpenAnalysis={
+                    packageAnalysisActive
+                      ? () => setArtifactTab("analysis")
+                      : undefined
+                  }
+                />
               </TabsContent>
+
+              {packageAnalysisActive && (
+                <TabsContent value="analysis" className="flex-1 overflow-y-auto mt-4">
+                  <PackageAnalysisTabContent artifact={selectedArtifact} />
+                </TabsContent>
+              )}
 
               <TabsContent value="health" className="flex-1 overflow-y-auto mt-4">
                 <HealthTabContent artifact={selectedArtifact} />
