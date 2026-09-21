@@ -66,6 +66,7 @@ import type { Artifact } from "@/types";
 import type { UpsertScanConfigRequest } from "@/types/security";
 import { supportsVersioning } from "@/lib/api/versions";
 import { supportsPackageAnalysis } from "@/lib/package-analysis-formats";
+import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
 import { ArtifactVersionsSection } from "./artifact-versions-section";
 import { SbomTabContent } from "./sbom-tab-content";
 import { SecurityTabContent } from "./security-tab-content";
@@ -76,6 +77,7 @@ import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
+import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
@@ -385,6 +387,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const showProxyScanSummary =
     isAuthenticated && hasProxyScanSummary(repository);
   const showSecurityTab = !!user?.is_admin || showProxyScanSummary;
+
+  // `scan_on_proxy` is accepted for every format but only *enforced* by four
+  // backend handlers (npm, PyPI, OCI/Docker, VS Code — artifact-keeper#1274).
+  // On a proxying repository of any other format the backend stores the flag,
+  // logs "unsupported for this format" and serves the upstream bytes unscanned,
+  // so the toggle must not read as an enableable promise of scanning. Hosted
+  // (local/staging) repositories proxy nothing and keep the control unchanged.
+  const proxiesUpstream =
+    repository?.repo_type === "remote" || repository?.repo_type === "virtual";
+  const scanOnProxyEnforced =
+    proxiesUpstream && !!repoFormat && supportsScanOnProxy(repoFormat);
+  const scanOnProxyUnenforced = proxiesUpstream && !scanOnProxyEnforced;
 
   // --- mutations ---
   const deleteMutation = useMutation({
@@ -1315,15 +1329,37 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     }
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="sec-proxy">Scan on Proxy</Label>
-                  <Switch
-                    id="sec-proxy"
-                    checked={currentSecForm.scan_on_proxy}
-                    onCheckedChange={(v) =>
-                      setSecForm({ ...currentSecForm, scan_on_proxy: v })
-                    }
-                  />
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="sec-proxy">Scan on Proxy</Label>
+                    <Switch
+                      id="sec-proxy"
+                      checked={currentSecForm.scan_on_proxy}
+                      // Ungated formats keep the *disable* path: a stored
+                      // `true` (set before this fix, or by the API) must stay
+                      // switchable so an operator can turn the illusion off.
+                      disabled={
+                        scanOnProxyUnenforced && !currentSecForm.scan_on_proxy
+                      }
+                      // Only a proxying repository renders a note to point at.
+                      aria-describedby={
+                        proxiesUpstream ? "sec-proxy-note" : undefined
+                      }
+                      onCheckedChange={(v) =>
+                        setSecForm({ ...currentSecForm, scan_on_proxy: v })
+                      }
+                    />
+                  </div>
+                  {proxiesUpstream && (
+                    <ScanOnProxyNote
+                      id="sec-proxy-note"
+                      enforced={scanOnProxyEnforced}
+                      formatLabel={repoFormatLabel(
+                        repository,
+                        formatHandlers,
+                      ).toUpperCase()}
+                    />
+                  )}
                 </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="sec-block">Block on Violation</Label>

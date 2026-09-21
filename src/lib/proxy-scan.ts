@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/fetch";
+import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
 import type {
   ProxyScanEnforcement,
   ProxyScanEntry,
@@ -328,34 +329,21 @@ export function showsInheritedVerdict(
 }
 
 /**
- * Formats whose proxy download path has scan-gate wiring.
- *
- * There is no authoritative source for this in the backend — the gate is
- * inline call sites with no registry or capability function — so this is a
- * hardcoded list mirroring the handlers that actually honour `scan_on_proxy`
- * at 1.10.0: `npm.rs`, `pypi.rs`, `oci_v2.rs` (the whole OCI family, whose
- * blob and manifest gates are scoped by the flag) and `vscode.rs`. Extend it
- * in step with the gate rather than guessing wider: showing an always-empty
- * proxy-cache panel on a format that has no gate is noise, and a format that
- * gains a gate without gaining a row here silently loses its summary — which
- * is how Docker/OCI was missed here while the user-facing copy already named
- * it.
- */
-const PROXY_SCANNED_FORMATS: ReadonlySet<string> = new Set([
-  "npm",
-  "pypi",
-  "docker",
-  "podman",
-  "buildx",
-  "oras",
-  "helm_oci",
-  "wasm_oci",
-  "vscode",
-]);
-
-/**
  * Whether the repository Security tab should render the proxy-cache summary.
- * Only Remote repositories have a proxy cache at all.
+ *
+ * Two independent conditions, both required:
+ *  * the repository actually has a proxy cache — Remote only; and
+ *  * the backend enforces `scan_on_proxy` for its format, so there can be a
+ *    verdict to show. That set is `supportsScanOnProxy`
+ *    (`@/lib/scan-on-proxy-formats`), the same one the repository settings
+ *    forms gate their "Scan on proxy" toggle on, so the panel and the toggle
+ *    can never disagree about which formats are covered. Showing an
+ *    always-empty summary for an ungated format is noise; claiming coverage
+ *    it does not have is worse.
+ *
+ * Delegating also picked up the alias formats the local list had missed
+ * (`yarn` / `pnpm` / `bower` are served by `npm.rs`, `poetry` / `jupyter` by
+ * `pypi.rs`) — the same way Docker/OCI had been missed here before.
  */
 export function hasProxyScanSummary(
   repository:
@@ -364,7 +352,7 @@ export function hasProxyScanSummary(
     | undefined,
 ): boolean {
   if (repository?.repo_type !== "remote") return false;
-  return PROXY_SCANNED_FORMATS.has(repository.format ?? "");
+  return supportsScanOnProxy(repository.format);
 }
 
 /**

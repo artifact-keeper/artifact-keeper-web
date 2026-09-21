@@ -39,6 +39,8 @@ import {
   hasDebianConfig,
   hasNpmScopePolicy,
 } from "../_lib/constants";
+import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
+import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ReleaseTargetSettings } from "./release-target-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
 import {
@@ -327,6 +329,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // First-class versioning is only offered where the backend applies it:
   // Generic/Mlmodel repositories (backend `versioning_applies`, #571).
   const versioningSupported = supportsVersioning(repository.format);
+
+  // `scan_on_proxy` is accepted for every format but only *enforced* by four
+  // backend handlers (npm, PyPI, OCI/Docker, VS Code — artifact-keeper#1274).
+  // Mirrors the Security tab's gate in `repo-detail-content.tsx`: on a
+  // proxying repository of any other format the flag is stored and the
+  // upstream bytes are served unscanned, so the toggle must not read as an
+  // enableable promise of scanning. Hosted repositories proxy nothing and keep
+  // the control unchanged.
+  const proxiesUpstream = isRemote || repository.repo_type === "virtual";
+  const scanOnProxyEnforced =
+    proxiesUpstream && supportsScanOnProxy(repository.format);
+  const scanOnProxyUnenforced = proxiesUpstream && !scanOnProxyEnforced;
 
   // Detect whether the form has unsaved changes
   const hasChanges = useMemo(() => {
@@ -1433,11 +1447,30 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                       Scan upstream artifacts inline as they are proxied
                       through this repository.
                     </p>
+                    {proxiesUpstream && (
+                      <ScanOnProxyNote
+                        id="settings-scan-on-proxy-note"
+                        enforced={scanOnProxyEnforced}
+                        formatLabel={repoFormatLabel(
+                          repository,
+                          formatHandlers,
+                        ).toUpperCase()}
+                      />
+                    )}
                   </div>
                   <Switch
                     id="settings-scan-on-proxy"
                     checked={scanForm.scan_on_proxy}
-                    disabled={!scanForm.scan_enabled}
+                    // An ungated format keeps the *disable* path: a stored
+                    // `true` must stay switchable so an operator can turn the
+                    // illusion off.
+                    disabled={
+                      !scanForm.scan_enabled ||
+                      (scanOnProxyUnenforced && !scanForm.scan_on_proxy)
+                    }
+                    aria-describedby={
+                      proxiesUpstream ? "settings-scan-on-proxy-note" : undefined
+                    }
                     onCheckedChange={(v) => setScanField("scan_on_proxy", v)}
                   />
                 </div>

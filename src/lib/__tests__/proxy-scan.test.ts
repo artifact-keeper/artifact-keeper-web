@@ -13,6 +13,10 @@ import {
   severityBuckets,
   showsInheritedVerdict,
 } from "@/lib/proxy-scan";
+import {
+  SCAN_ON_PROXY_GATED_FORMATS,
+  supportsScanOnProxy,
+} from "@/lib/scan-on-proxy-formats";
 import type {
   ProxyScanEnforcement,
   ProxyScanEntry,
@@ -311,8 +315,9 @@ describe("resolveProxyScanListView", () => {
 
 describe("hasProxyScanSummary", () => {
   it("is true for Remote repositories in formats with proxy gate wiring", () => {
-    // Mirrors the handlers that honour `scan_on_proxy` at backend 1.10.0:
-    // npm.rs, pypi.rs, oci_v2.rs (the whole OCI family) and vscode.rs.
+    // Delegates to `supportsScanOnProxy`, the shared list of handlers that
+    // honour `scan_on_proxy` at backend 1.10.0: npm.rs, pypi.rs, oci_v2.rs
+    // (the whole OCI family) and vscode.rs.
     expect(hasProxyScanSummary({ repo_type: "remote", format: "npm" })).toBe(true);
     expect(hasProxyScanSummary({ repo_type: "remote", format: "pypi" })).toBe(true);
     expect(hasProxyScanSummary({ repo_type: "remote", format: "docker" })).toBe(
@@ -324,6 +329,33 @@ describe("hasProxyScanSummary", () => {
     expect(hasProxyScanSummary({ repo_type: "remote", format: "vscode" })).toBe(
       true,
     );
+  });
+
+  // The alias formats this list used to miss: they have no route of their own
+  // and are served by the gated handler they alias, so their proxy downloads
+  // are scanned and do produce verdicts (artifact-keeper#1274).
+  it.each(["yarn", "pnpm", "bower"])(
+    "is true for a %s Remote, which npm.rs serves",
+    (format) => {
+      expect(hasProxyScanSummary({ repo_type: "remote", format })).toBe(true);
+    },
+  );
+
+  it.each(["poetry", "jupyter"])(
+    "is true for a %s Remote, which pypi.rs serves",
+    (format) => {
+      expect(hasProxyScanSummary({ repo_type: "remote", format })).toBe(true);
+    },
+  );
+
+  it("stays in step with the shared scan-on-proxy format gate", () => {
+    // One source of truth: the summary must never claim coverage the settings
+    // toggle refuses to offer, or vice versa.
+    for (const format of SCAN_ON_PROXY_GATED_FORMATS) {
+      expect(hasProxyScanSummary({ repo_type: "remote", format })).toBe(
+        supportsScanOnProxy(format),
+      );
+    }
   });
 
   it("is false for repositories that have no proxy cache", () => {
@@ -348,6 +380,17 @@ describe("hasProxyScanSummary", () => {
     expect(hasProxyScanSummary({ repo_type: "remote", format: "go" })).toBe(
       false,
     );
+    // `conda` shares the PyPI format handler but has its own ungated `/conda`
+    // router, and `helm` (ChartMuseum) is not `helm_oci` (OCI).
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "conda" })).toBe(
+      false,
+    );
+    expect(hasProxyScanSummary({ repo_type: "remote", format: "helm" })).toBe(
+      false,
+    );
+    expect(
+      hasProxyScanSummary({ repo_type: "remote", format: "helm_oci" }),
+    ).toBe(true);
   });
 
   it("tolerates a repository that has not loaded yet", () => {

@@ -2172,3 +2172,132 @@ describe("RepoSettingsTab - Age Gate (#701)", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scan-on-proxy format coverage (backend artifact-keeper#1274).
+//
+// Backend 1.10.0 enforces the inline scan-and-block gate in four handlers
+// only. This section must not offer an enableable toggle on a proxying
+// repository of any other format -- the same gate the Security tab applies
+// (see `__tests__/repo-detail-scan-on-proxy.test.tsx`).
+// ---------------------------------------------------------------------------
+
+const UNENFORCED_NOTE =
+  /the backend accepts the setting but serves proxied content unscanned/i;
+const VERDICTS_HELP = /proxy scan verdicts/i;
+
+describe("RepoSettingsTab - Scan on proxy format coverage (#1274)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockGetScanConfig.mockResolvedValue({
+      ...defaultScanConfig,
+      // Scanning itself is on, so the only thing that can disable the proxy
+      // toggle is the format gate under test.
+      scan_enabled: true,
+    });
+  });
+
+  /** Render the tab for a repository of `format`/`repoType` and settle. */
+  async function renderScanSection(format: string, repoType = "remote") {
+    render(
+      <RepoSettingsTab
+        repository={
+          {
+            ...baseRepo,
+            format,
+            repo_type: repoType,
+            upstream_url: "https://upstream.example.com",
+          } as Repository
+        }
+      />,
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText("Scan on proxy download")).toBeTruthy();
+    });
+    return screen.getByLabelText("Scan on proxy download");
+  }
+
+  it.each(["npm", "pypi", "docker", "vscode"])(
+    "stays enableable on a %s remote, with the verdicts pointer",
+    async (format) => {
+      expect(await renderScanSection(format)).toHaveProperty("disabled", false);
+      expect(screen.getByText(VERDICTS_HELP)).toBeTruthy();
+      expect(screen.queryByText(UNENFORCED_NOTE)).toBeNull();
+    }
+  );
+
+  it.each(["maven", "cargo", "helm"])(
+    "is disabled with a note on a %s remote",
+    async (format) => {
+      // The regression: an operator could switch this on and believe proxied
+      // Maven/Cargo/Helm artifacts were being scanned.
+      expect(await renderScanSection(format)).toHaveProperty("disabled", true);
+      expect(screen.getByText(UNENFORCED_NOTE)).toBeTruthy();
+      expect(screen.queryByText(VERDICTS_HELP)).toBeNull();
+    }
+  );
+
+  it("names the repository's own format in the note", async () => {
+    await renderScanSection("maven");
+
+    expect(
+      screen.getByText(/For MAVEN the backend accepts the setting/i)
+    ).toBeTruthy();
+  });
+
+  it("applies the gate to virtual repositories too", async () => {
+    expect(await renderScanSection("maven", "virtual")).toHaveProperty(
+      "disabled",
+      true
+    );
+    cleanup();
+    expect(await renderScanSection("docker", "virtual")).toHaveProperty(
+      "disabled",
+      false
+    );
+  });
+
+  it("leaves a hosted repository's control untouched", async () => {
+    // Local/staging repos proxy nothing, so neither the note nor the verdicts
+    // pointer applies and the pre-existing control is unchanged.
+    expect(await renderScanSection("maven", "local")).toHaveProperty(
+      "disabled",
+      false
+    );
+    expect(screen.queryByText(UNENFORCED_NOTE)).toBeNull();
+    expect(screen.queryByText(VERDICTS_HELP)).toBeNull();
+  });
+
+  it("still lets an operator turn a stored-true setting off", async () => {
+    // Repos configured before this fix carry `scan_on_proxy: true`. Disabling
+    // the control outright would strand them on a setting that does nothing.
+    mockGetScanConfig.mockResolvedValue({
+      ...defaultScanConfig,
+      scan_enabled: true,
+      scan_on_proxy: true,
+    });
+    const user = userEvent.setup();
+    const toggle = await renderScanSection("maven");
+
+    expect(toggle).toHaveProperty("disabled", false);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(UNENFORCED_NOTE)).toBeTruthy();
+
+    await user.click(toggle);
+
+    const after = screen.getByLabelText("Scan on proxy download");
+    expect(after.getAttribute("aria-checked")).toBe("false");
+    // And it does not come back: the illusion cannot be re-enabled.
+    expect(after).toHaveProperty("disabled", true);
+  });
+
+  it("keeps the master switch in charge on a gated format", async () => {
+    // A gated format is still subject to "Enable scanning" being off.
+    mockGetScanConfig.mockResolvedValue(defaultScanConfig);
+
+    expect(await renderScanSection("npm")).toHaveProperty("disabled", true);
+  });
+});
