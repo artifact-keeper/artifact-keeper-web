@@ -226,7 +226,13 @@ describe("PackageAnalysisTabContent", () => {
     expect(opts.enabled).toBe(false);
     const block = screen.getByTestId("package-analysis-unavailable");
     expect(block.textContent).toContain("This artifact cannot be analyzed.");
-    expect(block.textContent).toContain("proxy-cached remote artifacts");
+    // #3344 narrowed this copy: analysis and on-demand scans stay hosted-only,
+    // but the old blanket "not proxy-cached remote artifacts" also denied the
+    // download-time scanning that PyPI/npm/Docker proxies actually do.
+    expect(block.textContent).toContain("Proxy-cached artifacts");
+    expect(block.textContent).toContain(
+      "on-demand scans are available only for artifacts hosted in this registry",
+    );
     expect(screen.queryByTestId("package-analysis-none")).toBeNull();
     expect(screen.queryByTestId("vendored-panel")).toBeNull();
   });

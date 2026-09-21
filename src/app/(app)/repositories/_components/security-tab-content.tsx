@@ -21,9 +21,13 @@ import { toast } from "sonner";
 import { sbomApi } from "@/lib/api/sbom";
 import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { isArtifactAnalyzable } from "@/lib/artifact-analyzable";
+import {
+  ANALYZABLE_DISABLED_REASON,
+  isArtifactAnalyzable,
+} from "@/lib/artifact-analyzable";
 import { ArtifactScansSection } from "./artifact-scans-section";
 import { InstallScriptFindingsSummary } from "./install-script-findings-summary";
+import { ProxyScanPanel } from "./proxy-scan-panel";
 import { securityApi } from "@/lib/api/security";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
@@ -156,6 +160,17 @@ export function SecurityTabContent({
     retry: false,
   });
   const hasEverBeenScanned = (scanList?.items?.length ?? 0) > 0;
+
+  // The green all-clear is the strongest claim this tab makes, so it needs
+  // both halves of the evidence: an artifact-keyed scan actually ran, AND the
+  // artifact is one the artifact-keyed sources can describe at all.
+  //
+  // Proxy-cached content fails the second half structurally (#788): it has no
+  // `artifacts` row, so CVE history, scan_findings and Dependency-Track are
+  // all empty for it no matter what the download-time proxy scan found. A
+  // 403-blocked vulnerable artifact used to land here and render green. Its
+  // real verdict is digest-keyed and comes from `ProxyScanPanel` above.
+  const allClear = analyzable && hasEverBeenScanned;
   const [page, setPage] = useState(1);
   const [dtFindingsPage, setDtFindingsPage] = useState(1);
 
@@ -575,6 +590,26 @@ export function SecurityTabContent({
       )}
 
       {/* ----------------------------------------------------------------- */}
+      {/* Proxy scan verdict (proxy-cached artifacts only) */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Proxy-cached artifacts have no `artifacts` row, so every
+          artifact-keyed source below — CVE history, scan_findings,
+          Dependency-Track — is structurally empty for them. Reading that
+          emptiness as "no vulnerabilities" is exactly the bug: a download the
+          gate returned 403 for showed a green all-clear. The digest-keyed
+          proxy verdict is the authoritative answer for this content, so it
+          leads. */}
+      {!analyzable && (
+        <>
+          <ProxyScanPanel
+            repositoryKey={artifact.repository_key}
+            path={artifact.path}
+          />
+          <Separator />
+        </>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
       {/* Header */}
       {/* ----------------------------------------------------------------- */}
       <div className="flex items-center gap-3">
@@ -590,24 +625,24 @@ export function SecurityTabContent({
       {total === 0 ? (
         <div
           className="flex flex-col items-center justify-center py-12 text-center"
-          data-testid={
-            hasEverBeenScanned ? "vulns-none-found" : "vulns-not-assessed"
-          }
+          data-testid={allClear ? "vulns-none-found" : "vulns-not-assessed"}
         >
-          {hasEverBeenScanned ? (
+          {allClear ? (
             <ShieldCheck className="size-12 text-green-500/50 mb-4" />
           ) : (
             <ShieldQuestion className="size-12 text-muted-foreground/50 mb-4" />
           )}
           <p className="text-sm text-muted-foreground">
-            {hasEverBeenScanned
+            {allClear
               ? "No vulnerabilities detected for this artifact."
-              : "This artifact has not been scanned for vulnerabilities."}
+              : analyzable
+                ? "This artifact has not been scanned for vulnerabilities."
+                : "CVE history is not available for this artifact."}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {!analyzable
-              ? "SBOM and scanning are available only for artifacts hosted in this registry, not proxy-cached remote artifacts."
-              : hasEverBeenScanned
+              ? ANALYZABLE_DISABLED_REASON
+              : allClear
                 ? "This reflects the most recent scan."
                 : "Nothing has been checked yet — this is not a clean result. Generate an SBOM and run a security scan to check for CVEs."}
           </p>
