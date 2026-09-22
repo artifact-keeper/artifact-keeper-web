@@ -75,6 +75,9 @@ const PROXY_PATH_PREFIXES: readonly string[] = [
   // handler, artifact-keeper#1272). Without this the proxy 404s lxc clients.
   "/lxc",
   "/ext",
+  // Generic-handler download route (/general/{key}/*path); github/mise/aqua
+  // mirrors are fetched here by mise url_replacements (artifact-keeper#3656).
+  "/general",
   "/v2",
 ];
 

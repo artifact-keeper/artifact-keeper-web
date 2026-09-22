@@ -43,6 +43,10 @@ const EXPECTED_GATED: Record<RepositoryFormat, boolean> = {
   conan: false,
   cargo: false,
   generic: false,
+  // Generic-handler aliases (artifact-keeper#3656): not gated.
+  github: false,
+  mise: false,
+  aqua: false,
   conda: false,
   conda_native: false,
   chocolatey: false,
