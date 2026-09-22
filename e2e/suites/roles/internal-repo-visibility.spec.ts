@@ -81,8 +81,8 @@ test.describe('Internal repository visibility (anonymous)', () => {
    * middleware, and the guest-access guard allowlists it wholesale. Its own
    * anonymous gate was `is_anon && !repo.is_public`, so a repository that is
    * not anonymously readable had to be `is_public = false` for the pull to be
-   * refused — which is precisely what the guest-access coercion used to
-   * guarantee and no longer does.
+   * refused — which the guest-access coercion (Public -> `private`) guarantees
+   * only while guest access is disabled.
    *
    * Note this runs with guest access ENABLED. The point is that visibility
    * alone refuses the pull, with no help from the server-wide policy.

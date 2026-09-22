@@ -30,9 +30,11 @@ import {
   type AccessibleUser,
 } from "@/lib/api/blast-radius";
 import { isValidUuid } from "@/lib/api/audit";
+import { visibilityFromAccessScope } from "@/lib/repo-visibility";
 
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
+import { VisibilityBadge } from "@/components/common/visibility-badge";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +60,21 @@ interface Target {
   value: string;
 }
 
+// Badge palettes: red for exposure beyond the signed-in user base, amber for
+// broad-but-authenticated or explicitly granted exposure.
+const RED_BADGE =
+  "border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400";
+const AMBER_BADGE =
+  "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
+
+/**
+ * Sort rank for an access scope, widest first: public (anonymous) >
+ * internal (every signed-in user) > the restricted scopes.
+ */
+export function accessScopeRank(scope: string): number {
+  return scope === "public" ? 0 : scope === "internal" ? 1 : 2;
+}
+
 function truncateId(id: string): string {
   return id.length > 13 ? `${id.slice(0, 13)}…` : id;
 }
@@ -65,17 +82,28 @@ function truncateId(id: string): string {
 /**
  * Badge classifying how widely a repository holding an affected artifact is
  * reachable. `public` is the loud one: the artifact is anonymous-readable,
- * so everyone — not just the recorded downloaders — is exposed.
+ * so everyone — not just the recorded downloaders — is exposed. `internal`
+ * (backend artifact-keeper#3813) is next: every signed-in user can read it.
  */
 export function AccessScopeBadge({ scope }: { scope: string }) {
   if (scope === "public") {
     return (
       <Badge
         variant="outline"
-        className="border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+        className={RED_BADGE}
       >
         <AlertTriangle className="mr-1 size-3" />
         Public — everyone exposed
+      </Badge>
+    );
+  }
+  if (scope === "internal") {
+    // Not anonymous, but no grant is involved either: every signed-in user on
+    // the instance can pull the artifact, so it must not read as restricted.
+    return (
+      <Badge variant="outline" className={`font-semibold ${AMBER_BADGE}`}>
+        <Users className="mr-1 size-3" />
+        Internal — every signed-in user
       </Badge>
     );
   }
@@ -83,7 +111,7 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
     return (
       <Badge
         variant="outline"
-        className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+        className={AMBER_BADGE}
       >
         <Lock className="mr-1 size-3" />
         Restricted (explicit ACL)
@@ -105,14 +133,30 @@ export function AccessScopeBadge({ scope }: { scope: string }) {
 /**
  * Badge for the coarse breadth of latent access (1.6.0, #2386). `everyone` is
  * the loud one — a public repo where every principal (and anonymous clients)
- * can reach the artifact, so per-user enumeration is not applicable.
+ * can reach the artifact, so per-user enumeration is not applicable. An
+ * `internal` repository (artifact-keeper#3813) also reports `everyone`, but
+ * means every signed-in user, never anonymous clients, so `scope` words it.
  */
-export function ExposureBadge({ exposure }: { exposure: string }) {
+export function ExposureBadge({
+  exposure,
+  scope,
+}: {
+  exposure: string;
+  scope?: string;
+}) {
+  if (exposure === "everyone" && scope === "internal") {
+    return (
+      <Badge variant="outline" className={`font-semibold ${AMBER_BADGE}`}>
+        <Users className="mr-1 size-3" />
+        Every signed-in user — internal repository
+      </Badge>
+    );
+  }
   if (exposure === "everyone") {
     return (
       <Badge
         variant="outline"
-        className="border-red-200 bg-red-100 font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400"
+        className={RED_BADGE}
       >
         <Globe className="mr-1 size-3" />
         Everyone — public repository
@@ -123,7 +167,7 @@ export function ExposureBadge({ exposure }: { exposure: string }) {
     return (
       <Badge
         variant="outline"
-        className="border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+        className={AMBER_BADGE}
       >
         <AlertTriangle className="mr-1 size-3" />
         Effectively everyone
@@ -316,25 +360,25 @@ function BlastRadiusContent() {
     {
       id: "visibility",
       header: "Visibility",
-      accessor: (r) => (r.is_public ? "public" : "private"),
-      cell: (r) =>
-        r.is_public ? (
-          <Badge variant="outline">
-            <Globe className="mr-1 size-3" />
-            public
-          </Badge>
-        ) : (
-          <Badge variant="outline">
-            <Lock className="mr-1 size-3" />
-            private
-          </Badge>
-        ),
+      // `access_scope` distinguishes `internal` from private; the `is_public`
+      // mirror cannot, and would label an org-wide repository "private".
+      // Ranked public > internal > private (a visibility value is also a
+      // valid scope for `accessScopeRank`).
+      accessor: (r) =>
+        accessScopeRank(visibilityFromAccessScope(r.access_scope, r.is_public)),
+      cell: (r) => (
+        <VisibilityBadge
+          visibility={visibilityFromAccessScope(r.access_scope, r.is_public)}
+          variant="outline"
+          showIcon
+        />
+      ),
       sortable: true,
     },
     {
       id: "access_scope",
       header: "Access scope",
-      accessor: (r) => (r.access_scope === "public" ? 0 : 1),
+      accessor: (r) => accessScopeRank(r.access_scope),
       cell: (r) => <AccessScopeBadge scope={r.access_scope} />,
       sortable: true,
     },
@@ -713,7 +757,10 @@ function BlastRadiusContent() {
                   <span className="text-sm text-muted-foreground">
                     Exposure
                   </span>
-                  <ExposureBadge exposure={accessibleData.exposure} />
+                  <ExposureBadge
+                    exposure={accessibleData.exposure}
+                    scope={accessibleData.repository.access_scope}
+                  />
                   <Badge variant="outline" className="font-mono">
                     {accessibleData.repository.repository_key}
                   </Badge>
@@ -747,14 +794,18 @@ function BlastRadiusContent() {
                 ) : (
                   <Alert>
                     <AlertTitle>
-                      {accessibleData.exposure === "everyone"
-                        ? "Public repository — everyone can access"
-                        : "Access is too broad to enumerate"}
+                      {accessibleData.exposure !== "everyone"
+                        ? "Access is too broad to enumerate"
+                        : accessibleData.repository.access_scope === "internal"
+                          ? "Internal repository — every signed-in user can access"
+                          : "Public repository — everyone can access"}
                     </AlertTitle>
                     <AlertDescription>
-                      {accessibleData.exposure === "everyone"
-                        ? "This artifact lives in an anonymous-readable repository, so every user (and unauthenticated clients) can reach it. A per-user list is not applicable."
-                        : "So many principals can reach this artifact that a per-user list is not meaningful. Tighten the repository's access scope to narrow the latent blast radius."}
+                      {accessibleData.exposure !== "everyone"
+                        ? "So many principals can reach this artifact that a per-user list is not meaningful. Tighten the repository's access scope to narrow the latent blast radius."
+                        : accessibleData.repository.access_scope === "internal"
+                          ? "This artifact lives in an internal repository, so every authenticated user can reach it without a grant (never anonymous clients). A per-user list is not applicable."
+                          : "This artifact lives in an anonymous-readable repository, so every user (and unauthenticated clients) can reach it. A per-user list is not applicable."}
                     </AlertDescription>
                   </Alert>
                 )}

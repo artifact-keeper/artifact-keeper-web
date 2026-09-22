@@ -101,6 +101,8 @@ import { ArtifactFolderTree } from "./artifact-folder-tree";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
+import { VisibilityBadge } from "@/components/common/visibility-badge";
+import { resolveVisibility } from "@/lib/repo-visibility";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
 import { resolveInitialRepoTab } from "@/lib/repo-tabs";
@@ -950,12 +952,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               >
                 {repository.repo_type}
               </span>
-              <Badge
-                variant={repository.is_public ? "outline" : "secondary"}
+              <VisibilityBadge
+                visibility={resolveVisibility(repository)}
                 className="text-xs font-normal"
-              >
-                {repository.is_public ? "Public" : "Private"}
-              </Badge>
+              />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
               <span className="text-sm text-muted-foreground ml-2">
                 {formatBytes(repository.storage_used_bytes)} used
@@ -998,12 +998,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             >
               {repository.repo_type}
             </span>
-            <Badge
-              variant={repository.is_public ? "outline" : "secondary"}
+            <VisibilityBadge
+              visibility={resolveVisibility(repository)}
               className="text-xs font-normal"
-            >
-              {repository.is_public ? "Public" : "Private"}
-            </Badge>
+            />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
             <span className="text-sm text-muted-foreground ml-2">
               {formatBytes(repository.storage_used_bytes)} used
