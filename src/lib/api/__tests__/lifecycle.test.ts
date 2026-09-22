@@ -409,11 +409,42 @@ describe("lifecycleApi", () => {
     },
   );
 
-  it.each([401, 403, 404, 500])("fails closed on HTTP %s, even an empty error body", async (status) => {
-    mockCapabilities.mockResolvedValue({ error: "", response: new Response(null, { status }) });
+  // The SDK client fills `error` on every non-2xx: `{}` for an empty body.
+  it.each([404, 500])("fails closed on HTTP %s, even an empty error body", async (status) => {
+    mockCapabilities.mockResolvedValue({ error: {}, response: new Response(null, { status }) });
     const { lifecycleApi } = await import("../lifecycle");
-    await expect(lifecycleApi.attach("p1", "repo-a")).rejects.toThrow(`HTTP ${status}`);
+    await expect(lifecycleApi.attach("p1", "repo-a")).rejects.toThrow(
+      `Cannot verify cleanup policy assignment support (HTTP ${status}). Upgrade the backend`,
+    );
     expect(mockAssignment).not.toHaveBeenCalled();
+  });
+
+  it("asks for a backend upgrade when an older backend rejects the route with a 400 text body", async () => {
+    // Pre-1.11.0 backends route `/capabilities` to `/:id` and axum rejects the
+    // path with plain text, which the SDK client returns as `error`.
+    const body = "Invalid URL: UUID parsing failed: invalid character";
+    mockCapabilities.mockResolvedValue({ error: body, response: new Response(body, { status: 400 }) });
+    const { lifecycleApi } = await import("../lifecycle");
+    const failure = lifecycleApi.assignmentSupport();
+    await expect(failure).rejects.toThrow(
+      "Cannot verify cleanup policy assignment support (HTTP 400). Upgrade the backend",
+    );
+    await expect(failure).rejects.not.toThrow("UUID parsing failed");
+  });
+
+  it.each([401, 403])("fails closed on HTTP %s as a permission problem, not an old backend", async (status) => {
+    mockCapabilities.mockResolvedValue({ error: {}, response: new Response(null, { status }) });
+    const { lifecycleApi } = await import("../lifecycle");
+    const failure = lifecycleApi.attach("p1", "repo-a");
+    await expect(failure).rejects.toThrow(`Not permitted to check cleanup policy assignment support (HTTP ${status})`);
+    await expect(failure).rejects.not.toThrow("Upgrade the backend");
+    expect(mockAssignment).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the client returns neither a response nor an error", async () => {
+    mockCapabilities.mockResolvedValue({ data: undefined, error: undefined, response: undefined });
+    const { lifecycleApi } = await import("../lifecycle");
+    await expect(lifecycleApi.assignmentSupport()).rejects.toThrow("(HTTP unknown)");
   });
 
   it("does not reuse previous capability success at write time", async () => {

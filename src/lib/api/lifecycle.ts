@@ -57,18 +57,32 @@ function adaptScope(sdk: SdkLifecyclePolicy): Pick<
   };
 }
 
+function assignmentSupportUnverified(status: number | string): Error {
+  return new Error(
+    `Cannot verify cleanup policy assignment support (HTTP ${status}). Upgrade the backend before creating or assigning policies.`,
+  );
+}
+
 // Use the configured SDK transport for not-yet-generated endpoints so cookie
 // auth, CSRF, token refresh and remote-instance routing remain unchanged.
+// not in the generated SDK yet (backend 1.11.0, artifact-keeper#3943)
 async function requireAssignmentSupport(): Promise<true> {
   const result = await client.get<{ 200: unknown }>({
     url: `${LIFECYCLE_URL}/capabilities`,
   });
-  if (result.error) throw result.error;
-  if (!result.response?.ok) {
-    throw new Error(
-      `Cannot verify cleanup policy assignment support (HTTP ${result.response?.status ?? 'unknown'}). Upgrade the backend before creating or assigning policies.`,
-    );
+  // Status first: the SDK client fills `error` on every non-2xx response
+  // (`{}` or the text body), so an older backend's 400/404 would otherwise
+  // surface as raw text such as "Invalid URL: UUID parsing failed".
+  if (result.response && !result.response.ok) {
+    const status = result.response.status;
+    // 401/403 is a session or permission problem, not an old backend.
+    if (status === 401 || status === 403) {
+      throw new Error(`Not permitted to check cleanup policy assignment support (HTTP ${status}). Sign in again as an administrator.`);
+    }
+    throw assignmentSupportUnverified(status);
   }
+  if (result.error) throw result.error;
+  if (!result.response) throw assignmentSupportUnverified('unknown');
   const data = result.data;
   if (
     data === null || typeof data !== 'object' ||
@@ -80,6 +94,7 @@ async function requireAssignmentSupport(): Promise<true> {
   return true;
 }
 
+// not in the generated SDK yet (backend 1.11.0, artifact-keeper#3943)
 async function changeAssignment(
   id: string, repositoryId: string, method: 'PUT' | 'DELETE'
 ): Promise<LifecyclePolicy> {
