@@ -25,6 +25,7 @@
  */
 
 import type { RepositoryVisibility } from "@/types";
+import { VISIBILITY_OPTIONS, resolveVisibility } from "@/lib/repo-visibility";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -34,43 +35,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/** Human-facing copy for each state, kept in one place. */
-export const VISIBILITY_OPTIONS: ReadonlyArray<{
-  value: RepositoryVisibility;
-  label: string;
-  hint: string;
-}> = [
-  {
-    value: "public",
-    label: "Public",
-    hint: "Anyone can read, including unauthenticated callers.",
-  },
-  {
-    value: "internal",
-    label: "Internal",
-    hint: "Any signed-in user can read. Never readable anonymously.",
-  },
-  {
-    value: "private",
-    label: "Private",
-    hint: "Only users granted access can read.",
-  },
-];
-
-/**
- * Resolve a repository's visibility for display.
- *
- * Falls back to the legacy boolean when the backend predates the field, so an
- * older server still renders correctly. The fallback can only produce `public`
- * or `private` — a boolean cannot express `internal` — which is the same
- * degradation the API contract describes.
- */
-export function resolveVisibility(repo: {
-  visibility?: RepositoryVisibility;
-  is_public?: boolean;
-}): RepositoryVisibility {
-  return repo.visibility ?? (repo.is_public ? "public" : "private");
-}
+// The copy and the resolver live in `@/lib/repo-visibility` so the detail
+// header and the blast-radius page read the same labels; re-exported here for
+// the repository components that already import them from this module.
+export { VISIBILITY_OPTIONS, resolveVisibility };
 
 export interface VisibilitySelectProps {
   /** Prefix for the generated element ids, e.g. `"create"` or `"settings"`. */
@@ -80,7 +48,7 @@ export interface VisibilitySelectProps {
   /**
    * Server-wide guest-access policy. When false, `public` is withdrawn: nothing
    * anonymous would ever reach such a repository, and the backend coerces a
-   * request for it to `internal` anyway.
+   * request for it to `private` anyway.
    */
   guestAccessEnabled: boolean;
   disabled?: boolean;

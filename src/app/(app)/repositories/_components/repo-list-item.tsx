@@ -27,6 +27,7 @@ function VisibilityIcon({ visibility }: { visibility: RepositoryVisibility }) {
     return (
       <Users
         className="size-3 shrink-0 text-muted-foreground"
+        role="img"
         aria-label="Internal — readable by any signed-in user"
       />
     );
@@ -34,6 +35,7 @@ function VisibilityIcon({ visibility }: { visibility: RepositoryVisibility }) {
   return (
     <Lock
       className="size-3 shrink-0 text-muted-foreground"
+      role="img"
       aria-label="Private — readable only by users granted access"
     />
   );

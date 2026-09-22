@@ -97,7 +97,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; visibility: RepositoryVisibility; quota_bytes?: number }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; visibility?: RepositoryVisibility; quota_bytes?: number }) => void;
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: UpstreamAuthPayload) => void;
   upstreamAuthPending?: boolean;
@@ -160,7 +160,7 @@ export function RepoDialogs({
   });
 
   // When guest access is disabled the backend coerces a request for `public`
-  // to `internal`, so the `public` OPTION is withdrawn — but the control stays,
+  // to `private`, so the `public` OPTION is withdrawn — but the control stays,
   // because choosing between `internal` and `private` is still meaningful and
   // still the operator's call. While the config loads the provider falls back
   // to DEFAULT_SYSTEM_CONFIG (guest access enabled), so `public` renders
@@ -761,10 +761,14 @@ export function RepoDialogs({
             onSubmit={(e) => {
               e.preventDefault();
               if (editRepo) {
-                const { key: formKey, ...rest } = editForm;
+                const { key: formKey, visibility, ...rest } = editForm;
                 onEditSubmit(editRepo.key, {
                   ...rest,
                   ...(editKeyChanged ? { key: formKey } : {}),
+                  // Only when changed: resending an unchanged `public` while
+                  // guest access is disabled makes the backend coerce the
+                  // repository to `private` on an unrelated edit.
+                  ...(visibility !== resolveVisibility(editRepo) ? { visibility } : {}),
                   quota_bytes: quotaToBytes(editQuotaValue, editQuotaUnit) ?? undefined,
                 });
               }

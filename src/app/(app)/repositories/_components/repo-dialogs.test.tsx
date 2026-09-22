@@ -554,6 +554,33 @@ describe('RepoDialogs - Edit Dialog', () => {
     );
   });
 
+  it('omits visibility when only the name changed', async () => {
+    // Resending an unchanged `public` with guest access disabled would make
+    // the backend coerce the repository to `private` on an unrelated edit.
+    const onEditSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockEditRepo}
+        onEditSubmit={onEditSubmit}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const nameInput = within(dialog).getByDisplayValue('Test Repo');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Renamed');
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    expect(onEditSubmit).toHaveBeenCalledTimes(1);
+    const submitData = onEditSubmit.mock.calls[0][1];
+    expect(submitData.name).toBe('Renamed');
+    expect('visibility' in submitData).toBe(false);
+  });
+
   it('includes new key in submit data when key is changed', async () => {
     const onEditSubmit = vi.fn();
     const user = userEvent.setup();

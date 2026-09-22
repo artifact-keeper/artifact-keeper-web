@@ -169,7 +169,8 @@ describe("RepoListItem - visibility marker", () => {
       />
     );
 
-    expect(screen.getByLabelText(INTERNAL_LABEL)).toBeInTheDocument();
+    // role="img" so the labelled bare <svg> is announced consistently.
+    expect(screen.getByRole("img", { name: INTERNAL_LABEL })).toBeInTheDocument();
     expect(screen.queryByLabelText(PRIVATE_LABEL)).not.toBeInTheDocument();
   });
 
@@ -182,7 +183,7 @@ describe("RepoListItem - visibility marker", () => {
       />
     );
 
-    expect(screen.getByLabelText(PRIVATE_LABEL)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: PRIVATE_LABEL })).toBeInTheDocument();
     expect(screen.queryByLabelText(INTERNAL_LABEL)).not.toBeInTheDocument();
   });
 

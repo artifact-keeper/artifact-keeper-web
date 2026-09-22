@@ -1112,7 +1112,7 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Three-state visibility (backend migration 217)
+// Three-state visibility (backend artifact-keeper#3813)
 // ---------------------------------------------------------------------------
 //
 // Both body builders in `repositories.ts` are explicit allowlists rather than
@@ -1120,7 +1120,7 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
 // dropped field type-checks cleanly and fails silently: the dialogs would send
 // a visibility the client never forwards, and every `internal` repository
 // would read back as `private`. These tests pin both directions.
-describe("repositoriesApi — three-state visibility (backend migration 217)", () => {
+describe("repositoriesApi — three-state visibility (backend artifact-keeper#3813)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("forwards visibility on create", async () => {
@@ -1138,9 +1138,41 @@ describe("repositoriesApi — three-state visibility (backend migration 217)", (
     });
 
     expect(mockCreateRepository).toHaveBeenCalledWith({
-      body: expect.objectContaining({ visibility: "internal" }),
+      body: expect.objectContaining({ visibility: "internal", is_public: false }),
     });
     expect(result.visibility).toBe("internal");
+  });
+
+  it("sends a matching is_public for every visibility state", async () => {
+    // A backend without #3813 ignores `visibility` and acts on `is_public`,
+    // so the derived boolean is what keeps Public -> Private effective there.
+    mockCreateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    for (const state of ["public", "internal", "private"] as const) {
+      vi.clearAllMocks();
+      await repositoriesApi.create({
+        key: "k",
+        name: "K",
+        format: "npm",
+        repo_type: "local",
+        visibility: state,
+      });
+      await repositoriesApi.update("k", { visibility: state });
+      const expected = { visibility: state, is_public: state === "public" };
+      expect(mockCreateRepository.mock.calls[0][0].body).toMatchObject(expected);
+      expect(mockUpdateRepository.mock.calls[0][0].body).toMatchObject(expected);
+    }
+  });
+
+  it("overrides a contradicting caller-supplied is_public", async () => {
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+
+    await repositoriesApi.update("maven-local", { is_public: true, visibility: "internal" });
+
+    expect(mockUpdateRepository.mock.calls[0][0].body).toMatchObject({
+      visibility: "internal",
+      is_public: false,
+    });
   });
 
   it("forwards visibility on update", async () => {
@@ -1153,7 +1185,7 @@ describe("repositoriesApi — three-state visibility (backend migration 217)", (
 
     expect(mockUpdateRepository).toHaveBeenCalledWith({
       path: { key: "maven-local" },
-      body: expect.objectContaining({ visibility: "internal" }),
+      body: expect.objectContaining({ visibility: "internal", is_public: false }),
     });
     expect(result.visibility).toBe("internal");
   });

@@ -151,7 +151,7 @@ const REPO_VISIBILITIES = new Set<RepositoryVisibility>(['public', 'internal', '
  * `narrowEnum` cannot be used here because it must fall back to a value, and
  * every candidate fallback is wrong: `private` would hide a public repository,
  * `public` would widen a private one. `undefined` is the honest answer for a
- * backend that predates migration 217, and it routes the caller through
+ * backend that predates artifact-keeper#3813, and it routes the caller through
  * `resolveVisibility`'s documented `is_public` fallback. An unrecognised
  * string is treated the same way rather than trusted.
  */
@@ -172,13 +172,20 @@ function narrowVisibility(value: string | null | undefined): RepositoryVisibilit
  * progenitor SDK is regenerated), and both body builders here are explicit
  * allowlists rather than spreads, so an undeclared field is otherwise dropped
  * on the floor — silently, since TypeScript is satisfied by the local request
- * type that does declare it. The backend rejects a `visibility` that
- * contradicts `is_public`, so the caller sends one or the other, never both;
- * omitting the key entirely (rather than sending `undefined`) keeps a legacy
- * `is_public`-only client working unchanged.
+ * type that does declare it.
+ *
+ * `is_public` is sent alongside it, derived from `visibility` so the pair can
+ * never contradict (the backend rejects a pair that disagrees with a 400). A
+ * backend without artifact-keeper#3813 ignores the unknown `visibility` key and
+ * acts on `is_public` alone, so Public <-> Private still takes effect there and
+ * `internal` degrades to private (fails closed) instead of being silently
+ * dropped. When no visibility is supplied the body is left untouched, so a
+ * legacy `is_public`-only caller keeps working unchanged.
  */
 function withVisibility<T extends object>(body: T, visibility?: RepositoryVisibility): T {
-  return visibility === undefined ? body : { ...body, visibility };
+  return visibility === undefined
+    ? body
+    : { ...body, visibility, is_public: visibility === 'public' };
 }
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
@@ -261,7 +268,7 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     format_key:
       (sdk as RepositoryResponse & { format_key?: string | null }).format_key ?? null,
     is_public: sdk.is_public,
-    // `visibility` (backend migration 217) is the real state; `is_public` is
+    // `visibility` (backend artifact-keeper#3813) is the real state; `is_public` is
     // its deprecated boolean mirror and cannot express `internal`. The
     // generated SDK `RepositoryResponse` does not declare the field yet, so it
     // is read defensively the same way `format_key` is. A backend that omits
