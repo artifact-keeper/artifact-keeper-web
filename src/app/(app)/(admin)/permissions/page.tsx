@@ -132,9 +132,17 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
+  // People only (#823, backend artifact-keeper#3634). Service accounts are
+  // rows in `users`, but the API accepts them only as `principal_type:
+  // "service_account"`, so offering them under "User" was a guaranteed 400.
+  // The filter is server-side so every fetched row is a person, and the key
+  // is distinct from the audit page's unfiltered ["admin-users"] entry (its
+  // actor filter must still list service accounts) while staying under that
+  // prefix for invalidation. perPage 100 is the backend maximum: users past
+  // the first 100 cannot be picked until the picker searches server-side.
   const { data: usersData } = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => adminApi.listUsers(),
+    queryKey: ["admin-users", "principal-picker"],
+    queryFn: () => adminApi.listUsers({ isServiceAccount: false, perPage: 100 }),
     enabled: !!currentUser?.is_admin,
   });
 
@@ -160,33 +168,14 @@ export default function PermissionsPage() {
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
 
-  // `GET /api/v1/users` returns service accounts alongside people and exposes
-  // no discriminator to tell them apart (artifact-keeper#3634), so they land in
-  // the User branch below. Selecting one there is a guaranteed 400: the API
-  // accepts a service-account row only under `principal_type:
-  // "service_account"`. Subtract them by id from the list we already load.
-  const serviceAccountIds = useMemo(
-    () => new Set((serviceAccountsData ?? []).map((account: ServiceAccount) => account.id)),
-    [serviceAccountsData]
-  );
-
-  // Both non-group branches depend on that list -- one to build its options,
-  // the other to subtract them -- so neither is trustworthy until it resolves.
-  // Without this the User list renders unfiltered for a frame and the bug is
-  // reachable again in the gap.
-  const principalOptionsPending =
-    serviceAccountsLoading && form.principal_type !== "group";
-
   // principal options based on selected type
   const principalOptions = useMemo(() => {
     switch (form.principal_type) {
       case "user":
-        return users
-          .filter((u: User) => !serviceAccountIds.has(u.id))
-          .map((u: User): PrincipalOption => ({
-            value: u.id,
-            label: u.display_name || u.username,
-          }));
+        return users.map((u: User): PrincipalOption => ({
+          value: u.id,
+          label: u.display_name || u.username,
+        }));
       case "service_account":
         return (serviceAccountsData ?? []).map((account: ServiceAccount): PrincipalOption => ({
           value: account.id,
@@ -201,7 +190,7 @@ export default function PermissionsPage() {
           label: g.name,
         }));
     }
-  }, [form.principal_type, users, serviceAccountIds, serviceAccountsData, groups]);
+  }, [form.principal_type, users, serviceAccountsData, groups]);
 
   const selectedPrincipal = useMemo(
     () => principalOptions.find((principal) => principal.value === form.principal_id),
@@ -472,10 +461,13 @@ export default function PermissionsPage() {
                 aria-label="Principal"
                 aria-expanded={principalPickerOpen}
                 className="w-full justify-between font-normal"
-                disabled={editOpen || principalOptionsPending}
+                disabled={
+                  editOpen ||
+                  (form.principal_type === "service_account" && serviceAccountsLoading)
+                }
               >
-                {principalOptionsPending
-                  ? "Loading principals..."
+                {form.principal_type === "service_account" && serviceAccountsLoading
+                  ? "Loading service accounts..."
                   : selectedPrincipal?.label ??
                     (editOpen && selectedPermission
                       ? getPrincipalLabel(selectedPermission)
