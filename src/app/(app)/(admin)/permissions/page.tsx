@@ -132,9 +132,17 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
+  // People only (#823, backend artifact-keeper#3634). Service accounts are
+  // rows in `users`, but the API accepts them only as `principal_type:
+  // "service_account"`, so offering them under "User" was a guaranteed 400.
+  // The filter is server-side so every fetched row is a person, and the key
+  // is distinct from the audit page's unfiltered ["admin-users"] entry (its
+  // actor filter must still list service accounts) while staying under that
+  // prefix for invalidation. perPage 100 is the backend maximum: users past
+  // the first 100 cannot be picked until the picker searches server-side.
   const { data: usersData } = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => adminApi.listUsers(),
+    queryKey: ["admin-users", "principal-picker"],
+    queryFn: () => adminApi.listUsers({ isServiceAccount: false, perPage: 100 }),
     enabled: !!currentUser?.is_admin,
   });
 

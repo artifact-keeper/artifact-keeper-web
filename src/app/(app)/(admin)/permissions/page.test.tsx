@@ -597,6 +597,93 @@ describe("PermissionsPage", () => {
         });
       });
     });
+
+    // -- #823 / artifact-keeper#3634 ---------------------------------------
+    //
+    // Service accounts are rows in `users`, so an unfiltered `GET
+    // /api/v1/users` returns them alongside people. Under principal type
+    // "User" the API rejects them: `validate_principal` accepts a
+    // service-account row only as `principal_type: "service_account"`, so the
+    // submit was a guaranteed 400 with nothing on screen explaining why. The
+    // page now asks the server for people only (`is_service_account=false`,
+    // backend 1.9.0).
+    //
+    // The listUsers mock honours that parameter the way the backend does:
+    // unfiltered, it returns the service account too, which is the shape the
+    // real API returns.
+    describe("service accounts are not offered as user principals (#823)", () => {
+      const SERVICE_ACCOUNT_AS_USER_ROW = {
+        id: "service-account-1",
+        username: "svc-release-bot",
+        email: "svc-release-bot@service.local",
+        display_name: "Release Bot",
+        is_admin: false,
+      };
+
+      beforeEach(() => {
+        mockAdminApi.listUsers.mockImplementation(
+          async (params: { isServiceAccount?: boolean } = {}) =>
+            params.isServiceAccount === false
+              ? MOCK_USERS
+              : [...MOCK_USERS, SERVICE_ACCOUNT_AS_USER_ROW],
+        );
+      });
+
+      it("requests people only for the User principal list", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await waitForTableLoaded();
+        await openCreateDialog(user);
+
+        expect(mockAdminApi.listUsers).toHaveBeenCalledWith({
+          isServiceAccount: false,
+          perPage: 100,
+        });
+
+        // Principal type defaults to "user" (EMPTY_FORM).
+        await user.click(screen.getByRole("combobox", { name: "Principal" }));
+
+        expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+      });
+
+      it("still offers them under the Service Account type", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await waitForTableLoaded();
+        await openCreateDialog(user);
+
+        await user.selectOptions(getFormSelects()[0], "service_account");
+        await user.click(screen.getByRole("combobox", { name: "Principal" }));
+
+        // Excluding them from the User branch must not hide them from their
+        // own branch -- that is where the grant is legitimately made.
+        expect(screen.getByRole("button", { name: "Release Bot" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
+      });
+
+      it("does not block the User picker on the service-account request", async () => {
+        // The User list is filtered by the server, so it has no dependency on
+        // `GET /service-accounts`; only the Service Account branch waits.
+        mockServiceAccountsApi.list.mockReturnValue(new Promise(() => {}));
+
+        const user = userEvent.setup();
+        renderPage();
+        await waitForTableLoaded();
+        await openCreateDialog(user);
+
+        const picker = screen.getByRole("combobox", { name: "Principal" });
+        expect(picker.hasAttribute("disabled")).toBe(false);
+        await user.click(picker);
+        expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+
+        await user.selectOptions(getFormSelects()[0], "service_account");
+        const saPicker = screen.getByRole("combobox", { name: "Principal" });
+        expect(saPicker.hasAttribute("disabled")).toBe(true);
+        expect(saPicker.textContent).toContain("Loading service accounts...");
+      });
+    });
   });
 
   describe("group principals", () => {
