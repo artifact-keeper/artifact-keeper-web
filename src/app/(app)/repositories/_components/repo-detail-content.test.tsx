@@ -27,6 +27,11 @@ const h = vi.hoisted(() => ({
   // Tests that assert on the *request parameters* (not just the query key)
   // invoke it themselves.
   artifactsQueryFns: [] as Array<() => unknown>,
+  // The artifacts query's `enabled` flag, per render (the tree view keeps the
+  // list query off until a search is typed, #850).
+  artifactsQueryEnabled: [] as Array<boolean | undefined>,
+  // Whether the repo format offers the folder-tree view.
+  treeSupported: false,
   // What the artifact-stats query (#472) returns; null simulates a failed or
   // unavailable stats fetch.
   artifactStats: null as {
@@ -84,7 +89,11 @@ const dockerTagFixture = {
 vi.mock("@tanstack/react-query", () => ({
   // Return canned data by the first element of the query key; never execute
   // queryFn (so the mocked API modules are never actually called).
-  useQuery: (opts: { queryKey: unknown[]; queryFn?: () => unknown }) => {
+  useQuery: (opts: {
+    queryKey: unknown[];
+    queryFn?: () => unknown;
+    enabled?: boolean;
+  }) => {
     const key = Array.isArray(opts.queryKey) ? opts.queryKey[0] : undefined;
     if (key === "repository") {
       return { data: repository, isLoading: false, isFetching: false };
@@ -92,6 +101,7 @@ vi.mock("@tanstack/react-query", () => ({
     if (key === "artifacts") {
       h.artifactsQueryKeys.push(opts.queryKey);
       if (opts.queryFn) h.artifactsQueryFns.push(opts.queryFn);
+      h.artifactsQueryEnabled.push(opts.enabled);
       return {
         data: {
           items: [artifactFixture],
@@ -219,7 +229,7 @@ vi.mock("./artifact-folder-tree", () => ({ ArtifactFolderTree: () => <div data-s
 vi.mock("./artifact-browser-toggle", () => ({
   ArtifactBrowserToggle: () => <div data-stub="ArtifactBrowserToggle" />,
   supportsGrouping: () => false,
-  supportsTree: () => false,
+  supportsTree: () => h.treeSupported,
   // The real Docker-family set (#418): the grouped-view gate in
   // repo-detail-content keys off it.
   DOCKER_FAMILY_FORMATS: new Set([
@@ -238,10 +248,14 @@ vi.mock("@/components/common/data-table", () => ({
     data,
     columns,
     onRowClick,
+    onPageSizeChange,
+    rowKey,
   }: {
     data?: Array<{ id: string; name: string }>;
     columns?: Array<{ id: string; cell?: (row: unknown) => React.ReactNode }>;
     onRowClick?: (row: unknown) => void;
+    onPageSizeChange?: (size: number) => void;
+    rowKey?: (row: { id: string; name: string }) => string;
   }) => (
     <div
       data-stub="DataTable"
@@ -249,7 +263,7 @@ vi.mock("@/components/common/data-table", () => ({
     >
       {(data ?? []).map((row) => (
         <button
-          key={row.id}
+          key={rowKey ? rowKey(row) : row.id}
           data-testid={`stub-row-${row.id}`}
           onClick={() => onRowClick?.(row)}
         >
@@ -265,6 +279,12 @@ vi.mock("@/components/common/data-table", () => ({
           {columns?.find((c) => c.id === "name")?.cell?.(row)}
         </div>
       ))}
+      <button
+        data-testid="stub-table-page-size-50"
+        onClick={() => onPageSizeChange?.(50)}
+      >
+        page-size-50
+      </button>
     </div>
   ),
 }));
@@ -683,6 +703,58 @@ describe("RepoDetailContent Docker grouped view (#330 / ak#1336)", () => {
     expect(artifactsApi.listGrouped).toHaveBeenCalledWith(
       "demo",
       expect.objectContaining({ count: "exact" }),
+    );
+  });
+});
+
+describe("RepoDetailContent tree view search (#850)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.treeSupported = true;
+    h.searchParams = new URLSearchParams("view=tree");
+    h.artifactsQueryEnabled = [];
+  });
+  afterEach(() => {
+    cleanup();
+    h.treeSupported = false;
+    h.searchParams = new URLSearchParams();
+    h.artifactsQueryEnabled = [];
+  });
+
+  it("shows the lazy folder tree and skips the artifact list until a search is typed", async () => {
+    const { container } = render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+
+    expect(container.querySelector('[data-stub="folder-tree"]')).not.toBeNull();
+    expect(container.querySelector('[data-stub="DataTable"]')).toBeNull();
+    expect(h.artifactsQueryEnabled.at(-1)).toBe(false);
+  });
+
+  it("switches to the paginated server-side results table while searching", async () => {
+    const { container } = render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+
+    await userEvent.type(screen.getByPlaceholderText("Search artifacts..."), "config");
+
+    // The search runs as the ordinary list query, not a tree built from one page.
+    expect(h.artifactsQueryEnabled.at(-1)).toBe(true);
+    const lastKey = h.artifactsQueryKeys.at(-1) as unknown[];
+    expect(lastKey[2]).toBe("config");
+    expect(lastKey[3]).toBe(1);
+    expect(container.querySelector('[data-stub="folder-tree"]')).toBeNull();
+    expect(container.querySelector('[data-stub="DataTable"]')).not.toBeNull();
+
+    // The results table paginates like flat view: a new page size restarts at page 1.
+    await userEvent.click(screen.getByTestId("stub-table-page-size-50"));
+    const resized = h.artifactsQueryKeys.at(-1) as unknown[];
+    expect(resized[3]).toBe(1);
+    expect(resized[4]).toBe(50);
+
+    // A result row opens the artifact detail dialog, as in flat view.
+    await userEvent.click(screen.getByTestId("stub-row-a1"));
+    expect(await screen.findByRole("dialog", {}, { timeout: 2000 })).toHaveTextContent(
+      "config.yaml",
     );
   });
 });

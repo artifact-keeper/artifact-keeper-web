@@ -89,6 +89,21 @@ describe("treeApi.getChildren", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("package.json");
   });
+
+  it("maps the backend's `file` leaf type to the UI's `artifact` type", async () => {
+    // /api/v1/tree emits `type: "file"` for artifact leaves (tree.rs), never
+    // `artifact`; unmapped it would fall back to `folder` and render as an
+    // expandable empty folder.
+    const nodes = [
+      { id: "n2", name: "app.tar.gz", type: "file", path: "raw-local/builds/app.tar.gz", has_children: false },
+      { id: "folder:raw-local/builds/sub", name: "sub", type: "folder", path: "raw-local/builds/sub", has_children: true },
+    ];
+    mockGetTree.mockResolvedValue({ data: { nodes }, error: undefined });
+
+    const result = await treeApi.getChildren({ repository_key: "raw-local", path: "builds" });
+
+    expect(result.map((n) => n.type)).toEqual(["artifact", "folder"]);
+  });
 });
 
 describe("treeApi.getChildren — per-folder dedup passthrough (artifact-keeper#2056)", () => {
