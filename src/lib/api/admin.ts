@@ -145,13 +145,11 @@ export const adminApi = {
   },
 
   listUsersPage: async (params: ListUsersParams = {}): Promise<ListUsersResult> => {
-    // `is_service_account` is not in the generated SDK yet -- it ships with the
-    // backend release carrying artifact-keeper#3634 -- so the query is built as
-    // a plain object and cast once at the boundary, the same stopgap
-    // `versioning_enabled` uses (#571). It is included ONLY when the caller
-    // asks, leaving every existing call site's request unchanged on the wire,
-    // and a backend predating the filter ignores the unknown parameter, so this
-    // degrades to today's behavior rather than failing.
+    // `is_service_account` filter: not in the generated SDK yet (backend 1.9.0,
+    // artifact-keeper#3634), so the query is built as a plain object and cast
+    // once at the boundary, the same stopgap `versioning_enabled` uses (#571).
+    // It is included ONLY when the caller asks, leaving every other call
+    // site's request unchanged on the wire.
     const query = {
       page: params.page,
       per_page: params.perPage,

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The admin Users page listed service accounts as people, offering password resets against identities that have no password** (#825, backend artifact-keeper#3634) - service accounts are rows in the `users` table, so `GET /api/v1/users` returned them and the Users page rendered them inline with the full set of person-only actions: **Edit**, **Reset password**, **Force password change**, and the admin/active toggles. None of those mean anything for a `svc-*` identity, which authenticates with API tokens and is created with no usable password; all of them are already offered in their applicable form on the **Service Accounts** page. The user count was inflated by the same rows -- an instance with 30 people and 12 CI accounts reported 42 users. The page now asks the server for people only, and the total it shows counts people. **This one could not be fixed in the browser**: the listing is server-side paginated (#564), so dropping service accounts from a fetched page would have left `total` and `total_pages` counting rows the page no longer showed -- a short page and, at the boundary, a phantom trailing one. The filter had to be applied by the query that also produces the count, which is what artifact-keeper#3634 added. The filter is opt-in at the API layer: the audit actor filter still lists service accounts (filtering by a CI actor is usually the point), and so does the group member picker (a group grant is a valid way to give a service account access). `is_service_account` is not in the generated SDK yet, so `adminApi.listUsersPage` sends it through a narrowed cast.
+
 ## [1.10.1] - 2026-09-21
 
 ### Fixed
