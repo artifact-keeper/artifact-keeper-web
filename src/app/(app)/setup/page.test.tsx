@@ -427,7 +427,9 @@ describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () =>
     ["rubygems", "gem"],
     ["cargo", "cargo"],
     ["generic", "curl"],
-    ["vscode", "extensionsGallery"],
+    // makeRepo defaults to a private local repo, so vscode gets the
+    // direct-download note; the gallery snippets are covered below.
+    ["vscode", "/extensions/<publisher>/<name>/<version>/download"],
   ])("renders %s steps with format-specific tooling", async (format, marker) => {
     await openRepoDialog(makeRepo({ format: format as Repository["format"], key: `my-${format}` }));
 
@@ -628,7 +630,7 @@ describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () =
   afterEach(() => cleanup());
 
   it("interpolates the repo key into the VSCodium, code-server, and manifest URLs", async () => {
-    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx", repo_type: "remote", is_public: true }));
 
     const dialog = await screen.findByRole("dialog");
     const text = dialog.textContent ?? "";
@@ -641,7 +643,7 @@ describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () =
   });
 
   it("requires latestUrlTemplate on the VSCodium step, with a warning about leaking to open-vsx.org", async () => {
-    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx", repo_type: "remote", is_public: true }));
 
     const dialog = await screen.findByRole("dialog");
     const heading = within(dialog).getByRole("heading", {
@@ -655,7 +657,7 @@ describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () =
   });
 
   it("gives code-server the EXTENSIONS_GALLERY env block", async () => {
-    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx", repo_type: "remote", is_public: true }));
 
     const dialog = await screen.findByRole("dialog");
     const heading = within(dialog).getByRole("heading", { name: /Configure code-server/i });
@@ -667,7 +669,7 @@ describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () =
   });
 
   it("states the official VS Code enterprise-policy constraint accurately, not as a general preference", async () => {
-    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx" }));
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx", repo_type: "remote", is_public: true }));
 
     const dialog = await screen.findByRole("dialog");
     const heading = within(dialog).getByRole("heading", {
@@ -679,5 +681,25 @@ describe("SetupPage - vscode gateway onboarding (Open VSX gallery, #3253)", () =
     expect(stepText).toMatch(/enterprise/i);
     expect(stepText).toMatch(/ExtensionGalleryServiceUrl/);
     expect(stepText).toMatch(/does not cover VS Code Server or VS Code for the Web/i);
+  });
+
+  it.each([
+    ["local", { repo_type: "local" as const, is_public: true }],
+    ["private remote", { repo_type: "remote" as const, is_public: false }],
+  ])("shows only the direct-download note for a %s vscode repo", async (_label, overrides) => {
+    await openRepoDialog(makeRepo({ format: "vscode", key: "openvsx", ...overrides }));
+
+    const dialog = await screen.findByRole("dialog");
+    const text = dialog.textContent ?? "";
+
+    expect(
+      within(dialog).getByRole("heading", {
+        name: /VS Code gallery requires a public Remote repository/i,
+      }),
+    ).toBeTruthy();
+    expect(text).toContain("/vscode/openvsx/extensions/<publisher>/<name>/<version>/download");
+    expect(text).not.toContain("extensionsGallery");
+    expect(text).not.toContain("EXTENSIONS_GALLERY");
+    expect(text).not.toContain("/gallery/manifest");
   });
 });

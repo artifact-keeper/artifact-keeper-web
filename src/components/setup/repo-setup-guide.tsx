@@ -784,7 +784,20 @@ gpgcheck=0`,
     case "vscode": {
       // The gateway serves the VSCodium/code-server gallery-service contract
       // under /vscode/<repoKey>/... ; official VS Code additionally exposes
-      // a /gallery/manifest endpoint for its enterprise policy.
+      // a /gallery/manifest endpoint for its enterprise policy. The backend
+      // only serves gallery routes for public Remote repositories (501 for
+      // non-Remote, 403 for private), since gallery clients cannot send
+      // credentials; everything else gets the direct download route.
+      if (repo.repo_type !== "remote" || !repo.is_public) {
+        return [
+          {
+            title: "VS Code gallery requires a public Remote repository",
+            description:
+              "The gallery gateway (/vscode/<key>/gallery) only serves public Remote repositories that proxy an Open VSX gallery, because gallery clients cannot send credentials. For this repository, download extensions with the direct download route instead (add -u <username>:<api-token> when the repository is private):",
+            code: `curl -O ${REGISTRY_URL}/vscode/${repoKey}/extensions/<publisher>/<name>/<version>/download`,
+          },
+        ];
+      }
       const galleryUrl = `${REGISTRY_URL}/vscode/${repoKey}/gallery`;
       const itemUrl = `${REGISTRY_URL}/vscode/${repoKey}/item`;
       const latestUrlTemplate = `${galleryUrl}/{publisher}/{name}/latest`;
@@ -793,7 +806,7 @@ gpgcheck=0`,
         {
           title: "Configure VSCodium (persistent)",
           description:
-            "Create product.json in VSCodium's user configuration directory: ~/.config/VSCodium on Linux ($XDG_CONFIG_HOME/VSCodium when that is set), ~/Library/Application Support/VSCodium on macOS, or %APPDATA%\\VSCodium on Windows. latestUrlTemplate is required alongside extensionUrlTemplate: omitting it can let an update lookup fall back to open-vsx.org directly, bypassing this repository. Restart VSCodium after editing.",
+            "Public Remote repositories only. Create product.json in VSCodium's user configuration directory: ~/.config/VSCodium on Linux ($XDG_CONFIG_HOME/VSCodium when that is set), ~/Library/Application Support/VSCodium on macOS, or %APPDATA%\\VSCodium on Windows. latestUrlTemplate is required alongside extensionUrlTemplate: omitting it can let an update lookup fall back to open-vsx.org directly, bypassing this repository. Restart VSCodium after editing.",
           code: `{
   "extensionsGallery": {
     "serviceUrl": "${galleryUrl}",
