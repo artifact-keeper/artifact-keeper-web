@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Three-state repository visibility: Public / Internal / Private** (#839, backend artifact-keeper#3813) - the binary "Public repository" switch in the create dialog, edit dialog and repository Settings tab is replaced by a shared **Visibility** select (`visibility-select.tsx`). `Internal` is readable by every signed-in user with no grant and never anonymously. The repository list marks `Internal` with a group icon and `Private` with a padlock (public stays unmarked); the repository detail header and the CVE blast-radius page report `internal` rather than calling it private. With guest access disabled the control stays and only `Public` is withdrawn; an already-public repository keeps showing its own value, and saving an unrelated change no longer resends it. The client sends `visibility` with a matching `is_public`, and reads `visibility` falling back to `is_public`, so against a backend without artifact-keeper#3813 `Internal` degrades to `Private` rather than failing.
+
 ## [1.10.1] - 2026-09-21
 
 ### Fixed

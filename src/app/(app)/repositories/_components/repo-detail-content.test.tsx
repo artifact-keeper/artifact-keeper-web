@@ -312,6 +312,32 @@ describe("RepoDetailContent tab strip", () => {
   });
 });
 
+describe("RepoDetailContent visibility badge (#839)", () => {
+  const mutable = repository as { visibility?: string; is_public?: boolean };
+  afterEach(() => {
+    cleanup();
+    delete mutable.visibility;
+    delete mutable.is_public;
+  });
+
+  // Both header variants (panel and standalone page) render the badge.
+  it.each([false, true])(
+    "labels an internal repository Internal, not Private (standalone=%s)",
+    (standalone) => {
+      mutable.visibility = "internal";
+      render(<RepoDetailContent repoKey="demo" standalone={standalone} />);
+      expect(screen.getByText("Internal")).toBeTruthy();
+      expect(screen.queryByText("Private")).toBeNull();
+    },
+  );
+
+  it("falls back to the legacy boolean when the backend omits visibility", () => {
+    mutable.is_public = true;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(screen.getByText("Public")).toBeTruthy();
+  });
+});
+
 describe("RepoDetailContent Setup tab (#560)", () => {
   beforeEach(() => {
     cleanup();

@@ -207,6 +207,7 @@ vi.mock("@/components/common/data-table", () => ({
 
 import BlastRadiusPage, {
   AccessScopeBadge,
+  accessScopeRank,
   ExposureBadge,
   ViaBadge,
   ipPreview,
@@ -715,6 +716,67 @@ describe("BlastRadiusPage", () => {
     expect(screen.queryByText("carol")).not.toBeInTheDocument();
   });
 
+  it("reports an internal repo as internal, never private (artifact-keeper#3813)", () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState({
+      data: {
+        ...REPORT,
+        affected_repos: [
+          ...REPORT.affected_repos,
+          {
+            repository_id: "r4",
+            repository_key: "internal-npm",
+            // The deprecated mirror is false for internal; the scope is not.
+            is_public: false,
+            access_scope: "internal",
+          },
+        ],
+      },
+    });
+
+    render(<BlastRadiusPage />);
+
+    // Visibility column: one public, one internal, the two restricted
+    // scopes private.
+    expect(screen.getByText("Public")).toBeInTheDocument();
+    expect(screen.getByText("Internal")).toBeInTheDocument();
+    expect(screen.getAllByText("Private")).toHaveLength(2);
+    expect(
+      screen.getByText(/internal — every signed-in user/i)
+    ).toBeInTheDocument();
+  });
+
+  it("words the everyone banner for an internal repo as signed-in only", () => {
+    searchParamsState.value = "cve=CVE-2021-44228";
+    queryState(
+      { data: REPORT },
+      {
+        data: {
+          ...ACCESSIBLE_REPORT,
+          repository: {
+            ...ACCESSIBLE_REPORT.repository,
+            access_scope: "internal",
+          },
+          exposure: "everyone",
+          accessible_not_downloaded: [],
+          total: null,
+        },
+      }
+    );
+
+    render(<BlastRadiusPage />);
+
+    expect(
+      screen.getByText(/internal repository — every signed-in user can access/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/never anonymous clients/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/every signed-in user — internal repository/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/public repository/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unauthenticated clients/i)).not.toBeInTheDocument();
+  });
+
   it("shows a latent-exposure error without hiding the downloaders view", () => {
     searchParamsState.value = "cve=CVE-2021-44228";
     queryState({ data: REPORT }, { isError: true });
@@ -728,9 +790,26 @@ describe("BlastRadiusPage", () => {
 });
 
 describe("AccessScopeBadge", () => {
+  it("flags an internal scope as reaching every signed-in user", () => {
+    render(<AccessScopeBadge scope="internal" />);
+    expect(
+      screen.getByText(/internal — every signed-in user/i)
+    ).toBeInTheDocument();
+  });
+
   it("degrades unknown scopes to a neutral badge with the raw value", () => {
     render(<AccessScopeBadge scope="quarantined" />);
     expect(screen.getByText("quarantined")).toBeInTheDocument();
+  });
+});
+
+describe("accessScopeRank", () => {
+  it("ranks public, then internal, then the restricted scopes", () => {
+    expect(accessScopeRank("public")).toBe(0);
+    expect(accessScopeRank("internal")).toBe(1);
+    expect(accessScopeRank("restricted_acl")).toBe(2);
+    expect(accessScopeRank("restricted_roles")).toBe(2);
+    expect(accessScopeRank("private")).toBe(2);
   });
 });
 

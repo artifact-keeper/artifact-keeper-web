@@ -66,6 +66,19 @@ export interface Repository {
    */
   format_key?: string | null;
   repo_type: RepositoryType;
+  /**
+   * Baseline read audience. `public` is readable by anyone including anonymous
+   * callers, `internal` by any signed-in principal with no grant, `private`
+   * only by grant holders.
+   *
+   * Optional so the UI stays safe against a backend that predates the field:
+   * treat a missing value as derived from `is_public`.
+   */
+  visibility?: RepositoryVisibility;
+  /**
+   * @deprecated Equal to `visibility === "public"`. Cannot distinguish
+   * `internal` from `private` — read `visibility` instead.
+   */
   is_public: boolean;
   /**
    * First-class artifact versioning opt-in (#571, backend
@@ -179,6 +192,14 @@ export type RepositoryFormat =
 
 export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
 
+/**
+ * Baseline read audience of a repository.
+ *
+ * Orthogonal to grants: this is who may read BEFORE any grant is consulted,
+ * and it never confers write, delete, or admin.
+ */
+export type RepositoryVisibility = "public" | "internal" | "private";
+
 export interface CreateRepositoryRequest {
   key: string;
   name: string;
@@ -191,6 +212,9 @@ export interface CreateRepositoryRequest {
    */
   format_key?: string;
   repo_type: RepositoryType;
+  /** Baseline read audience. Preferred over the legacy `is_public` flag. */
+  visibility?: RepositoryVisibility;
+  /** @deprecated Send `visibility` instead. Means `visibility === "public"`. */
   is_public?: boolean;
   /** Opt a Generic/Mlmodel repository into first-class versioning (#571). */
   versioning_enabled?: boolean;
