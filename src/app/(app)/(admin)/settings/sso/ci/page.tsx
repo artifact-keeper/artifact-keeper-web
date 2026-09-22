@@ -105,6 +105,9 @@ const CLAIM_PLACEHOLDER: Record<string, string> = {
   generic: `{\n  "sub": "system:serviceaccount:prod"\n}`,
 };
 
+const RESTRICTED_TO_ALL_HINT =
+  "Switching a restricted mapping back to all repositories is not supported yet (artifact-keeper#4198).";
+
 function ProviderTypeIcon({ type }: { type: string }) {
   if (type === "gitlab" || type === "github")
     return <GitBranch className="size-4" />;
@@ -161,18 +164,48 @@ function mappingFormFromRow(m: CiOidcIdentityMapping): MappingForm {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function parseClaimFilters(raw: string): ClaimFilters | undefined {
+export type ParsedClaimFilters =
+  | { ok: true; filters: ClaimFilters }
+  | { ok: false; error: string };
+
+/**
+ * Parse the claim-filter JSON typed by the admin. The backend compares each
+ * value exactly against the JWT claim (arrays are any-of), and CI JWT claims
+ * are strings, so only a string or a non-empty array of strings can ever
+ * match. Anything else would save a mapping that silently never matches.
+ */
+export function parseClaimFilters(raw: string): ParsedClaimFilters {
   const t = raw.trim();
-  if (!t) return {};
+  if (!t) return { ok: true, filters: {} };
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(t);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return undefined;
-    }
-    return parsed as ClaimFilters;
+    parsed = JSON.parse(t);
   } catch {
-    return undefined;
+    return {
+      ok: false,
+      error: "Invalid JSON — please fix claim_filters before saving.",
+    };
   }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {
+      ok: false,
+      error: "Claim filters must be a JSON object of claim names to values.",
+    };
+  }
+  for (const [key, value] of Object.entries(parsed)) {
+    const valid =
+      typeof value === "string" ||
+      (Array.isArray(value) &&
+        value.length > 0 &&
+        value.every((v) => typeof v === "string"));
+    if (!valid) {
+      return {
+        ok: false,
+        error: `Claim filter "${key}" must be a string or a non-empty array of strings.`,
+      };
+    }
+  }
+  return { ok: true, filters: parsed as ClaimFilters };
 }
 
 export function claimFilterSummary(filters: ClaimFilters): string {
@@ -336,36 +369,55 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
 
   function handleSubmit() {
     setFiltersError(null);
-    const filters = parseClaimFilters(form.claim_filters_raw);
-    if (filters === undefined) {
-      setFiltersError("Invalid JSON — please fix claim_filters before saving.");
+    const parsedFilters = parseClaimFilters(form.claim_filters_raw);
+    if (!parsedFilters.ok) {
+      setFiltersError(parsedFilters.error);
       return;
     }
+    const filters = parsedFilters.filters;
     const priority = parseInt(form.priority, 10);
     if (isNaN(priority) || priority < 1) {
       setFiltersError("Priority must be a positive integer (>= 1).");
       return;
     }
 
-    const payload = {
+    const base = {
       name: form.name,
       priority,
       claim_filters: filters,
-      allowed_repo_ids:
-        form.repo_scope_mode === "all"
-          ? editTarget
-            ? [] // Update: send empty array to clear previous restriction
-            : null // Create: null means no restriction
-          : form.selected_repo_ids,
       is_enabled: form.is_enabled,
     };
 
-    if (editTarget) {
-      updateMutation.mutate({ id: editTarget.id, req: payload });
-    } else {
-      createMutation.mutate(payload as CreateCiOidcMappingRequest);
+    if (!editTarget) {
+      // Create: null means no repository restriction.
+      const req: CreateCiOidcMappingRequest = {
+        ...base,
+        allowed_repo_ids:
+          form.repo_scope_mode === "all" ? null : form.selected_repo_ids,
+      };
+      createMutation.mutate(req);
+      return;
     }
+
+    // Update: the backend treats an absent or null allowed_repo_ids as
+    // "unchanged" and stores [] as deny-all, so "All repositories" can only
+    // be kept (by omitting the field), never restored on a restricted
+    // mapping (artifact-keeper#4198).
+    if (form.repo_scope_mode === "all" && editTarget.allowed_repo_ids != null) {
+      setFiltersError(RESTRICTED_TO_ALL_HINT);
+      return;
+    }
+    const req: UpdateCiOidcMappingRequest = {
+      ...base,
+      ...(form.repo_scope_mode === "selected" && {
+        allowed_repo_ids: form.selected_repo_ids,
+      }),
+    };
+    updateMutation.mutate({ id: editTarget.id, req });
   }
+
+  const cannotWidenToAll =
+    editTarget !== null && editTarget.allowed_repo_ids != null;
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
@@ -425,6 +477,7 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                       variant="ghost"
                       size="icon"
                       className="size-7"
+                      aria-label={`${m.is_enabled ? "Disable" : "Enable"} mapping ${m.name}`}
                       onClick={() =>
                         toggleMutation.mutate({
                           id: m.id,
@@ -442,6 +495,7 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                       variant="ghost"
                       size="icon"
                       className="size-7"
+                      aria-label={`Edit mapping ${m.name}`}
                       onClick={() => openEdit(m)}
                     >
                       <Pencil className="size-3.5" />
@@ -450,6 +504,7 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                       variant="ghost"
                       size="icon"
                       className="size-7 text-destructive hover:text-destructive"
+                      aria-label={`Delete mapping ${m.name}`}
                       onClick={() => setDeleteTarget(m)}
                     >
                       <Trash2 className="size-3.5" />
@@ -546,10 +601,17 @@ function MappingsPanel({ provider }: MappingsPanelProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All repositories</SelectItem>
+                  <SelectItem value="all" disabled={cannotWidenToAll}>
+                    All repositories
+                  </SelectItem>
                   <SelectItem value="selected">Selected repositories only</SelectItem>
                 </SelectContent>
               </Select>
+              {cannotWidenToAll && (
+                <p className="text-xs text-muted-foreground">
+                  {RESTRICTED_TO_ALL_HINT}
+                </p>
+              )}
 
               {form.repo_scope_mode === "selected" && (
                 <div className="space-y-2 rounded-md border p-3">
@@ -824,6 +886,7 @@ const toggleMutation = useMutation({
                           variant="ghost"
                           size="icon"
                           className="size-7 shrink-0"
+                          aria-label={`${expanded ? "Collapse" : "Expand"} mappings for ${p.name}`}
                         >
                           {expanded ? (
                             <ChevronDown className="size-4" />
@@ -861,6 +924,7 @@ const toggleMutation = useMutation({
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label={`${p.is_enabled ? "Disable" : "Enable"} provider ${p.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleMutation.mutate({
@@ -879,6 +943,7 @@ const toggleMutation = useMutation({
                           variant="ghost"
                           size="icon"
                           className="size-8"
+                          aria-label={`Edit provider ${p.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             openEdit(p);
@@ -890,6 +955,7 @@ const toggleMutation = useMutation({
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive hover:text-destructive"
+                          aria-label={`Delete provider ${p.name}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setDeleteTarget(p);

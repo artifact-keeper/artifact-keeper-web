@@ -393,55 +393,55 @@ describe("ciOidcApi", () => {
   // ---- Helper coverage (exported pure functions are in the page, test them too) ----
 
   describe("parseClaimFilters", () => {
+    async function parse(raw: string) {
+      const { parseClaimFilters } = await import(
+        "@/app/(app)/(admin)/settings/sso/ci/page"
+      );
+      return parseClaimFilters(raw);
+    }
+
     it("returns empty object for empty string", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters("")).toEqual({});
-      expect(parseClaimFilters("   ")).toEqual({});
+      expect(await parse("")).toEqual({ ok: true, filters: {} });
+      expect(await parse("   ")).toEqual({ ok: true, filters: {} });
     });
 
-    it("parses valid JSON", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      const result = parseClaimFilters('{"sub": "value"}');
-      expect(result).toEqual({ sub: "value" });
+    it("accepts string and string-array values", async () => {
+      expect(await parse('{"sub": "value", "ref": ["a", "b"]}')).toEqual({
+        ok: true,
+        filters: { sub: "value", ref: ["a", "b"] },
+      });
     });
 
-    it("rejects arrays", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters("[1,2]")).toBeUndefined();
+    it.each(["[1,2]", '"foo"', "42", "null"])(
+      "rejects non-object JSON %s",
+      async (raw) => {
+        expect(await parse(raw)).toEqual({
+          ok: false,
+          error: "Claim filters must be a JSON object of claim names to values.",
+        });
+      },
+    );
+
+    it("returns an error for invalid JSON", async () => {
+      expect(await parse("{bad")).toEqual({
+        ok: false,
+        error: "Invalid JSON — please fix claim_filters before saving.",
+      });
     });
 
-    it("rejects strings", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters('"foo"')).toBeUndefined();
-    });
-
-    it("rejects numbers", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters("42")).toBeUndefined();
-    });
-
-    it("rejects null", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters("null")).toBeUndefined();
-    });
-
-    it("returns undefined for invalid JSON", async () => {
-      const { parseClaimFilters } = await import(
-        "@/app/(app)/(admin)/settings/sso/ci/page"
-      );
-      expect(parseClaimFilters("{bad")).toBeUndefined();
+    it.each([
+      '{"a": 1}',
+      '{"a": true}',
+      '{"a": null}',
+      '{"a": [1]}',
+      '{"a": ["x", 2]}',
+      '{"a": []}',
+      '{"a": {"b": "c"}}',
+    ])("rejects non-string claim values in %s and names the key", async (raw) => {
+      expect(await parse(raw)).toEqual({
+        ok: false,
+        error: 'Claim filter "a" must be a string or a non-empty array of strings.',
+      });
     });
   });
 

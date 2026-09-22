@@ -80,8 +80,18 @@ vi.mock("@/components/ui/select", () => {
     SelectTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     SelectValue: () => null,
     SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => (
-      <option value={value}>{children}</option>
+    SelectItem: ({
+      value,
+      disabled,
+      children,
+    }: {
+      value: string;
+      disabled?: boolean;
+      children: React.ReactNode;
+    }) => (
+      <option value={value} disabled={disabled}>
+        {children}
+      </option>
     ),
   };
 });
@@ -267,11 +277,9 @@ describe("CiOidcPage", () => {
       expect(screen.getByText("GitLab Prod")).toBeTruthy();
     });
 
-    // Find the pencil icon button for editing provider
-    const editBtns = screen.getAllByRole("button");
-    const editBtn = editBtns.find((b) => b.querySelector(".lucide-pencil"));
-    expect(editBtn).toBeTruthy();
-    await user.click(editBtn!);
+    await user.click(
+      screen.getByRole("button", { name: "Edit provider GitLab Prod" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Edit CI OIDC Provider")).toBeTruthy();
@@ -306,10 +314,9 @@ describe("CiOidcPage", () => {
       expect(screen.getByText("GitLab Prod")).toBeTruthy();
     });
 
-    const trashBtns = screen.getAllByRole("button");
-    const trashBtn = trashBtns.find((b) => b.querySelector(".lucide-trash-2"));
-    expect(trashBtn).toBeTruthy();
-    await user.click(trashBtn!);
+    await user.click(
+      screen.getByRole("button", { name: "Delete provider GitLab Prod" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("confirm-dialog")).toBeTruthy();
@@ -334,9 +341,9 @@ describe("CiOidcPage", () => {
       expect(screen.getByText("GitLab Prod")).toBeTruthy();
     });
 
-    const toggleBtn = screen.getAllByRole("button").find((b) => b.querySelector(".lucide-toggle-right"));
-    expect(toggleBtn).toBeTruthy();
-    await user.click(toggleBtn!);
+    await user.click(
+      screen.getByRole("button", { name: "Disable provider GitLab Prod" }),
+    );
 
     await waitFor(() => {
       expect(mockCiOidcApi.disableProvider).toHaveBeenCalled();
@@ -445,46 +452,106 @@ describe("CiOidcPage", () => {
     });
   });
 
-  it("edits mapping and sends allowed_repo_ids: [] when switching from selected to all repos (bug fix verification)", async () => {
+  async function openMappingEdit(mapping: CiOidcIdentityMapping) {
+    mockCiOidcApi.listMappings.mockResolvedValue([mapping]);
+    mockCiOidcApi.updateMapping.mockResolvedValue(mapping);
     const user = userEvent.setup();
-    mockCiOidcApi.updateMapping.mockResolvedValue({ ...MOCK_MAPPING, allowed_repo_ids: null });
-
     await renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText("Prod Deployment")).toBeTruthy();
-    });
-
-    // Find the edit button inside MappingsPanel table
-    const editBtns = screen.getAllByRole("button");
-    const editMappingBtn = editBtns.find(
-      (b) => b.querySelector(".lucide-pencil") && b.closest("table"),
+    await user.click(
+      await screen.findByRole("button", { name: `Edit mapping ${mapping.name}` }),
     );
-    expect(editMappingBtn).toBeTruthy();
-    await user.click(editMappingBtn!);
-
-    await waitFor(() => {
-      expect(screen.getByText("Edit Identity Mapping")).toBeTruthy();
-    });
-
-    // Switch repo scope mode from "selected" to "all"
+    await screen.findByText("Edit Identity Mapping");
     const selects = screen.getAllByRole("combobox");
-    const repoScopeSelect = selects[selects.length - 1];
-    await user.selectOptions(repoScopeSelect, "all");
+    return { user, repoScopeSelect: selects[selects.length - 1] as HTMLSelectElement };
+  }
 
-    const saveBtn = screen.getByRole("button", { name: /Save Changes/i });
-    await user.click(saveBtn);
-
-    await waitFor(() => {
-      expect(mockCiOidcApi.updateMapping).toHaveBeenCalled();
-      expect(mockCiOidcApi.updateMapping.mock.calls[0][0]).toBe("p1");
-      expect(mockCiOidcApi.updateMapping.mock.calls[0][1]).toBe("m1");
-      expect(mockCiOidcApi.updateMapping.mock.calls[0][2]).toEqual(
-        expect.objectContaining({
-          allowed_repo_ids: [],
-        }),
-      );
+  it("omits allowed_repo_ids when renaming an unrestricted mapping", async () => {
+    const { user, repoScopeSelect } = await openMappingEdit({
+      ...MOCK_MAPPING,
+      allowed_repo_ids: null,
     });
+    expect(repoScopeSelect.value).toBe("all");
+
+    const nameInput = screen.getByLabelText(/^Name$/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => expect(mockCiOidcApi.updateMapping).toHaveBeenCalled());
+    const [providerId, mappingId, body] = mockCiOidcApi.updateMapping.mock.calls[0];
+    expect(providerId).toBe("p1");
+    expect(mappingId).toBe("m1");
+    expect(body).toEqual({
+      name: "Renamed",
+      priority: 10,
+      claim_filters: { namespace_path: "org/project" },
+      is_enabled: true,
+    });
+    expect(body).not.toHaveProperty("allowed_repo_ids");
+  });
+
+  it("does not let a restricted mapping switch back to all repositories", async () => {
+    const { user, repoScopeSelect } = await openMappingEdit(MOCK_MAPPING);
+
+    const allOption = screen.getByRole("option", {
+      name: "All repositories",
+    }) as HTMLOptionElement;
+    expect(allOption.disabled).toBe(true);
+    expect(
+      screen.getByText(/not supported yet \(artifact-keeper#4198\)/),
+    ).toBeTruthy();
+
+    // Even if the value is forced, nothing is sent to the server.
+    fireEvent.change(repoScopeSelect, { target: { value: "all" } });
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+    expect(mockCiOidcApi.updateMapping).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText(/not supported yet \(artifact-keeper#4198\)/),
+    ).toHaveLength(2);
+  });
+
+  it("sends the selected repository ids in selected mode, including an empty list", async () => {
+    const { user } = await openMappingEdit(MOCK_MAPPING);
+
+    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(checkboxes.map((c) => c.checked)).toEqual([true, false]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => expect(mockCiOidcApi.updateMapping).toHaveBeenCalledTimes(1));
+    expect(mockCiOidcApi.updateMapping.mock.calls[0][2]).toEqual(
+      expect.objectContaining({ allowed_repo_ids: ["r1", "r2"] }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit mapping Prod Deployment" }),
+    );
+    await screen.findByText("Edit Identity Mapping");
+    await user.click((screen.getAllByRole("checkbox") as HTMLInputElement[])[0]);
+    await user.click(screen.getByRole("button", { name: /Save Changes/i }));
+
+    await waitFor(() => expect(mockCiOidcApi.updateMapping).toHaveBeenCalledTimes(2));
+    expect(mockCiOidcApi.updateMapping.mock.calls[1][2]).toEqual(
+      expect.objectContaining({ allowed_repo_ids: [] }),
+    );
+  });
+
+  it("rejects claim filter values that are not strings", async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(await screen.findByRole("button", { name: /Add Mapping/i }));
+    await user.type(screen.getByLabelText(/^Name$/i), "Numeric");
+    fireEvent.change(screen.getByLabelText(/Claim Filters/i), {
+      target: { value: '{"project_id": 42}' },
+    });
+    await user.click(screen.getByRole("button", { name: /Create Mapping/i }));
+
+    expect(
+      await screen.findByText(
+        'Claim filter "project_id" must be a string or a non-empty array of strings.',
+      ),
+    ).toBeTruthy();
+    expect(mockCiOidcApi.createMapping).not.toHaveBeenCalled();
   });
 
   it("toggles and deletes identity mapping", async () => {
@@ -498,11 +565,9 @@ describe("CiOidcPage", () => {
       expect(screen.getByText("Prod Deployment")).toBeTruthy();
     });
 
-    // Find toggle button inside mappings table
-    const mappingRow = screen.getByText("Prod Deployment").closest("tr");
-    const toggleMappingBtn = mappingRow?.querySelector(".lucide-toggle-right")?.closest("button");
-    expect(toggleMappingBtn).toBeTruthy();
-    await user.click(toggleMappingBtn!);
+    await user.click(
+      screen.getByRole("button", { name: "Disable mapping Prod Deployment" }),
+    );
 
     await waitFor(() => {
       expect(mockCiOidcApi.disableMapping).toHaveBeenCalled();
@@ -511,9 +576,9 @@ describe("CiOidcPage", () => {
     });
 
     // Delete mapping
-    const deleteMappingBtn = mappingRow?.querySelector(".lucide-trash-2")?.closest("button");
-    expect(deleteMappingBtn).toBeTruthy();
-    await user.click(deleteMappingBtn!);
+    await user.click(
+      screen.getByRole("button", { name: "Delete mapping Prod Deployment" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("confirm-dialog")).toBeTruthy();
