@@ -102,15 +102,10 @@ vi.mock("@/lib/api/age-gate", () => ({
 
 // Mock lifecycle API
 const mockListPolicies = vi.fn();
-const mockDeletePolicy = vi.fn();
-const mockExecutePolicy = vi.fn();
-const mockPreviewPolicy = vi.fn();
 vi.mock("@/lib/api/lifecycle", () => ({
   lifecycleApi: {
     list: (...args: unknown[]) => mockListPolicies(...args),
-    delete: (...args: unknown[]) => mockDeletePolicy(...args),
-    execute: (...args: unknown[]) => mockExecutePolicy(...args),
-    preview: (...args: unknown[]) => mockPreviewPolicy(...args),
+    assignmentSupport: vi.fn().mockResolvedValue(true),
   },
 }));
 
@@ -622,7 +617,7 @@ describe("RepoSettingsTab - Cleanup Policies Section", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/no cleanup policies configured/i)
+        screen.getByText(/no cleanup policies apply/i)
       ).toBeTruthy();
     });
   });
@@ -632,6 +627,9 @@ describe("RepoSettingsTab - Cleanup Policies Section", () => {
       {
         id: "pol-1",
         repository_id: "repo-1",
+        applies_to_all: false,
+        repository_ids: ["repo-1"],
+        scope_source: "explicit",
         name: "Remove old snapshots",
         description: null,
         enabled: true,
@@ -646,6 +644,9 @@ describe("RepoSettingsTab - Cleanup Policies Section", () => {
       {
         id: "pol-2",
         repository_id: "repo-1",
+        applies_to_all: false,
+        repository_ids: ["repo-1"],
+        scope_source: "explicit",
         name: "Max 10 versions",
         description: null,
         enabled: false,
@@ -670,16 +671,19 @@ describe("RepoSettingsTab - Cleanup Policies Section", () => {
     expect(screen.getByText("Max 10 versions")).toBeTruthy();
     expect(screen.getByText("Max Age (Days)")).toBeTruthy();
     expect(screen.getByText("Max Versions")).toBeTruthy();
-    expect(screen.getByText("Active")).toBeTruthy();
+    expect(screen.getByText("Enabled")).toBeTruthy();
     expect(screen.getByText("Disabled")).toBeTruthy();
     expect(screen.getByText(/12 removed/)).toBeTruthy();
   });
 
-  it("renders preview, execute, and delete buttons for each policy", async () => {
+  it("renders detach and a policy-wide admin link instead of preview, execute or delete", async () => {
     mockListPolicies.mockResolvedValue([
       {
         id: "pol-1",
         repository_id: "repo-1",
+        applies_to_all: false,
+        repository_ids: ["repo-1"],
+        scope_source: "explicit",
         name: "Test Policy",
         description: null,
         enabled: true,
@@ -702,14 +706,18 @@ describe("RepoSettingsTab - Cleanup Policies Section", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /preview policy test policy/i })
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: /preview policy test policy/i })
+    ).toBeNull();
     expect(
-      screen.getByRole("button", { name: /execute policy test policy/i })
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: /execute policy test policy/i })
+    ).toBeNull();
     expect(
-      screen.getByRole("button", { name: /delete policy test policy/i })
+      screen.queryByRole("button", { name: /delete policy test policy/i })
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /detach policy test policy/i })
     ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /manage policies in lifecycle administration/i }).getAttribute("href")).toBe("/lifecycle");
   });
 });
 

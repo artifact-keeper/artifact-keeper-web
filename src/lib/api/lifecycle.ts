@@ -1,4 +1,5 @@
 import '@/lib/sdk-client';
+import { client } from '@artifact-keeper/sdk/client';
 import {
   listLifecyclePolicies as sdkListLifecyclePolicies,
   getLifecyclePolicy as sdkGetLifecyclePolicy,
@@ -27,6 +28,93 @@ import { assertData } from '@/lib/api/fetch';
 import { toUserMessage } from '@/lib/error-utils';
 import { unwrap } from '@/lib/sdk-utils';
 
+const LIFECYCLE_URL = '/api/v1/admin/lifecycle';
+
+function adaptScope(sdk: SdkLifecyclePolicy): Pick<
+  LifecyclePolicy, 'applies_to_all' | 'repository_ids' | 'scope_source'
+> {
+  // Only old responses with BOTH fields absent may use the legacy projection.
+  // A partial/malformed explicit scope must never be displayed as global.
+  if (!('applies_to_all' in sdk) && !('repository_ids' in sdk)) {
+    return {
+      applies_to_all: sdk.repository_id == null,
+      repository_ids: sdk.repository_id ? [sdk.repository_id] : [],
+      scope_source: 'legacy',
+    };
+  }
+  if (
+    !('applies_to_all' in sdk) || typeof sdk.applies_to_all !== 'boolean' ||
+    !('repository_ids' in sdk) || !Array.isArray(sdk.repository_ids) ||
+    !sdk.repository_ids.every((id: unknown) => typeof id === 'string') ||
+    (sdk.applies_to_all && sdk.repository_ids.length > 0)
+  ) {
+    throw new Error('Invalid lifecycle policy repository scope');
+  }
+  return {
+    applies_to_all: sdk.applies_to_all,
+    repository_ids: sdk.repository_ids,
+    scope_source: 'explicit',
+  };
+}
+
+function assignmentSupportUnverified(status: number | string): Error {
+  return new Error(
+    `Cannot verify cleanup policy assignment support (HTTP ${status}). Upgrade the backend before creating or assigning policies.`,
+  );
+}
+
+// Use the configured SDK transport for not-yet-generated endpoints so cookie
+// auth, CSRF, token refresh and remote-instance routing remain unchanged.
+// not in the generated SDK yet (backend 1.11.0, artifact-keeper#3943)
+async function requireAssignmentSupport(): Promise<true> {
+  const result = await client.get<{ 200: unknown }>({
+    url: `${LIFECYCLE_URL}/capabilities`,
+  });
+  // Status first: the SDK client fills `error` on every non-2xx response
+  // (`{}` or the text body), so an older backend's 400/404 would otherwise
+  // surface as raw text such as "Invalid URL: UUID parsing failed".
+  if (result.response && !result.response.ok) {
+    const status = result.response.status;
+    // 401/403 is a session or permission problem, not an old backend.
+    if (status === 401 || status === 403) {
+      throw new Error(`Not permitted to check cleanup policy assignment support (HTTP ${status}). Sign in again as an administrator.`);
+    }
+    throw assignmentSupportUnverified(status);
+  }
+  if (result.error) throw result.error;
+  if (!result.response) throw assignmentSupportUnverified('unknown');
+  const data = result.data;
+  if (
+    data === null || typeof data !== 'object' ||
+    !('explicit_repository_assignment' in data) ||
+    data.explicit_repository_assignment !== true
+  ) {
+    throw new Error('This backend does not confirm explicit cleanup policy assignment support. Upgrade the backend before creating or assigning policies.');
+  }
+  return true;
+}
+
+// not in the generated SDK yet (backend 1.11.0, artifact-keeper#3943)
+async function changeAssignment(
+  id: string, repositoryId: string, method: 'PUT' | 'DELETE'
+): Promise<LifecyclePolicy> {
+  // Recheck at write time, not just from a possibly stale UI capability cache.
+  await requireAssignmentSupport();
+  const result = await client.request<{ 200: SdkLifecyclePolicy }>({
+    url: `${LIFECYCLE_URL}/${encodeURIComponent(id)}/repositories/${encodeURIComponent(repositoryId)}`,
+    method,
+  });
+  if (result.error) throw result.error;
+  if (!result.response?.ok) {
+    throw new Error(`Cleanup policy assignment failed (HTTP ${result.response?.status ?? 'unknown'})`);
+  }
+  const policy = adaptLifecyclePolicy(assertData(result.data, 'lifecycleApi.assignment'));
+  if (policy.scope_source !== 'explicit') {
+    throw new Error('The backend returned a legacy policy after an assignment change. Refresh and verify the policy scope.');
+  }
+  return policy;
+}
+
 // SDK ⇄ local shape adapters. The SDK types declare optional+nullable
 // (`?: string | null`) for fields the local types declare as
 // required-but-nullable (`: string | null`); these adapters normalize
@@ -40,6 +128,7 @@ function adaptLifecyclePolicy(sdk: SdkLifecyclePolicy): LifecyclePolicy {
   return {
     id: sdk.id,
     repository_id: sdk.repository_id ?? null,
+    ...adaptScope(sdk),
     name: sdk.name,
     description: sdk.description ?? null,
     enabled: sdk.enabled,
@@ -91,24 +180,32 @@ function adaptPolicyExecutionResult(
 // `CreateLifecyclePolicyRequest` / `UpdateLifecyclePolicyRequest`, so the old
 // double-cast-through-`unknown` workaround is gone. Fields are still forwarded
 // explicitly (typed as the local request shape) so adding a local field forces
-// an adapter update rather than silently drifting.
-function adaptCreateRequest(req: CreateLifecyclePolicyRequest): SdkCreateLifecyclePolicyRequest {
+// an adapter update rather than silently drifting. Scope fields extend SDK 1.7
+// until it is generated from the explicit-assignment OpenAPI schema.
+function adaptCreateRequest(
+  req: CreateLifecyclePolicyRequest,
+): SdkCreateLifecyclePolicyRequest & Pick<CreateLifecyclePolicyRequest, 'applies_to_all' | 'repository_ids'> {
   return {
     name: req.name,
     policy_type: req.policy_type,
     config: req.config,
-    repository_id: req.repository_id,
+    applies_to_all: req.applies_to_all,
+    repository_ids: req.repository_ids,
     description: req.description,
     priority: req.priority,
   };
 }
-function adaptUpdateRequest(req: UpdateLifecyclePolicyRequest): SdkUpdateLifecyclePolicyRequest {
+function adaptUpdateRequest(
+  req: UpdateLifecyclePolicyRequest,
+): SdkUpdateLifecyclePolicyRequest & Pick<UpdateLifecyclePolicyRequest, 'applies_to_all' | 'repository_ids'> {
   return {
     name: req.name,
     description: req.description,
     enabled: req.enabled,
     config: req.config,
     priority: req.priority,
+    applies_to_all: req.applies_to_all,
+    repository_ids: req.repository_ids,
   };
 }
 
@@ -208,6 +305,10 @@ export function parseLifecycleConfigError(error: unknown): LifecycleConfigError 
 }
 
 export const lifecycleApi = {
+  assignmentSupport: requireAssignmentSupport,
+  attach: (id: string, repositoryId: string) => changeAssignment(id, repositoryId, 'PUT'),
+  detach: (id: string, repositoryId: string) => changeAssignment(id, repositoryId, 'DELETE'),
+
   list: async (params?: ListPoliciesQuery): Promise<LifecyclePolicy[]> => {
     const data = await unwrap(sdkListLifecyclePolicies({ query: params }));
     return assertData(data, 'lifecycleApi.list').map(adaptLifecyclePolicy);
@@ -219,21 +320,34 @@ export const lifecycleApi = {
   },
 
   create: async (req: CreateLifecyclePolicyRequest): Promise<LifecyclePolicy> => {
+    await requireAssignmentSupport();
     const data = await unwrap(sdkCreateLifecyclePolicy({
       body: adaptCreateRequest(req),
     }));
-    return adaptLifecyclePolicy(assertData(data, 'lifecycleApi.create'));
+    const policy = adaptLifecyclePolicy(assertData(data, 'lifecycleApi.create'));
+    if (policy.scope_source !== 'explicit') {
+      throw new Error('The backend returned a legacy policy after creation. Verify its scope in Lifecycle administration before continuing.');
+    }
+    return policy;
   },
 
   update: async (
     id: string,
     req: UpdateLifecyclePolicyRequest
   ): Promise<LifecyclePolicy> => {
+    const changesScope = req.applies_to_all !== undefined || req.repository_ids !== undefined;
+    if (changesScope) {
+      await requireAssignmentSupport();
+    }
     const data = await unwrap(sdkUpdateLifecyclePolicy({
       path: { id },
       body: adaptUpdateRequest(req),
     }));
-    return adaptLifecyclePolicy(assertData(data, 'lifecycleApi.update'));
+    const policy = adaptLifecyclePolicy(assertData(data, 'lifecycleApi.update'));
+    if (changesScope && policy.scope_source !== 'explicit') {
+      throw new Error('The backend returned a legacy policy after a scope change. Refresh and verify the policy scope.');
+    }
+    return policy;
   },
 
   delete: async (id: string): Promise<void> => {
@@ -255,4 +369,3 @@ export const lifecycleApi = {
     return assertData(data, 'lifecycleApi.executeAll').map(adaptPolicyExecutionResult);
   },
 };
-

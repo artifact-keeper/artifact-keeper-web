@@ -2,8 +2,12 @@
 import React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { POLICY_TYPE_LABELS, type LifecyclePolicy, type PolicyType } from "@/types/lifecycle";
+import LifecyclePage from "./page";
 
 beforeAll(() => {
   globalThis.ResizeObserver = class {
@@ -16,488 +20,281 @@ beforeAll(() => {
   Element.prototype.releasePointerCapture = vi.fn();
 });
 
-interface MutationConfig {
-  mutationFn: (...args: unknown[]) => unknown;
-  onSuccess?: (data: never) => void;
-  onError?: (error: unknown) => void;
-}
-
-const mutationConfigs: MutationConfig[] = [];
-const mutateFns: Array<ReturnType<typeof vi.fn>> = [];
-const { lifecycleApi, repositoriesApi } = vi.hoisted(() => ({
-  lifecycleApi: {
-    list: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    execute: vi.fn(),
-    preview: vi.fn(),
-    executeAll: vi.fn(),
+const { api, auth } = vi.hoisted(() => ({
+  api: {
+    list: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(),
+    execute: vi.fn(), preview: vi.fn(), executeAll: vi.fn(), assignmentSupport: vi.fn(),
   },
-  repositoriesApi: { list: vi.fn() },
+  auth: { user: { is_admin: true } },
 }));
-let policiesQuery = { data: [], isLoading: false };
-let repositoriesQuery: {
-  data: { items: Array<Record<string, string>> } | undefined;
-  isLoading: boolean;
-  isError?: boolean;
-} = {
-  data: {
-    items: [
-      {
-        id: "repo-npm-local",
-        key: "npm-local",
-        format: "npm",
-        repo_type: "local",
-      },
-      {
-        id: "repo-docker-local",
-        key: "docker-local",
-        format: "docker",
-        repo_type: "local",
-      },
-    ],
-  },
-  isLoading: false,
-};
-
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: {
-    queryKey: string[];
-    queryFn: () => unknown;
-    enabled?: boolean;
-  }) => {
-    if (options.enabled !== false) {
-      try {
-        options.queryFn();
-      } catch {
-        // Query errors are represented by the controlled test response.
-      }
-    }
-
-    return options.queryKey[0] === "repositories"
-      ? repositoriesQuery
-      : { ...policiesQuery, isError: false };
-  },
-  useMutation: (config: MutationConfig) => {
-    mutationConfigs.push(config);
-    const mutate = vi.fn();
-    mutateFns.push(mutate);
-    return { mutate, isPending: false };
-  },
-  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-}));
-
 // Only the network surface is mocked: `withExclusions` and
 // `parseLifecycleConfigError` are pure helpers the page is under test with.
 vi.mock("@/lib/api/lifecycle", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/lifecycle")>()),
-  lifecycleApi,
+  lifecycleApi: api,
 }));
-
 vi.mock("@/lib/sdk-client", () => ({}));
-
-vi.mock("@artifact-keeper/sdk", () => ({}));
-
-vi.mock("@/lib/api/repositories", () => ({ repositoriesApi }));
-
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ user: { is_admin: true } }),
-}));
-
+vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-vi.mock("@/components/ui/select", () => ({
-  Select: ({
-    value,
-    onValueChange,
-    disabled,
-    children,
-  }: {
-    value?: string;
-    onValueChange?: (value: string) => void;
-    disabled?: boolean;
-    children: React.ReactNode;
-  }) => {
-    let id = "";
-    const items: Array<{ value: string; label: string }> = [];
+const policy: LifecyclePolicy = {
+  id: "p1", name: "Cleanup", description: null, enabled: true, policy_type: "max_age_days",
+  config: { days: 90 }, priority: 100, repository_id: null,
+  applies_to_all: false, repository_ids: [], scope_source: "explicit",
+  created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z",
+  last_run_at: null, last_run_items_removed: null,
+};
 
-    React.Children.forEach(children, (child) => {
-      if (!React.isValidElement(child)) return;
-      const childProps = child.props as {
-        id?: string;
-        children?: React.ReactNode;
-      };
-      if (childProps.id) id = childProps.id;
-      React.Children.forEach(childProps.children, (item) => {
-        if (!React.isValidElement(item)) return;
-        const itemProps = item.props as {
-          value?: string;
-          children?: React.ReactNode;
-        };
-        if (itemProps.value) {
-          items.push({
-            value: itemProps.value,
-            label: String(itemProps.children),
-          });
-        }
-      });
-    });
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  render(<QueryClientProvider client={client}><LifecyclePage /></QueryClientProvider>);
+  return { client, invalidate };
+}
 
-    return (
-      <select
-        aria-label={id === "lifecycle-type" ? "Policy Type" : "Repository"}
-        disabled={disabled}
-        value={value ?? ""}
-        onChange={(event) => onValueChange?.(event.target.value)}
-      >
-        <option value="">Select</option>
-        {items.map((item) => (
-          <option key={item.value} value={item.value}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-    );
-  },
-  SelectTrigger: ({ children, ...props }: { children: React.ReactNode }) => (
-    <span {...props}>{children}</span>
-  ),
-  SelectValue: () => null,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => (
-    <option value={value}>{children}</option>
-  ),
-}));
-
-vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  PopoverContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("@/components/ui/command", () => ({
-  Command: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CommandInput: ({
-    value,
-    onValueChange,
-    ...props
-  }: {
-    value?: string;
-    onValueChange?: (value: string) => void;
-  }) => (
-    <input
-      {...props}
-      value={value ?? ""}
-      onChange={(event) => onValueChange?.(event.target.value)}
-    />
-  ),
-  CommandList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CommandEmpty: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CommandGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CommandItem: ({
-    children,
-    onSelect,
-  }: {
-    children: React.ReactNode;
-    onSelect?: () => void;
-  }) => (
-    <button type="button" onClick={onSelect}>
-      {children}
-    </button>
-  ),
-}));
-
-import LifecyclePage from "./page";
-
-// The component declares mutations in this fixed order: create, delete,
-// toggle, execute, preview, execute-all. State changes produce a new set.
-const createMutate = () => mutateFns[mutateFns.length - 6];
-const createConfig = () => mutationConfigs[mutationConfigs.length - 6];
-
-/** Drive the create mutation's onError the way TanStack Query would. */
-function rejectCreate(message: string) {
-  act(() => createConfig().onError?.({ code: "VALIDATION_ERROR", message }));
+async function openCreate() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "New Policy" }));
+  await user.type(screen.getByLabelText("Name"), "Cleanup");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).toBeEnabled());
+  return user;
 }
 
 beforeEach(() => {
-  mutationConfigs.length = 0;
-  mutateFns.length = 0;
-  vi.clearAllMocks();
-  policiesQuery = { data: [], isLoading: false };
-  repositoriesQuery = {
-    data: {
-      items: [
-        {
-          id: "repo-npm-local",
-          key: "npm-local",
-          format: "npm",
-          repo_type: "local",
-        },
-        {
-          id: "repo-docker-local",
-          key: "docker-local",
-          format: "docker",
-          repo_type: "local",
-        },
-      ],
-    },
-    isLoading: false,
-  };
+  vi.resetAllMocks();
+  auth.user.is_admin = true;
+  api.assignmentSupport.mockResolvedValue(true);
+  api.list.mockResolvedValue([]);
+  api.create.mockResolvedValue(policy);
 });
+afterEach(cleanup);
 
-afterEach(() => cleanup());
-
-describe("LifecyclePage repository scope", () => {
-  it("keeps globally applicable policies global", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.type(screen.getByLabelText("Name"), "Remove stale artifacts");
-
-    expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(createMutate()).toHaveBeenCalledWith({
-      name: "Remove stale artifacts",
-      description: undefined,
-      policy_type: "max_age_days",
-      config: { days: 90 },
-      repository_id: undefined,
-    });
+describe("Lifecycle policy scope", () => {
+  it.each(Object.keys(POLICY_TYPE_LABELS) as PolicyType[])("creates %s unassigned without requiring a repository", async (type) => {
+    const { invalidate } = renderPage();
+    const user = await openCreate();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByText(/created unassigned with no effect/i)).toBeInTheDocument();
+    if (type !== "max_age_days") {
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: POLICY_TYPE_LABELS[type] }));
+    }
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith({
+      name: "Cleanup", description: undefined, policy_type: type,
+      config: expect.any(Object), applies_to_all: false, repository_ids: [],
+    }));
+    expect(api.create.mock.calls[0][0]).not.toHaveProperty("repository_id");
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ["lifecycle-policies"] }));
   });
 
-  it("requires a repository and sends its ID for Max Versions", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.type(screen.getByLabelText("Name"), "Keep recent npm releases");
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
-
-    expect(screen.getByText(/required for max versions and size quota/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-    expect(repositoriesApi.list).toHaveBeenCalledWith({ per_page: 1000 });
-
-    await user.click(screen.getByRole("combobox", { name: "Repository" }));
-    await user.type(screen.getByRole("textbox", { name: "Search repositories" }), "docker");
-    expect(screen.queryByRole("button", { name: /npm-local/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /docker-local/i }));
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(createMutate()).toHaveBeenCalledWith({
-      name: "Keep recent npm releases",
-      description: undefined,
-      policy_type: "max_versions",
-      config: { keep: 5 },
-      repository_id: "repo-docker-local",
-    });
+  it("only opts into global cleanup when the checkbox is checked", async () => {
+    renderPage();
+    const user = await openCreate();
+    await user.click(screen.getByRole("checkbox", { name: /automatically apply to all current and future/i }));
+    expect(screen.getByText(/individual repositories cannot opt out/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ applies_to_all: true, repository_ids: [] }),
+    ));
   });
 
-  it("requires the same repository selection for Size Quota", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.selectOptions(
-      screen.getByLabelText("Policy Type"),
-      "size_quota_bytes"
-    );
-
-    expect(screen.getByLabelText("Repository")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+  it("unchecking the global option restores the dormant payload", async () => {
+    renderPage();
+    const user = await openCreate();
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ applies_to_all: false, repository_ids: [] }),
+    ));
   });
 
-  it("clears repository scope when switching back to a global policy", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.type(screen.getByLabelText("Name"), "Remove stale artifacts");
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
-    await user.click(screen.getByRole("button", { name: /docker-local/i }));
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_age_days");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(createMutate()).toHaveBeenCalledWith({
-      name: "Remove stale artifacts",
-      description: undefined,
-      policy_type: "max_age_days",
-      config: { days: 90 },
-      repository_id: undefined,
-    });
+  it("does not retain global opt-in across cancelled or successful creates", async () => {
+    renderPage();
+    const user = await openCreate();
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await openCreate();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await openCreate();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
   });
 
-  it("clears repository search when the create dialog is cancelled", async () => {
+  it("blocks empty-collection creation on unsupported backend and allows retry", async () => {
+    api.assignmentSupport.mockRejectedValue(new Error("Upgrade required"));
+    renderPage();
+    expect(await screen.findByText("Upgrade required")).toBeInTheDocument();
     const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
-    await user.type(
-      screen.getByRole("textbox", { name: "Search repositories" }),
-      "docker"
-    );
-    await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-
-    expect(
-      screen.getByRole("textbox", { name: "Search repositories" })
-    ).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "New Policy" }));
+    await user.type(screen.getByLabelText("Name"), "Blocked");
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(api.create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    api.assignmentSupport.mockResolvedValue(true);
+    await user.click(screen.getByRole("button", { name: "Retry support check" }));
+    await openCreate();
   });
 
-  it("shows an error when repositories cannot be loaded", async () => {
+  it("blocks creation while the capability check is pending", async () => {
+    api.assignmentSupport.mockReturnValue(new Promise(() => {}));
+    renderPage();
     const user = userEvent.setup();
-    repositoriesQuery = { data: undefined, isLoading: false, isError: true };
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
-
-    expect(screen.getByText(/couldn't load repositories/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New Policy" }));
+    await user.type(screen.getByLabelText("Name"), "Blocked");
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    expect(api.create).not.toHaveBeenCalled();
   });
 
-  it("shows an empty state when no repositories are available", async () => {
-    const user = userEvent.setup();
-    repositoriesQuery = { data: { items: [] }, isLoading: false };
-    render(<LifecyclePage />);
+  it("labels global, selected and unassigned scope, including legacy reads", async () => {
+    api.assignmentSupport.mockRejectedValue(new Error("Older backend"));
+    api.list.mockResolvedValue([
+      policy,
+      { ...policy, id: "p2", applies_to_all: true, scope_source: "legacy" },
+      { ...policy, id: "p3", repository_ids: ["r1", "r2"] },
+    ]);
+    renderPage();
+    expect(await screen.findByText("Unassigned - no effect")).toBeInTheDocument();
+    expect(screen.getByText("Global - all current and future repositories")).toBeInTheDocument();
+    expect(screen.getByText("Selected - 2 repositories")).toBeInTheDocument();
+    expect(screen.getByText("Legacy scope (read-only)")).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.selectOptions(screen.getByLabelText("Policy Type"), "max_versions");
+  it("shows create errors without dismissing the form", async () => {
+    api.create.mockRejectedValue({ message: "Assignment support disappeared" });
+    renderPage();
+    const user = await openCreate();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Assignment support disappeared"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
 
-    expect(screen.getByText("No repositories are available.")).toBeInTheDocument();
+  it("shows policy query errors rather than claiming no policies exist", async () => {
+    api.list.mockRejectedValue(new Error("Cannot read policies"));
+    renderPage();
+    expect(await screen.findByText("Cannot read policies")).toBeInTheDocument();
+    expect(screen.queryByText("No lifecycle policies")).not.toBeInTheDocument();
+  });
+
+  it("does not fetch admin data or offer controls to non-admins", () => {
+    auth.user.is_admin = false;
+    renderPage();
+    expect(screen.getByText("Access Denied")).toBeInTheDocument();
+    expect(api.list).not.toHaveBeenCalled();
+    expect(api.assignmentSupport).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "New Policy" })).not.toBeInTheDocument();
   });
 });
 
 describe("LifecyclePage exclusions (#855)", () => {
-  it("sends config.exclude alongside the policy config", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
+  async function rejectCreate(message: string) {
+    api.create.mockRejectedValue({ code: "VALIDATION_ERROR", message });
+    renderPage();
+    const user = await openCreate();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    return user;
+  }
 
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    await user.type(screen.getByLabelText("Name"), "Keep release tags");
+  it("sends config.exclude alongside the policy config", async () => {
+    renderPage();
+    const user = await openCreate();
     await user.type(screen.getByLabelText("Keep these versions"), "latest");
     await user.click(screen.getByRole("button", { name: "Add version" }));
     await user.type(screen.getByLabelText("Keep versions matching"), "^v\\d+$");
     await user.click(screen.getByRole("button", { name: "Add pattern" }));
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(createMutate()).toHaveBeenCalledWith({
-      name: "Keep release tags",
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith({
+      name: "Cleanup",
       description: undefined,
       policy_type: "max_age_days",
       config: {
         days: 90,
         exclude: { versions: ["latest"], version_patterns: ["^v\\d+$"] },
       },
-      repository_id: undefined,
-    });
+      applies_to_all: false,
+      repository_ids: [],
+    }));
   });
 
   it("offers the editor for every policy type", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    for (const policyType of [
-      "max_versions",
-      "no_downloads_days",
-      "tag_pattern_keep",
-      "tag_pattern_delete",
-      "size_quota_bytes",
-    ]) {
-      await user.selectOptions(screen.getByLabelText("Policy Type"), policyType);
+    renderPage();
+    const user = await openCreate();
+    for (const type of Object.keys(POLICY_TYPE_LABELS) as PolicyType[]) {
+      await user.click(screen.getByRole("combobox"));
+      await user.click(screen.getByRole("option", { name: POLICY_TYPE_LABELS[type] }));
       expect(screen.getByLabelText("Keep these versions")).toBeInTheDocument();
       expect(screen.getByLabelText("Keep versions matching")).toBeInTheDocument();
     }
   });
 
   it("clears the exclusions after a successful create", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    renderPage();
+    const user = await openCreate();
     await user.type(screen.getByLabelText("Keep these versions"), "latest");
     await user.click(screen.getByRole("button", { name: "Add version" }));
-    act(() => createConfig().onSuccess?.(undefined as never));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    await openCreate();
     expect(
       screen.queryByRole("button", { name: "Remove version latest" })
     ).not.toBeInTheDocument();
   });
 
   it("attaches a rejected config key to the config field", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    rejectCreate(
+    await rejectCreate(
       "unknown config key 'schedule' for policy_type 'max_age_days'. Allowed: days, max_age_days, exclude"
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "unknown config key 'schedule'"
-    );
-    expect(screen.getByLabelText("Config (JSON)")).toHaveAttribute(
-      "aria-invalid",
-      "true"
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent("unknown config key 'schedule'");
+    expect(screen.getByLabelText("Config (JSON)")).toHaveAttribute("aria-invalid", "true");
   });
 
   it("attaches a rejected exclusion pattern to the patterns list", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
+    await rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
 
     expect(screen.getByRole("alert")).toHaveTextContent("unclosed group");
-    expect(screen.getByLabelText("Keep versions matching")).toHaveAttribute(
-      "aria-invalid",
-      "true"
-    );
-    expect(screen.getByLabelText("Config (JSON)")).not.toHaveAttribute(
-      "aria-invalid"
-    );
+    expect(screen.getByLabelText("Keep versions matching")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Config (JSON)")).not.toHaveAttribute("aria-invalid");
   });
 
   it("clears the field error when the dialog is reopened", async () => {
-    const user = userEvent.setup();
-    render(<LifecyclePage />);
-
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
-    rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
-    await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    const user = await rejectCreate("Invalid regex in exclude.version_patterns: unclosed group");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "New Policy" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
 describe("LifecyclePage preview figure (#855)", () => {
-  it("reports the reclaimable size from bytes_matched, not the dry run's zero bytes_freed", () => {
-    render(<LifecyclePage />);
-
-    // Mutations are declared in a fixed order (create, delete, toggle,
-    // execute, preview, execute-all), so the preview is 2nd from last.
-    const previewConfig = mutationConfigs[mutationConfigs.length - 2];
-    act(() =>
-      previewConfig.onSuccess?.({
-        policy_id: "p1",
-        policy_name: "Drop old snapshots",
-        dry_run: true,
-        artifacts_matched: 12,
-        artifacts_removed: 0,
-        bytes_matched: 1572864,
-        bytes_freed: 0,
-        errors: [],
-      } as never)
+  it("reports the reclaimable size from bytes_matched, not the dry run's zero bytes_freed", async () => {
+    api.list.mockResolvedValue([{ ...policy, name: "Drop old snapshots" }]);
+    api.preview.mockResolvedValue({
+      policy_id: "p1",
+      policy_name: "Drop old snapshots",
+      dry_run: true,
+      artifacts_matched: 12,
+      artifacts_removed: 0,
+      bytes_matched: 1572864,
+      bytes_freed: 0,
+      errors: [],
+    });
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Preview policy Drop old snapshots (dry run)" })
     );
 
     expect(
-      screen.getByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
+      await screen.findByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/free 0 B/)).not.toBeInTheDocument();
   });
