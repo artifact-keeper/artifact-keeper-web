@@ -81,7 +81,7 @@ function sdkOk<T>(data: T, status = 200) {
 }
 
 /** Build an SDK-style error result ({ data: undefined, error, response }). */
-function sdkErr(error: { code: string; message: string }, status: number) {
+function sdkErr(error: unknown, status: number) {
   return {
     data: undefined,
     error,
@@ -304,14 +304,60 @@ describe("uploads API client", () => {
       expect(result).toEqual(completeResult);
     });
 
-    it("throws ChecksumMismatchError on 409 status", async () => {
+    it("throws ChecksumMismatchError on a 409 whose body is a checksum mismatch", async () => {
+      // Exact shape of backend `UploadError::ChecksumMismatch` (upload.rs map_upload_err).
       mockComplete.mockResolvedValue(
-        sdkErr({ code: "CHECKSUM_MISMATCH", message: "checksum mismatch" }, 409)
+        sdkErr({ error: "checksum mismatch: expected aaa, got bbb" }, 409)
       );
 
       await expect(completeUploadSession("sess-001")).rejects.toThrow(
         ChecksumMismatchError
       );
+    });
+
+    it("recognises a checksum mismatch carried in the message field", async () => {
+      mockComplete.mockResolvedValue(
+        sdkErr({ code: "CONFLICT", message: "Checksum mismatch" }, 409)
+      );
+
+      await expect(completeUploadSession("sess-001")).rejects.toThrow(
+        ChecksumMismatchError
+      );
+    });
+
+    it("shows the backend message for an immutable-version 409 (#894)", async () => {
+      // Exact shape of backend `AppError::Conflict` from enforce_path_immutability.
+      mockComplete.mockResolvedValue(
+        sdkErr(
+          {
+            code: "CONFLICT",
+            message: "Artifact version already exists and is immutable",
+          },
+          409
+        )
+      );
+
+      const err = await completeUploadSession("sess-001").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(ChecksumMismatchError);
+      expect((err as Error).message).toBe(
+        "Artifact version already exists and is immutable"
+      );
+    });
+
+    it.each([
+      ["an empty body (the SDK yields {})", {}],
+      ["a blank message", { code: "CONFLICT", message: "  " }],
+      ["a non-JSON text body", "Conflict"],
+    ])("shows a generic 409 message for %s, never the checksum wording", async (_label, body) => {
+      mockComplete.mockResolvedValue(sdkErr(body, 409));
+
+      const err = await completeUploadSession("sess-001").catch((e: unknown) => e);
+      expect(err).not.toBeInstanceOf(ChecksumMismatchError);
+      expect((err as Error).message).toBe(
+        "Failed to finalize upload (HTTP 409 Conflict)"
+      );
+      expect((err as Error).message).not.toMatch(/checksum/i);
     });
 
     it("throws UploadSessionExpiredError on 410 status", async () => {

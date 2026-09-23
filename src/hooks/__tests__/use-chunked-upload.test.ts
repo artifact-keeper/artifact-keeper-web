@@ -623,6 +623,54 @@ describe("useChunkedUpload", () => {
     expect(stateSlots[2].value).toBeInstanceOf(Error); // error
   });
 
+  describe("completion conflicts (#894)", () => {
+    function mockSingleChunkSession() {
+      mockCreateUploadSession.mockResolvedValue({
+        session_id: "sess-409",
+        chunk_count: 1,
+        chunk_size: 5000,
+        expires_at: "2026-03-25T00:00:00Z",
+      });
+      mockUploadChunk.mockResolvedValue({
+        chunk_index: 0,
+        bytes_received: 2000,
+        chunks_completed: 1,
+        chunks_remaining: 0,
+      });
+    }
+
+    it("keeps the checksum wording for a checksum mismatch", async () => {
+      const { ChecksumMismatchError } = await import("@/lib/api/uploads");
+      mockSingleChunkSession();
+      mockCompleteUploadSession.mockRejectedValue(new ChecksumMismatchError());
+
+      const hook = await loadHook({ threshold: 500 });
+      await expect(hook.upload(createFile(2000))).rejects.toThrow();
+
+      expect(stateSlots[0].value).toBe("error");
+      expect((stateSlots[2].value as Error).message).toBe(
+        "File checksum does not match. The file may have changed during upload."
+      );
+    });
+
+    it("surfaces the backend message for any other completion conflict", async () => {
+      mockSingleChunkSession();
+      mockCompleteUploadSession.mockRejectedValue(
+        new Error("Artifact version already exists and is immutable")
+      );
+
+      const hook = await loadHook({ threshold: 500 });
+      await expect(hook.upload(createFile(2000))).rejects.toThrow(
+        "Artifact version already exists and is immutable"
+      );
+
+      expect(stateSlots[0].value).toBe("error");
+      expect((stateSlots[2].value as Error).message).toBe(
+        "Artifact version already exists and is immutable"
+      );
+    });
+  });
+
   it("saves session to localStorage after creation", async () => {
     mockCreateUploadSession.mockResolvedValue({
       session_id: "sess-save",

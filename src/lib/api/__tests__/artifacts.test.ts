@@ -972,6 +972,25 @@ describe("artifactsApi", () => {
       await expect(promise).rejects.toThrow("Invalid artifact format");
     });
 
+    it("rejects with the backend message for an immutable-version 409 (#894)", async () => {
+      const { artifactsApi } = await import("../artifacts");
+      const file = new File(["data"], "lib-1.0.jar");
+
+      const promise = artifactsApi.upload("my-repo", file);
+      const xhr = xhrInstances[0];
+
+      xhr.status = 409;
+      xhr.responseText = JSON.stringify({
+        code: "CONFLICT",
+        message: "Artifact version already exists and is immutable",
+      });
+      xhr.onload();
+
+      await expect(promise).rejects.toThrow(
+        "Artifact version already exists and is immutable"
+      );
+    });
+
     it("rejects with message field when error field is absent", async () => {
       const { artifactsApi } = await import("../artifacts");
       const file = new File(["data"], "bad.jar");
