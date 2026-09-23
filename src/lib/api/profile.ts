@@ -67,11 +67,18 @@ export interface AccessToken {
   repository_ids?: string[];
 }
 
+/**
+ * Exactly the fields the backend's personal-token request
+ * (`CreateApiTokenRequest`) has. There is deliberately no `repo_selector`:
+ * the backend drops it today, which would leave a token the user thinks is
+ * scoped unrestricted, and once it enforces `deny_unknown_fields` the field
+ * is a 400 (web #902, artifact-keeper#4219). Repository-scoped tokens are
+ * minted through service accounts.
+ */
 export interface CreateAccessTokenRequest {
   name: string;
   expires_in_days?: number;
   scopes?: string[];
-  repo_selector?: RepoSelector;
 }
 
 export interface CreateAccessTokenResponse extends TokenExpiryInfo {
@@ -213,14 +220,14 @@ export const profileApi = {
   createAccessToken: async (
     reqData: CreateAccessTokenRequest
   ): Promise<CreateAccessTokenResponse> => {
-    // SDK CreateApiTokenRequest doesn't model repo_selector; include it via
-    // `satisfies` so the backend still receives it.
+    // Pick the backend's fields by name rather than spreading the request, so
+    // nothing else (a `repo_selector` smuggled in through a cast) reaches the
+    // wire (web #902).
     const body = {
       name: reqData.name,
       expires_in_days: reqData.expires_in_days,
       ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
-      ...(reqData.repo_selector !== undefined ? { repo_selector: reqData.repo_selector } : {}),
-    } satisfies Partial<SdkCreateApiTokenRequest> & { repo_selector?: unknown };
+    } satisfies Partial<SdkCreateApiTokenRequest>;
     const data = await unwrap(sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest }));
     const result = assertData(data, 'profileApi.createAccessToken');
     return {

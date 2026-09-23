@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,8 @@ interface TokenCreateFormProps {
   showRepoSelector?: boolean;
   repoSelector?: RepoSelector;
   onRepoSelectorChange?: (selector: RepoSelector) => void;
+  /** Extra content shown below the scopes, above the actions. */
+  notice?: ReactNode;
 }
 
 export function TokenCreateForm({
@@ -60,6 +63,7 @@ export function TokenCreateForm({
   showRepoSelector = false,
   repoSelector,
   onRepoSelectorChange,
+  notice,
 }: TokenCreateFormProps) {
   const toggleScope = (scope: string) => {
     onScopesChange(
@@ -137,6 +141,7 @@ export function TokenCreateForm({
             />
           </div>
         )}
+        {notice}
         <DialogFooter>
           <Button variant="outline" type="button" onClick={onCancel}>
             Cancel

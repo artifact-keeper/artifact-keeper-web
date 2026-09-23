@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Key,
@@ -21,7 +22,6 @@ import type {
   CreateApiKeyResponse,
   CreateAccessTokenResponse,
 } from "@/lib/api/profile";
-import type { RepoSelector } from "@/lib/api/service-accounts";
 import { useAuth } from "@/providers/auth-provider";
 import { SCOPES } from "@/lib/constants/token";
 
@@ -89,6 +89,33 @@ function TokenPrefix({ prefix }: { prefix: string }) {
   );
 }
 
+/**
+ * The backend's personal-token endpoint has no repository selector yet: it
+ * dropped one silently, leaving the token unrestricted, so the create dialog
+ * no longer offers it and says so instead (web #902, artifact-keeper#4219).
+ * Service Accounts is an admin page, so only admins get a link to it.
+ */
+function PersonalTokenScopeNote({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <p
+      data-testid="personal-token-scope-note"
+      className="border-t pt-4 text-xs text-muted-foreground"
+    >
+      Personal tokens can&apos;t be limited to specific repositories yet
+      (artifact-keeper#4219). A personal token can reach every repository your
+      account can. For a repository-scoped token, use a{" "}
+      {isAdmin ? (
+        <Link href="/service-accounts" className="underline underline-offset-2">
+          service account
+        </Link>
+      ) : (
+        "service account"
+      )}
+      .
+    </p>
+  );
+}
+
 export function renderRepoAccess(token: AccessToken) {
   if (token.repo_selector) {
     const parts: string[] = [];
@@ -144,7 +171,6 @@ export default function AccessTokensPage() {
   const [tokenName, setTokenName] = useState("");
   const [tokenExpiry, setTokenExpiry] = useState("90");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["read:artifacts"]);
-  const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreateAccessTokenResponse | null>(null);
   const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
@@ -195,7 +221,6 @@ export default function AccessTokensPage() {
       setTokenName("");
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
-      setTokenRepoSelector({});
       toast.success("Access token created");
     },
     onError: (err: unknown) =>
@@ -355,7 +380,7 @@ export default function AccessTokensPage() {
             <div>
               <h2 className="text-lg font-semibold">Access Tokens</h2>
               <p className="text-sm text-muted-foreground">
-                Personal access tokens for CLI and CI/CD authentication. Tokens can be scoped to specific repositories.
+                Personal access tokens for CLI and CI/CD authentication. A personal token can reach every repository your account can.
               </p>
             </div>
             <Button onClick={() => setCreateTokenOpen(true)}>
@@ -445,7 +470,6 @@ export default function AccessTokensPage() {
             setTokenName("");
             setTokenScopes(["read:artifacts"]);
             setTokenExpiry("90");
-            setTokenRepoSelector({});
             setNewlyCreatedToken(null);
           }
         }}
@@ -476,24 +500,17 @@ export default function AccessTokensPage() {
               onScopesChange={setTokenScopes}
               availableScopes={availableScopes}
               isPending={createTokenMutation.isPending}
-              onSubmit={() => {
-                const hasSelector =
-                  (tokenRepoSelector.match_formats?.length ?? 0) > 0 ||
-                  Object.keys(tokenRepoSelector.match_labels ?? {}).length > 0 ||
-                  !!tokenRepoSelector.match_pattern;
+              onSubmit={() =>
                 createTokenMutation.mutate({
                   name: tokenName,
                   expires_in_days:
                     tokenExpiry === "0" ? undefined : Number(tokenExpiry),
                   scopes: tokenScopes,
-                  repo_selector: hasSelector ? tokenRepoSelector : undefined,
-                });
-              }}
+                })
+              }
               onCancel={() => setCreateTokenOpen(false)}
               submitLabel="Create Token"
-              showRepoSelector
-              repoSelector={tokenRepoSelector}
-              onRepoSelectorChange={setTokenRepoSelector}
+              notice={<PersonalTokenScopeNote isAdmin={!!user?.is_admin} />}
             />
           )}
         </DialogContent>

@@ -317,4 +317,21 @@ describe("TokenCreateForm", () => {
       screen.getByText(/Restrict which repositories this token can access/)
     ).toBeInTheDocument();
   });
+
+  it("renders the notice between the scopes and the actions", () => {
+    render(
+      <TokenCreateForm
+        {...defaultProps({ notice: <p data-testid="form-notice">Heads up</p> })}
+      />
+    );
+    const notice = screen.getByTestId("form-notice");
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(
+      screen.getByText("Scopes").compareDocumentPosition(notice) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      notice.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
 });

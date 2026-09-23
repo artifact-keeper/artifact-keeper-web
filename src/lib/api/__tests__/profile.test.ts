@@ -448,7 +448,7 @@ describe("profileApi", () => {
     ).rejects.toBe("invalid request");
   });
 
-  it("createAccessToken passes repo_selector to SDK", async () => {
+  it("createAccessToken sends only the backend's fields, never repo_selector (#902)", async () => {
     const mockResponse = {
       id: "tok-scoped",
       token: "akt_scoped_token",
@@ -460,31 +460,24 @@ describe("profileApi", () => {
     });
 
     const { profileApi } = await import("../profile");
+    // The type no longer has `repo_selector`; a caller that casts one in
+    // must still not get it onto the wire, where the backend would drop it
+    // and mint an unrestricted token (artifact-keeper#4219).
     const result = await profileApi.createAccessToken({
       name: "Scoped Token",
       expires_in_days: 90,
       scopes: ["read:artifacts", "write:artifacts"],
-      repo_selector: {
-        match_formats: ["docker", "npm"],
-        match_pattern: "prod-*",
-        match_labels: { env: "production" },
-      },
-    });
+      repo_selector: { match_formats: ["docker"] },
+      repository_ids: ["repo-1"],
+    } as unknown as Parameters<typeof profileApi.createAccessToken>[0]);
 
-    expect(mockCreateApiToken).toHaveBeenCalledWith({
-      body: {
-        name: "Scoped Token",
-        expires_in_days: 90,
-        scopes: ["read:artifacts", "write:artifacts"],
-        repo_selector: {
-          match_formats: ["docker", "npm"],
-          match_pattern: "prod-*",
-          match_labels: { env: "production" },
-        },
-      },
+    const { body } = mockCreateApiToken.mock.calls[0][0];
+    expect(Object.keys(body).sort()).toEqual(["expires_in_days", "name", "scopes"]);
+    expect(body).toEqual({
+      name: "Scoped Token",
+      expires_in_days: 90,
+      scopes: ["read:artifacts", "write:artifacts"],
     });
-    // A pre-1.10.0 mint carries neither expiry field; both normalize rather
-    // than surfacing as undefined on the reveal (#854).
     expect(result).toEqual({
       ...mockResponse,
       expires_at: null,

@@ -222,6 +222,7 @@ vi.mock("@/components/common/token-create-form", () => ({
     showRepoSelector,
     repoSelector,
     onRepoSelectorChange,
+    notice,
   }: any) => (
     <div data-testid="token-create-form">
       <span>{title}</span>
@@ -255,6 +256,7 @@ vi.mock("@/components/common/token-create-form", () => ({
           </button>
         </div>
       )}
+      {notice}
     </div>
   ),
 }));
@@ -1011,7 +1013,7 @@ describe("AccessTokensPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Personal access tokens for CLI and CI/CD authentication. Tokens can be scoped to specific repositories."
+        "Personal access tokens for CLI and CI/CD authentication. A personal token can reach every repository your account can."
       )
     ).toBeInTheDocument();
   });
@@ -1431,19 +1433,76 @@ describe("AccessTokensPage", () => {
   // =========================================================================
 
   // -------------------------------------------------------------------------
-  // 53. Access token create dialog shows repo selector
+  // 53. Access token create dialog offers no repo selector (#902)
   // -------------------------------------------------------------------------
-  it("shows repo selector section in create access token dialog", () => {
+  // The personal-token endpoint drops a selector, leaving the token
+  // unrestricted (artifact-keeper#4219), so the dialog no longer offers one
+  // and says so instead.
+  it("offers no repo selector in the create access token dialog and explains why", () => {
     setupDefaultMocks();
 
     render(<AccessTokensPage />);
 
-    // Open create token dialog
     const tokenTab = screen.getByTestId("tab-content-access-tokens");
-    const createBtn = tokenTab.querySelector("button")!;
-    fireEvent.click(createBtn);
+    fireEvent.click(tokenTab.querySelector("button")!);
 
-    expect(screen.getByTestId("repo-selector-section")).toBeInTheDocument();
+    expect(screen.queryByTestId("repo-selector-section")).not.toBeInTheDocument();
+    const note = screen.getByTestId("personal-token-scope-note");
+    expect(note.textContent).toBe(
+      "Personal tokens can't be limited to specific repositories yet " +
+        "(artifact-keeper#4219). A personal token can reach every repository " +
+        "your account can. For a repository-scoped token, use a service account."
+    );
+  });
+
+  it("links the note to Service Accounts for an admin", () => {
+    setupDefaultMocks({ isAdmin: true });
+
+    render(<AccessTokensPage />);
+
+    const tokenTab = screen.getByTestId("tab-content-access-tokens");
+    fireEvent.click(tokenTab.querySelector("button")!);
+
+    const note = screen.getByTestId("personal-token-scope-note");
+    const link = note.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(link).toHaveAttribute("href", "/service-accounts");
+    expect(link!.textContent).toBe("service account");
+  });
+
+  it("leaves 'service account' as plain text for a non-admin", () => {
+    setupDefaultMocks({ isAdmin: false });
+
+    render(<AccessTokensPage />);
+
+    const tokenTab = screen.getByTestId("tab-content-access-tokens");
+    fireEvent.click(tokenTab.querySelector("button")!);
+
+    const note = screen.getByTestId("personal-token-scope-note");
+    expect(note.querySelector("a")).toBeNull();
+    expect(note.textContent).toContain("use a service account.");
+  });
+
+  it("sends only name, scopes and expires_in_days when creating an access token", async () => {
+    const { profileApi } = await import("@/lib/api/profile");
+    setupDefaultMocks();
+
+    render(<AccessTokensPage />);
+
+    const tokenTab = screen.getByTestId("tab-content-access-tokens");
+    fireEvent.click(tokenTab.querySelector("button")!);
+    fireEvent.click(screen.getByTestId("form-submit-btn"));
+
+    expect(profileApi.createAccessToken).toHaveBeenCalledTimes(1);
+    const body = vi.mocked(profileApi.createAccessToken).mock.calls[0][0];
+    expect(Object.keys(body).sort()).toEqual(
+      ["expires_in_days", "name", "scopes"]
+    );
+    expect(body).toEqual({
+      name: "",
+      expires_in_days: 90,
+      scopes: ["read:artifacts"],
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1463,50 +1522,9 @@ describe("AccessTokensPage", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 55. Repo selector initializes with empty object
+  // 57. createTokenMutation onSuccess
   // -------------------------------------------------------------------------
-  it("initializes repo selector with empty object", () => {
-    setupDefaultMocks();
-
-    render(<AccessTokensPage />);
-
-    const tokenTab = screen.getByTestId("tab-content-access-tokens");
-    fireEvent.click(tokenTab.querySelector("button")!);
-
-    const selectorData = screen.getByTestId("repo-selector-data");
-    expect(selectorData.textContent).toBe("{}");
-  });
-
-  // -------------------------------------------------------------------------
-  // 56. Repo selector resets on dialog close
-  // -------------------------------------------------------------------------
-  it("resets repo selector when access token dialog is closed", () => {
-    setupDefaultMocks();
-
-    render(<AccessTokensPage />);
-
-    // Open dialog
-    const tokenTab = screen.getByTestId("tab-content-access-tokens");
-    fireEvent.click(tokenTab.querySelector("button")!);
-
-    // Change the selector
-    fireEvent.click(screen.getByTestId("repo-selector-change-btn"));
-
-    // Close dialog
-    fireEvent.click(screen.getByTestId("dialog-close-trigger"));
-
-    // Re-open dialog
-    fireEvent.click(tokenTab.querySelector("button")!);
-
-    // Selector should be reset to empty
-    const selectorData = screen.getByTestId("repo-selector-data");
-    expect(selectorData.textContent).toBe("{}");
-  });
-
-  // -------------------------------------------------------------------------
-  // 57. createTokenMutation onSuccess resets repo selector
-  // -------------------------------------------------------------------------
-  it("resets repo selector after successful token creation", async () => {
+  it("toasts after successful token creation", async () => {
     const { toast } = await import("sonner");
     setupDefaultMocks();
 
@@ -1518,7 +1536,6 @@ describe("AccessTokensPage", () => {
     });
 
     expect(toast.success).toHaveBeenCalledWith("Access token created");
-    // The repo selector should be reset (tested implicitly by re-opening dialog)
   });
 
   // -------------------------------------------------------------------------
@@ -1558,16 +1575,18 @@ describe("AccessTokensPage", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 61. Updated access tokens description mentions scoping
+  // 61. The description does not claim personal tokens are repo-scoped (#902)
   // -------------------------------------------------------------------------
-  it("shows updated description mentioning repository scoping", () => {
+  it("does not claim personal tokens can be scoped to repositories", () => {
     setupDefaultMocks();
 
     render(<AccessTokensPage />);
 
+    expect(screen.queryByText(/scoped to specific repositories/)).toBeNull();
+
     expect(
       screen.getByText(
-        "Personal access tokens for CLI and CI/CD authentication. Tokens can be scoped to specific repositories."
+        "Personal access tokens for CLI and CI/CD authentication. A personal token can reach every repository your account can."
       )
     ).toBeInTheDocument();
   });
