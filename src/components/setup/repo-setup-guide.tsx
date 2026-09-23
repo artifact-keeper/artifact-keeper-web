@@ -533,6 +533,44 @@ function getRepoSetupSteps(repo: Repository): SetupStep[] {
   const repoKey = repo.key;
 
   switch (repo.format) {
+    case "github":
+    case "mise":
+    case "aqua": {
+      const authenticatedOrigin = REGISTRY_URL.replace("://", "://YOUR_USERNAME:YOUR_TOKEN@");
+      if (repo.repo_type !== "remote") {
+        return [{
+          title: "Create a remote GitHub mirror",
+          description: "For mise downloads, create a remote repository with this format and https://github.com as its upstream. Keep it private. Local repositories store files without fetching GitHub releases.",
+        }];
+      }
+      return [
+        {
+          title: "Restrict mirror access",
+          description: "Keep this repository private and authenticate with an Artifact Keeper token. If you configure a GitHub token for upstream requests, every reader of the mirror must be trusted to access everything that token can read. These formats do not restrict upstream paths.",
+        },
+        {
+          title: "Configure mise URL replacements",
+          description: "Add to your private mise configuration and trust that file. Replace the username and token placeholders with URL-encoded Artifact Keeper credentials; do not commit them. The upstream should be https://github.com.",
+          code: `[settings]
+experimental = true
+lockfile = true
+
+[settings.url_replacements]
+'regex:^https://github\\.com/([^/]+)/([^/]+)/releases/download/(.+)' = '${authenticatedOrigin}/general/${repoKey}/$1/$2/releases/download/$3'`,
+        },
+        {
+          title: "Lock and install tools",
+          description: "Use mise with lockfile support (2026.3 or newer). Resolve the lockfile online, commit mise.toml and mise.lock, then warm the mirror with a locked install. Locked installs avoid GitHub API lookups. Without a lockfile, API requests need a separate mirror or direct GitHub access.",
+          code: `mise use aqua:jqlang/jq@1.7.1
+mise lock
+mise install --locked`,
+        },
+        {
+          title: "Cache lifetime",
+          description: "Release downloads and checksum files are cached for seven days by default, then checked for upstream changes. A repository cache setting can override this. Outage coverage depends on remaining freshness and the existing error fallback, not seven days from the start of an outage. The aqua format name does not add standalone aqua CLI integration.",
+        },
+      ];
+    }
     case "conda":
       // Conda has its own wire format (repodata.json), not PyPI Simple — it
       // belongs with format-specific tooling, not the pypi-variants group.

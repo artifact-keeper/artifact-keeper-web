@@ -390,6 +390,33 @@ describe("repositoriesApi.narrowFormat (via get)", () => {
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+  it.each(["github", "mise", "aqua"] as const)("preserves the %s mirror format", async (format) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetRepository.mockResolvedValue({
+      data: {
+        id: "r1",
+        key: "lab-ext",
+        name: "JupyterLab Extensions",
+        description: null,
+        format,
+        repo_type: "local",
+        is_public: true,
+        storage_used_bytes: 0,
+        quota_bytes: null,
+        upstream_url: null,
+        upstream_auth_type: null,
+        upstream_auth_configured: false,
+        created_at: "2025-01-01",
+        updated_at: "2025-01-01",
+      },
+      error: undefined,
+    });
+
+    const result = await repositoriesApi.get("lab-ext");
+    expect(result.format).toBe(format);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------

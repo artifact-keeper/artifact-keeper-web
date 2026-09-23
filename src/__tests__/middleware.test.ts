@@ -174,6 +174,7 @@ describe("middleware proxying", () => {
       "/v2/my-repo/manifests/latest",
       "/helm/my-repo/index.yaml",
       "/cargo/my-repo/api/v1/crates",
+      "/general/gh-mirror/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64",
     ];
 
     for (const path of formatPaths) {
