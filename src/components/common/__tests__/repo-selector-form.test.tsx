@@ -631,7 +631,28 @@ describe("RepoSelectorForm", () => {
     const selector = { match_formats: ["docker"] };
     await capturedMutationOpts.mutationFn(selector);
 
-    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(selector);
+    // The account id is passed alongside the selector so the backend can also
+    // report members it has no access to (artifact-keeper#4215); it is
+    // `undefined` when the form is used without an account.
+    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(selector, undefined);
+  });
+
+  it("passes the service account to the preview when the form has one", async () => {
+    render(
+      <RepoSelectorForm
+        value={{ match_formats: ["docker"] }}
+        onChange={vi.fn()}
+        serviceAccountId="acct-1"
+      />
+    );
+    mockPreviewRepoSelector.mockResolvedValueOnce({ matched_repositories: [], total: 0 });
+
+    await capturedMutationOpts.mutationFn({ match_formats: ["docker"] });
+
+    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(
+      { match_formats: ["docker"] },
+      "acct-1"
+    );
   });
 
   // onError surfaces the backend error via toUserMessage (#207)

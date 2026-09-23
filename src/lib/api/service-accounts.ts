@@ -41,6 +41,11 @@ export interface ServiceAccountToken {
   is_expired: boolean;
   repo_selector?: RepoSelector;
   repository_ids: string[];
+  /**
+   * How many virtual-repository members this token cannot reach
+   * (artifact-keeper#4215). Absent on backends before 1.11.
+   */
+  unreachable_member_count?: number;
 }
 
 export interface RepoSelector {
@@ -65,6 +70,28 @@ export interface RepoSelector {
   include_virtual_members?: boolean;
 }
 
+/**
+ * Why one member of a virtual repository is out of reach for a token
+ * (backend artifact-keeper#4215). A closed set, so the UI groups on it rather
+ * than parsing the message.
+ */
+export type UnreachableReason = 'out_of_token_scope' | 'no_grant';
+
+export interface UnreachableMember {
+  repo_key: string;
+  reason: UnreachableReason;
+}
+
+export interface UnreachableVirtual {
+  virtual_repo_key: string;
+  members: UnreachableMember[];
+}
+
+export interface TokenScopeAnalysis {
+  unreachable: UnreachableVirtual[];
+  unreachable_member_count: number;
+}
+
 export interface MatchedRepository {
   id: string;
   key: string;
@@ -74,6 +101,12 @@ export interface MatchedRepository {
 export interface PreviewRepoSelectorResponse {
   matched_repositories: MatchedRepository[];
   total: number;
+  /**
+   * Members of a matched virtual repository this scope would not reach
+   * (backend artifact-keeper#4215). Absent on backends before 1.11, and only
+   * populated when the preview is asked on behalf of a service account.
+   */
+  unreachable?: UnreachableVirtual[];
 }
 
 export interface CreateTokenRequest {
@@ -161,15 +194,34 @@ export const serviceAccountsApi = {
     });
   },
 
+  /**
+   * `serviceAccountId` is optional and only sharpens the answer: with it the
+   * backend can also report members the account has no grant on, which it
+   * cannot know otherwise (artifact-keeper#4215).
+   */
   previewRepoSelector: async (
-    selector: RepoSelector
+    selector: RepoSelector,
+    serviceAccountId?: string
   ): Promise<PreviewRepoSelectorResponse> => {
     return apiFetch<PreviewRepoSelectorResponse>(
       '/api/v1/service-accounts/repo-selector/preview',
       {
         method: 'POST',
-        body: JSON.stringify({ repo_selector: selector }),
+        body: JSON.stringify({
+          repo_selector: selector,
+          ...(serviceAccountId ? { service_account_id: serviceAccountId } : {}),
+        }),
       }
+    );
+  },
+
+  /** Which members this token cannot read, and why (artifact-keeper#4215). */
+  getTokenScopeAnalysis: async (
+    accountId: string,
+    tokenId: string
+  ): Promise<TokenScopeAnalysis> => {
+    return apiFetch<TokenScopeAnalysis>(
+      `/api/v1/service-accounts/${accountId}/tokens/${tokenId}/scope-analysis`
     );
   },
 };
