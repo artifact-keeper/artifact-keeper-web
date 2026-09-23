@@ -375,9 +375,11 @@ export default function ServiceAccountsPage() {
       header: "Name",
       accessor: (t) => t.name,
       cell: (t) => (
-        <div className="flex items-center gap-2">
-          <Key className="size-3.5 text-muted-foreground" />
-          <span className="font-medium text-sm">{t.name}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Key className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="font-medium text-sm truncate max-w-[18rem]" title={t.name}>
+            {t.name}
+          </span>
           {t.is_expired && (
             <Badge variant="destructive" className="text-xs">
               Expired
@@ -620,7 +622,12 @@ export default function ServiceAccountsPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        {/* Wide but capped (#900): the token table carries a name, a prefix,
+            scope badges and a repo-access summary, which a fixed `sm:max-w-2xl`
+            could not fit — the table spilled over the dialog's edge. Same idiom
+            the other wide dialogs in this app use; past the cap the table
+            scrolls horizontally inside the dialog. */}
+        <DialogContent className="w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100%-2rem)] sm:max-w-none">
           <DialogHeader>
             <DialogTitle>
               Tokens: {tokenAccount?.username}

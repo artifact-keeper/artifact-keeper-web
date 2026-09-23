@@ -466,12 +466,16 @@ export default function PermissionsPage() {
                   (form.principal_type === "service_account" && serviceAccountsLoading)
                 }
               >
-                {form.principal_type === "service_account" && serviceAccountsLoading
-                  ? "Loading service accounts..."
-                  : selectedPrincipal?.label ??
-                    (editOpen && selectedPermission
-                      ? getPrincipalLabel(selectedPermission)
-                      : "Select...")}
+                {/* #900: a long principal name has to truncate inside the
+                    button, not widen it. */}
+                <span className="truncate">
+                  {form.principal_type === "service_account" && serviceAccountsLoading
+                    ? "Loading service accounts..."
+                    : selectedPrincipal?.label ??
+                      (editOpen && selectedPermission
+                        ? getPrincipalLabel(selectedPermission)
+                        : "Select...")}
+                </span>
                 <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -568,13 +572,17 @@ export default function PermissionsPage() {
               }
               disabled={editOpen}
             >
-              <SelectTrigger>
+              {/* #900: `SelectTrigger` is `w-fit whitespace-nowrap`, so a long
+                  repository key grew the trigger past the dialog. Full width
+                  bounds it and the value truncates; the dropdown is capped and
+                  its items truncate too. */}
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder={`Select ${form.target_type}...`} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-w-[min(90vw,32rem)]">
                 {targetOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                  <SelectItem key={o.value} value={o.value} title={o.label}>
+                    <span className="truncate">{o.label}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
