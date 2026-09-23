@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A token that cannot read a virtual repository is now flagged where tokens are managed, with the one thing that fixes it** (#904, backend artifact-keeper#4215) - a service-account token reads nothing through a virtual repository if it is not scoped to the members, or if the account has no access to them, and the two look identical from the outside: an empty list, a 404. The token row now carries a count in Repo Access (`2 unreachable`); clicking it lists the repositories grouped by reason, each with its remedy — grant the account access, or add the repositories to the token. At create time, one line under Preview Matched Repos names the virtual repository and the count, because the fix is the checkbox directly above it. The detail is fetched only when the popover opens, so a list of tokens costs nothing extra. The verdict is the backend's: the rule exempts public members and weighs role assignments, neither of which the browser can see, so the UI renders what the server decided and does not re-implement it. On backends before 1.11 the fields are absent and nothing renders.
+
 ## [1.11.1] - 2026-10-18
 
 ### Sponsors

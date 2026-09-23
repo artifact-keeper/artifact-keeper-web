@@ -10,8 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { mutationErrorToast } from "@/lib/error-utils";
-import type { RepoSelector, MatchedRepository } from "@/lib/api/service-accounts";
+import type {
+  RepoSelector,
+  MatchedRepository,
+  UnreachableVirtual,
+} from "@/lib/api/service-accounts";
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
+import { PreviewScopeWarning } from "@/components/common/token-scope-warning";
 
 const COMMON_FORMATS = [
   "docker",
@@ -45,18 +50,23 @@ export function selectorHasFilters(selector: RepoSelector): boolean {
 interface RepoSelectorFormProps {
   readonly value: RepoSelector;
   readonly onChange: (selector: RepoSelector) => void;
+  /** When known, the preview also reports members this account cannot read
+   *  (artifact-keeper#4215). */
+  readonly serviceAccountId?: string;
 }
 
-export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
+export function RepoSelectorForm({ value, onChange, serviceAccountId }: RepoSelectorFormProps) {
   const [labelKey, setLabelKey] = useState("");
   const [labelValue, setLabelValue] = useState("");
   const [previewResults, setPreviewResults] = useState<MatchedRepository[] | null>(null);
+  const [unreachable, setUnreachable] = useState<UnreachableVirtual[] | undefined>(undefined);
 
   const previewMutation = useMutation({
     mutationFn: (selector: RepoSelector) =>
-      serviceAccountsApi.previewRepoSelector(selector),
+      serviceAccountsApi.previewRepoSelector(selector, serviceAccountId),
     onSuccess: (data) => {
       setPreviewResults(data.matched_repositories);
+      setUnreachable(data.unreachable);
     },
     onError: mutationErrorToast("Failed to preview repository selector"),
   });
@@ -69,6 +79,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
         : [...current, format];
       onChange({ ...value, match_formats: updated.length > 0 ? updated : undefined });
       setPreviewResults(null);
+      setUnreachable(undefined);
     },
     [value, onChange]
   );
@@ -94,6 +105,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
         match_labels: Object.keys(current).length > 0 ? current : undefined,
       });
       setPreviewResults(null);
+      setUnreachable(undefined);
     },
     [value, onChange]
   );
@@ -105,6 +117,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
         match_pattern: pattern || undefined,
       });
       setPreviewResults(null);
+      setUnreachable(undefined);
     },
     [value, onChange]
   );
@@ -212,6 +225,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
           <Search className="size-4" />
           {previewMutation.isPending ? "Checking..." : "Preview Matched Repos"}
         </Button>
+        <PreviewScopeWarning unreachable={unreachable} />
         {previewResults !== null && (
           <div className="rounded-md border p-3 text-sm">
             <p className="font-medium mb-1">
