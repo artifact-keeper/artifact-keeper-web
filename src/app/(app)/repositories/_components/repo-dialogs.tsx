@@ -12,6 +12,9 @@ import {
   hasNpmScopePolicy,
 } from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
+import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
+import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
+import { toUserMessage } from "@/lib/error-utils";
 
 // Alphabetised copy of FORMAT_OPTIONS for the create dialog's flat dropdown.
 // The source array is deliberately ordered by ecosystem group so that the
@@ -45,6 +48,7 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import {
   RpmTrustedKeyField,
+  RpmRepodataDepthField,
   DebianConfigFields,
   NpmScopePolicyFields,
   buildRpmConfigFields,
@@ -183,6 +187,15 @@ export function RepoDialogs({
 
   // 1.6.0 format-specific config state for the create dialog (#602).
   const [rpmConfig, setRpmConfig] = useState<RpmConfigValue>(EMPTY_RPM_CONFIG);
+  const [repodataDepth, setRepodataDepth] = useState("0");
+  const hasRepodataDepth = supportsRpmRepodataDepth(createForm.format, createForm.repo_type);
+  const repodataSupport = useRpmRepodataCapabilities(createOpen && hasRepodataDepth);
+  const parsedDepth = parseRepodataDepth(repodataDepth, repodataSupport.data ?? { min: 0, max: 0 });
+  const depthError = hasRepodataDepth && parsedDepth === null
+    ? repodataSupport.data
+      ? `Enter a whole number from ${repodataSupport.data.min} to ${repodataSupport.data.max}.`
+      : "Positive Repodata Depth requires confirmed backend support. Reopen the dialog after upgrading or restoring connectivity."
+    : undefined;
   const [debianConfig, setDebianConfig] =
     useState<DebianConfigValue>(EMPTY_DEBIAN_CONFIG);
   const [npmScopePolicy, setNpmScopePolicy] = useState<NpmScopePolicyValue>(
@@ -314,6 +327,7 @@ export function RepoDialogs({
     setUpstreamUsername("");
     setUpstreamPassword("");
     setRpmConfig(EMPTY_RPM_CONFIG);
+    setRepodataDepth("0");
     setDebianConfig(EMPTY_DEBIAN_CONFIG);
     setNpmScopePolicy(EMPTY_NPM_SCOPE_POLICY);
   };
@@ -361,6 +375,7 @@ export function RepoDialogs({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              if (depthError) return;
               // #591: a selected WASM plugin layout is submitted as
               // `format: "generic"` plus the plugin's `format_key` — the
               // backend binds plugin-backed repos that way (migration 065).
@@ -409,6 +424,9 @@ export function RepoDialogs({
                   submitData,
                   buildNpmScopePolicyFields(npmScopePolicy),
                 );
+              }
+              if (hasRepodataDepth && parsedDepth !== null && parsedDepth > 0) {
+                submitData.repodata_depth = parsedDepth;
               }
               onCreateSubmit(submitData);
             }}
@@ -465,6 +483,7 @@ export function RepoDialogs({
                 <Select
                   value={createForm.format}
                   onValueChange={(v) => {
+                    setRepodataDepth("0");
                     setCreateForm((f) => ({
                       ...f,
                       format: v as RepositoryFormat,
@@ -496,6 +515,7 @@ export function RepoDialogs({
                 <Select
                   value={createForm.repo_type}
                   onValueChange={(v) => {
+                    setRepodataDepth("0");
                     setCreateForm((f) => ({
                       ...f,
                       repo_type: v as RepositoryType,
@@ -645,6 +665,26 @@ export function RepoDialogs({
               </div>
             )}
 
+            {hasRepodataDepth && (
+              <div className="space-y-3 border-t pt-4">
+                <RpmRepodataDepthField
+                  idPrefix="create"
+                  value={repodataDepth}
+                  onChange={setRepodataDepth}
+                  repoKey={createForm.key}
+                  depth={parsedDepth}
+                  capability={repodataSupport.data}
+                  disabled={!repodataSupport.data || !!repodataSupport.error || createPending}
+                  error={depthError}
+                  notice={repodataSupport.isLoading
+                    ? "Checking backend Repodata Depth support..."
+                    : repodataSupport.error
+                      ? toUserMessage(repodataSupport.error, "Cannot verify Repodata Depth support.")
+                      : undefined}
+                />
+              </div>
+            )}
+
             {/* RPM curation trusted GPG key (#2568) */}
             {hasRpmTrustedKeyConfig(createForm.format) && (
               <div className="space-y-3 border-t pt-4">
@@ -734,7 +774,7 @@ export function RepoDialogs({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createPending || keyTaken}>
+              <Button type="submit" disabled={createPending || keyTaken || !!depthError}>
                 {createPending ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>

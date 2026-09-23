@@ -12,6 +12,21 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import type { Repository } from "@/types";
+import type { RpmRepodataCapabilities } from "@/lib/rpm-repodata";
+
+const depthSupport = vi.hoisted(() => ({
+  data: { supported: true, min: 0, max: 1023, default: 0 } as RpmRepodataCapabilities | undefined,
+  isLoading: false,
+  error: null as Error | null,
+}));
+vi.mock("@/hooks/use-rpm-repodata-capabilities", () => ({
+  useRpmRepodataCapabilities: () => depthSupport,
+}));
+beforeEach(() => {
+  depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
+  depthSupport.error = null;
+  depthSupport.isLoading = false;
+});
 
 // jsdom doesn't provide ResizeObserver
 beforeAll(() => {
@@ -302,6 +317,96 @@ function createWrapper() {
   }
   return TestWrapper;
 }
+
+describe("RepoSettingsTab - Repodata Depth", () => {
+  const repository: Repository = {
+    ...baseRepo, key: "rpm-builds", format: "rpm",
+    repodata_depth: 1, repodata_depth_editable: true,
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+    mockUpdate.mockResolvedValue(repository);
+  });
+  function show(overrides: Partial<Repository> = {}) {
+    return render(<RepoSettingsTab repository={{ ...repository, ...overrides }} />, { wrapper: createWrapper() });
+  }
+  it("displays the stored value, without treating storage bytes as an editability heuristic", () => {
+    show();
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "1");
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("disabled", false);
+    expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
+  });
+  it("submits positive-to-zero changes and resets after saving", async () => {
+    mockUpdate.mockResolvedValue({ ...repository, repodata_depth: 0 });
+    show();
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("rpm-builds", { repodata_depth: 0 }));
+    await waitFor(() => expect(screen.queryByText("You have unsaved changes")).toBeNull());
+  });
+  it("preserves positive depth on unrelated saves when the repository is populated", async () => {
+    show({ repodata_depth_editable: false });
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "1");
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("disabled", true);
+    expect(screen.getByText(/no artifact history/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("rpm-builds", { name: "Renamed" }));
+  });
+  it("does not treat an equivalent same-value edit as a mutation", () => {
+    show({ repodata_depth_editable: false });
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value: "01" } });
+    expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+  it("restores the stored value on discard", () => {
+    show();
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "1");
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+  it("does not carry an unsaved layout to another repository identity", () => {
+    const { rerender } = render(<RepoSettingsTab key={repository.id} repository={repository} />, { wrapper: createWrapper() });
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value: "2" } });
+    const other = { ...repository, id: "other-repo", key: "other-rpm", repodata_depth: 0 };
+    rerender(<RepoSettingsTab key={other.id} repository={other} />);
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "0");
+    expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
+  });
+  it.each(["", "-1", "1.5", "1e2", "1024"])("blocks invalid edit %j", (value) => {
+    show();
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value } });
+    expect(screen.getByRole("button", { name: "Save Changes" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Enter a whole number/, { selector: "[role=alert]" })).toBeTruthy();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+  it("leaves failed changes available for correction and displays the mutation error", async () => {
+    const { toast } = await import("sonner");
+    mockUpdate.mockRejectedValue(new Error("Cannot change repodata_depth while the repository contains artifacts (including deleted artifacts)"));
+    show();
+    fireEvent.change(screen.getByLabelText("Repodata Depth"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Failed to save repository settings"));
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "2");
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+  });
+  it("keeps old-backend settings viewable and unrelated settings editable", async () => {
+    depthSupport.data = undefined;
+    depthSupport.error = new Error("Upgrade backend");
+    show({ repodata_depth: undefined, repodata_depth_editable: undefined });
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("Repodata Depth")).toHaveProperty("value", "0");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith("rpm-builds", { name: "Renamed" }));
+  });
+  it.each(["remote", "virtual", "staging"] as const)("hides the setting for %s repositories", (repo_type) => {
+    show({ repo_type });
+    expect(screen.queryByLabelText("Repodata Depth")).toBeNull();
+  });
+});
 
 describe("RepoSettingsTab - General Section", () => {
   beforeEach(() => {
