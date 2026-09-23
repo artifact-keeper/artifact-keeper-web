@@ -45,7 +45,7 @@ async function seedAccountWithLongTokens(page: Page): Promise<boolean> {
     : [];
   for (const name of LONG_TOKEN_NAMES) {
     if (have.includes(name)) continue;
-    await page.request.post(`/api/v1/service-accounts/${account.id}/tokens`, {
+    const token = await page.request.post(`/api/v1/service-accounts/${account.id}/tokens`, {
       data: {
         name,
         scopes: ['read:artifacts', 'write:artifacts'],
@@ -53,6 +53,9 @@ async function seedAccountWithLongTokens(page: Page): Promise<boolean> {
         repo_selector: { match_formats: ['nuget'], match_pattern: 'pos-aggregated-*' },
       },
     });
+    // A token the API refused would leave the fixture without its long names:
+    // skip rather than fail on setup.
+    if (!token.ok()) return false;
   }
   return true;
 }
