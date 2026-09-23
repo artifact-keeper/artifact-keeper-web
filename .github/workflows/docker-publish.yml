@@ -48,8 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # amd64 builds on rocky's image-build pool (DinD sidecar per pod),
+          # not ak-ci-runners, so web images stop taking a Rust CI runner.
           - platform: linux/amd64
-            runner: ak-ci-runners
+            runner: ak-docker-runners
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
 
