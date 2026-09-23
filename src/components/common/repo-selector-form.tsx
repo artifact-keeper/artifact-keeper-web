@@ -109,6 +109,17 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
     [value, onChange]
   );
 
+  const toggleVirtualMembers = useCallback(
+    (checked: boolean) => {
+      onChange({ ...value, include_virtual_members: checked || undefined });
+      setPreviewResults(null);
+    },
+    [value, onChange]
+  );
+
+  // The virtual-members flag is deliberately not a filter: it widens a match,
+  // so on its own it selects nothing and the backend refuses such a token (an
+  // empty selector means unrestricted) - artifact-keeper#4130.
   const hasFilters = selectorHasFilters(value);
 
   return (
@@ -119,7 +130,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
         <p className="text-xs text-muted-foreground">
           Restrict access to repositories of specific types.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2" data-testid="format-checkboxes">
           {COMMON_FORMATS.map((fmt) => (
             <label key={fmt} className="flex items-center gap-2 text-sm">
               <Checkbox
@@ -198,6 +209,27 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
             <Plus className="size-4" />
           </Button>
         </div>
+      </div>
+
+      {/* Virtual repository members (artifact-keeper#4130) */}
+      <div className="space-y-2">
+        <Label>Virtual Repositories</Label>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            id="include-virtual-members"
+            className="mt-0.5"
+            checked={value.include_virtual_members === true}
+            onCheckedChange={(checked) => toggleVirtualMembers(checked === true)}
+          />
+          <span>Include members of matched virtual repositories</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          A token scoped to a virtual repository alone reads nothing through it,
+          because its contents belong to the member repositories. Members are
+          re-resolved on every request, so one added later is covered without a
+          new token. This only adds members to a match - it selects nothing on
+          its own.
+        </p>
       </div>
 
       {/* Preview */}

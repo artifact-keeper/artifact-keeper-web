@@ -121,12 +121,75 @@ describe("RepoSelectorForm", () => {
   it("renders all 12 format checkboxes", () => {
     renderForm();
 
-    const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes).toHaveLength(COMMON_FORMATS.length);
+    // Scoped to the formats grid: the form also carries the
+    // include-virtual-members box (artifact-keeper#4130), and counting every
+    // checkbox in the form would make this fail whenever one is added
+    // elsewhere.
+    const formatBoxes = screen
+      .getAllByRole("checkbox")
+      .filter((cb) => cb.closest("[data-testid='format-checkboxes']"));
+    expect(formatBoxes).toHaveLength(COMMON_FORMATS.length);
 
     for (const fmt of COMMON_FORMATS) {
       expect(screen.getByText(fmt)).toBeDefined();
     }
+  });
+
+  // 1b. artifact-keeper#4130: the virtual-members flag.
+  describe("virtual repository members (artifact-keeper#4130)", () => {
+    function virtualMembersCheckbox(): HTMLElement {
+      const boxes = screen
+        .getAllByRole("checkbox")
+        .filter((cb) => !cb.closest("[data-testid='format-checkboxes']"));
+      expect(boxes).toHaveLength(1);
+      return boxes[0];
+    }
+
+    it("sets include_virtual_members when ticked", () => {
+      const { onChange } = renderForm({ match_pattern: "libs-*" });
+
+      act(() => {
+        fireEvent.click(virtualMembersCheckbox());
+      });
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({ match_pattern: "libs-*", include_virtual_members: true })
+      );
+    });
+
+    // Unset rather than `false`: the backend treats both as absent, and an
+    // explicit `false` would post a field that means nothing.
+    it("clears the flag when unticked", () => {
+      const { onChange } = renderForm({
+        match_pattern: "libs-*",
+        include_virtual_members: true,
+      } as never);
+
+      act(() => {
+        fireEvent.click(virtualMembersCheckbox());
+      });
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({ include_virtual_members: undefined })
+      );
+    });
+
+    // The flag widens a match rather than filtering: on its own it selects
+    // nothing and the backend refuses such a token, so it must not enable the
+    // preview either.
+    it("does not count as a filter on its own", () => {
+      renderForm({ include_virtual_members: true } as never);
+
+      const preview = screen.getByText(/Preview Matched Repos/i).closest("button");
+      expect((preview as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("leaves the preview enabled when a real filter is present too", () => {
+      renderForm({ include_virtual_members: true, match_pattern: "libs-*" } as never);
+
+      const preview = screen.getByText(/Preview Matched Repos/i).closest("button");
+      expect((preview as HTMLButtonElement).disabled).toBe(false);
+    });
   });
 
   // 2. toggleFormat adds format when unchecked

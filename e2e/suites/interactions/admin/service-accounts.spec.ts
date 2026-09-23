@@ -161,6 +161,37 @@ test.describe.serial('Service Account CRUD', () => {
     await assertNoAppErrors(page);
   });
 
+  /**
+   * artifact-keeper#4130: a token scoped to a virtual repository alone reads
+   * nothing through it, so the selector form offers the members as part of the
+   * scope. The flag is not a filter — on its own it selects nothing and the
+   * backend refuses such a token — so the preview stays disabled until a real
+   * filter is set alongside it.
+   */
+  test('can scope a token to the members of matched virtual repositories', async ({ page }) => {
+    test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
+
+    const dialog = await openTokenDialogForAccount(page, SVC_ACCOUNT_RE);
+    await clickCreateTokenInDialog(dialog);
+    await fillDialogName(dialog, 'e2e-virtual-members-token');
+
+    const includeMembers = dialog.getByRole('checkbox', {
+      name: /include members of matched virtual repositories/i,
+    });
+    await includeMembers.check();
+    await expect(includeMembers).toBeChecked();
+
+    const preview = dialog.getByRole('button', { name: /preview matched repos/i });
+    await expect(preview).toBeDisabled();
+
+    await dialog.getByPlaceholder('libs-*').fill('prod-*');
+    await expect(preview).toBeEnabled();
+
+    await submitTokenForm(dialog, page);
+    await dismissTokenAlert(page);
+    await assertNoAppErrors(page);
+  });
+
   test('can edit a service account description', async ({ page }) => {
     test.skip(!(await ensureAccountExists(page)), SKIP_MSG);
 
