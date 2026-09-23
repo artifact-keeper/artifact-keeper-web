@@ -59,6 +59,27 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * The human-readable text of a backend error body. Upload-service errors are
+ * `{ error }` while `AppError` responses are `{ code, message }`, so read both.
+ */
+function bodyText(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const { error: err, message } = error as Record<string, unknown>;
+  const text = typeof err === 'string' && err.trim() ? err : message;
+  return typeof text === 'string' && text.trim() ? text : undefined;
+}
+
+/**
+ * A 409 from completion is a checksum mismatch only when the body says so
+ * (`UploadError::ChecksumMismatch` renders "checksum mismatch: expected …").
+ * Since artifact-keeper#4015 the same status also means the path holds an
+ * immutable version, and neither body carries a distinguishing `code`.
+ */
+function isChecksumMismatch(error: unknown): boolean {
+  return /checksum mismatch/i.test(bodyText(error) ?? '');
+}
+
 // --- API Functions ---
 
 export async function createUploadSession(
@@ -129,7 +150,14 @@ export async function completeUploadSession(
   });
   if (error) {
     if (response?.status === 409) {
-      throw new ChecksumMismatchError();
+      if (isChecksumMismatch(error)) {
+        throw new ChecksumMismatchError();
+      }
+      // Any other conflict (e.g. an immutable version already at this path)
+      // is shown in the backend's own words.
+      throw new Error(
+        bodyText(error) ?? 'Failed to finalize upload (HTTP 409 Conflict)'
+      );
     }
     if (response?.status === 410) {
       throw new UploadSessionExpiredError(sessionId);
