@@ -63,7 +63,12 @@ vi.mock("sonner", () => ({
 // Component under test (imported AFTER all vi.mock calls)
 // ---------------------------------------------------------------------------
 
-import { RepoSelectorForm, selectorHasFilters } from "../repo-selector-form";
+import {
+  RepoSelectorForm,
+  selectorHasFilters,
+  virtualMembersWithoutFilter,
+  VIRTUAL_MEMBERS_NEEDS_FILTER,
+} from "../repo-selector-form";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -189,6 +194,26 @@ describe("RepoSelectorForm", () => {
 
       const preview = screen.getByText(/Preview Matched Repos/i).closest("button");
       expect((preview as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    // #897: flag-only would mint an unrestricted token, so the form says so
+    // while that state holds; the submit handler refuses it.
+    it("warns inline while the flag is set without a filter", () => {
+      renderForm({ include_virtual_members: true } as never);
+
+      expect(screen.getByRole("alert").textContent).toBe(VIRTUAL_MEMBERS_NEEDS_FILTER);
+    });
+
+    it("drops the inline warning once a filter is set beside the flag", () => {
+      renderForm({ include_virtual_members: true, match_formats: ["npm"] } as never);
+
+      expect(screen.queryByText(VIRTUAL_MEMBERS_NEEDS_FILTER)).toBeNull();
+    });
+
+    it("shows no warning with no flag and no filter", () => {
+      renderForm({});
+
+      expect(screen.queryByText(VIRTUAL_MEMBERS_NEEDS_FILTER)).toBeNull();
     });
   });
 
@@ -677,16 +702,42 @@ describe("RepoSelectorForm", () => {
 });
 
 describe("selectorHasFilters", () => {
-  it("is false for an empty or all-blank selector", () => {
+  it("is false for an empty selector", () => {
     expect(selectorHasFilters({})).toBe(false);
+  });
+
+  it("is false for empty formats, labels and pattern", () => {
     expect(
-      selectorHasFilters({ match_formats: [], match_labels: {}, match_pattern: "" })
+      selectorHasFilters({ match_formats: [], match_labels: {}, match_pattern: "" }),
     ).toBe(false);
   });
 
-  it("is true for a format, a label or a name pattern", () => {
-    expect(selectorHasFilters({ match_formats: ["npm"] })).toBe(true);
-    expect(selectorHasFilters({ match_labels: { env: "prod" } })).toBe(true);
-    expect(selectorHasFilters({ match_pattern: "prod-*" })).toBe(true);
+  it("ignores the virtual-members flag", () => {
+    expect(selectorHasFilters({ include_virtual_members: true })).toBe(false);
+  });
+
+  it.each([
+    ["formats", { match_formats: ["npm"] }],
+    ["labels", { match_labels: { env: "prod" } }],
+    ["pattern", { match_pattern: "prod-*" }],
+  ])("is true with %s", (_name, selector) => {
+    expect(selectorHasFilters(selector)).toBe(true);
+  });
+});
+
+describe("virtualMembersWithoutFilter", () => {
+  it("is true for a flag-only selector", () => {
+    expect(virtualMembersWithoutFilter({ include_virtual_members: true })).toBe(true);
+  });
+
+  it("is false when a filter accompanies the flag", () => {
+    expect(
+      virtualMembersWithoutFilter({ include_virtual_members: true, match_pattern: "prod-*" }),
+    ).toBe(false);
+  });
+
+  it("is false without the flag, filters or not", () => {
+    expect(virtualMembersWithoutFilter({})).toBe(false);
+    expect(virtualMembersWithoutFilter({ match_formats: ["npm"] })).toBe(false);
   });
 });
