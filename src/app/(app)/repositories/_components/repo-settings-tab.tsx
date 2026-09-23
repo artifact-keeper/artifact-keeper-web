@@ -23,7 +23,9 @@ import {
   type ProxyScanAction,
   type UpsertScanConfigRequest,
 } from "@/lib/api/scan-config";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
+import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
+import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
 import { formatBytes } from "@/lib/utils";
 import { storageBackendLabel } from "@/lib/storage-backend";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
@@ -51,6 +53,7 @@ import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { CleanupPolicySettings } from "./cleanup-policy-settings";
 import {
   RpmTrustedKeyField,
+  RpmRepodataDepthField,
   DebianConfigFields,
   NpmScopePolicyFields,
   buildDebianConfigFields,
@@ -158,6 +161,7 @@ export interface UpdateRepositoryFields {
   // --- 1.6.0 format-specific config (#602) ---
   /** RPM curation trusted GPG key (#2568): string to set, `null` to clear. */
   trusted_gpg_key?: string | null;
+  repodata_depth?: number;
   apt_origin?: string;
   apt_label?: string;
   apt_release_version?: string;
@@ -249,6 +253,22 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const [rpmClear, setRpmClear] = useState(false);
   const rpmKeyTyped = rpmConfig.trusted_gpg_key.trim().length > 0;
   const rpmChanged = isRpm && (rpmKeyTyped || rpmClear);
+  const hasRepodataDepth = supportsRpmRepodataDepth(repository.format, repository.repo_type);
+  const repodataSupport = useRpmRepodataCapabilities(hasRepodataDepth);
+  const storedDepth = repository.repodata_depth ?? 0;
+  const [depthOverride, setDepthOverride] = useState<string>();
+  const depthValue = depthOverride ?? String(storedDepth);
+  const parsedDepth = repodataSupport.data
+    ? parseRepodataDepth(depthValue, repodataSupport.data)
+    : null;
+  const depthChanged = hasRepodataDepth && depthOverride !== undefined &&
+    (parsedDepth === null || parsedDepth !== storedDepth);
+  const canEditDepth = !!repodataSupport.data && !repodataSupport.error &&
+    repository.repodata_depth_editable === true;
+  const depthInvalid = depthChanged && (!canEditDepth || parsedDepth === null);
+  const depthError = depthChanged && parsedDepth === null && repodataSupport.data
+    ? `Enter a whole number from ${repodataSupport.data.min} to ${repodataSupport.data.max}.`
+    : undefined;
 
   // Debian/APT config (#2407/#2460/#2489/#2459), override-based like the
   // general fields so a repository prop change re-seeds the defaults.
@@ -371,7 +391,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     const originalQuotaBytes = repository.quota_bytes ?? null;
     if (currentQuotaBytes !== originalQuotaBytes) return true;
     if (cacheTtlChanged) return true;
-    if (rpmChanged || debianChanged || npmChanged) return true;
+    if (rpmChanged || debianChanged || npmChanged || depthChanged) return true;
     return false;
   }, [
     form,
@@ -381,6 +401,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     repository,
     cacheTtlChanged,
     rpmChanged,
+    depthChanged,
     debianChanged,
     npmChanged,
   ]);
@@ -401,6 +422,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       // Reset 1.6.0 format-specific config editors (#602). The RPM key is
       // write-only, so the textarea always returns to empty after a save.
       setRpmConfig(EMPTY_RPM_CONFIG);
+      setDepthOverride(undefined);
       setRpmClear(false);
       setDebianOverrides({});
       setNpmOverrides({});
@@ -422,6 +444,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   const handleSave = useCallback(async () => {
+    if (depthInvalid) return;
     // The general-fields update and the cache-TTL update are two separate
     // backend endpoints, so dispatch them independently. We deliberately do
     // NOT short-circuit one on the other's failure: a bad TTL value
@@ -461,6 +484,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       if (typedKey) fields.trusted_gpg_key = typedKey;
       else if (rpmClear) fields.trusted_gpg_key = null;
     }
+    if (depthChanged && parsedDepth !== null) fields.repodata_depth = parsedDepth;
     if (isDebian && debianChanged) {
       Object.assign(fields, buildDebianConfigFields(debianConfig));
     }
@@ -500,6 +524,9 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     isNpmScoped,
     npmChanged,
     npmScopePolicy,
+    depthInvalid,
+    depthChanged,
+    parsedDepth,
   ]);
 
   const handleDiscard = useCallback(() => {
@@ -507,6 +534,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     setQuotaOverrides({});
     setCacheTtlOverride(undefined);
     setRpmConfig(EMPTY_RPM_CONFIG);
+    setDepthOverride(undefined);
     setRpmClear(false);
     setDebianOverrides({});
     setNpmOverrides({});
@@ -983,6 +1011,31 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             </div>
           </section>
 
+          <Separator />
+        </>
+      )}
+
+      {hasRepodataDepth && (
+        <>
+          <section aria-label="RPM metadata layout">
+            <RpmRepodataDepthField
+              idPrefix="settings"
+              value={depthValue}
+              onChange={setDepthOverride}
+              repoKey={form.key}
+              depth={depthOverride === undefined ? storedDepth : parsedDepth}
+              capability={repodataSupport.data}
+              disabled={!canEditDepth || saveMutation.isPending}
+              error={depthError}
+              notice={repodataSupport.isLoading
+                ? "Checking backend Repodata Depth support..."
+                : repodataSupport.error
+                  ? toUserMessage(repodataSupport.error, "Cannot verify Repodata Depth support.")
+                  : !repository.repodata_depth_editable
+                    ? "Repodata Depth can only change on an eligible empty Local RPM repository, with no artifact history, curation, publications, or virtual membership. Other settings remain editable."
+                    : undefined}
+            />
+          </section>
           <Separator />
         </>
       )}
@@ -1712,6 +1765,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 setCacheTtlMutation.isPending ||
                 !form.name.trim() ||
                 !form.key.trim() ||
+                depthInvalid ||
                 (cacheTtlChanged && !cacheTtlIsValid)
               }
             >
