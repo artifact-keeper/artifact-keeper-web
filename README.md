@@ -33,6 +33,32 @@ Runs on http://localhost:3000. Configure `NEXT_PUBLIC_API_URL` to point to the A
 
 ## Deployment
 
+### Hosted RPM metadata roots
+
+Local RPM repositories support **Repodata Depth** in the create dialog and
+repository Settings when the backend confirms support through
+`GET /api/v1/repositories/_/capabilities`
+([backend tracking issue](https://github.com/artifact-keeper/artifact-keeper/issues/4216)).
+Zero is the default and keeps existing root-level metadata. At depth one,
+`build-a/package.rpm` and `build-b/package.rpm` have independent metadata at
+`/rpm/<repo>/build-a/repodata/repomd.xml` and
+`/rpm/<repo>/build-b/repodata/repomd.xml`. Deeper descendants stay in their
+respective root. These are paths in one repository, not child repositories or
+separate permissions.
+
+The Upload tab accepts the complete relative artifact path, including the
+filename. The shared Setup Guide shows the matching native curl PUT and YUM/DNF
+baseurl. A positive depth requires at least that many directories before the
+filename; the backend also enforces path safety and its path-length limit.
+
+Positive depth is not supported on Remote, Virtual, Staging, curated or snapshot
+repositories, or repositories participating in curation, publications or virtual
+membership. Changing the value requires backend-confirmed eligibility and no
+artifact history, including deleted artifacts. Unrelated settings and same-value
+updates preserve the existing layout. Older backends can still create default
+depth-zero repositories; positive settings remain disabled until support is
+confirmed. Upgrade all backend instances before enabling this feature.
+
 ### HTTPS hardening (`AK_ENFORCE_HTTPS`)
 
 By default the web UI ships **without** HSTS and without the CSP

@@ -5,6 +5,16 @@ import { render, screen, within, fireEvent, cleanup } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { RepoDialogs } from './repo-dialogs';
 import type { FormatHandler } from '@/lib/api/format-handlers';
+import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
+
+const depthSupport = vi.hoisted(() => ({
+  data: { supported: true, min: 0, max: 1023, default: 0 } as RpmRepodataCapabilities | undefined,
+  isLoading: false,
+  error: null as Error | null,
+}));
+vi.mock('@/hooks/use-rpm-repodata-capabilities', () => ({
+  useRpmRepodataCapabilities: () => depthSupport,
+}));
 
 // jsdom doesn't provide ResizeObserver
 beforeAll(() => {
@@ -80,6 +90,9 @@ vi.mock('@/providers/system-config-provider', () => ({
 // into other suites (their beforeEach hooks don't know about the mock).
 beforeEach(() => {
   mockFlags.guestAccessEnabled = true;
+  depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
+  depthSupport.error = null;
+  depthSupport.isLoading = false;
 });
 
 const defaultProps = {
@@ -101,6 +114,78 @@ const defaultProps = {
   deletePending: false,
   availableRepos: [],
 };
+
+describe('RepoDialogs - Repodata Depth', () => {
+  beforeEach(() => { cleanup(); vi.clearAllMocks(); });
+  function renderRpm() {
+    const rendered = render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(screen.getAllByTestId('mock-select')[0], { target: { value: 'rpm' } });
+    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'rpm-builds' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'RPM builds' } });
+    return rendered;
+  }
+  function submit() {
+    fireEvent.submit(screen.getByRole('button', { name: 'Create' }).closest('form')!);
+  }
+  it('defaults to zero without submitting a new field', () => {
+    renderRpm();
+    expect(screen.getByLabelText('Repodata Depth')).toHaveProperty('value', '0');
+    submit();
+    expect(defaultProps.onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('repodata_depth');
+  });
+  it('submits a validated positive depth with the matching metadata example', () => {
+    renderRpm();
+    fireEvent.change(screen.getByLabelText('Repodata Depth'), { target: { value: '1' } });
+    expect(screen.getByText('/rpm/rpm-builds/build-a/repodata/repomd.xml')).toBeTruthy();
+    submit();
+    expect(defaultProps.onCreateSubmit).toHaveBeenCalledWith(expect.objectContaining({ repodata_depth: 1 }));
+  });
+  it.each(['', '-1', '1.5', '1e2', '1024'])('blocks invalid value %j even on direct form submit', (value) => {
+    renderRpm();
+    fireEvent.change(screen.getByLabelText('Repodata Depth'), { target: { value } });
+    submit();
+    expect(screen.getByRole('alert').textContent).toContain('whole number');
+    expect(defaultProps.onCreateSubmit).not.toHaveBeenCalled();
+  });
+  it.each(['remote', 'virtual', 'staging'])('excludes stale depth after switching to %s', (value) => {
+    renderRpm();
+    fireEvent.change(screen.getByLabelText('Repodata Depth'), { target: { value: '2' } });
+    fireEvent.change(screen.getAllByTestId('mock-select')[1], { target: { value } });
+    expect(screen.queryByLabelText('Repodata Depth')).toBeNull();
+    submit();
+    expect(defaultProps.onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('repodata_depth');
+    fireEvent.change(screen.getAllByTestId('mock-select')[1], { target: { value: 'local' } });
+    expect(screen.getByLabelText('Repodata Depth')).toHaveProperty('value', '0');
+  });
+  it('resets after format changes and reopening', () => {
+    const { rerender } = renderRpm();
+    fireEvent.change(screen.getByLabelText('Repodata Depth'), { target: { value: '2' } });
+    fireEvent.change(screen.getAllByTestId('mock-select')[0], { target: { value: 'generic' } });
+    expect(screen.queryByLabelText('Repodata Depth')).toBeNull();
+    submit();
+    expect(defaultProps.onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('repodata_depth');
+    rerender(<RepoDialogs {...defaultProps} createOpen={false} />);
+    rerender(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(screen.getAllByTestId('mock-select')[0], { target: { value: 'rpm' } });
+    expect(screen.getByLabelText('Repodata Depth')).toHaveProperty('value', '0');
+  });
+  it('keeps zero creation available while old-server positive editing is disabled', () => {
+    depthSupport.data = undefined;
+    depthSupport.error = new Error('Upgrade the backend before changing Repodata Depth.');
+    renderRpm();
+    expect(screen.getByLabelText('Repodata Depth')).toHaveProperty('disabled', true);
+    expect(screen.getByText(/Upgrade the backend/)).toBeTruthy();
+    submit();
+    expect(defaultProps.onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('repodata_depth');
+  });
+  it('does not enable a field while capability is loading', () => {
+    depthSupport.data = undefined;
+    depthSupport.isLoading = true;
+    renderRpm();
+    expect(screen.getByLabelText('Repodata Depth')).toHaveProperty('disabled', true);
+    expect(screen.getByText(/Checking backend/)).toBeTruthy();
+  });
+});
 
 describe('RepoDialogs - Staging Hint', () => {
   beforeEach(() => {

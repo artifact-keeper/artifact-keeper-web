@@ -24,6 +24,10 @@ import {
 interface FileUploadProps {
   onUpload: (file: File, path?: string) => Promise<void>;
   showPathInput?: boolean;
+  pathLabel?: string;
+  pathPlaceholder?: string;
+  pathHint?: string;
+  validatePath?: (path: string) => string | undefined;
   accept?: string;
   className?: string;
   /** When provided, enables chunked upload for files over the threshold */
@@ -103,6 +107,10 @@ function ChunkedProgressDisplay({
 export function FileUpload({
   onUpload,
   showPathInput = false,
+  pathLabel = "Custom path (optional)",
+  pathPlaceholder = "e.g. libs/mylib-1.0.jar",
+  pathHint,
+  validatePath,
   accept,
   className,
   repositoryKey,
@@ -121,6 +129,7 @@ export function FileUpload({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isChunkedMode = !!repositoryKey && !!file && file.size >= chunkedThreshold;
+  const pathError = file ? validatePath?.(customPath || file.name) : undefined;
 
   const chunked = useChunkedUpload({
     repositoryKey: repositoryKey || "",
@@ -162,12 +171,12 @@ export function FileUpload({
       setFile(f);
 
       if (repositoryKey && f.size >= chunkedThreshold) {
-        if (chunked.hasPendingSession(f)) {
+        if (chunked.hasPendingSession(f, customPath || undefined)) {
           setShowResumePrompt(true);
         }
       }
     },
-    [repositoryKey, chunkedThreshold, chunked, maxUploadSizeBytes]
+    [repositoryKey, chunkedThreshold, chunked, maxUploadSizeBytes, customPath]
   );
 
   const handleDrop = useCallback(
@@ -213,6 +222,11 @@ export function FileUpload({
 
   const handleUpload = useCallback(async () => {
     if (!file) return;
+    const invalidPath = validatePath?.(customPath || file.name);
+    if (invalidPath) {
+      setError(invalidPath);
+      return;
+    }
     setUploading(true);
     setSimpleProgress(0);
     setShowResumePrompt(false);
@@ -237,7 +251,7 @@ export function FileUpload({
         setSimpleProgress(0);
       }
     }
-  }, [file, customPath, isChunkedMode, chunked, onUpload, handleClear]);
+  }, [file, customPath, isChunkedMode, chunked, onUpload, handleClear, validatePath]);
 
   const handleCancel = useCallback(() => {
     if (isChunkedMode && isActive) {
@@ -258,14 +272,24 @@ export function FileUpload({
     <div className={cn("space-y-4", className)}>
       {showPathInput && (
         <div className="space-y-2">
-          <Label htmlFor="upload-path">Custom path (optional)</Label>
+          <Label htmlFor="upload-path">{pathLabel}</Label>
           <Input
             id="upload-path"
-            placeholder="e.g. libs/mylib-1.0.jar"
+            placeholder={pathPlaceholder}
             value={customPath}
-            onChange={(e) => setCustomPath(e.target.value)}
+            onChange={(e) => {
+              const path = e.target.value;
+              setCustomPath(path);
+              setError(null);
+              if (file && isChunkedMode) {
+                setShowResumePrompt(chunked.hasPendingSession(file, path || undefined));
+              }
+            }}
             disabled={isActive}
+            aria-invalid={!!pathError}
+            aria-describedby={pathHint ? "upload-path-help" : undefined}
           />
+          {pathHint && <p id="upload-path-help" className="text-xs text-muted-foreground">{pathHint}</p>}
         </div>
       )}
 
@@ -374,13 +398,13 @@ export function FileUpload({
         </div>
       )}
 
-      {(error || (chunked.status === "error" && chunked.error)) && (
+      {(pathError || error || (chunked.status === "error" && chunked.error)) && (
         <div
           className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle className="size-4 mt-0.5 shrink-0" />
-          <p>{error ?? `Upload failed: ${chunked.error?.message}`}</p>
+          <p>{pathError ?? error ?? `Upload failed: ${chunked.error?.message}`}</p>
         </div>
       )}
 
@@ -404,7 +428,7 @@ export function FileUpload({
             Cancel
           </Button>
           {!isActive && (
-            <Button onClick={handleUpload}>
+            <Button onClick={handleUpload} disabled={!!pathError}>
               {showResumePrompt ? "Resume Upload" : "Upload"}
             </Button>
           )}

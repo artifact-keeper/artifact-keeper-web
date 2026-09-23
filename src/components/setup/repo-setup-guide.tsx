@@ -9,6 +9,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/common/copy-button";
+import { repodataRootExample } from "@/lib/rpm-repodata";
 
 // -- types --
 
@@ -730,6 +731,42 @@ sudo apt install <package-name>`,
         },
       ];
     case "rpm":
+      if ((repo.repodata_depth ?? 0) > 0) {
+        const depth = repo.repodata_depth ?? 0;
+        const root = repodataRootExample(depth);
+        const baseUrl = `${REGISTRY_URL}/rpm/${repoKey}/${root}/`;
+        const rpmFilename = "foo-1.2.3-1.x86_64.rpm";
+        return [
+          {
+            title: `Repodata Depth: ${depth}`,
+            description: `Choose a metadata root with exactly ${depth} directories. Packages below it, including deeper descendants, belong to that root; sibling roots such as build-a and build-b are independent, not child repositories with separate permissions. Upload paths require at least ${depth} directories before the filename. ${depth > 2 ? `Replace ${root} with your actual ${depth}-directory root; the paths below are illustrative placeholders. ` : ""}The repository root does not aggregate these roots. Changes to depth require an eligible empty repository, including no deleted artifact history.`,
+          },
+          {
+            title: "Add YUM/DNF repository",
+            description: "Create /etc/yum.repos.d/artifact-keeper.repo for your chosen metadata root. Configure credentials separately for private repositories:",
+            code: `[${repoKey}]
+name=Artifact Keeper - ${repo.name}
+baseurl=${baseUrl}
+enabled=1
+gpgcheck=0`,
+          },
+          {
+            title: "Metadata location",
+            code: `${baseUrl}repodata/repomd.xml`,
+          },
+          ...(repo.repo_type === "local" ? [{
+            title: "Publish an RPM to this metadata root",
+            description: "Use your access token and an RPM filename in name-version-release.arch.rpm form, matching the local file and URL basename. Keep the complete relative artifact path in the URL; the server enforces path safety and length limits.",
+            code: `curl --fail-with-body -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
+  --upload-file ${rpmFilename} \\
+  "${baseUrl}${rpmFilename}"`,
+          }] : []),
+          {
+            title: "Install a package",
+            code: "sudo dnf install <package-name>",
+          },
+        ];
+      }
       return [
         {
           title: "Add YUM/DNF repository",

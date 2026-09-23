@@ -160,6 +160,7 @@ import { CopyButton } from "@/components/common/copy-button";
 import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
+import { repodataRootExample, validateRepodataUploadPath } from "@/lib/rpm-repodata";
 
 interface RepoDetailContentProps {
   repoKey: string;
@@ -1279,6 +1280,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 repositoryKey={repoKey}
                 onChunkedComplete={handleChunkedComplete}
                 maxUploadSizeBytes={systemConfig.max_upload_size_bytes}
+                {...(repository.format === "rpm" && (repository.repodata_depth ?? 0) > 0
+                  ? {
+                      pathLabel: "Artifact path (required)",
+                      pathPlaceholder: `${repodataRootExample(repository.repodata_depth ?? 0)}/package.rpm`,
+                      pathHint: `Repodata Depth ${repository.repodata_depth}: enter the full relative path including the filename, with at least ${repository.repodata_depth} directories. Packages under each metadata root share its YUM metadata; sibling roots are independent.`,
+                      validatePath: (path: string) => validateRepodataUploadPath(path, repository.repodata_depth ?? 0),
+                    }
+                  : {})}
               />
             </div>
           </TabsContent>
@@ -1434,7 +1443,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {/* --- Settings Tab --- */}
         {user?.is_admin && (
           <TabsContent value="settings" className="mt-4">
-            <RepoSettingsTab repository={repository} />
+            <RepoSettingsTab key={repository.id} repository={repository} />
           </TabsContent>
         )}
 

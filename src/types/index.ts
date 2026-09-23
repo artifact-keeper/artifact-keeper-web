@@ -90,6 +90,10 @@ export interface Repository {
    * only exposure. Only meaningful for RPM-format repositories.
    */
   has_trusted_gpg_key?: boolean;
+  /** Hosted RPM metadata-root depth; omitted before artifact-keeper/artifact-keeper#4216. */
+  repodata_depth?: number;
+  /** Backend structural/empty-repository eligibility, not an authorization grant. */
+  repodata_depth_editable?: boolean;
   /** Debian/APT `Release` metadata + proxy filters (#2407/#2460/#2489/#2459). */
   apt_origin?: string;
   apt_label?: string;
@@ -209,6 +213,8 @@ export interface CreateRepositoryRequest {
    * RPM-format repositories.
    */
   trusted_gpg_key?: string | null;
+  /** Hosted RPM metadata-root depth. Omit on update to leave unchanged. */
+  repodata_depth?: number;
   /** Debian/APT `Release` metadata (#2460). */
   apt_origin?: string | null;
   apt_label?: string | null;

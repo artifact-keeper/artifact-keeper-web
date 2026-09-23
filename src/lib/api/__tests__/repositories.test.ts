@@ -29,6 +29,10 @@ const mockRemoveVirtualMember = vi.fn();
 const mockUpdateVirtualMembers = vi.fn();
 const mockGetCacheTtl = vi.fn();
 const mockSetCacheTtl = vi.fn();
+const mockCapabilities = vi.fn();
+vi.mock("@artifact-keeper/sdk/client", () => ({
+  client: { get: (...args: unknown[]) => mockCapabilities(...args) },
+}));
 vi.mock("@artifact-keeper/sdk", () => ({
   listRepositories: (...args: unknown[]) => mockListRepositories(...args),
   getRepository: (...args: unknown[]) => mockGetRepository(...args),
@@ -48,6 +52,108 @@ vi.mock("@/lib/sdk-client", () => ({
 }));
 
 import { repositoriesApi, supportsAgePolicy } from "../repositories";
+
+describe("RPM Repodata Depth API", () => {
+  const capability = { supported: true, min: 0, max: 1023, default: 0 };
+  const input = { key: "rpm-builds", name: "RPM builds", format: "rpm" as const, repo_type: "local" as const };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCapabilities.mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+      data: { rpm_repodata_depth: capability },
+    });
+  });
+
+  it("uses the non-conflicting capability route", async () => {
+    expect(await repositoriesApi.repodataSupport()).toEqual(capability);
+    expect(mockCapabilities).toHaveBeenCalledWith({ url: "/api/v1/repositories/_/capabilities" });
+    mockGetRepository.mockResolvedValue({ data: sdkRepo({ key: "capabilities" }) });
+    await repositoriesApi.get("capabilities");
+    expect(mockGetRepository).toHaveBeenCalledWith({ path: { key: "capabilities" } });
+  });
+
+  it.each([undefined, {}, { rpm_repodata_depth: false }, { rpm_repodata_depth: { ...capability, supported: false } }, { rpm_repodata_depth: { ...capability, max: "1023" } }, { rpm_repodata_depth: { ...capability, default: 1 } }])("blocks unconfirmed capability %j", async (data) => {
+    mockCapabilities.mockResolvedValue({ response: new Response(null), data });
+    await expect(repositoriesApi.create({ ...input, repodata_depth: 1 })).rejects.toThrow(/Upgrade/);
+    expect(mockCreateRepository).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 404, 401, 403, 500])("blocks writes on HTTP %i", async (status) => {
+    mockCapabilities.mockResolvedValue({ response: new Response(null, { status }) });
+    await expect(repositoriesApi.update(input.key, { repodata_depth: 1 })).rejects.toThrow(
+      status === 401 || status === 403 ? /permissions/ : status === 500 ? /Cannot verify/ : /Upgrade/,
+    );
+    expect(mockUpdateRepository).not.toHaveBeenCalled();
+  });
+
+  it("does not mistake transport failures for support", async () => {
+    mockCapabilities.mockRejectedValue(new Error("Network unavailable"));
+    await expect(repositoriesApi.create({ ...input, repodata_depth: 1 })).rejects.toThrow("Network unavailable");
+    expect(mockCreateRepository).not.toHaveBeenCalled();
+  });
+
+  it("rechecks support on each explicit write and forwards depth without dropping GPG config", async () => {
+    mockCreateRepository.mockResolvedValue({ data: sdkRepo({ repodata_depth: 1, repodata_depth_editable: true }) });
+    const result = await repositoriesApi.create({ ...input, repodata_depth: 1, trusted_gpg_key: "public-key" });
+    expect(result).toMatchObject({ repodata_depth: 1, repodata_depth_editable: true });
+    expect(mockCreateRepository.mock.calls[0][0].body).toMatchObject({ repodata_depth: 1, trusted_gpg_key: "public-key" });
+    mockCapabilities.mockResolvedValue({ response: new Response(null, { status: 404 }) });
+    await expect(repositoriesApi.update(input.key, { repodata_depth: 0 })).rejects.toThrow(/Upgrade/);
+    expect(mockCapabilities).toHaveBeenCalledTimes(2);
+    expect(mockUpdateRepository).not.toHaveBeenCalled();
+  });
+
+  it("omits default-zero creation and unrelated update fields for old servers", async () => {
+    mockCreateRepository.mockResolvedValue({ data: sdkRepo() });
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo() });
+    await repositoriesApi.create({ ...input, repodata_depth: 0 });
+    await repositoriesApi.update(input.key, { name: "Renamed" });
+    expect(mockCreateRepository.mock.calls[0][0].body).not.toHaveProperty("repodata_depth");
+    expect(mockUpdateRepository.mock.calls[0][0].body).not.toHaveProperty("repodata_depth");
+    expect(mockCapabilities).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, 0.5, 1024, NaN, Infinity])("blocks invalid depth %s before mutation", async (repodata_depth) => {
+    await expect(repositoriesApi.update(input.key, { repodata_depth })).rejects.toThrow(/whole number/);
+    expect(mockUpdateRepository).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1, 1023])("updates and confirms depth %i, including a populated same-value no-op", async (repodata_depth) => {
+    mockUpdateRepository.mockResolvedValue({ data: sdkRepo({ repodata_depth, repodata_depth_editable: false }) });
+    expect(await repositoriesApi.update(input.key, { repodata_depth })).toMatchObject({ repodata_depth });
+    expect(mockUpdateRepository.mock.calls[0][0].body).toHaveProperty("repodata_depth", repodata_depth);
+  });
+
+  it.each([
+    "Cannot change repodata_depth while the repository contains artifacts (including deleted artifacts)",
+    "Repodata depth requires a local RPM repository without curation, publications, or virtual membership",
+  ])("preserves backend rejection: %s", async (message) => {
+    mockUpdateRepository.mockResolvedValue({ error: { message } });
+    await expect(repositoriesApi.update(input.key, { repodata_depth: 1 })).rejects.toEqual({ message });
+  });
+
+  it.each([{}, { repodata_depth: 0, repodata_depth_editable: true }])("never reports success for missing/mismatched write echo", async (fields) => {
+    mockCreateRepository.mockResolvedValue({ data: sdkRepo(fields) });
+    await expect(repositoriesApi.create({ ...input, repodata_depth: 1 })).rejects.toThrow(/may have been saved/);
+    expect(mockCreateRepository).toHaveBeenCalledTimes(1);
+  });
+
+  it("adapts list/get values and legacy absence", async () => {
+    const positive = sdkRepo({ repodata_depth: 2, repodata_depth_editable: false });
+    mockListRepositories.mockResolvedValue({ data: { items: [positive, sdkRepo()], pagination: {} } });
+    expect((await repositoriesApi.list()).items).toEqual([
+      expect.objectContaining({ repodata_depth: 2, repodata_depth_editable: false }),
+      expect.objectContaining({ repodata_depth: 0, repodata_depth_editable: false }),
+    ]);
+    mockGetRepository.mockResolvedValue({ data: positive });
+    expect(await repositoriesApi.get(input.key)).toMatchObject({ repodata_depth: 2 });
+  });
+
+  it.each([{ repodata_depth: null }, { repodata_depth: -1, repodata_depth_editable: false }, { repodata_depth: "1", repodata_depth_editable: true }, { repodata_depth_editable: true }])("rejects malformed supplied fields %j", async (fields) => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(fields) });
+    await expect(repositoriesApi.get(input.key)).rejects.toThrow(/Invalid repository Repodata Depth/);
+  });
+});
 
 describe("repositoriesApi.updateUpstreamAuth", () => {
   beforeEach(() => {

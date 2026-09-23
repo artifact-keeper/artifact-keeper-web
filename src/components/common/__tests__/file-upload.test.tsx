@@ -60,6 +60,7 @@ vi.mock("@/lib/utils", () => ({
 }));
 
 import { FileUpload } from "../file-upload";
+import { validateRepodataUploadPath } from "@/lib/rpm-repodata";
 import {
   useChunkedUpload,
   type UseChunkedUploadReturn,
@@ -106,6 +107,39 @@ describe("FileUpload", () => {
   });
 
   afterEach(cleanup);
+
+  it.each([false, true])("checks the complete depth-aware path before uploading (chunked=%s)", async (chunked) => {
+    const onUpload = vi.fn().mockResolvedValue(undefined);
+    const state = makeHookState();
+    mockedUseChunkedUpload.mockReturnValue(state);
+    const { container } = render(
+      <FileUpload
+        onUpload={onUpload}
+        showPathInput
+        repositoryKey="rpm-builds"
+        chunkedThreshold={chunked ? 1 : 1000}
+        pathLabel="Artifact path (required)"
+        pathHint="Choose the complete relative RPM path."
+        validatePath={(path) => validateRepodataUploadPath(path, 2)}
+      />,
+    );
+    const file = createMockFile("package.rpm", 10);
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("at least 2");
+    expect(onUpload).not.toHaveBeenCalled();
+    expect(state.upload).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Artifact path (required)"), { target: { value: "build-a/x86_64/deeper/package.rpm" } });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    await waitFor(() => expect(chunked ? state.upload : onUpload).toHaveBeenCalledWith(file, "build-a/x86_64/deeper/package.rpm"));
+    if (chunked) {
+      expect(state.hasPendingSession).toHaveBeenLastCalledWith(file, "build-a/x86_64/deeper/package.rpm");
+      expect(onUpload).not.toHaveBeenCalled();
+    } else {
+      expect(state.upload).not.toHaveBeenCalled();
+    }
+  });
 
   // ---- Error display ----
 

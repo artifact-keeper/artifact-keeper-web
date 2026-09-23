@@ -23,6 +23,37 @@ function makeRepo(overrides: Partial<Repository> = {}): Repository {
 describe("RepoSetupGuide", () => {
   afterEach(() => cleanup());
 
+  it.each([0, undefined])("preserves root RPM setup when depth is %s", (repodata_depth) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "rpm", repodata_depth })} />);
+    expect(container.textContent).toContain("/rpm/my-repo/\nenabled=1");
+    expect(container.textContent).not.toContain("build-a");
+    expect(container.textContent).not.toContain("curl");
+  });
+  it.each([1, 2])("uses a depth-%i root for RPM metadata, upload and YUM", (repodata_depth) => {
+    const root = repodata_depth === 1 ? "build-a" : "build-a/x86_64";
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "rpm", repodata_depth })} />);
+    expect(container.textContent).toContain(`Repodata Depth: ${repodata_depth}`);
+    expect(container.textContent).toContain(`/rpm/my-repo/${root}/\nenabled=1`);
+    expect(container.textContent).toContain(`/rpm/my-repo/${root}/repodata/repomd.xml`);
+    const uploadCommand = Array.from(container.querySelectorAll("code"))
+      .find((code) => code.textContent?.includes("curl --fail-with-body -X PUT"))
+      ?.textContent;
+    const sourceFilename = uploadCommand?.match(/--upload-file (\S+)/)?.[1];
+    const destinationPath = uploadCommand?.match(/\/rpm\/my-repo\/([^"]+)"/)?.[1];
+    expect(sourceFilename).toBe("foo-1.2.3-1.x86_64.rpm");
+    expect(destinationPath).toBe(`${root}/${sourceFilename}`);
+    expect(uploadCommand).toContain('Authorization: Bearer YOUR_TOKEN');
+    expect(container.textContent).toContain("name-version-release.arch.rpm");
+    expect(container.textContent).toContain("including deeper descendants");
+    expect(container.textContent).toContain("build-a and build-b are independent");
+    expect(container.textContent).toContain("does not aggregate");
+  });
+  it("labels large-depth placeholders rather than generating a misleading runnable path", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "rpm", repodata_depth: 1023 })} />);
+    expect(container.textContent).toContain("<root-with-1023-directories>");
+    expect(container.textContent).toContain("illustrative placeholders");
+  });
+
   it("renders client-variant tabs for JVM formats", () => {
     render(<RepoSetupGuide repo={makeRepo({ format: "maven" })} />);
     expect(screen.getByRole("tab", { name: "Maven" })).toBeTruthy();

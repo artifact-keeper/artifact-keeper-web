@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { repodataRootExample, type RpmRepodataCapabilities } from "@/lib/rpm-repodata";
 
 // ---------------------------------------------------------------------------
 // Value shapes (string-based so every field stays a controlled input)
@@ -174,6 +175,58 @@ export function buildNpmScopePolicyFields(
 // ---------------------------------------------------------------------------
 // Field groups
 // ---------------------------------------------------------------------------
+
+interface RpmRepodataDepthFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  idPrefix: string;
+  repoKey: string;
+  depth: number | null;
+  capability?: RpmRepodataCapabilities;
+  disabled?: boolean;
+  notice?: string;
+  error?: string;
+}
+
+export function RpmRepodataDepthField({
+  value, onChange, idPrefix, repoKey, depth, capability, disabled, notice, error,
+}: RpmRepodataDepthFieldProps) {
+  const id = `${idPrefix}-repodata-depth`;
+  const root = depth !== null ? repodataRootExample(depth) : "";
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>Repodata Depth</Label>
+      <Input
+        id={id}
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        aria-invalid={!!error}
+        aria-describedby={`${id}-help${error ? ` ${id}-error` : ""}${notice ? ` ${id}-notice` : ""}`}
+      />
+      <div id={`${id}-help`} className="space-y-1 text-xs text-muted-foreground">
+        <p>
+          Directory levels before each independent YUM metadata root. Zero keeps
+          metadata at the repository root. Deeper packages belong to that root;
+          sibling roots stay separate, with the same repository permissions.
+        </p>
+        {capability && <p>Enter a whole number from {capability.min} to {capability.max}.</p>}
+        {depth !== null && (
+          <p>
+            {depth > 2 ? "Illustrative metadata path: " : "Metadata path: "}
+            <code>/rpm/{repoKey || "my-repo"}/{root ? `${root}/` : ""}repodata/repomd.xml</code>
+          </p>
+        )}
+        {depth !== null && depth > 0 && (
+          <p>Uploads require at least {depth} directories before the filename. The server also enforces its artifact-path length limit.</p>
+        )}
+      </div>
+      {notice && <p id={`${id}-notice`} role="status" className="text-xs text-muted-foreground">{notice}</p>}
+      {error && <p id={`${id}-error`} role="alert" className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
 
 interface RpmTrustedKeyFieldProps {
   value: RpmConfigValue;

@@ -1,4 +1,5 @@
 import '@/lib/sdk-client';
+import { client } from '@artifact-keeper/sdk/client';
 import {
   listRepositories,
   getRepository,
@@ -32,6 +33,72 @@ import type {
   RepositoryType,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
+import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
+
+const REPODATA_UPGRADE_MESSAGE =
+  'This backend does not confirm RPM Repodata Depth support. Upgrade the backend before changing Repodata Depth.';
+
+async function requireRepodataSupport(): Promise<RpmRepodataCapabilities> {
+  const result = await client.get<{ 200: unknown }>({
+    url: '/api/v1/repositories/_/capabilities',
+  });
+  if (!result.response?.ok) {
+    const status = result.response?.status;
+    if (status === 404 || status === 400) throw new Error(REPODATA_UPGRADE_MESSAGE);
+    if (status === 401 || status === 403) {
+      throw new Error(`Not permitted to check RPM Repodata Depth support (HTTP ${status}). Check your session and permissions.`);
+    }
+    if (result.error) throw result.error;
+    throw new Error(`Cannot verify RPM Repodata Depth support (HTTP ${status ?? 'unknown'}).`);
+  }
+  if (result.error) throw result.error;
+  const data = result.data;
+  const capability = data !== null && typeof data === 'object' && 'rpm_repodata_depth' in data
+    ? data.rpm_repodata_depth
+    : undefined;
+  if (
+    capability === null || typeof capability !== 'object' ||
+    !('supported' in capability) || capability.supported !== true ||
+    !('min' in capability) || capability.min !== 0 ||
+    !('max' in capability) || typeof capability.max !== 'number' ||
+    !Number.isSafeInteger(capability.max) || capability.max < 1 ||
+    !('default' in capability) || capability.default !== 0
+  ) {
+    throw new Error(REPODATA_UPGRADE_MESSAGE);
+  }
+  return { supported: true, min: 0, max: capability.max, default: 0 };
+}
+
+async function validateRepodataWrite(depth: number | undefined): Promise<void> {
+  if (depth === undefined) return;
+  const capability = await requireRepodataSupport();
+  if (!Number.isSafeInteger(depth) || depth < capability.min || depth > capability.max) {
+    throw new Error(`Repodata Depth must be a whole number from ${capability.min} to ${capability.max}.`);
+  }
+}
+
+function readRepodataFields(sdk: RepositoryResponse): Pick<Repository, 'repodata_depth' | 'repodata_depth_editable'> {
+  if (!('repodata_depth' in sdk) && !('repodata_depth_editable' in sdk)) {
+    return { repodata_depth: 0, repodata_depth_editable: false };
+  }
+  if (
+    !('repodata_depth' in sdk) || typeof sdk.repodata_depth !== 'number' ||
+    !Number.isSafeInteger(sdk.repodata_depth) || sdk.repodata_depth < 0 ||
+    !('repodata_depth_editable' in sdk) || typeof sdk.repodata_depth_editable !== 'boolean'
+  ) {
+    throw new Error('Invalid repository Repodata Depth response. Refresh to verify the stored settings.');
+  }
+  return {
+    repodata_depth: sdk.repodata_depth,
+    repodata_depth_editable: sdk.repodata_depth_editable,
+  };
+}
+
+function verifyRepodataWrite(sdk: RepositoryResponse, requested: number | undefined): void {
+  if (requested !== undefined && (!('repodata_depth' in sdk) || sdk.repodata_depth !== requested)) {
+    throw new Error('The backend did not confirm the requested Repodata Depth. The repository may have been saved; refresh and verify before retrying.');
+  }
+}
 
 export interface ListRepositoriesParams {
   page?: number;
@@ -234,6 +301,7 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     // `has_trusted_gpg_key` (#2568) is required on the current SDK type but
     // `?? false` stays defensive against a backend/list handler that omits it.
     has_trusted_gpg_key: sdk.has_trusted_gpg_key ?? false,
+    ...readRepodataFields(sdk),
     apt_origin: sdk.apt_origin ?? undefined,
     apt_label: sdk.apt_label ?? undefined,
     apt_release_version: sdk.apt_release_version ?? undefined,
@@ -280,6 +348,8 @@ function adaptVirtualMembersList(sdk: VirtualMembersListResponse): VirtualMember
 }
 
 export const repositoriesApi = {
+  repodataSupport: requireRepodataSupport,
+
   list: async (params: ListRepositoriesParams = {}): Promise<PaginatedResponse<Repository>> => {
     const data = await unwrap(listRepositories({ query: params }));
     return adaptRepositoryList(assertData(data, 'repositoriesApi.list'));
@@ -291,7 +361,10 @@ export const repositoriesApi = {
   },
 
   create: async (input: CreateRepositoryRequest): Promise<Repository> => {
-    const body: SdkCreateRepositoryRequest = {
+    // Default-zero creates retain their legacy wire shape on older backends.
+    const depth = input.repodata_depth === 0 ? undefined : input.repodata_depth;
+    await validateRepodataWrite(depth);
+    const body: SdkCreateRepositoryRequest & { repodata_depth?: number } = {
       key: input.key,
       name: input.name,
       description: input.description,
@@ -317,6 +390,7 @@ export const repositoriesApi = {
       // --- 1.6.0 format-specific config (#602). Undefined fields are dropped
       // by JSON serialization, so a repo of another format sends none of them.
       trusted_gpg_key: input.trusted_gpg_key,
+      ...(depth !== undefined ? { repodata_depth: depth } : {}),
       apt_origin: input.apt_origin,
       apt_label: input.apt_label,
       apt_release_version: input.apt_release_version,
@@ -327,10 +401,13 @@ export const repositoriesApi = {
       npm_allow_unscoped: input.npm_allow_unscoped,
     };
     const data = await unwrap(createRepository({ body }));
-    return adaptRepository(assertData(data, 'repositoriesApi.create'));
+    const repository = assertData(data, 'repositoriesApi.create');
+    verifyRepodataWrite(repository, depth);
+    return adaptRepository(repository);
   },
 
   update: async (key: string, input: Partial<CreateRepositoryRequest>): Promise<Repository> => {
+    await validateRepodataWrite(input.repodata_depth);
     // `versioning_enabled` (artifact-keeper#2367) is now on the generated SDK
     // request type. When omitted the backend leaves the flag unchanged.
     const body: SdkUpdateRepositoryRequest = {
@@ -344,6 +421,7 @@ export const repositoriesApi = {
       // three-way semantics: omit (undefined) = unchanged, `null` = clear,
       // string = set. Undefined fields are dropped by JSON serialization.
       trusted_gpg_key: input.trusted_gpg_key,
+      ...(input.repodata_depth !== undefined ? { repodata_depth: input.repodata_depth } : {}),
       apt_origin: input.apt_origin,
       apt_label: input.apt_label,
       apt_release_version: input.apt_release_version,
@@ -360,7 +438,9 @@ export const repositoriesApi = {
       // generated-required field without sending a spurious value.
     } as SdkUpdateRepositoryRequest;
     const data = await unwrap(updateRepository({ path: { key }, body }));
-    return adaptRepository(assertData(data, 'repositoriesApi.update'));
+    const repository = assertData(data, 'repositoriesApi.update');
+    verifyRepodataWrite(repository, input.repodata_depth);
+    return adaptRepository(repository);
   },
 
   delete: async (key: string): Promise<void> => {
@@ -516,4 +596,3 @@ export const repositoriesApi = {
     return assertData(data, 'repositoriesApi.setCacheTtl');
   },
 };
-
