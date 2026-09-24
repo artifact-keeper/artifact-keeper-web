@@ -69,16 +69,17 @@ export interface AccessToken {
 
 /**
  * Exactly the fields the backend's personal-token request
- * (`CreateApiTokenRequest`) has. There is deliberately no `repo_selector`:
- * the backend drops it today, which would leave a token the user thinks is
- * scoped unrestricted, and once it enforces `deny_unknown_fields` the field
- * is a 400 (web #902, artifact-keeper#4219). Repository-scoped tokens are
- * minted through service accounts.
+ * (`CreateApiTokenRequest`) has. `repo_selector` is accepted and enforced only
+ * from backend 1.11.0 (artifact-keeper#4219): before that it was dropped,
+ * leaving a token the user thought was scoped unrestricted (web #902). Callers
+ * must send it only to a 1.11.0+ backend and only with a real filter — the
+ * backend refuses an empty selector, and unknown fields, with a 400.
  */
 export interface CreateAccessTokenRequest {
   name: string;
   expires_in_days?: number;
   scopes?: string[];
+  repo_selector?: RepoSelector;
 }
 
 export interface CreateAccessTokenResponse extends TokenExpiryInfo {
@@ -221,13 +222,18 @@ export const profileApi = {
     reqData: CreateAccessTokenRequest
   ): Promise<CreateAccessTokenResponse> => {
     // Pick the backend's fields by name rather than spreading the request, so
-    // nothing else (a `repo_selector` smuggled in through a cast) reaches the
-    // wire (web #902).
+    // nothing else (a `repository_ids` smuggled in through a cast) reaches the
+    // wire, where `deny_unknown_fields` makes it a 400 (web #902). The SDK
+    // does not model `repo_selector` yet (backend 1.11.0,
+    // artifact-keeper#4219), hence the widened `satisfies`.
     const body = {
       name: reqData.name,
       expires_in_days: reqData.expires_in_days,
       ...(reqData.scopes !== undefined ? { scopes: reqData.scopes } : {}),
-    } satisfies Partial<SdkCreateApiTokenRequest>;
+      ...(reqData.repo_selector !== undefined
+        ? { repo_selector: reqData.repo_selector }
+        : {}),
+    } satisfies Partial<SdkCreateApiTokenRequest> & { repo_selector?: RepoSelector };
     const data = await unwrap(sdkCreateApiToken({ body: body as SdkCreateApiTokenRequest }));
     const result = assertData(data, 'profileApi.createAccessToken');
     return {

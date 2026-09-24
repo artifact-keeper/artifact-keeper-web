@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 
 import { profileApi } from "@/lib/api/profile";
+import { adminApi } from "@/lib/api/admin";
 import { apiErrorMessage } from "@/lib/api/fetch";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import type {
@@ -22,6 +23,11 @@ import type {
   CreateApiKeyResponse,
   CreateAccessTokenResponse,
 } from "@/lib/api/profile";
+import type { RepoSelector } from "@/lib/api/service-accounts";
+import {
+  backendAtLeast,
+  PERSONAL_TOKEN_REPO_SELECTOR_MIN,
+} from "@/lib/backend-version";
 import { useAuth } from "@/providers/auth-provider";
 import { SCOPES } from "@/lib/constants/token";
 
@@ -49,6 +55,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
+import { selectorHasFilters } from "@/components/common/repo-selector-form";
 
 /**
  * A refused mint is shown with the backend's own words: since backend 1.10.0
@@ -90,10 +97,11 @@ function TokenPrefix({ prefix }: { prefix: string }) {
 }
 
 /**
- * The backend's personal-token endpoint has no repository selector yet: it
- * dropped one silently, leaving the token unrestricted, so the create dialog
- * no longer offers it and says so instead (web #902, artifact-keeper#4219).
- * Service Accounts is an admin page, so only admins get a link to it.
+ * Before backend 1.11.0 the personal-token endpoint has no repository
+ * selector: it dropped one silently, leaving the token unrestricted, so on
+ * those backends the create dialog does not offer it and says so instead
+ * (web #902, artifact-keeper#4219). Service Accounts is an admin page, so
+ * only admins get a link to it.
  */
 function PersonalTokenScopeNote({ isAdmin }: { isAdmin: boolean }) {
   return (
@@ -101,8 +109,8 @@ function PersonalTokenScopeNote({ isAdmin }: { isAdmin: boolean }) {
       data-testid="personal-token-scope-note"
       className="border-t pt-4 text-xs text-muted-foreground"
     >
-      Personal tokens can&apos;t be limited to specific repositories yet
-      (artifact-keeper#4219). A personal token can reach every repository your
+      Personal tokens can be limited to specific repositories on backend
+      1.11.0 and later. A personal token can reach every repository your
       account can. For a repository-scoped token, use a{" "}
       {isAdmin ? (
         <Link href="/service-accounts" className="underline underline-offset-2">
@@ -171,6 +179,7 @@ export default function AccessTokensPage() {
   const [tokenName, setTokenName] = useState("");
   const [tokenExpiry, setTokenExpiry] = useState("90");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["read:artifacts"]);
+  const [tokenRepoSelector, setTokenRepoSelector] = useState<RepoSelector>({});
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreateAccessTokenResponse | null>(null);
   const [revokeTokenId, setRevokeTokenId] = useState<string | null>(null);
@@ -185,6 +194,19 @@ export default function AccessTokensPage() {
     queryKey: ["profile", "access-tokens"],
     queryFn: () => profileApi.listAccessTokens(),
   });
+
+  // The server version the sidebar shows, from the same cached `/health`
+  // query. Personal tokens take a `repo_selector` only from backend 1.11.0
+  // (artifact-keeper#4219); an unknown version keeps the selector off.
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const personalRepoSelector = backendAtLeast(
+    health?.version,
+    PERSONAL_TOKEN_REPO_SELECTOR_MIN
+  );
 
   // Mutations
   const createKeyMutation = useMutation({
@@ -221,6 +243,7 @@ export default function AccessTokensPage() {
       setTokenName("");
       setTokenScopes(["read:artifacts"]);
       setTokenExpiry("90");
+      setTokenRepoSelector({});
       toast.success("Access token created");
     },
     onError: (err: unknown) =>
@@ -380,7 +403,10 @@ export default function AccessTokensPage() {
             <div>
               <h2 className="text-lg font-semibold">Access Tokens</h2>
               <p className="text-sm text-muted-foreground">
-                Personal access tokens for CLI and CI/CD authentication. A personal token can reach every repository your account can.
+                Personal access tokens for CLI and CI/CD authentication.{" "}
+                {personalRepoSelector
+                  ? "Tokens can be limited to specific repositories."
+                  : "A personal token can reach every repository your account can."}
               </p>
             </div>
             <Button onClick={() => setCreateTokenOpen(true)}>
@@ -470,6 +496,7 @@ export default function AccessTokensPage() {
             setTokenName("");
             setTokenScopes(["read:artifacts"]);
             setTokenExpiry("90");
+            setTokenRepoSelector({});
             setNewlyCreatedToken(null);
           }
         }}
@@ -506,11 +533,24 @@ export default function AccessTokensPage() {
                   expires_in_days:
                     tokenExpiry === "0" ? undefined : Number(tokenExpiry),
                   scopes: tokenScopes,
+                  // Only a 1.11.0+ backend enforces it, and it refuses an
+                  // empty one, so it goes only there and only with a filter.
+                  ...(personalRepoSelector &&
+                  selectorHasFilters(tokenRepoSelector)
+                    ? { repo_selector: tokenRepoSelector }
+                    : {}),
                 })
               }
               onCancel={() => setCreateTokenOpen(false)}
               submitLabel="Create Token"
-              notice={<PersonalTokenScopeNote isAdmin={!!user?.is_admin} />}
+              showRepoSelector={personalRepoSelector}
+              repoSelector={tokenRepoSelector}
+              onRepoSelectorChange={setTokenRepoSelector}
+              notice={
+                personalRepoSelector ? undefined : (
+                  <PersonalTokenScopeNote isAdmin={!!user?.is_admin} />
+                )
+              }
             />
           )}
         </DialogContent>

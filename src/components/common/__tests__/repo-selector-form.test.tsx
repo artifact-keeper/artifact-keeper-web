@@ -63,7 +63,7 @@ vi.mock("sonner", () => ({
 // Component under test (imported AFTER all vi.mock calls)
 // ---------------------------------------------------------------------------
 
-import { RepoSelectorForm } from "../repo-selector-form";
+import { RepoSelectorForm, selectorHasFilters } from "../repo-selector-form";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -610,5 +610,20 @@ describe("RepoSelectorForm", () => {
     expect(
       screen.getByText(/Restrict access to repositories of specific types/)
     ).toBeDefined();
+  });
+});
+
+describe("selectorHasFilters", () => {
+  it("is false for an empty or all-blank selector", () => {
+    expect(selectorHasFilters({})).toBe(false);
+    expect(
+      selectorHasFilters({ match_formats: [], match_labels: {}, match_pattern: "" })
+    ).toBe(false);
+  });
+
+  it("is true for a format, a label or a name pattern", () => {
+    expect(selectorHasFilters({ match_formats: ["npm"] })).toBe(true);
+    expect(selectorHasFilters({ match_labels: { env: "prod" } })).toBe(true);
+    expect(selectorHasFilters({ match_pattern: "prod-*" })).toBe(true);
   });
 });

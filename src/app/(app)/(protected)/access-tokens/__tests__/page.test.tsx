@@ -59,6 +59,10 @@ vi.mock("@/lib/api/profile", () => ({
   },
 }));
 
+vi.mock("@/lib/api/admin", () => ({
+  adminApi: { getHealth: vi.fn() },
+}));
+
 vi.mock("@/lib/api/service-accounts", () => ({
   serviceAccountsApi: {
     previewRepoSelector: vi.fn(),
@@ -261,7 +265,11 @@ vi.mock("@/components/common/token-create-form", () => ({
   ),
 }));
 
-vi.mock("@/components/common/repo-selector-form", () => ({
+vi.mock("@/components/common/repo-selector-form", async (importOriginal) => ({
+  // The real `selectorHasFilters`, so the page's submit rule is under test.
+  ...(await importOriginal<
+    typeof import("@/components/common/repo-selector-form")
+  >()),
   RepoSelectorForm: () => <div data-testid="repo-selector-form" />,
 }));
 
@@ -348,6 +356,8 @@ function setupDefaultMocks(
     keysLoading?: boolean;
     tokensLoading?: boolean;
     isAdmin?: boolean;
+    /** The backend version `/health` reports; undefined = not known. */
+    serverVersion?: string;
   } = {}
 ) {
   const {
@@ -356,6 +366,7 @@ function setupDefaultMocks(
     keysLoading = false,
     tokensLoading = false,
     isAdmin = false,
+    serverVersion,
   } = overrides;
 
   mockUseAuth.mockReturnValue({
@@ -376,6 +387,12 @@ function setupDefaultMocks(
     }
     if (opts.queryKey[1] === "access-tokens") {
       return { data: accessTokens, isLoading: tokensLoading };
+    }
+    if (opts.queryKey[0] === "health") {
+      return {
+        data: serverVersion === undefined ? undefined : { version: serverVersion },
+        isLoading: false,
+      };
     }
     return { data: [], isLoading: false };
   });
@@ -1449,8 +1466,8 @@ describe("AccessTokensPage", () => {
     expect(screen.queryByTestId("repo-selector-section")).not.toBeInTheDocument();
     const note = screen.getByTestId("personal-token-scope-note");
     expect(note.textContent).toBe(
-      "Personal tokens can't be limited to specific repositories yet " +
-        "(artifact-keeper#4219). A personal token can reach every repository " +
+      "Personal tokens can be limited to specific repositories on backend " +
+        "1.11.0 and later. A personal token can reach every repository " +
         "your account can. For a repository-scoped token, use a service account."
     );
   });
@@ -1502,6 +1519,113 @@ describe("AccessTokensPage", () => {
       name: "",
       expires_in_days: 90,
       scopes: ["read:artifacts"],
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 53b. The selector returns on backend 1.11.0+ (artifact-keeper#4219)
+  // -------------------------------------------------------------------------
+  describe("personal token repo selector gated on the backend version", () => {
+    async function openAndSubmit(opts: {
+      serverVersion?: string;
+      pickSelector?: boolean;
+    }) {
+      const { profileApi } = await import("@/lib/api/profile");
+      setupDefaultMocks({ serverVersion: opts.serverVersion });
+      render(<AccessTokensPage />);
+      fireEvent.click(
+        screen.getByTestId("tab-content-access-tokens").querySelector("button")!
+      );
+      if (opts.pickSelector) {
+        fireEvent.click(screen.getByTestId("repo-selector-change-btn"));
+      }
+      fireEvent.click(screen.getByTestId("form-submit-btn"));
+      expect(profileApi.createAccessToken).toHaveBeenCalledTimes(1);
+      return vi.mocked(profileApi.createAccessToken).mock.calls[0][0];
+    }
+
+    it("reads the version from the shared health query", () => {
+      setupDefaultMocks({ serverVersion: "1.11.0" });
+      render(<AccessTokensPage />);
+      const healthCall = mockUseQuery.mock.calls.find(
+        ([opts]) => opts.queryKey[0] === "health"
+      );
+      expect(healthCall?.[0].queryKey).toEqual(["health"]);
+    });
+
+    it.each(["1.10.1", "1.11.0-rc.1", "not-a-version"])(
+      "offers no selector on %s and shows the version note",
+      async (serverVersion) => {
+        const body = await openAndSubmit({ serverVersion });
+        expect(screen.queryByTestId("repo-selector-section")).toBeNull();
+        expect(
+          screen.getByTestId("personal-token-scope-note").textContent
+        ).toContain(
+          "Personal tokens can be limited to specific repositories on backend 1.11.0 and later."
+        );
+        expect(Object.keys(body).sort()).toEqual([
+          "expires_in_days",
+          "name",
+          "scopes",
+        ]);
+      }
+    );
+
+    it("offers no selector while the version is unknown", async () => {
+      const body = await openAndSubmit({});
+      expect(screen.queryByTestId("repo-selector-section")).toBeNull();
+      expect(screen.getByTestId("personal-token-scope-note")).toBeInTheDocument();
+      expect(body).not.toHaveProperty("repo_selector");
+    });
+
+    it("shows the selector on 1.11.0 and sends the chosen filter", async () => {
+      const body = await openAndSubmit({
+        serverVersion: "1.11.0",
+        pickSelector: true,
+      });
+      expect(screen.getByTestId("repo-selector-section")).toBeInTheDocument();
+      expect(screen.queryByTestId("personal-token-scope-note")).toBeNull();
+      expect(body).toEqual({
+        name: "",
+        expires_in_days: 90,
+        scopes: ["read:artifacts"],
+        repo_selector: { match_formats: ["docker"] },
+      });
+    });
+
+    it("sends no repo_selector on 1.11.0 when no filter is chosen", async () => {
+      const body = await openAndSubmit({ serverVersion: "1.11.0" });
+      expect(screen.getByTestId("repo-selector-section")).toBeInTheDocument();
+      expect(body).not.toHaveProperty("repo_selector");
+      expect(Object.keys(body).sort()).toEqual([
+        "expires_in_days",
+        "name",
+        "scopes",
+      ]);
+    });
+
+    it("says tokens can be scoped in the tab description on 1.11.0", () => {
+      setupDefaultMocks({ serverVersion: "1.11.0" });
+      render(<AccessTokensPage />);
+      expect(
+        screen.getByText(
+          "Personal access tokens for CLI and CI/CD authentication. Tokens can be limited to specific repositories."
+        )
+      ).toBeInTheDocument();
+    });
+
+    it("resets the selector when the dialog is closed", () => {
+      setupDefaultMocks({ serverVersion: "1.11.0" });
+      render(<AccessTokensPage />);
+      const tokenTab = screen.getByTestId("tab-content-access-tokens");
+      fireEvent.click(tokenTab.querySelector("button")!);
+      fireEvent.click(screen.getByTestId("repo-selector-change-btn"));
+      expect(screen.getByTestId("repo-selector-data").textContent).toBe(
+        '{"match_formats":["docker"]}'
+      );
+      fireEvent.click(screen.getByTestId("dialog-close-trigger"));
+      fireEvent.click(tokenTab.querySelector("button")!);
+      expect(screen.getByTestId("repo-selector-data").textContent).toBe("{}");
     });
   });
 
