@@ -448,7 +448,7 @@ describe("profileApi", () => {
     ).rejects.toBe("invalid request");
   });
 
-  it("createAccessToken sends only the backend's fields, never repo_selector (#902)", async () => {
+  it("createAccessToken sends only the backend's fields (#902)", async () => {
     const mockResponse = {
       id: "tok-scoped",
       token: "akt_scoped_token",
@@ -460,14 +460,12 @@ describe("profileApi", () => {
     });
 
     const { profileApi } = await import("../profile");
-    // The type no longer has `repo_selector`; a caller that casts one in
-    // must still not get it onto the wire, where the backend would drop it
-    // and mint an unrestricted token (artifact-keeper#4219).
+    // A field the type does not have, cast in, must not reach the wire, where
+    // `deny_unknown_fields` makes it a 400 (artifact-keeper#4219).
     const result = await profileApi.createAccessToken({
       name: "Scoped Token",
       expires_in_days: 90,
       scopes: ["read:artifacts", "write:artifacts"],
-      repo_selector: { match_formats: ["docker"] },
       repository_ids: ["repo-1"],
     } as unknown as Parameters<typeof profileApi.createAccessToken>[0]);
 
@@ -482,6 +480,28 @@ describe("profileApi", () => {
       ...mockResponse,
       expires_at: null,
       policy_applied: false,
+    });
+  });
+
+  it("createAccessToken passes repo_selector through when given (backend 1.11.0, #902)", async () => {
+    mockCreateApiToken.mockResolvedValue({
+      data: { id: "tok-scoped", token: "akt_scoped", name: "Scoped" },
+      error: undefined,
+    });
+
+    const { profileApi } = await import("../profile");
+    await profileApi.createAccessToken({
+      name: "Scoped",
+      scopes: ["read:artifacts"],
+      repo_selector: { match_formats: ["docker"], match_pattern: "prod-*" },
+    });
+
+    const { body } = mockCreateApiToken.mock.calls[0][0];
+    expect(body).toEqual({
+      name: "Scoped",
+      expires_in_days: undefined,
+      scopes: ["read:artifacts"],
+      repo_selector: { match_formats: ["docker"], match_pattern: "prod-*" },
     });
   });
 

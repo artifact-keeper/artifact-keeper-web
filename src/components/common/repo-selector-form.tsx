@@ -28,6 +28,20 @@ const COMMON_FORMATS = [
   "generic",
 ];
 
+/**
+ * Whether a selector carries a real filter (format, label or name pattern).
+ * Token submit handlers omit the selector entirely when this is false: the
+ * backend reads an empty selector as unrestricted, and the personal-token
+ * endpoint refuses one with a 400 (artifact-keeper#4219).
+ */
+export function selectorHasFilters(selector: RepoSelector): boolean {
+  return (
+    (selector.match_formats?.length ?? 0) > 0 ||
+    Object.keys(selector.match_labels ?? {}).length > 0 ||
+    !!selector.match_pattern
+  );
+}
+
 interface RepoSelectorFormProps {
   readonly value: RepoSelector;
   readonly onChange: (selector: RepoSelector) => void;
@@ -95,10 +109,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
     [value, onChange]
   );
 
-  const hasFilters =
-    (value.match_formats?.length ?? 0) > 0 ||
-    Object.keys(value.match_labels ?? {}).length > 0 ||
-    !!value.match_pattern;
+  const hasFilters = selectorHasFilters(value);
 
   return (
     <div className="space-y-4">
