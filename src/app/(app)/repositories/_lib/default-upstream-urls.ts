@@ -15,7 +15,10 @@ export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
   cocoapods: "https://cdn.cocoapods.org",
   composer: "https://repo.packagist.org",
   conan: "https://center.conan.io",
-  conda: "https://conda.anaconda.org",
+  // A conda upstream is a channel URL: the backend appends `{subdir}/repodata.json`
+  // and `channeldata.json` to it, so the bare anaconda.org root 404s.
+  conda: "https://conda.anaconda.org/conda-forge",
+  conda_native: "https://conda.anaconda.org/conda-forge",
   pub: "https://pub.dev",
   swift: "https://github.com",
   hex: "https://repo.hex.pm",

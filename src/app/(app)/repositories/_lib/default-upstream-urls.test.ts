@@ -49,3 +49,10 @@ describe("DEFAULT_UPSTREAM_URLS", () => {
 it.each(["github", "mise", "aqua"])("defaults %s to GitHub", (format) => {
   expect(DEFAULT_UPSTREAM_URLS[format]).toBe("https://github.com");
 });
+
+it.each(["conda", "conda_native"])("defaults %s to the conda-forge channel, not the anaconda.org root", (format) => {
+  // The backend's conda handler (backend/src/api/handlers/conda.rs) serves both
+  // formats and joins `{subdir}/repodata.json` / `channeldata.json` onto the
+  // upstream URL, so the upstream must be a channel URL (#909).
+  expect(DEFAULT_UPSTREAM_URLS[format]).toBe("https://conda.anaconda.org/conda-forge");
+});
