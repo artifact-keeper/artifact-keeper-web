@@ -10,12 +10,14 @@ const mockListArtifacts = vi.fn();
 const mockDeleteArtifact = vi.fn();
 const mockCreateDownloadTicket = vi.fn();
 const mockGetArtifactStats = vi.fn();
+const mockGetArtifact = vi.fn();
 
 vi.mock("@artifact-keeper/sdk", () => ({
   listArtifacts: (...args: unknown[]) => mockListArtifacts(...args),
   deleteArtifact: (...args: unknown[]) => mockDeleteArtifact(...args),
   createDownloadTicket: (...args: unknown[]) => mockCreateDownloadTicket(...args),
   getArtifactStats: (...args: unknown[]) => mockGetArtifactStats(...args),
+  getArtifact: (...args: unknown[]) => mockGetArtifact(...args),
 }));
 
 describe("artifactsApi", () => {
@@ -675,6 +677,115 @@ describe("artifactsApi", () => {
     ).rejects.toThrow("Failed to fetch artifact: 404");
 
     vi.restoreAllMocks();
+  });
+
+  // -------------------------------------------------------------------------
+  // origin (#914, backend artifact-keeper#4135 / #4190)
+  // -------------------------------------------------------------------------
+
+  describe("origin", () => {
+    const base = { id: "a1", repository_key: "libs-release", path: "x.jar" };
+
+    it("getById reads the artifact by id and adapts a hosted origin", async () => {
+      mockGetArtifact.mockResolvedValue({
+        data: { ...base, origin: { v: 1, kind: "hosted", repository_key: "libs-release" } },
+        error: undefined,
+      });
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.getById("a1");
+      expect(mockGetArtifact).toHaveBeenCalledWith({ path: { id: "a1" } });
+      expect(result.origin).toEqual({
+        kind: "hosted",
+        raw_kind: "hosted",
+        repository_key: "libs-release",
+        upstream_url: undefined,
+      });
+    });
+
+    it("keeps a promoted copy's source repository and upstream URL", async () => {
+      mockGetArtifact.mockResolvedValue({
+        data: {
+          ...base,
+          origin: {
+            v: 1,
+            kind: "proxy",
+            repository_key: "npm-remote",
+            upstream_url: "https://registry.npmjs.org",
+          },
+        },
+        error: undefined,
+      });
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.getById("a1");
+      expect(result.repository_key).toBe("libs-release");
+      expect(result.origin).toEqual({
+        kind: "proxy",
+        raw_kind: "proxy",
+        repository_key: "npm-remote",
+        upstream_url: "https://registry.npmjs.org",
+      });
+    });
+
+    it("degrades an unknown kind to 'unknown' and keeps the raw value", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mockGetArtifact.mockResolvedValue({
+        data: { ...base, origin: { v: 2, kind: "replication", repository_key: "edge" } },
+        error: undefined,
+      });
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.getById("a1");
+      expect(result.origin).toMatchObject({ kind: "unknown", raw_kind: "replication" });
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("getById throws the SDK error", async () => {
+      mockGetArtifact.mockResolvedValue({ data: undefined, error: "nope" });
+      const { artifactsApi } = await import("../artifacts");
+      await expect(artifactsApi.getById("a1")).rejects.toBe("nope");
+    });
+
+    it("adaptArtifactOrigin: absent stays absent, null and malformed documents become null", async () => {
+      const { adaptArtifactOrigin } = await import("../artifacts");
+      expect(adaptArtifactOrigin(undefined)).toBeUndefined();
+      expect(adaptArtifactOrigin(null)).toBeNull();
+      expect(adaptArtifactOrigin("hosted")).toBeNull();
+      expect(adaptArtifactOrigin({ kind: "hosted" })).toBeNull();
+      expect(adaptArtifactOrigin({ repository_key: "r" })).toBeNull();
+      expect(adaptArtifactOrigin({ kind: "", repository_key: "r" })).toBeNull();
+      expect(
+        adaptArtifactOrigin({ kind: "virtual", repository_key: "v", upstream_url: "" }),
+      ).toEqual({ kind: "virtual", raw_kind: "virtual", repository_key: "v", upstream_url: undefined });
+    });
+
+    it("listing rows carry the backend's null origin through", async () => {
+      mockListArtifacts.mockResolvedValue({
+        data: { items: [{ ...base, origin: null }], pagination: { total: 1 } },
+        error: undefined,
+      });
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.list("libs-release");
+      expect(result.items[0].origin).toBeNull();
+    });
+
+    it("get (by path) adapts the origin on the metadata response", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          ...base,
+          origin: { v: 1, kind: "migration", repository_key: "libs-release", upstream_url: "https://nexus.example.com" },
+        }),
+      });
+      const { artifactsApi } = await import("../artifacts");
+      const result = await artifactsApi.get("libs-release", "x.jar");
+      expect(result.origin).toEqual({
+        kind: "migration",
+        raw_kind: "migration",
+        repository_key: "libs-release",
+        upstream_url: "https://nexus.example.com",
+      });
+      vi.restoreAllMocks();
+    });
   });
 
   it("delete calls SDK", async () => {

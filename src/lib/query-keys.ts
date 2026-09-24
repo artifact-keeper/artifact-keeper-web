@@ -46,6 +46,14 @@ export function packageAnalysisKey(artifactId: string) {
   return ["security", "package-analysis", artifactId] as const;
 }
 
+/**
+ * One artifact by id (`GET /api/v1/artifacts/{id}`), read by the artifact
+ * detail dialog for the fields listings do not carry, such as `origin` (#914).
+ */
+export function artifactDetailKey(artifactId: string) {
+  return ["artifact", artifactId] as const;
+}
+
 // ---------------------------------------------------------------------------
 // Invalidation groups - which keys to invalidate per domain
 // ---------------------------------------------------------------------------

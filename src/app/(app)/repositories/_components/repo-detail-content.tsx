@@ -79,6 +79,8 @@ import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
 import { StorageBackendBadge } from "./storage-backend-badge";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
+import { ArtifactOriginSection } from "./artifact-origin-section";
+import { artifactDetailKey } from "@/lib/query-keys";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   ArtifactBrowserToggle,
@@ -354,6 +356,25 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       selectedArtifactId ? await artifactsApi.getStats(selectedArtifactId) : null,
     enabled: detailOpen && !!selectedArtifactId,
   });
+  // The artifact's origin (#914) is only on the per-artifact endpoints, never
+  // on the listing row the dialog usually opens from, so fetch it by id.
+  // Skipped for proxy-cached rows (synthetic id, no `artifacts` row, so no
+  // origin) and when the row already carries one (the grouped view's by-path
+  // fetch). Best-effort: a failure or an older backend just hides the block.
+  const needsOrigin =
+    detailOpen &&
+    !!selectedArtifactId &&
+    selectedArtifact?.analyzable !== false &&
+    !selectedArtifact?.origin;
+  const { data: artifactDetail } = useQuery({
+    queryKey: artifactDetailKey(selectedArtifactId ?? ""),
+    queryFn: () => artifactsApi.getById(selectedArtifactId as string),
+    enabled: needsOrigin,
+    retry: false,
+  });
+  const selectedOrigin =
+    selectedArtifact?.origin ??
+    (artifactDetail?.id === selectedArtifactId ? artifactDetail?.origin : null);
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -1618,6 +1639,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     value={artifactsApi.getAbsoluteDownloadUrl(repoKey, selectedArtifact.path)}
                     copy
                     mono
+                  />
+                  <ArtifactOriginSection
+                    origin={selectedOrigin}
+                    currentRepositoryKey={selectedArtifact.repository_key || repoKey}
                   />
                   {(repoFormat === "maven" || repoFormat === "gradle") && (
                     <MavenGavSection
