@@ -20,9 +20,15 @@ import {
   type CurationRule,
   type CreateRuleRequest,
   type RuleType,
+  type RuleAction,
+  type PublisherMatch,
+  type PublisherTrustAction,
+  type PublisherTrustSettings,
   RULE_ACTIONS,
   RULE_TYPES,
   PUBLISHER_MATCHES,
+  PUBLISHER_TRUST_ACTIONS,
+  readPublisherTrust,
   parseList,
   clampDistance,
 } from "@/lib/api/curation-rules";
@@ -67,6 +73,43 @@ const RULE_TYPE_ICONS: Record<RuleType, typeof Filter> = {
   popularity: TrendingDown,
 };
 
+const PUBLISHER_MATCH_LABELS: Record<PublisherMatch, string> = {
+  attestation: "Attestation",
+  metadata: "Declared metadata",
+};
+
+// What each mode actually checks today (backend publisher_trust.rs and the
+// attestation verifier). Keep these honest: only PyPI attestations are
+// cryptographically verified; npm is recorded as unsupported and conda's
+// CEP-27 verifier is not wired to ingestion yet (artifact-keeper#4155).
+const PUBLISHER_MATCH_HELP: Record<PublisherMatch, string> = {
+  attestation:
+    "A listed publisher counts only when its identity comes from a provenance " +
+    "attestation the server has cryptographically verified (Sigstore " +
+    "signature, certificate chain and transparency-log entry). Today that " +
+    "verification runs for PyPI only: npm attestations are held for review, " +
+    "and conda packages cannot satisfy this mode yet.",
+  metadata:
+    "Also accepts the author or maintainer name the package declares about " +
+    "itself (PyPI author/maintainer, npm publisher/maintainers, conda " +
+    "about.json maintainer). This trusts publisher metadata, not a verified " +
+    "signature: anyone can publish a package claiming a trusted name. It is " +
+    "the only publisher signal conda packages carry today.",
+};
+
+const PUBLISHER_ACTION_HELP: Record<PublisherTrustAction, string> = {
+  block: "Block packages that are not from a trusted publisher; trusted ones are allowed.",
+  allow: "Allow packages from a trusted publisher; send everything else to review.",
+  flag:
+    "Watch mode: send packages from the listed publishers to review and let " +
+    "everything else through. Not a gate.",
+};
+
+/** A value the backend accepts is shown as-is; anything else is labelled. */
+function unknownLabel(known: string, raw: string): string {
+  return known === "unknown" ? `Unknown: ${raw}` : known;
+}
+
 // ---------------------------------------------------------------------------
 // Form state — one flat object covering every engine's fields. `toRequest`
 // projects only the fields relevant to the selected `rule_type` into `config`.
@@ -105,7 +148,7 @@ const emptyForm: RuleFormState = {
   package_pattern: "*",
   version_constraint: "*",
   architecture: "*",
-  action: "flag",
+  action: "block",
   priority: 100,
   reason: "",
   enabled: true,
@@ -152,6 +195,22 @@ function buildConfig(f: RuleFormState): Record<string, unknown> {
   return {};
 }
 
+/**
+ * The top-level `action` column must be `allow` or `block` (a DB constraint),
+ * but only pattern rules read it. Typed rules decide from `config.action`, so
+ * store the matching column value to keep the two from contradicting each
+ * other in the list.
+ */
+function topLevelAction(f: RuleFormState): RuleAction {
+  if (f.rule_type === "publisher_trust") {
+    return f.pt_action === "block" ? "block" : "allow";
+  }
+  if (f.rule_type === "popularity") {
+    return f.pop_action === "block" ? "block" : "allow";
+  }
+  return f.action === "allow" ? "allow" : "block";
+}
+
 export function toRequest(f: RuleFormState): CreateRuleRequest {
   return {
     rule_type: f.rule_type,
@@ -163,7 +222,7 @@ export function toRequest(f: RuleFormState): CreateRuleRequest {
     package_pattern: f.package_pattern.trim() || "*",
     version_constraint: f.version_constraint.trim() || "*",
     architecture: f.architecture.trim() || "*",
-    action: f.action,
+    action: topLevelAction(f),
     priority: f.priority,
     reason: f.reason.trim(),
     enabled: f.enabled,
@@ -179,6 +238,9 @@ function formFromRule(r: CurationRule): RuleFormState {
     typeof v === "number" ? v : undefined;
   const asBool = (v: unknown, dflt: boolean): boolean =>
     typeof v === "boolean" ? v : dflt;
+  // An unrecognised stored match/action leaves the select empty so the admin
+  // has to pick a valid value before saving; it is never silently replaced.
+  const pt = r.rule_type === "publisher_trust" ? readPublisherTrust(c) : null;
   return {
     rule_type: r.rule_type,
     scope: r.scope,
@@ -186,16 +248,13 @@ function formFromRule(r: CurationRule): RuleFormState {
     package_pattern: r.package_pattern,
     version_constraint: r.version_constraint,
     architecture: r.architecture,
-    action: r.action,
+    action: r.action === "allow" ? "allow" : "block",
     priority: r.priority,
     reason: r.reason ?? "",
     enabled: r.enabled,
     trusted_publishers: asList(c.trusted_publishers),
-    pt_match: typeof c.match === "string" ? c.match : "attestation",
-    pt_action:
-      r.rule_type === "publisher_trust" && typeof c.action === "string"
-        ? c.action
-        : "flag",
+    pt_match: pt ? (pt.match === "unknown" ? "" : pt.match) : "attestation",
+    pt_action: pt ? (pt.action === "unknown" ? "" : pt.action) : "flag",
     min_downloads: asNum(c.min_downloads),
     max_distance: clampDistance(asNum(c.max_distance)),
     typosquat_check: asBool(c.typosquat_check, true),
@@ -284,7 +343,19 @@ export function CurationRulesManager() {
   const canSave =
     !saveMutation.isPending &&
     (form.rule_type !== "publisher_trust" ||
-      parseList(form.trusted_publishers).length > 0);
+      (parseList(form.trusted_publishers).length > 0 &&
+        (PUBLISHER_MATCHES as readonly string[]).includes(form.pt_match) &&
+        (PUBLISHER_TRUST_ACTIONS as readonly string[]).includes(form.pt_action)));
+
+  // The publisher_trust config of the rule being edited, as stored, so the
+  // form can say which values the backend does not recognise.
+  const editingPt = useMemo(
+    () =>
+      editing?.rule_type === "publisher_trust"
+        ? readPublisherTrust(editing.config)
+        : null,
+    [editing],
+  );
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -292,7 +363,18 @@ export function CurationRulesManager() {
     saveMutation.mutate({ id: editing?.id ?? null, form });
   }
 
-  const rows = rules ?? [];
+  const rows = useMemo(() => rules ?? [], [rules]);
+  // Read each publisher_trust config once per fetch (the reader warns on
+  // unknown values, which should not repeat on every render).
+  const ptById = useMemo(() => {
+    const map = new Map<string, PublisherTrustSettings>();
+    for (const r of rows) {
+      if (r.rule_type === "publisher_trust") {
+        map.set(r.id, readPublisherTrust(r.config));
+      }
+    }
+    return map;
+  }, [rows]);
 
   return (
     <div className="space-y-6">
@@ -365,12 +447,28 @@ export function CurationRulesManager() {
             <tbody className="divide-y">
               {rows.map((r) => {
                 const Icon = RULE_TYPE_ICONS[r.rule_type];
+                const pt = ptById.get(r.id);
+                const effectiveAction = pt
+                  ? unknownLabel(pt.action, pt.raw_action)
+                  : r.action;
                 return (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
                       <span className="flex items-center gap-1.5">
                         <Icon className="size-4 text-muted-foreground" />
                         {RULE_TYPE_LABELS[r.rule_type]}
+                        {pt && pt.problems.length > 0 && (
+                          <Badge
+                            variant="destructive"
+                            title={pt.problems.join("; ")}
+                          >
+                            <AlertCircle className="size-3" />
+                            Invalid
+                            <span className="sr-only">
+                              : {pt.problems.join("; ")}
+                            </span>
+                          </Badge>
+                        )}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">
@@ -386,12 +484,20 @@ export function CurationRulesManager() {
                     <td className="px-3 py-2">
                       <Badge
                         variant={
-                          r.action === "block" ? "destructive" : "secondary"
+                          effectiveAction === "block" ? "destructive" : "secondary"
                         }
-                        className="capitalize"
+                        className={pt?.action === "unknown" ? undefined : "capitalize"}
                       >
-                        {r.action}
+                        {effectiveAction}
                       </Badge>
+                      {pt && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          match:{" "}
+                          {pt.match === "unknown"
+                            ? unknownLabel(pt.match, pt.raw_match)
+                            : PUBLISHER_MATCH_LABELS[pt.match]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{r.priority}</td>
                     <td className="px-3 py-2">
@@ -554,28 +660,31 @@ export function CurationRulesManager() {
                 </div>
               </div>
 
-              {/* Common: action + priority */}
+              {/* Action (pattern rules only; typed rules use their config
+                  action) + priority */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cr-action">Action</Label>
-                  <Select
-                    value={form.action}
-                    onValueChange={(v) =>
-                      setForm((f) => ({ ...f, action: v }))
-                    }
-                  >
-                    <SelectTrigger id="cr-action" aria-label="Action">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RULE_ACTIONS.map((a) => (
-                        <SelectItem key={a} value={a} className="capitalize">
-                          {a}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {form.rule_type === "pattern" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cr-action">Action</Label>
+                    <Select
+                      value={form.action}
+                      onValueChange={(v) =>
+                        setForm((f) => ({ ...f, action: v }))
+                      }
+                    >
+                      <SelectTrigger id="cr-action" aria-label="Action">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RULE_ACTIONS.map((a) => (
+                          <SelectItem key={a} value={a} className="capitalize">
+                            {a}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label htmlFor="cr-priority">Priority</Label>
                   <Input
@@ -612,65 +721,94 @@ export function CurationRulesManager() {
                           trusted_publishers: e.target.value,
                         }))
                       }
-                      placeholder={"github.com/acme\nnpmjs.com/@acme"}
+                      placeholder={"NumFOCUS\nMicrosoft"}
                       rows={3}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Compared exactly (ignoring case) with the publisher name:
+                      the repository owner from a PyPI attestation, otherwise
+                      the declared author or maintainer.
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cr-pt-match">Match</Label>
-                      <Select
-                        value={form.pt_match}
-                        onValueChange={(v) =>
-                          setForm((f) => ({ ...f, pt_match: v }))
-                        }
-                      >
-                        <SelectTrigger id="cr-pt-match" aria-label="Match">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PUBLISHER_MATCHES.map((m) => (
-                            <SelectItem
-                              key={m}
-                              value={m}
-                              className="capitalize"
-                            >
-                              {m}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cr-pt-action">Untrusted action</Label>
-                      <Select
-                        value={form.pt_action}
-                        onValueChange={(v) =>
-                          setForm((f) => ({ ...f, pt_action: v }))
-                        }
-                      >
-                        <SelectTrigger
-                          id="cr-pt-action"
-                          aria-label="Untrusted action"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(["flag", "block", "allow", "audit"] as const).map(
-                            (a) => (
-                              <SelectItem
-                                key={a}
-                                value={a}
-                                className="capitalize"
-                              >
-                                {a}
-                              </SelectItem>
-                            ),
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cr-pt-match">Match</Label>
+                    <Select
+                      value={form.pt_match}
+                      onValueChange={(v) =>
+                        setForm((f) => ({ ...f, pt_match: v }))
+                      }
+                    >
+                      <SelectTrigger id="cr-pt-match" aria-label="Match">
+                        <SelectValue placeholder="Choose a match mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PUBLISHER_MATCHES.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {PUBLISHER_MATCH_LABELS[m]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editingPt?.match === "unknown" && form.pt_match === "" && (
+                      <p role="alert" className="text-xs text-destructive">
+                        Stored value &quot;{editingPt.raw_match}&quot; is not a
+                        match mode the server knows, so this rule flags every
+                        package for review. Choose one to fix it.
+                      </p>
+                    )}
+                    {(PUBLISHER_MATCHES as readonly string[]).includes(
+                      form.pt_match,
+                    ) && (
+                      <p className="text-xs text-muted-foreground">
+                        {PUBLISHER_MATCH_HELP[form.pt_match as PublisherMatch]}
+                      </p>
+                    )}
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cr-pt-action">Publisher action</Label>
+                    <Select
+                      value={form.pt_action}
+                      onValueChange={(v) =>
+                        setForm((f) => ({ ...f, pt_action: v }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="cr-pt-action"
+                        aria-label="Publisher action"
+                      >
+                        <SelectValue placeholder="Choose an action" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PUBLISHER_TRUST_ACTIONS.map((a) => (
+                          <SelectItem key={a} value={a} className="capitalize">
+                            {a}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editingPt?.action === "unknown" && form.pt_action === "" && (
+                      <p role="alert" className="text-xs text-destructive">
+                        Stored value &quot;{editingPt.raw_action}&quot; is not
+                        an action the server knows, so this rule flags every
+                        package for review. Choose one to fix it.
+                      </p>
+                    )}
+                    {(PUBLISHER_TRUST_ACTIONS as readonly string[]).includes(
+                      form.pt_action,
+                    ) && (
+                      <p className="text-xs text-muted-foreground">
+                        {
+                          PUBLISHER_ACTION_HELP[
+                            form.pt_action as PublisherTrustAction
+                          ]
+                        }
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Applies to PyPI, npm and conda packages; other formats pass
+                    through this rule unaffected.
+                  </p>
                 </div>
               )}
 

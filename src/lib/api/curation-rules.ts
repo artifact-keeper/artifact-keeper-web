@@ -45,26 +45,53 @@ export const RULE_SCOPES: readonly RuleScope[] = ["repository", "global"] as con
 const RULE_SCOPE_SET = new Set<RuleScope>(RULE_SCOPES);
 
 /**
- * Top-level rule action (the decision applied when the rule matches). Different
- * engines support different subsets, but the backend models one string column,
- * so the web keeps a single union and lets each sub-form present the relevant
- * options.
+ * Top-level rule `action` column. The backend stores it under a
+ * `CHECK (action IN ('allow', 'block'))` constraint (artifact-keeper
+ * `backend/migrations/071_curation.sql`), so any other value fails the write
+ * with a 500. Only `pattern` rules read it; `publisher_trust` and `popularity`
+ * rules decide from `config.action` and ignore this column.
  */
-export type RuleAction = "allow" | "block" | "flag" | "audit";
-export const RULE_ACTIONS: readonly RuleAction[] = [
-  "allow",
-  "block",
-  "flag",
-  "audit",
-] as const;
+export type RuleAction = "allow" | "block";
+export const RULE_ACTIONS: readonly RuleAction[] = ["allow", "block"] as const;
 
-/** publisher_trust `match` strategy. */
-export type PublisherMatch = "attestation" | "signature" | "namespace";
+/**
+ * publisher_trust `config.match`: which publisher signal satisfies the trusted
+ * list. The backend evaluator accepts exactly these two values
+ * (`backend/src/services/curation/publisher_trust.rs`); anything else makes
+ * the rule flag every applicable package as misconfigured.
+ *
+ * - `attestation` (backend default): only a publisher identity from a
+ *   provenance attestation the server has cryptographically verified counts.
+ * - `metadata` (artifact-keeper#4134): also accepts the self-asserted
+ *   author/maintainer name the package declares, which anyone can forge.
+ */
+export type PublisherMatch = "attestation" | "metadata";
 export const PUBLISHER_MATCHES: readonly PublisherMatch[] = [
   "attestation",
-  "signature",
-  "namespace",
+  "metadata",
 ] as const;
+const PUBLISHER_MATCH_SET = new Set<PublisherMatch>(PUBLISHER_MATCHES);
+
+/**
+ * publisher_trust `config.action` (backend default `flag`). Unknown values make
+ * the rule flag every applicable package as misconfigured.
+ */
+export type PublisherTrustAction = "allow" | "flag" | "block";
+export const PUBLISHER_TRUST_ACTIONS: readonly PublisherTrustAction[] = [
+  "block",
+  "allow",
+  "flag",
+] as const;
+const PUBLISHER_TRUST_ACTION_SET = new Set<PublisherTrustAction>(
+  PUBLISHER_TRUST_ACTIONS,
+);
+
+/**
+ * Package formats a publisher_trust rule evaluates (backend
+ * `publisher_source::APPLICABLE_FORMATS`, plus the jupyter/poetry and yarn/pnpm
+ * aliases). Every other format passes through the rule untouched.
+ */
+export const PUBLISHER_TRUST_FORMATS = ["pypi", "npm", "conda"] as const;
 
 // ---------------------------------------------------------------------------
 // Config shapes (engine-specific `config` JSON)
@@ -74,10 +101,10 @@ export const PUBLISHER_MATCHES: readonly PublisherMatch[] = [
 export interface PublisherTrustConfig {
   /** Publishers whose artifacts are trusted (required, non-empty). */
   trusted_publishers: string[];
-  /** How trust is proven; backend default `attestation`. */
-  match: string;
-  /** Decision for artifacts from an untrusted publisher. */
-  action: "flag" | "block" | "allow" | "audit";
+  /** Which publisher signal is sufficient; backend default `attestation`. */
+  match: PublisherMatch;
+  /** What the rule does with trusted / untrusted packages; backend default `flag`. */
+  action: PublisherTrustAction;
 }
 
 /** `popularity` engine config (typo-squat / low-reputation heuristics). */
@@ -216,6 +243,65 @@ export function parseRuleList(data: unknown): CurationRule[] {
   }
   const rows = Array.isArray(parsed.data) ? parsed.data : parsed.data.rules;
   return rows.map(adaptRule);
+}
+
+// ---------------------------------------------------------------------------
+// publisher_trust config reader
+// ---------------------------------------------------------------------------
+
+/**
+ * A stored publisher_trust config as the backend evaluator will read it.
+ * `match` / `action` are `"unknown"` when the stored value is one the backend
+ * rejects; `raw_match` / `raw_action` keep that value verbatim so the UI can
+ * show it instead of pretending the rule is valid.
+ */
+export interface PublisherTrustSettings {
+  trusted_publishers: string[];
+  match: PublisherMatch | "unknown";
+  action: PublisherTrustAction | "unknown";
+  raw_match: string;
+  raw_action: string;
+  /**
+   * Why the backend treats the rule as misconfigured (it then flags every
+   * applicable package for review). Empty when the config is valid.
+   */
+  problems: string[];
+}
+
+/**
+ * Read a publisher_trust `config` the way the backend evaluator does: a
+ * missing or non-string `match` / `action` takes the backend default
+ * (`attestation` / `flag`), non-string and blank publisher entries are
+ * dropped. An unrecognised value is kept, never coerced to a valid one.
+ */
+export function readPublisherTrust(
+  config: Record<string, unknown> | null | undefined,
+): PublisherTrustSettings {
+  const c = config ?? {};
+  const list = Array.isArray(c.trusted_publishers) ? c.trusted_publishers : [];
+  const trusted_publishers = list
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+  const raw_match = typeof c.match === "string" ? c.match : "attestation";
+  const raw_action = typeof c.action === "string" ? c.action : "flag";
+  const match = narrowEnum<PublisherMatch | "unknown">(
+    raw_match,
+    PUBLISHER_MATCH_SET,
+    "unknown",
+    `Unknown publisher_trust match mode "${raw_match}"; the backend flags every package for this rule`,
+  );
+  const action = narrowEnum<PublisherTrustAction | "unknown">(
+    raw_action,
+    PUBLISHER_TRUST_ACTION_SET,
+    "unknown",
+    `Unknown publisher_trust action "${raw_action}"; the backend flags every package for this rule`,
+  );
+  const problems: string[] = [];
+  if (trusted_publishers.length === 0) problems.push("No trusted publishers");
+  if (match === "unknown") problems.push(`Unknown match mode "${raw_match}"`);
+  if (action === "unknown") problems.push(`Unknown action "${raw_action}"`);
+  return { trusted_publishers, match, action, raw_match, raw_action, problems };
 }
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,9 @@ export type {
   RuleType,
   RuleScope,
   RuleAction,
+  PublisherMatch,
+  PublisherTrustAction,
+  PublisherTrustSettings,
   PublisherTrustConfig,
   PopularityConfig,
 } from './curation-rules';

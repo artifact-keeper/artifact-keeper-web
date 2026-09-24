@@ -396,7 +396,8 @@ describe("CurationRulesManager", () => {
     const arch = screen.getByLabelText("Architecture");
     await user.clear(arch);
     await user.type(arch, "x86_64");
-    await user.selectOptions(screen.getByLabelText("Action"), "block");
+    // Typed rules decide from config.action; the top-level select is hidden.
+    expect(screen.queryByLabelText("Action")).not.toBeInTheDocument();
     // Number inputs carry a default and revert on clear, so drive them with a
     // single deterministic change event rather than clear+type.
     fireEvent.change(screen.getByLabelText("Priority"), {
@@ -442,7 +443,7 @@ describe("CurationRulesManager", () => {
     });
   });
 
-  it("captures publisher-trust match + untrusted action on create", async () => {
+  it("captures publisher-trust match + action on create", async () => {
     const user = userEvent.setup();
     render(<CurationRulesManager />);
     await user.click(screen.getByRole("button", { name: /new rule/i }));
@@ -451,9 +452,9 @@ describe("CurationRulesManager", () => {
       "publisher_trust",
     );
     await user.type(screen.getByLabelText(/Trusted publishers/i), "acme");
-    await user.selectOptions(screen.getByLabelText("Match"), "signature");
+    await user.selectOptions(screen.getByLabelText("Match"), "metadata");
     await user.selectOptions(
-      screen.getByLabelText("Untrusted action"),
+      screen.getByLabelText("Publisher action"),
       "block",
     );
     await user.click(screen.getByRole("button", { name: /^Create$/i }));
@@ -461,9 +462,49 @@ describe("CurationRulesManager", () => {
     expect(arg.form).toMatchObject({
       rule_type: "publisher_trust",
       trusted_publishers: "acme",
-      pt_match: "signature",
+      pt_match: "metadata",
       pt_action: "block",
     });
+  });
+
+  it("offers exactly the match modes and actions the backend accepts", async () => {
+    const user = userEvent.setup();
+    render(<CurationRulesManager />);
+    await user.click(screen.getByRole("button", { name: /new rule/i }));
+    const values = (label: string) =>
+      Array.from(
+        (screen.getByLabelText(label) as HTMLSelectElement).options,
+      )
+        .map((o) => o.value)
+        .filter((v) => v !== "");
+    // Pattern rules: the DB column only takes allow | block.
+    expect(values("Action")).toEqual(["allow", "block"]);
+    await user.selectOptions(
+      screen.getByLabelText("Rule type"),
+      "publisher_trust",
+    );
+    expect(values("Match")).toEqual(["attestation", "metadata"]);
+    expect(values("Publisher action")).toEqual(["block", "allow", "flag"]);
+    expect(screen.queryByLabelText("Action")).not.toBeInTheDocument();
+  });
+
+  it("explains that the metadata tier trusts declared metadata, not a signature", async () => {
+    const user = userEvent.setup();
+    render(<CurationRulesManager />);
+    await user.click(screen.getByRole("button", { name: /new rule/i }));
+    await user.selectOptions(
+      screen.getByLabelText("Rule type"),
+      "publisher_trust",
+    );
+    // Default mode is attestation; its help is scoped to what is verified.
+    expect(
+      screen.getByText(/verification runs for PyPI only/i),
+    ).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Match"), "metadata");
+    expect(
+      screen.getByText(/trusts publisher metadata, not a verified signature/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/conda about.json maintainer/i)).toBeInTheDocument();
   });
 
   it("round-trips a publisher-trust rule into the edit form", async () => {
@@ -476,8 +517,8 @@ describe("CurationRulesManager", () => {
           rule_type: "publisher_trust",
           config: {
             trusted_publishers: ["p1", "p2"],
-            match: "namespace",
-            action: "audit",
+            match: "metadata",
+            action: "allow",
           },
         },
       ],
@@ -492,9 +533,103 @@ describe("CurationRulesManager", () => {
       (screen.getByLabelText(/Trusted publishers/i) as HTMLTextAreaElement)
         .value,
     ).toBe("p1, p2");
-    expect((screen.getByLabelText("Untrusted action") as HTMLSelectElement).value).toBe(
-      "audit",
+    expect((screen.getByLabelText("Match") as HTMLSelectElement).value).toBe(
+      "metadata",
     );
+    expect(
+      (screen.getByLabelText("Publisher action") as HTMLSelectElement).value,
+    ).toBe("allow");
+  });
+
+  describe("publisher-trust rules with values the backend rejects", () => {
+    const INVALID_PT = {
+      ...PATTERN_RULE,
+      id: "pt-bad",
+      rule_type: "publisher_trust",
+      config: {
+        trusted_publishers: ["p1"],
+        match: "signature",
+        action: "audit",
+      },
+    };
+    let warn: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+    afterEach(() => warn.mockRestore());
+
+    it("marks the row invalid and shows the raw values as unknown", () => {
+      rulesResponse = { data: [INVALID_PT, PATTERN_RULE], isLoading: false };
+      reposData = REPOS;
+      render(<CurationRulesManager />);
+      const badge = screen.getByText("Invalid");
+      expect(badge.closest("[title]")).toHaveAttribute(
+        "title",
+        'Unknown match mode "signature"; Unknown action "audit"',
+      );
+      expect(screen.getByText("Unknown: audit")).toBeInTheDocument();
+      expect(screen.getByText(/match: Unknown: signature/)).toBeInTheDocument();
+      // Only the bad rule is badged.
+      expect(screen.getAllByText("Invalid")).toHaveLength(1);
+      expect(warn).toHaveBeenCalled();
+    });
+
+    it("badges a publisher_trust rule with no trusted publishers", () => {
+      rulesResponse = {
+        data: [
+          {
+            ...INVALID_PT,
+            config: { trusted_publishers: [], match: "metadata", action: "block" },
+          },
+        ],
+        isLoading: false,
+      };
+      render(<CurationRulesManager />);
+      expect(screen.getByText("Invalid").closest("[title]")).toHaveAttribute(
+        "title",
+        "No trusted publishers",
+      );
+      expect(screen.getByText(/match: Declared metadata/)).toBeInTheDocument();
+    });
+
+    it("does not coerce unknown values in the edit form and blocks saving until fixed", async () => {
+      const user = userEvent.setup();
+      rulesResponse = { data: [INVALID_PT], isLoading: false };
+      render(<CurationRulesManager />);
+      await user.click(
+        screen.getByRole("button", { name: /Edit publisher_trust rule/i }),
+      );
+      expect((screen.getByLabelText("Match") as HTMLSelectElement).value).toBe("");
+      expect(
+        (screen.getByLabelText("Publisher action") as HTMLSelectElement).value,
+      ).toBe("");
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts.map((a) => a.textContent).join(" ")).toMatch(
+        /"signature"[\s\S]*"audit"/,
+      );
+      const save = screen.getByRole("button", { name: /^Save$/i });
+      expect(save).toBeDisabled();
+      await user.selectOptions(screen.getByLabelText("Match"), "attestation");
+      expect(save).toBeDisabled();
+      await user.selectOptions(screen.getByLabelText("Publisher action"), "block");
+      expect(save).toBeEnabled();
+      expect(screen.queryAllByRole("alert")).toHaveLength(0);
+      await user.click(save);
+      const arg = saveMutate().mock.calls[0][0] as {
+        id: string;
+        form: Parameters<typeof toRequest>[0];
+      };
+      expect(arg.id).toBe("pt-bad");
+      expect(toRequest(arg.form)).toMatchObject({
+        rule_type: "publisher_trust",
+        action: "block",
+        config: {
+          trusted_publishers: ["p1"],
+          match: "attestation",
+          action: "block",
+        },
+      });
+    });
   });
 
   it("cancel closes the dialog without saving", async () => {
@@ -606,14 +741,29 @@ describe("toRequest config building", () => {
       ...base,
       rule_type: "publisher_trust",
       trusted_publishers: "a, b\n b \nc",
-      pt_match: "signature",
+      pt_match: "metadata",
       pt_action: "block",
     });
     expect(req.config).toEqual({
       trusted_publishers: ["a", "b", "c"],
-      match: "signature",
+      match: "metadata",
       action: "block",
     });
+    expect(req.action).toBe("block");
+  });
+
+  it("only ever sends allow or block as the top-level action", () => {
+    // Pattern rules carry the chosen action.
+    expect(toRequest({ ...base, action: "allow" }).action).toBe("allow");
+    expect(toRequest({ ...base, action: "block" }).action).toBe("block");
+    // Typed rules mirror their config action onto the allow|block column.
+    const pt = { ...base, rule_type: "publisher_trust" as const, trusted_publishers: "a" };
+    expect(toRequest({ ...pt, pt_action: "flag" }).action).toBe("allow");
+    expect(toRequest({ ...pt, pt_action: "allow" }).action).toBe("allow");
+    expect(toRequest({ ...pt, pt_action: "block" }).action).toBe("block");
+    const pop = { ...base, rule_type: "popularity" as const };
+    expect(toRequest({ ...pop, pop_action: "flag" }).action).toBe("allow");
+    expect(toRequest({ ...pop, pop_action: "block" }).action).toBe("block");
   });
 
   it("omits affix/homoglyph/distance from popularity config when typosquat is off", () => {
