@@ -136,6 +136,102 @@ describe("curationRulesApi", () => {
     );
   });
 
+  describe("backend enums", () => {
+    it("offers exactly the values the backend accepts", async () => {
+      const mod = await import("../curation-rules");
+      expect(mod.RULE_ACTIONS).toEqual(["allow", "block"]);
+      expect(mod.PUBLISHER_MATCHES).toEqual(["attestation", "metadata"]);
+      expect([...mod.PUBLISHER_TRUST_ACTIONS].sort()).toEqual([
+        "allow",
+        "block",
+        "flag",
+      ]);
+      expect(mod.PUBLISHER_TRUST_FORMATS).toEqual(["pypi", "npm", "conda"]);
+    });
+  });
+
+  describe("readPublisherTrust", () => {
+    it("reads a valid config with no problems", async () => {
+      const { readPublisherTrust } = await import("../curation-rules");
+      expect(
+        readPublisherTrust({
+          trusted_publishers: [" NumFOCUS ", "", 7, "Microsoft"],
+          match: "metadata",
+          action: "block",
+        }),
+      ).toEqual({
+        trusted_publishers: ["NumFOCUS", "Microsoft"],
+        match: "metadata",
+        action: "block",
+        raw_match: "metadata",
+        raw_action: "block",
+        problems: [],
+      });
+    });
+
+    it("applies the backend defaults when match/action are absent or not strings", async () => {
+      const { readPublisherTrust } = await import("../curation-rules");
+      const r = readPublisherTrust({ trusted_publishers: ["a"], match: 3 });
+      expect(r.match).toBe("attestation");
+      expect(r.action).toBe("flag");
+      expect(r.problems).toEqual([]);
+    });
+
+    it("keeps unknown values verbatim, warns, and lists every problem", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { readPublisherTrust } = await import("../curation-rules");
+      const r = readPublisherTrust({
+        trusted_publishers: [],
+        match: "namespace",
+        action: "audit",
+      });
+      expect(r.match).toBe("unknown");
+      expect(r.raw_match).toBe("namespace");
+      expect(r.action).toBe("unknown");
+      expect(r.raw_action).toBe("audit");
+      expect(r.problems).toEqual([
+        "No trusted publishers",
+        'Unknown match mode "namespace"',
+        'Unknown action "audit"',
+      ]);
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
+
+    it("treats a missing config as having no publishers", async () => {
+      const { readPublisherTrust } = await import("../curation-rules");
+      expect(readPublisherTrust(null).problems).toEqual(["No trusted publishers"]);
+    });
+  });
+
+  it("sends a publisher_trust create body with the backend field names", async () => {
+    mockApiFetch.mockResolvedValue({ id: "pt", rule_type: "publisher_trust" });
+    const mod = await import("../curation-rules");
+    await mod.curationRulesApi.create({
+      rule_type: "publisher_trust",
+      scope: "global",
+      staging_repo_id: null,
+      action: "block",
+      config: {
+        trusted_publishers: ["NumFOCUS"],
+        match: "metadata",
+        action: "block",
+      },
+    });
+    const body = JSON.parse(mockApiFetch.mock.calls[0][1].body);
+    expect(body).toEqual({
+      rule_type: "publisher_trust",
+      scope: "global",
+      staging_repo_id: null,
+      action: "block",
+      config: {
+        trusted_publishers: ["NumFOCUS"],
+        match: "metadata",
+        action: "block",
+      },
+    });
+  });
+
   describe("parseList", () => {
     it("splits on commas and newlines, trims, and de-dupes", async () => {
       const { parseList } = await import("../curation-rules");
