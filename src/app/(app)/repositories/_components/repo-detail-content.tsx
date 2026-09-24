@@ -274,8 +274,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     supportsVersioning(repoFormat);
   // Package analysis (vendored components + install scripts) is only
   // produced for the formats the backend unpacks (`PACKAGE_ANALYSIS_FORMATS`:
-  // conda, npm, pypi, rpm, debian), so the Analysis tab is format-gated the
-  // same way the Versions tab is.
+  // conda, conda_native, npm, pypi, rpm, debian), so the Analysis tab is
+  // format-gated the same way the Versions tab is.
   const packageAnalysisActive =
     !!repoFormat && supportsPackageAnalysis(repoFormat);
 

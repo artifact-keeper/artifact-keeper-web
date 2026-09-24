@@ -380,8 +380,8 @@ describe("hasProxyScanSummary", () => {
     expect(hasProxyScanSummary({ repo_type: "remote", format: "go" })).toBe(
       false,
     );
-    // `conda` shares the PyPI format handler but has its own ungated `/conda`
-    // router, and `helm` (ChartMuseum) is not `helm_oci` (OCI).
+    // `conda` is served by the `/conda` channel router, which never reads the
+    // flag, and `helm` (ChartMuseum) is not `helm_oci` (OCI).
     expect(hasProxyScanSummary({ repo_type: "remote", format: "conda" })).toBe(
       false,
     );

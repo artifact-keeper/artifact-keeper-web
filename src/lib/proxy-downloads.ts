@@ -28,8 +28,13 @@ import type { Repository, RepositoryFormat } from "@/types";
  * `rubygems` through the shared `try_remote_or_virtual_download` helper, plus
  * explicit call sites in `maven`, `npm` and `pypi`.
  *
+ * `conda_native` is listed alongside `conda` because both format ids are served
+ * by the same `/conda` channel router: `resolve_conda_repo` accepts
+ * `["conda", "conda_native"]` and the Remote arm of `download_package` records
+ * every proxied serve with no per-format branch (backend `api/handlers/conda.rs`).
+ *
  * Deliberately conservative: format ids that merely *resemble* an instrumented
- * handler (`gradle`, `yarn`, `pnpm`, `poetry`, `jupyter`, `conda_native`, …) are left out
+ * handler (`gradle`, `yarn`, `pnpm`, `poetry`, `jupyter`, …) are left out
  * because that issue lists backend handler modules, not repository format ids,
  * and this list is only ever consulted for a **zero** count (see
  * `downloadCountKind`). Under-claiming therefore shows "not tracked" on a
@@ -42,6 +47,7 @@ import type { Repository, RepositoryFormat } from "@/types";
 export const PROXY_DOWNLOAD_TRACKED_FORMATS = new Set<RepositoryFormat>([
   "ansible",
   "conda",
+  "conda_native",
   "cran",
   "maven",
   "npm",
