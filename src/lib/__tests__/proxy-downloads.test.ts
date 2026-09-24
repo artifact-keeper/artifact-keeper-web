@@ -36,6 +36,8 @@ describe("proxyDownloadsTracked", () => {
     ["maven", true],
     ["ansible", true],
     ["conda", true],
+    // same `/conda` channel router as `conda`, so the same recording path
+    ["conda_native", true],
     ["cran", true],
     ["rpm", true],
     ["rubygems", true],
@@ -135,6 +137,7 @@ describe("copy", () => {
     expect([...PROXY_DOWNLOAD_TRACKED_FORMATS].sort()).toEqual([
       "ansible",
       "conda",
+      "conda_native",
       "cran",
       "maven",
       "npm",

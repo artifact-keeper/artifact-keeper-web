@@ -30,8 +30,12 @@ export const SCAN_ON_PROXY_GATED_FORMATS: ReadonlySet<RepositoryFormat> = new Se
   "pnpm",
   "bower",
   // PyPI family, served at `/pypi` by `api/handlers/pypi.rs` (`serve_scanned_pypi_file`).
-  // `conda` is deliberately absent: it shares the PyPI *FormatHandler* but has
-  // its own ungated `/conda` router (`api/handlers/conda.rs`).
+  // `conda` and `conda_native` are deliberately absent: both are served by the
+  // `/conda` channel router (`api/handlers/conda.rs`), which never reads the
+  // `scan_on_proxy` flag. Conda has not been a PyPI alias since backend
+  // artifact-keeper#4118 gave it its own `conda` handler key (served by the
+  // conda-native handler); it was never gated either way, because gating lives
+  // in the request router, not in the FormatHandler.
   "pypi",
   "poetry",
   "jupyter",

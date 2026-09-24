@@ -93,11 +93,13 @@ describe('supportsScanOnProxy (backend artifact-keeper#1274)', () => {
     expect([...SCAN_ON_PROXY_GATED_FORMATS].sort()).toEqual(expected);
   });
 
-  // `conda` shares the PyPI FormatHandler (`get_handler_for_format`) but is
-  // served by its own ungated `/conda` router, so the handler-key mapping is
-  // the wrong source for this list.
-  it('excludes conda despite its PyPI handler_key', () => {
+  // Both conda format ids are served by the `/conda` channel router
+  // (`api/handlers/conda.rs`), which never reads the `scan_on_proxy` flag.
+  // Conda has its own handler key since artifact-keeper#4118 (it used to
+  // share PyPI's), and gating follows the request router, not the handler.
+  it('excludes both conda formats, unlike pypi', () => {
     expect(supportsScanOnProxy('conda')).toBe(false);
+    expect(supportsScanOnProxy('conda_native')).toBe(false);
     expect(supportsScanOnProxy('pypi')).toBe(true);
   });
 
