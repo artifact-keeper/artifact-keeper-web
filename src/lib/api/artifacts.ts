@@ -4,6 +4,7 @@ import {
   deleteArtifact,
   createDownloadTicket,
   getArtifactStats,
+  getArtifact,
 } from '@artifact-keeper/sdk';
 import type {
   ArtifactResponse,
@@ -17,12 +18,14 @@ import {
 } from '@/lib/sdk-client';
 import type {
   Artifact,
+  ArtifactOrigin,
+  ArtifactOriginKind,
   DockerTag,
   GroupedArtifactListResponse,
   MavenComponent,
   PaginatedResponse,
 } from '@/types';
-import { apiFetch, assertData } from '@/lib/api/fetch';
+import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListArtifactsParams {
@@ -60,6 +63,40 @@ export interface ListArtifactsParams {
   count?: 'exact';
 }
 
+const ORIGIN_KINDS: ReadonlySet<ArtifactOriginKind> = new Set<ArtifactOriginKind>([
+  'hosted',
+  'proxy',
+  'virtual',
+  'migration',
+]);
+
+/**
+ * Adapt the artifact's `origin` document. The field is not in the generated
+ * SDK yet (backend 1.11.0, artifact-keeper#4135), so it is read off the
+ * runtime object. The backend shape is `{ v, kind, repository_key, upstream_url? }`;
+ * listings serialize `null` and an older backend omits the field, both of
+ * which come back as `null` / `undefined` so the dialog shows nothing. A
+ * document missing its kind or repository is treated as absent rather than
+ * half-rendered. An unrecognised kind degrades to `'unknown'` with the raw
+ * value kept for display.
+ */
+export function adaptArtifactOrigin(raw: unknown): ArtifactOrigin | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object') return null;
+  const doc = raw as Record<string, unknown>;
+  const rawKind = doc.kind;
+  const repositoryKey = doc.repository_key;
+  if (typeof rawKind !== 'string' || !rawKind) return null;
+  if (typeof repositoryKey !== 'string' || !repositoryKey) return null;
+  const upstream = doc.upstream_url;
+  return {
+    kind: narrowEnum(rawKind, ORIGIN_KINDS, 'unknown', `Unknown artifact origin kind: ${rawKind}`),
+    raw_kind: rawKind,
+    repository_key: repositoryKey,
+    upstream_url: typeof upstream === 'string' && upstream ? upstream : undefined,
+  };
+}
+
 // Local Artifact extends ArtifactResponse with quarantine fields the SDK
 // doesn't model yet. Every artifact surface (listing, by-id, by-path)
 // serializes `quarantine_status` — and `quarantine_until` for timed holds —
@@ -79,6 +116,7 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     analyzable?: boolean;
     quarantine_status?: string | null;
     quarantine_until?: string | null;
+    origin?: unknown;
   };
   return {
     id: sdk.id,
@@ -106,6 +144,7 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     // for an artifact (artifact-keeper#2292). Matches the backend's safe
     // default so hosted artifacts always stay analyzable.
     analyzable: sdkAny.analyzable ?? true,
+    origin: adaptArtifactOrigin(sdkAny.origin),
   };
 }
 
@@ -208,7 +247,20 @@ export const artifactsApi = {
     if (!response.ok) {
       throw new Error(`Failed to fetch artifact: ${response.status}`);
     }
-    return response.json() as Promise<Artifact>;
+    const raw = (await response.json()) as Artifact & { origin?: unknown };
+    return { ...raw, origin: adaptArtifactOrigin(raw.origin) };
+  },
+
+  /**
+   * One artifact by id (`GET /api/v1/artifacts/{id}`). The artifact detail
+   * dialog uses it for the `origin` record (#914), which the listing rows the
+   * dialog opens from never carry. By id rather than by path on purpose: the
+   * by-path route falls through to serving bytes for a path with no
+   * `artifacts` row on remote and virtual repositories.
+   */
+  getById: async (artifactId: string): Promise<Artifact> => {
+    const data = await unwrap(getArtifact({ path: { id: artifactId } }));
+    return adaptArtifact(assertData(data, 'artifactsApi.getById'));
   },
 
   delete: async (repoKey: string, artifactPath: string): Promise<void> => {

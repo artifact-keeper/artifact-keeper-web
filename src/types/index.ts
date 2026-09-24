@@ -315,6 +315,35 @@ export interface Artifact {
    * `isArtifactAnalyzable` in `@/lib/artifact-analyzable`.
    */
   analyzable?: boolean;
+  /**
+   * Where the artifact's bytes came from: the immutable origin record the
+   * backend stamps at ingest (artifact-keeper#4135). Only the per-artifact
+   * detail endpoints populate it; listings serialize `null`, and an older
+   * backend omits it. Since artifact-keeper#4190 a promoted or approved copy
+   * keeps the source artifact's origin, so `origin.repository_key` can name a
+   * repository other than `repository_key`.
+   */
+  origin?: ArtifactOrigin | null;
+}
+
+/**
+ * How an artifact entered the registry (artifact-keeper#4135). `unknown`
+ * stands in for a kind this web build does not model yet; the raw value is
+ * kept on `ArtifactOrigin.raw_kind` so it can still be shown.
+ */
+export type ArtifactOriginKind = 'hosted' | 'proxy' | 'virtual' | 'migration' | 'unknown';
+
+export interface ArtifactOrigin {
+  kind: ArtifactOriginKind;
+  /** The kind string exactly as the backend sent it. */
+  raw_kind: string;
+  /** Repository the artifact was uploaded to, fetched through, or imported into. */
+  repository_key: string;
+  /**
+   * Normalized URL of the upstream system that supplied the bytes (a proxy's
+   * upstream, a migration's source system). Absent for hosted uploads.
+   */
+  upstream_url?: string;
 }
 
 export interface PaginatedResponse<T> {

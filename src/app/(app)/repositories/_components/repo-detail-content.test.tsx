@@ -38,6 +38,10 @@ const h = vi.hoisted(() => ({
     download_count: number;
     last_downloaded: string | null;
   } | null,
+  // What the by-id artifact detail query (#914) returns, and the `enabled`
+  // flag it was issued with on the latest render.
+  artifactDetail: undefined as Record<string, unknown> | undefined,
+  artifactDetailEnabled: undefined as boolean | undefined,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -114,6 +118,14 @@ vi.mock("@tanstack/react-query", () => ({
         isFetching: false,
       };
     }
+    if (key === "artifact") {
+      h.artifactDetailEnabled = opts.enabled;
+      return {
+        data: opts.enabled ? h.artifactDetail : undefined,
+        isLoading: false,
+        isFetching: false,
+      };
+    }
     if (key === "artifact-stats") {
       return { data: h.artifactStats ?? undefined, isLoading: false, isFetching: false };
     }
@@ -172,6 +184,7 @@ vi.mock("@/lib/api/artifacts", () => ({
       download_count: 0,
       created_at: "2026-07-01T00:00:00Z",
     }),
+    getById: vi.fn(),
     getAbsoluteDownloadUrl: () => "http://localhost/download",
     getDownloadUrl: () => "/download",
     createDownloadTicket: vi.fn(),
@@ -593,6 +606,54 @@ describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", 
     h.artifactStats = { download_count: 0, last_downloaded: null };
     const dialog = await openDetailDialog();
     expect(within(dialog).queryByText("Last downloaded")).toBeNull();
+  });
+});
+
+describe("RepoDetailContent artifact detail dialog — Origin (#914)", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.artifactDetail = undefined;
+    h.artifactDetailEnabled = undefined;
+  });
+  afterEach(() => {
+    cleanup();
+    h.artifactDetail = undefined;
+    h.artifactDetailEnabled = undefined;
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
+    row.click();
+    return await screen.findByRole("dialog", {}, { timeout: 2000 });
+  }
+
+  it("fetches the artifact by id and shows a promoted copy as originally from its source repository", async () => {
+    h.artifactDetail = {
+      ...artifactFixture,
+      origin: {
+        kind: "proxy",
+        raw_kind: "proxy",
+        repository_key: "npm-remote",
+        upstream_url: "https://registry.npmjs.org",
+      },
+    };
+    const dialog = await openDetailDialog();
+    expect(h.artifactDetailEnabled).toBe(true);
+    const origin = within(dialog).getByTestId("artifact-origin");
+    expect(within(origin).getByText("Fetched from upstream through a proxy")).toBeInTheDocument();
+    expect(origin).toHaveTextContent("Originally from npm-remote");
+    expect(within(origin).getByText("https://registry.npmjs.org")).toBeInTheDocument();
+  });
+
+  it("shows nothing when the backend returns no origin (older backend)", async () => {
+    h.artifactDetail = { ...artifactFixture, origin: null };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByTestId("artifact-origin")).toBeNull();
+    // The rest of the dialog is unaffected.
+    expect(within(dialog).getByText("SHA-256")).toBeInTheDocument();
   });
 });
 
