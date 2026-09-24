@@ -22,6 +22,7 @@ import type {
   CacheTtlResponse,
 } from '@artifact-keeper/sdk';
 import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
+import { narrowStorageBackend } from '@/lib/storage-backend';
 import type {
   Repository,
   CreateRepositoryRequest,
@@ -255,6 +256,12 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     // access via `as any` — the backend returns the fields when set.
     quarantine_enabled: (sdk as Record<string, unknown>).quarantine_enabled as boolean | undefined,
     quarantine_duration_minutes: (sdk as Record<string, unknown>).quarantine_duration_minutes as number | undefined,
+    // `storage_backend`: not in the generated SDK yet (backend 1.11.0,
+    // artifact-keeper#4018). Read defensively and narrowed; absent on older
+    // backends, and an unrecognised value is kept raw rather than dropped.
+    storage_backend: narrowStorageBackend(
+      (sdk as RepositoryResponse & { storage_backend?: unknown }).storage_backend,
+    ),
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };

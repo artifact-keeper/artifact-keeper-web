@@ -1137,3 +1137,62 @@ describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
     expect(call.body).toMatchObject({ format: "generic", format_key: "unity" });
   });
 });
+
+describe("repositoriesApi — storage_backend (#918, backend artifact-keeper#4018)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("narrows a known storage_backend on get", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ storage_backend: "s3" }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.storage_backend).toEqual({ known: true, value: "s3" });
+  });
+
+  it("carries storage_backend through the list adapter", async () => {
+    mockListRepositories.mockResolvedValue({
+      data: {
+        items: [
+          sdkRepo({ storage_backend: "filesystem" }),
+          sdkRepo({ id: "r2", key: "az", storage_backend: "azure" }),
+        ],
+        pagination: { page: 1, per_page: 20, total: 2, total_pages: 1 },
+      },
+      error: undefined,
+    });
+    const result = await repositoriesApi.list();
+    expect(result.items.map((r) => r.storage_backend)).toEqual([
+      { known: true, value: "filesystem" },
+      { known: true, value: "azure" },
+    ]);
+  });
+
+  it("leaves storage_backend undefined when the backend predates #4018", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.storage_backend).toBeUndefined();
+  });
+
+  it("treats null and empty values as absent", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ storage_backend: null }),
+      error: undefined,
+    });
+    expect((await repositoriesApi.get("a")).storage_backend).toBeUndefined();
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ storage_backend: "  " }),
+      error: undefined,
+    });
+    expect((await repositoriesApi.get("b")).storage_backend).toBeUndefined();
+  });
+
+  it("keeps an unknown value raw instead of throwing or dropping it", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ storage_backend: "minio-legacy" }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("maven-local");
+    expect(repo.storage_backend).toEqual({ known: false, value: "minio-legacy" });
+  });
+});

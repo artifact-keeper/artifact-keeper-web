@@ -77,6 +77,7 @@ import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
+import { StorageBackendBadge } from "./storage-backend-badge";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
@@ -934,6 +935,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               >
                 {repository.is_public ? "Public" : "Private"}
               </Badge>
+              <StorageBackendBadge storageBackend={repository.storage_backend} />
               <span className="text-sm text-muted-foreground ml-2">
                 {formatBytes(repository.storage_used_bytes)} used
               </span>
@@ -981,6 +983,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             >
               {repository.is_public ? "Public" : "Private"}
             </Badge>
+            <StorageBackendBadge storageBackend={repository.storage_backend} />
             <span className="text-sm text-muted-foreground ml-2">
               {formatBytes(repository.storage_used_bytes)} used
             </span>
