@@ -400,6 +400,36 @@ describe("SetupPage - PyPI client variants", () => {
   });
 });
 
+describe("SetupPage - conda client variants (#908)", () => {
+  beforeEach(() => mockUseQuery.mockReset());
+  afterEach(() => cleanup());
+
+  it.each(["conda", "conda_native"] as const)(
+    "renders conda channel tabs for a %s repo instead of pip or generic curl",
+    async (format) => {
+      await openRepoDialog(makeRepo({ format, key: "my-conda" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("tab", { name: "Conda", selected: true })).toBeTruthy();
+      expect(within(dialog).getByRole("tab", { name: "Mamba / Micromamba" })).toBeTruthy();
+      const panel = within(dialog).getByRole("tabpanel", { name: "Conda" });
+      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/my-conda");
+      expect(dialog.textContent).not.toContain("pip.conf");
+      expect(dialog.textContent).not.toContain("/api/v1/repositories/");
+    },
+  );
+
+  it("keeps conda_native repos under the Ecosystem category filter", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([
+      makeRepo({ id: "r1", key: "native-ch", name: "Native Channel", format: "conda_native" }),
+      makeRepo({ id: "r2", key: "java-libs", name: "Java Libs", format: "maven" }),
+    ]);
+    await user.click(screen.getByRole("button", { name: "Ecosystem" }));
+    expect(screen.getByText("native-ch")).toBeTruthy();
+    expect(screen.queryByText("java-libs")).toBeNull();
+  });
+});
+
 describe("SetupPage - non-JVM formats render flat steps (no client tabs)", () => {
   beforeEach(() => {
     mockUseQuery.mockReset();

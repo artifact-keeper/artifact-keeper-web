@@ -500,8 +500,86 @@ const PYPI_DEFAULT_VARIANT: Record<"pypi" | "poetry" | "jupyter", string> = {
   jupyter: "jupyter",
 };
 
-/** Generate repo-specific setup content based on format. JVM, npm, and PyPI
- *  formats return a set of client variants (rendered as tabs); all other
+/** Build the conda-channel client variants (conda, mamba/micromamba, and a
+ *  curl upload tab for writable repos). `conda` and `conda_native` repos are
+ *  served by the same channel routes (`/conda/<key>/<subdir>/repodata.json`,
+ *  artifact-keeper `handlers/conda.rs`), so both formats get this content.
+ *
+ *  Credentials ride in the channel URL as `/conda/t/<token>/<key>` — the form
+ *  conda clients understand natively (they mask the `/t/<token>` segment in
+ *  output). The backend validates that segment as an API token, so a login
+ *  password does not work there. Remote and virtual channels reject writes, so
+ *  the upload tab is only offered for local/staging repos. `channel_alias` is
+ *  deliberately not suggested: it re-roots every short channel name (e.g.
+ *  `conda-forge`) onto this server, which only resolves if a repo has that key. */
+function getCondaClientVariants(
+  repoKey: string,
+  repoType: RepositoryType,
+): SetupClientVariant[] {
+  const channelUrl = `${REGISTRY_URL}/conda/t/YOUR_TOKEN/${repoKey}`;
+  const isProxy = repoType === "remote" || repoType === "virtual";
+  const tokenNote =
+    "YOUR_TOKEN must be an API access token; for a public channel you can drop the /t/YOUR_TOKEN segment.";
+  const condarcStep: SetupStep = {
+    title: "Configure channel",
+    description: isProxy
+      ? `Add to ~/.condarc. Listing only this channel routes every install through the repository. ${tokenNote}`
+      : `Add to ~/.condarc, ahead of the channels you already use. ${tokenNote}`,
+    code: `channels:
+  - ${channelUrl}`,
+  };
+
+  const variants: SetupClientVariant[] = [
+    {
+      key: "conda",
+      label: "Conda",
+      steps: [
+        condarcStep,
+        {
+          title: "Install a package",
+          code: `conda install -c ${channelUrl} <package-name>`,
+        },
+      ],
+    },
+    {
+      key: "mamba",
+      label: "Mamba / Micromamba",
+      steps: [
+        {
+          ...condarcStep,
+          description: `mamba and micromamba read ~/.condarc (micromamba also reads ~/.mambarc). ${tokenNote}`,
+        },
+        {
+          title: "Install a package",
+          code: `mamba install -c ${channelUrl} <package-name>
+micromamba install -c ${channelUrl} <package-name>`,
+        },
+      ],
+    },
+  ];
+
+  if (!isProxy) {
+    variants.push({
+      key: "upload",
+      label: "Upload",
+      steps: [
+        {
+          title: "Upload a package",
+          description:
+            "PUT the built .conda or .tar.bz2 file under its platform subdir (noarch, linux-64, osx-arm64, ...). The token needs the write:artifacts scope.",
+          code: `curl -X PUT -H "Authorization: Bearer YOUR_TOKEN" \\
+  --data-binary @my-package-1.0.0-py_0.conda \\
+  ${REGISTRY_URL}/conda/${repoKey}/noarch/my-package-1.0.0-py_0.conda`,
+        },
+      ],
+    });
+  }
+
+  return variants;
+}
+
+/** Generate repo-specific setup content based on format. JVM, npm, PyPI, and
+ *  conda formats return a set of client variants (rendered as tabs); all other
  *  formats return a flat list of steps. */
 function getRepoSetupContent(repo: Repository): RepoSetupContent {
   if (repo.format === "maven" || repo.format === "gradle" || repo.format === "sbt") {
@@ -523,6 +601,13 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
       kind: "variants",
       variants: getPypiClientVariants(repo.key, repo.repo_type),
       defaultKey: PYPI_DEFAULT_VARIANT[repo.format],
+    };
+  }
+  if (repo.format === "conda" || repo.format === "conda_native") {
+    return {
+      kind: "variants",
+      variants: getCondaClientVariants(repo.key, repo.repo_type),
+      defaultKey: "conda",
     };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
@@ -571,23 +656,6 @@ mise install --locked`,
         },
       ];
     }
-    case "conda":
-      // Conda has its own wire format (repodata.json), not PyPI Simple — it
-      // belongs with format-specific tooling, not the pypi-variants group.
-      // TODO: replace this pip-style placeholder with real conda channel setup.
-      return [
-        {
-          title: "Configure pip",
-          description: "Add to ~/.pip/pip.conf or ~/.config/pip/pip.conf:",
-          code: `[global]
-index-url = ${REGISTRY_URL}/pypi/${repoKey}/simple/
-trusted-host = ${REGISTRY_HOST}`,
-        },
-        {
-          title: "Install a package",
-          code: `pip install --index-url ${REGISTRY_URL}/pypi/${repoKey}/simple/ <package-name>`,
-        },
-      ];
     case "docker":
     case "podman":
     case "buildx":
