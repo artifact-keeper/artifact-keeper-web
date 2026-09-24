@@ -183,7 +183,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
   {
     key: "ecosystem",
     label: "Ecosystem",
-    formats: ["poetry", "conda", "yarn", "pnpm", "composer", "cocoapods", "swift", "hex", "pub", "sbt", "cran"],
+    formats: ["poetry", "conda", "conda_native", "yarn", "pnpm", "composer", "cocoapods", "swift", "hex", "pub", "sbt", "cran"],
   },
   {
     key: "infra",

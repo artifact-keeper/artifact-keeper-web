@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import type { Repository } from "@/types";
 import { RepoSetupGuide } from "./repo-setup-guide";
@@ -85,6 +86,58 @@ describe("RepoSetupGuide", () => {
     expect(panel.textContent).toContain("/pypi/lab-all/pypi");
     expect(panel.textContent).toContain("Members must be hosted repositories");
   });
+
+  // Both formats are served by the backend's conda channel routes
+  // (/conda/<key>/..., artifact-keeper handlers/conda.rs), never by /pypi (#908).
+  it.each(["conda", "conda_native"] as const)(
+    "gives a local %s repo conda channel setup with a token URL and an upload tab (#908)",
+    (format) => {
+      const { container } = render(
+        <RepoSetupGuide repo={makeRepo({ format, key: "sci", repo_type: "local" })} />,
+      );
+      expect(screen.getByRole("tab", { name: "Conda", selected: true })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "Mamba / Micromamba" })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "Upload" })).toBeTruthy();
+      const panel = screen.getByRole("tabpanel", { name: "Conda" });
+      expect(panel.textContent).toContain("~/.condarc");
+      expect(panel.textContent).toContain("channels:");
+      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/sci");
+      expect(panel.textContent).toContain("conda install -c ");
+      expect(panel.textContent).toContain("ahead of the channels you already use");
+      expect(container.textContent).not.toContain("/pypi/");
+      expect(container.textContent).not.toContain("pip install");
+      expect(container.textContent).not.toContain("/api/v1/repositories/");
+    },
+  );
+
+  it("shows mamba and micromamba commands and the curl PUT upload for a hosted conda repo", async () => {
+    const user = userEvent.setup();
+    render(<RepoSetupGuide repo={makeRepo({ format: "conda_native", key: "sci", repo_type: "staging" })} />);
+
+    await user.click(screen.getByRole("tab", { name: "Mamba / Micromamba" }));
+    const mamba = screen.getByRole("tabpanel", { name: "Mamba / Micromamba" });
+    expect(mamba.textContent).toContain("mamba install -c ");
+    expect(mamba.textContent).toContain("micromamba install -c ");
+    expect(mamba.textContent).toContain("~/.mambarc");
+
+    await user.click(screen.getByRole("tab", { name: "Upload" }));
+    const upload = screen.getByRole("tabpanel", { name: "Upload" });
+    expect(upload.textContent).toContain("curl -X PUT");
+    expect(upload.textContent).toContain('Authorization: Bearer YOUR_TOKEN');
+    expect(upload.textContent).toContain("/conda/sci/noarch/my-package-1.0.0-py_0.conda");
+    expect(upload.textContent).toContain("write:artifacts");
+  });
+
+  it.each(["remote", "virtual"] as const)(
+    "omits the upload tab and routes every install through a %s conda channel",
+    (repo_type) => {
+      render(<RepoSetupGuide repo={makeRepo({ format: "conda", key: "cf", repo_type })} />);
+      expect(screen.queryByRole("tab", { name: "Upload" })).toBeNull();
+      const panel = screen.getByRole("tabpanel", { name: "Conda" });
+      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/cf");
+      expect(panel.textContent).toContain("routes every install through the repository");
+    },
+  );
 
   it("renders a flat step list (no tabs) for formats without client variants", () => {
     render(<RepoSetupGuide repo={makeRepo({ format: "docker", key: "imgs" })} />);
