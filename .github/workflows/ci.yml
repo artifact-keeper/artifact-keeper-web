@@ -11,6 +11,14 @@ permissions:
   contents: read
   packages: write
 
+# One run per PR: a newer push cancels the superseded run (it held hosted slots
+# the whole org shares). Pushes to main are never cancelled, so every main
+# commit keeps its own result. E2E is not a required check, so cancelling it
+# mid-run cannot strand a PR. See the CI architecture design, phase 1 PR 1.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/artifact-keeper-web
