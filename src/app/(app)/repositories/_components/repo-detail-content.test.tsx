@@ -54,7 +54,9 @@ const repository = {
   name: "Demo",
   format: "generic",
   repo_type: "virtual",
-  storage_backend: "filesystem",
+  storage_backend: { known: true, value: "filesystem" } as
+    | { known: boolean; value: string }
+    | undefined,
   versioning_enabled: false,
 };
 
@@ -756,5 +758,35 @@ describe("RepoDetailContent tree view search (#850)", () => {
     expect(await screen.findByRole("dialog", {}, { timeout: 2000 })).toHaveTextContent(
       "config.yaml",
     );
+  });
+});
+
+describe("RepoDetailContent header storage backend (#918)", () => {
+  const original = repository.storage_backend;
+  beforeEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    repository.storage_backend = original;
+  });
+
+  it.each([true, false])(
+    "shows a human label for a known backend (standalone=%s)",
+    (standalone) => {
+      repository.storage_backend = { known: true, value: "s3" };
+      render(<RepoDetailContent repoKey="demo" standalone={standalone} />);
+      expect(screen.getByText("Storage: S3")).toBeInTheDocument();
+    },
+  );
+
+  it("renders an unknown backend verbatim", () => {
+    repository.storage_backend = { known: false, value: "minio-legacy" };
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(screen.getByText("Storage: minio-legacy")).toBeInTheDocument();
+  });
+
+  it("shows nothing when the backend does not report one", () => {
+    repository.storage_backend = undefined;
+    render(<RepoDetailContent repoKey="demo" standalone />);
+    expect(screen.queryByText(/^Storage:/)).not.toBeInTheDocument();
   });
 });

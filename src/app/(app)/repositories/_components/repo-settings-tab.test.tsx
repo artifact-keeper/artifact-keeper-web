@@ -763,6 +763,40 @@ describe("RepoSettingsTab - Repository Info Section", () => {
   });
 });
 
+describe("RepoSettingsTab - Storage backend (#918)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  it("shows the storage backend read-only in Repository Info", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...baseRepo, storage_backend: { known: true, value: "gcs" } }}
+      />,
+      { wrapper: createWrapper() },
+    );
+    const label = screen.getByText("Storage Backend");
+    expect(label.tagName).toBe("DT");
+    expect(label.nextElementSibling?.textContent).toBe("GCS");
+  });
+
+  it("renders an unknown backend verbatim", () => {
+    render(
+      <RepoSettingsTab
+        repository={{ ...baseRepo, storage_backend: { known: false, value: "minio-legacy" } }}
+      />,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("minio-legacy")).toBeTruthy();
+  });
+
+  it("omits the field when the backend does not report one", () => {
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    expect(screen.queryByText("Storage Backend")).toBeNull();
+  });
+});
+
 describe("RepoSettingsTab - Empty description handling", () => {
   beforeEach(() => {
     vi.clearAllMocks();

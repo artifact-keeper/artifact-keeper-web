@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/scan-config";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
+import { storageBackendLabel } from "@/lib/storage-backend";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import type {
@@ -1551,6 +1552,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           </dd>
           <dt className="text-muted-foreground">Type</dt>
           <dd className="capitalize">{repository.repo_type}</dd>
+          {repository.storage_backend && (
+            <>
+              <dt className="text-muted-foreground">Storage Backend</dt>
+              <dd title="Set when the repository was created; cannot be changed">
+                {storageBackendLabel(repository.storage_backend)}
+              </dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Created</dt>
           <dd>{new Date(repository.created_at).toLocaleDateString()}</dd>
           <dt className="text-muted-foreground">Last Updated</dt>

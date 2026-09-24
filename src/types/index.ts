@@ -107,9 +107,30 @@ export interface Repository {
    */
   quarantine_enabled?: boolean;
   quarantine_duration_minutes?: number;
+  /**
+   * Storage backend holding this repository's content (#918, backend
+   * artifact-keeper#4018). Chosen at creation and immutable afterwards.
+   * Absent when the backend predates #4018; an unrecognised value is kept
+   * raw so it still renders.
+   */
+  storage_backend?: RepositoryStorageBackend;
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Storage backends the backend accepts (`SUPPORTED_STORAGE_BACKENDS` in
+ * backend `config.rs`).
+ */
+export type KnownStorageBackend = 'filesystem' | 's3' | 'azure' | 'gcs';
+
+/**
+ * A repository's storage backend, narrowed. `known: false` carries a value
+ * the UI does not recognise so it can be shown verbatim instead of dropped.
+ */
+export type RepositoryStorageBackend =
+  | { known: true; value: KnownStorageBackend }
+  | { known: false; value: string };
 
 /**
  * Debian/APT proxy filter allowlists (#2407). Empty or `["*"]` selects
