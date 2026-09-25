@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import {
+  INVALID_RULE_NOTE,
   curationRulesApi,
   type CurationRule,
   type CreateRuleRequest,
@@ -460,12 +461,12 @@ export function CurationRulesManager() {
                         {pt && pt.problems.length > 0 && (
                           <Badge
                             variant="destructive"
-                            title={pt.problems.join("; ")}
+                            title={[...pt.problems, INVALID_RULE_NOTE].join("; ")}
                           >
                             <AlertCircle className="size-3" />
                             Invalid
                             <span className="sr-only">
-                              : {pt.problems.join("; ")}
+                              : {[...pt.problems, INVALID_RULE_NOTE].join("; ")}
                             </span>
                           </Badge>
                         )}
