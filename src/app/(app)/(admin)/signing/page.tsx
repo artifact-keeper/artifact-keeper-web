@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyButton } from "@/components/common/copy-button";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SigningRepositoriesPanel } from "./signing-repositories-panel";
 import {
   Dialog,
   DialogContent,
@@ -152,6 +153,8 @@ export default function SigningPage() {
       </div>
 
       <AttestationPolicyCard />
+
+      <SigningRepositoriesPanel />
 
       <h2 className="text-sm font-medium">Signing keys</h2>
 
