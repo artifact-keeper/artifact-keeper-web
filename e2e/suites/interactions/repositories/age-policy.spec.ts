@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '../../../../src/lib/backend-version';
 
 /**
  * Configuration flow for the package age policy (issue #265, proxy gate #853).
@@ -8,20 +9,29 @@ import { test, expect } from '@playwright/test';
  * sends `quarantine_enabled` + `quarantine_duration_minutes` to:
  *   PATCH /api/v1/repositories/{key}
  *
- * Backend 1.10.0 (artifact-keeper#3647) refuses `quarantine_enabled: true` on
- * the proxying repository types with a 400 — quarantine state is keyed on rows
- * a remote/virtual repository never writes, so the hold would have no release
- * path. Disabling stays accepted on every type. The policy is therefore
- * exercised against a hosted repository, and the seeded `e2e-npm-remote` repo
- * is used to pin the refusal and the read-only panel the UI now renders there.
+ * Backend 1.10.0 (artifact-keeper#3647) refused `quarantine_enabled: true` on
+ * the proxying repository types with a 400. Backend main (artifact-keeper#4264,
+ * ships in 1.11.0, and in the `:dev` image this suite runs against) accepts it
+ * on remote repositories again — proxied content now carries a releasable,
+ * release-date-aware hold — and still refuses it on virtual repositories,
+ * which cache nothing themselves. Disabling stays accepted on every type.
  *
- * The hosted repository is created by this spec rather than reusing a seeded
- * one: enabling quarantine on a shared repo would hold artifacts other suites
- * upload into it.
+ * The API tests pin backend main. The UI test on the remote repository reads
+ * `/health` and asserts whichever panel the web gate (`PROXY_AGE_POLICY_MIN`)
+ * selects: `:dev` reports the last released version (1.10.0) until the
+ * workspace is bumped, so it renders #863's read-only panel today.
+ *
+ * The hosted and remote repositories the policy is enabled on are created by
+ * this spec rather than reusing seeded ones: enabling quarantine on a shared
+ * repo would hold artifacts other suites upload or fetch through it.
  */
 test.describe.serial('Repository - Package Age Policy', () => {
-  /** Proxying type: enabling is refused by the backend. */
+  /** Seeded remote: the disable path and the UI panel. */
   const REMOTE_KEY = 'e2e-npm-remote';
+  /** Spec-owned remote: enabling is accepted here since artifact-keeper#4264. */
+  const OWN_REMOTE_KEY = 'e2e-age-policy-remote';
+  /** Seeded virtual: enabling is still refused. */
+  const VIRTUAL_KEY = 'e2e-docker-virtual';
   /** Hosted type: the policy is configurable here. */
   const HOSTED_KEY = 'e2e-age-policy-local';
 
@@ -35,10 +45,21 @@ test.describe.serial('Repository - Package Age Policy', () => {
         is_public: true,
       },
     });
+    await request.post('/api/v1/repositories', {
+      data: {
+        key: OWN_REMOTE_KEY,
+        name: 'E2E Age Policy Remote',
+        format: 'npm',
+        repo_type: 'remote',
+        upstream_url: 'https://registry.npmjs.org',
+        is_public: true,
+      },
+    });
   });
 
   test.afterAll(async ({ request }) => {
     await request.delete(`/api/v1/repositories/${HOSTED_KEY}`).catch(() => {});
+    await request.delete(`/api/v1/repositories/${OWN_REMOTE_KEY}`).catch(() => {});
   });
 
   test('PATCH stores the age policy on a hosted repository', async ({ request }) => {
@@ -63,8 +84,35 @@ test.describe.serial('Repository - Package Age Policy', () => {
       .catch(() => {});
   });
 
-  test('enabling the age policy on a remote repository is refused', async ({ request }) => {
-    const resp = await request.fetch(`/api/v1/repositories/${REMOTE_KEY}`, {
+  test('enabling the age policy on a remote repository is accepted', async ({ request }) => {
+    try {
+      const resp = await request.fetch(`/api/v1/repositories/${OWN_REMOTE_KEY}`, {
+        method: 'PATCH',
+        data: { quarantine_enabled: true, quarantine_duration_minutes: 4320 },
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(
+        resp.status(),
+        `Enabling the age policy on a remote failed: ${await resp.text()}`
+      ).toBe(200);
+
+      const get = await request.get(`/api/v1/repositories/${OWN_REMOTE_KEY}`);
+      expect(get.status()).toBe(200);
+      expect((await get.json()).quarantine_enabled).toBe(true);
+    } finally {
+      // Reset so the suite stays idempotent even when an assertion fails.
+      await request
+        .fetch(`/api/v1/repositories/${OWN_REMOTE_KEY}`, {
+          method: 'PATCH',
+          data: { quarantine_enabled: false, quarantine_duration_minutes: 4320 },
+          headers: { 'Content-Type': 'application/json' },
+        })
+        .catch(() => {});
+    }
+  });
+
+  test('enabling the age policy on a virtual repository is refused', async ({ request }) => {
+    const resp = await request.fetch(`/api/v1/repositories/${VIRTUAL_KEY}`, {
       method: 'PATCH',
       data: { quarantine_enabled: true, quarantine_duration_minutes: 4320 },
       headers: { 'Content-Type': 'application/json' },
@@ -72,10 +120,10 @@ test.describe.serial('Repository - Package Age Policy', () => {
 
     expect(resp.status()).toBe(400);
 
-    // Match loosely: the wording is the backend's, but it has to name why the
-    // hold cannot work on proxied content rather than just the field name.
+    // Match loosely: the wording is the backend's, but it has to be about the
+    // virtual repository type rather than just the field name.
     const body = (await resp.text()).toLowerCase();
-    expect(body).toMatch(/proxy|proxied|release/);
+    expect(body).toMatch(/virtual|member|proxy|proxied/);
   });
 
   test('disabling the age policy on a remote repository is still accepted', async ({
@@ -96,9 +144,9 @@ test.describe.serial('Repository - Package Age Policy', () => {
   });
 
   test('rejects a negative cooldown duration', async ({ request }) => {
-    // Against the hosted repo: on a remote the request would be refused for
-    // the repository type before the duration is looked at, so the duration
-    // rule itself would never be exercised.
+    // Against the hosted repo: on a remote the request can be refused for the
+    // repository type (backend 1.10.0) before the duration is looked at, so
+    // the duration rule itself would never be exercised.
     const resp = await request.fetch(`/api/v1/repositories/${HOSTED_KEY}`, {
       method: 'PATCH',
       data: { quarantine_enabled: true, quarantine_duration_minutes: -10 },
@@ -176,9 +224,13 @@ test.describe.serial('Repository - Package Age Policy', () => {
       .catch(() => {});
   });
 
-  test('Settings tab renders the age policy read-only on a remote repository', async ({
+  test('Settings tab gates the age policy on a remote repository by backend version', async ({
     page,
+    request,
   }) => {
+    const health = await (await request.get('/health')).json().catch(() => ({}));
+    const proxyHolds = backendAtLeast(health?.version, PROXY_AGE_POLICY_MIN);
+
     await page.goto(`/repositories/${REMOTE_KEY}`);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(3000);
@@ -192,11 +244,19 @@ test.describe.serial('Repository - Package Age Policy', () => {
     await settingsTab.click({ force: true });
     await page.waitForTimeout(1500);
 
-    // The section is still there, but explains the restriction instead of
-    // offering controls the backend would refuse (#853).
     await expect(
       page.getByRole('heading', { name: /package age policy/i })
     ).toBeVisible({ timeout: 5000 });
+
+    if (proxyHolds) {
+      // Backend >= 1.11.0 (artifact-keeper#4264): the editable form is back.
+      await expect(page.getByLabel('Enable age policy')).toBeVisible();
+      await expect(page.getByTestId('age-policy-proxy-note')).toHaveCount(0);
+      return;
+    }
+
+    // Older backend: the section explains the restriction instead of
+    // offering controls the backend would refuse (#853).
 
     const note = page.getByTestId('age-policy-proxy-note');
     await expect(note).toBeVisible();
