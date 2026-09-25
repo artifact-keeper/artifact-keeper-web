@@ -11,6 +11,8 @@ import {
   type AgePolicyPayload,
 } from "@/lib/api/repositories";
 import { ageGateApi } from "@/lib/api/age-gate";
+import { adminApi } from "@/lib/api/admin";
+import { backendAtLeast, PROXY_AGE_POLICY_MIN } from "@/lib/backend-version";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { useAuth } from "@/providers/auth-provider";
@@ -510,8 +512,22 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // has no quarantine identity to release. Disabling stays accepted everywhere,
   // so remote/virtual repositories get a read-only panel that still offers the
   // turn-off path for a policy enabled before the gate existed.
-  const ageConfigurable = supportsAgePolicy(repository.repo_type);
+  //
+  // From 1.11.0 (artifact-keeper#4264) remote content carries a releasable
+  // hold, so remote gets the editable form; virtual is still refused (it
+  // caches nothing itself) and shows the form locked, pointing at its member
+  // remotes. The version comes from the same cached `/health` query the
+  // sidebar uses; an unknown version keeps the 1.10.0 behaviour.
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const ageConfigurable = supportsAgePolicy(repository.repo_type, health?.version);
   const ageLegacyEnabled = !ageConfigurable && ageDefaults.enabled;
+  const ageVirtualLocked =
+    repository.repo_type === "virtual" &&
+    backendAtLeast(health?.version, PROXY_AGE_POLICY_MIN);
 
   const ageMutation = useMutation({
     mutationFn: (payload: AgePolicyPayload) =>
@@ -667,6 +683,30 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     ageGateEnabled,
     ageGateMutation,
   ]);
+
+  // The one change every backend accepts on a type that cannot enable the
+  // policy: turning off a row written before the gate existed.
+  const ageDisableButton = (
+    <Button
+      variant="outline"
+      onClick={() =>
+        ageMutation.mutate({
+          enabled: false,
+          duration_minutes: ageMinutes,
+        })
+      }
+      disabled={ageMutation.isPending}
+    >
+      {ageMutation.isPending ? (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          Disabling...
+        </>
+      ) : (
+        "Disable Age Policy"
+      )}
+    </Button>
+  );
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -971,7 +1011,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <h3 id="settings-age-heading" className="text-base font-semibold">
             Package Age Policy
           </h3>
-          {ageConfigurable ? (
+          {ageConfigurable || ageVirtualLocked ? (
             <p className="text-xs text-muted-foreground mt-0.5">
               Hold freshly published packages in quarantine for a cooldown
               period after their release. New releases pulled from upstream are
@@ -984,7 +1024,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             </p>
           )}
         </div>
-        {!ageConfigurable ? (
+        {!ageConfigurable && !ageVirtualLocked ? (
           <div className="space-y-4">
             <div
               className="flex items-start gap-2 rounded-md border p-3"
@@ -1015,32 +1055,25 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   restriction shipped. Turning it off is the only change the
                   server accepts here, and it cannot be switched back on.
                 </p>
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      ageMutation.mutate({
-                        enabled: false,
-                        duration_minutes: ageMinutes,
-                      })
-                    }
-                    disabled={ageMutation.isPending}
-                  >
-                    {ageMutation.isPending ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Disabling...
-                      </>
-                    ) : (
-                      "Disable Age Policy"
-                    )}
-                  </Button>
-                </div>
+                <div className="flex justify-end">{ageDisableButton}</div>
               </>
             )}
           </div>
         ) : (
           <div className="space-y-4">
+            {ageVirtualLocked && (
+              <div
+                className="flex items-start gap-2 rounded-md border p-3"
+                data-testid="age-policy-virtual-note"
+              >
+                <AlertTriangle className="size-4 shrink-0 text-yellow-500 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  A virtual repository caches nothing itself; set the age
+                  policy on its member Remote repositories (listed on the
+                  Members tab).
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="settings-age-enabled">Enable age policy</Label>
@@ -1052,6 +1085,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 id="settings-age-enabled"
                 checked={ageEnabled}
                 onCheckedChange={setAgeEnabled}
+                disabled={ageVirtualLocked}
               />
             </div>
 
@@ -1065,7 +1099,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   step="1"
                   value={ageValue}
                   onChange={(e) => setAgeValue(e.target.value)}
-                  disabled={!ageEnabled}
+                  disabled={!ageEnabled || ageVirtualLocked}
                   className="flex-1"
                   aria-invalid={ageInvalid}
                   aria-describedby="settings-age-error"
@@ -1073,7 +1107,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 <Select
                   value={ageUnit}
                   onValueChange={(v) => setAgeUnit(v as AgeUnit)}
-                  disabled={!ageEnabled}
+                  disabled={!ageEnabled || ageVirtualLocked}
                 >
                   <SelectTrigger className="w-28">
                     <SelectValue />
@@ -1098,7 +1132,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               )}
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {ageLegacyEnabled && ageDisableButton}
               <Button
                 onClick={() =>
                   ageMutation.mutate({
@@ -1106,7 +1141,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     duration_minutes: ageMinutes,
                   })
                 }
-                disabled={ageMutation.isPending || ageInvalid || !ageDirty}
+                disabled={
+                  ageVirtualLocked ||
+                  ageMutation.isPending ||
+                  ageInvalid ||
+                  !ageDirty
+                }
               >
                 {ageMutation.isPending ? (
                   <>

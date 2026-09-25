@@ -33,6 +33,7 @@ import type {
   RepositoryType,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
+import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '@/lib/backend-version';
 
 export interface ListRepositoriesParams {
   page?: number;
@@ -124,20 +125,29 @@ export interface AgePolicyPayload {
 }
 
 /**
- * Whether the package age policy can be *enabled* on a repository of this type.
+ * Whether the package age policy can be *enabled* on a repository of this
+ * type, against a backend reporting `backendVersion` (from `/health`).
  *
- * Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true` on
- * `remote` and `virtual` repositories with a 400: proxied content is recorded
- * in `proxy_cache_artifacts`, which carries no quarantine identity, so the hold
- * has no release path and degrades into a total block on everything not already
- * cached. Only the hosted types (`local` / `staging`) qualify.
+ * - Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true`
+ *   on `remote` and `virtual` repositories with a 400: proxied content had no
+ *   quarantine identity, so a hold had no release path. Only the hosted types
+ *   (`local` / `staging`) qualify.
+ * - Backend 1.11.0 (artifact-keeper#4264) accepts it on `remote` too: proxied
+ *   content carries a releasable, release-date-aware hold. `virtual` is still
+ *   refused with a 400 — it caches nothing itself, so the policy belongs on
+ *   its member remote repositories.
  *
- * Disabling is still accepted on every type, which is the escape hatch for rows
- * written before the gate existed — so callers must gate the enable path on
- * this, not the whole panel.
+ * An unknown version is treated as the older backend. Disabling is still
+ * accepted on every type, which is the escape hatch for rows written before
+ * the gate existed — so callers must gate the enable path on this, not the
+ * whole panel.
  */
-export function supportsAgePolicy(repoType: RepositoryType): boolean {
-  return repoType === 'local' || repoType === 'staging';
+export function supportsAgePolicy(
+  repoType: RepositoryType,
+  backendVersion?: string | null
+): boolean {
+  if (repoType === 'local' || repoType === 'staging') return true;
+  return repoType === 'remote' && backendAtLeast(backendVersion, PROXY_AGE_POLICY_MIN);
 }
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
@@ -481,8 +491,10 @@ export const repositoriesApi = {
    * preserved and re-enabling does not lose the previously configured window.
    *
    * Backend 1.10.0 (artifact-keeper#3647) answers 400 when `enabled` is true on
-   * a `remote` or `virtual` repository; callers must check `supportsAgePolicy`
-   * first and surface the rejection message when a request is sent anyway.
+   * a `remote` or `virtual` repository; from 1.11.0 (artifact-keeper#4264)
+   * only `virtual` is refused. Callers must check `supportsAgePolicy` with the
+   * backend version first and surface the rejection message when a request is
+   * sent anyway.
    */
   updateAgePolicy: async (repoKey: string, payload: AgePolicyPayload): Promise<void> => {
     await apiFetch<void>(`/api/v1/repositories/${encodeURIComponent(repoKey)}`, {

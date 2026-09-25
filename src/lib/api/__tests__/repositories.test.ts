@@ -1087,6 +1087,32 @@ describe("supportsAgePolicy (#853, backend artifact-keeper#3647)", () => {
     expect(supportsAgePolicy("remote")).toBe(false);
     expect(supportsAgePolicy("virtual")).toBe(false);
   });
+
+  // artifact-keeper#4264: backend 1.11.0 accepts the policy on remote; the
+  // gate is the /health version, and anything below it stays the 1.10.0 rule.
+  it.each([
+    ["1.10.0", false],
+    ["1.11.0-dev", false],
+    [undefined, false],
+    [null, false],
+    ["1.11.0", true],
+    ["1.12.3+abc", true],
+  ] as const)("remote on backend %s -> %s", (version, expected) => {
+    expect(supportsAgePolicy("remote", version)).toBe(expected);
+  });
+
+  it("keeps refusing virtual on every backend version", () => {
+    expect(supportsAgePolicy("virtual", "1.10.0")).toBe(false);
+    expect(supportsAgePolicy("virtual", "1.11.0")).toBe(false);
+    expect(supportsAgePolicy("virtual", "2.0.0")).toBe(false);
+  });
+
+  it("allows the hosted types on either side of the gate", () => {
+    for (const v of ["1.10.0", "1.11.0", undefined]) {
+      expect(supportsAgePolicy("local", v)).toBe(true);
+      expect(supportsAgePolicy("staging", v)).toBe(true);
+    }
+  });
 });
 
 describe("repositoriesApi — WASM plugin format_key (#591/#592)", () => {
