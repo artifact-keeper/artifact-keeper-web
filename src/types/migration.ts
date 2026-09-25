@@ -11,6 +11,7 @@ export type MigrationJobStatus =
   | 'running'
   | 'paused'
   | 'completed'
+  | 'completed_with_errors'
   | 'failed'
   | 'cancelled';
 
