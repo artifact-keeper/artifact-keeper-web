@@ -215,13 +215,17 @@ export const serviceAccountsApi = {
     );
   },
 
-  /** Which members this token cannot read, and why (artifact-keeper#4215). */
+  /**
+   * Which members this token cannot read, and why (artifact-keeper#4215).
+   * Goes through `apiFetch` because the endpoint is not in the generated SDK
+   * yet.
+   */
   getTokenScopeAnalysis: async (
     accountId: string,
     tokenId: string
   ): Promise<TokenScopeAnalysis> => {
     return apiFetch<TokenScopeAnalysis>(
-      `/api/v1/service-accounts/${accountId}/tokens/${tokenId}/scope-analysis`
+      `/api/v1/service-accounts/${encodeURIComponent(accountId)}/tokens/${encodeURIComponent(tokenId)}/scope-analysis`
     );
   },
 };

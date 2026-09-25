@@ -70,7 +70,7 @@ interface TokenScopeWarningProps {
 export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarningProps) {
   const [open, setOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["token-scope-analysis", accountId, tokenId],
     queryFn: () => serviceAccountsApi.getTokenScopeAnalysis(accountId, tokenId),
     enabled: open,
@@ -105,7 +105,12 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
             Checking...
           </div>
         )}
-        {!isLoading && groups.length === 0 && (
+        {/* A failed check must never read as the all-clear next to a badge
+            that says otherwise. */}
+        {isError && (
+          <p className="text-muted-foreground">Couldn&apos;t check this token. Try again later.</p>
+        )}
+        {data && groups.length === 0 && (
           <p className="text-muted-foreground">Nothing — the token reaches every member.</p>
         )}
         {groups.map(({ reason, repoKeys }) => (
