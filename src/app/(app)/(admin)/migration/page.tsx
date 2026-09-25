@@ -102,6 +102,8 @@ function statusColor(
   switch (status) {
     case "completed":
       return "green";
+    case "completed_with_errors":
+      return "yellow";
     case "running":
     case "assessing":
       return "blue";
@@ -129,6 +131,7 @@ function formatDuration(seconds: number): string {
 // these so we don't 404 on in-flight jobs.
 const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "completed",
+  "completed_with_errors",
   "failed",
   "cancelled",
 ]);
@@ -137,7 +140,8 @@ const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
 // returns can lag (e.g. a job with nothing to transfer reports 0). Other
 // statuses keep their real, rounded progress.
 function jobProgress(job: MigrationJob): number {
-  if (job.status === "completed") return 100;
+  if (job.status === "completed" || job.status === "completed_with_errors")
+    return 100;
   return Math.round(job.progress_percent ?? 0);
 }
 
@@ -177,6 +181,11 @@ function effectiveTotal(job: MigrationJob): number {
   const processed =
     job.completed_items + job.failed_items + job.skipped_items;
   return Math.max(job.total_items, processed);
+}
+
+// "completed_with_errors" -> "completed with errors" for the status badge.
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ");
 }
 
 // Same story for bytes: total_bytes can be 0 while bytes were transferred.
@@ -776,7 +785,9 @@ export default function MigrationPage() {
     {
       id: "status",
       header: "Status",
-      cell: (j) => <StatusBadge status={j.status} color={statusColor(j.status)} />,
+      cell: (j) => (
+        <StatusBadge status={statusLabel(j.status)} color={statusColor(j.status)} />
+      ),
     },
     {
       id: "progress",
@@ -887,10 +898,7 @@ export default function MigrationPage() {
               <TooltipContent>Cancel</TooltipContent>
             </Tooltip>
           )}
-          {(j.status === "completed" ||
-            j.status === "failed" ||
-            j.status === "cancelled" ||
-            j.status === "pending") && (
+          {(TERMINAL_STATUSES.has(j.status) || j.status === "pending") && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1655,7 +1663,7 @@ export default function MigrationPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
                   <StatusBadge
-                    status={detailJob.status}
+                    status={statusLabel(detailJob.status)}
                     color={statusColor(detailJob.status)}
                   />
                 </div>

@@ -419,6 +419,17 @@ describe("migrationApi", () => {
     expect(await migrationApi.startMigration("m1")).toEqual(localJob({ status: "running" }));
   });
 
+  // artifact-keeper-web#886: the backend's `completed_with_errors` was not in
+  // the allow-list and fell back to 'pending', hiding the job's report.
+  it("keeps completed_with_errors instead of falling back to pending", async () => {
+    mockGetMigration.mockResolvedValue({
+      data: sdkJob({ status: "completed_with_errors" }),
+      error: undefined,
+    });
+    const { migrationApi } = await import("../migration");
+    expect((await migrationApi.getMigration("m1")).status).toBe("completed_with_errors");
+  });
+
   it("startMigration throws on error", async () => {
     mockStartMigration.mockResolvedValue({ data: undefined, error: "fail" });
     const { migrationApi } = await import("../migration");
