@@ -88,6 +88,21 @@ describe("TokenScopeWarning (artifact-keeper#4215)", () => {
     expect(screen.getByText(/Include members of matched virtual repositories/)).toBeInTheDocument();
   });
 
+  /**
+   * #905 review: a failed analysis rendered "Nothing — the token reaches every
+   * member." beside an "N unreachable" badge. An error must say it could not
+   * check, never give the all-clear.
+   */
+  it("says it could not check when the analysis fails", async () => {
+    mockGetTokenScopeAnalysis.mockRejectedValue(new Error("503"));
+    renderWarning(2);
+
+    await userEvent.click(screen.getByRole("button", { name: /2 unreachable/i }));
+
+    expect(await screen.findByText(/Couldn't check this token/)).toBeInTheDocument();
+    expect(screen.queryByText(/reaches every member/)).not.toBeInTheDocument();
+  });
+
   it("has an accessible name that says what the badge is", async () => {
     renderWarning(1);
 
