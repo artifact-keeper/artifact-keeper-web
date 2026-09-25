@@ -98,7 +98,7 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 text-sm">
-        <p className="font-medium mb-2">This token cannot read</p>
+        {!isError && <p className="font-medium mb-2">This token cannot read</p>}
         {isLoading && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />

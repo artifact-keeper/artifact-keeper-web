@@ -101,6 +101,8 @@ describe("TokenScopeWarning (artifact-keeper#4215)", () => {
 
     expect(await screen.findByText(/Couldn't check this token/)).toBeInTheDocument();
     expect(screen.queryByText(/reaches every member/)).not.toBeInTheDocument();
+    // Nor a heading that asserts a verdict the check never reached.
+    expect(screen.queryByText("This token cannot read")).not.toBeInTheDocument();
   });
 
   it("has an accessible name that says what the badge is", async () => {
