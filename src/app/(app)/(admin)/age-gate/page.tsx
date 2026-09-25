@@ -28,6 +28,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { HoldsNav } from "@/components/common/holds-nav";
 import {
   Select,
   SelectTrigger,
@@ -220,6 +221,8 @@ export default function AgeGatePage() {
           </p>
         </div>
       </div>
+
+      <HoldsNav />
 
       <div className="flex flex-wrap items-center gap-4">
         <fieldset className="flex flex-wrap items-center gap-4">
