@@ -30,6 +30,7 @@ import { formatBytes } from "@/lib/utils";
 import { storageBackendLabel } from "@/lib/storage-backend";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
+import { SigningSettings } from "./signing-settings";
 import type {
   Repository,
   DebianRepoConfig,
@@ -1287,6 +1288,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           </div>
         )}
       </section>
+
+      <SigningSettings repository={repository} />
 
       <Separator />
 

@@ -169,3 +169,5 @@ export const signingApi = {
   },
 };
 
+export default signingApi;
+
