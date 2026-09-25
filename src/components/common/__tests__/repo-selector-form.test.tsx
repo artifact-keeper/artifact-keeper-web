@@ -63,7 +63,12 @@ vi.mock("sonner", () => ({
 // Component under test (imported AFTER all vi.mock calls)
 // ---------------------------------------------------------------------------
 
-import { RepoSelectorForm, selectorHasFilters } from "../repo-selector-form";
+import {
+  RepoSelectorForm,
+  selectorHasFilters,
+  virtualMembersWithoutFilter,
+  VIRTUAL_MEMBERS_NEEDS_FILTER,
+} from "../repo-selector-form";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,12 +126,95 @@ describe("RepoSelectorForm", () => {
   it("renders all 12 format checkboxes", () => {
     renderForm();
 
-    const checkboxes = screen.getAllByRole("checkbox");
-    expect(checkboxes).toHaveLength(COMMON_FORMATS.length);
+    // Scoped to the formats grid: the form also carries the
+    // include-virtual-members box (artifact-keeper#4130), and counting every
+    // checkbox in the form would make this fail whenever one is added
+    // elsewhere.
+    const formatBoxes = screen
+      .getAllByRole("checkbox")
+      .filter((cb) => cb.closest("[data-testid='format-checkboxes']"));
+    expect(formatBoxes).toHaveLength(COMMON_FORMATS.length);
 
     for (const fmt of COMMON_FORMATS) {
       expect(screen.getByText(fmt)).toBeDefined();
     }
+  });
+
+  // 1b. artifact-keeper#4130: the virtual-members flag.
+  describe("virtual repository members (artifact-keeper#4130)", () => {
+    function virtualMembersCheckbox(): HTMLElement {
+      const boxes = screen
+        .getAllByRole("checkbox")
+        .filter((cb) => !cb.closest("[data-testid='format-checkboxes']"));
+      expect(boxes).toHaveLength(1);
+      return boxes[0];
+    }
+
+    it("sets include_virtual_members when ticked", () => {
+      const { onChange } = renderForm({ match_pattern: "libs-*" });
+
+      act(() => {
+        fireEvent.click(virtualMembersCheckbox());
+      });
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({ match_pattern: "libs-*", include_virtual_members: true })
+      );
+    });
+
+    // Unset rather than `false`: the backend treats both as absent, and an
+    // explicit `false` would post a field that means nothing.
+    it("clears the flag when unticked", () => {
+      const { onChange } = renderForm({
+        match_pattern: "libs-*",
+        include_virtual_members: true,
+      } as never);
+
+      act(() => {
+        fireEvent.click(virtualMembersCheckbox());
+      });
+
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({ include_virtual_members: undefined })
+      );
+    });
+
+    // The flag widens a match rather than filtering: on its own it selects
+    // nothing and the backend refuses such a token, so it must not enable the
+    // preview either.
+    it("does not count as a filter on its own", () => {
+      renderForm({ include_virtual_members: true } as never);
+
+      const preview = screen.getByText(/Preview Matched Repos/i).closest("button");
+      expect((preview as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("leaves the preview enabled when a real filter is present too", () => {
+      renderForm({ include_virtual_members: true, match_pattern: "libs-*" } as never);
+
+      const preview = screen.getByText(/Preview Matched Repos/i).closest("button");
+      expect((preview as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    // #897: flag-only would mint an unrestricted token, so the form says so
+    // while that state holds; the submit handler refuses it.
+    it("warns inline while the flag is set without a filter", () => {
+      renderForm({ include_virtual_members: true } as never);
+
+      expect(screen.getByRole("alert").textContent).toBe(VIRTUAL_MEMBERS_NEEDS_FILTER);
+    });
+
+    it("drops the inline warning once a filter is set beside the flag", () => {
+      renderForm({ include_virtual_members: true, match_formats: ["npm"] } as never);
+
+      expect(screen.queryByText(VIRTUAL_MEMBERS_NEEDS_FILTER)).toBeNull();
+    });
+
+    it("shows no warning with no flag and no filter", () => {
+      renderForm({});
+
+      expect(screen.queryByText(VIRTUAL_MEMBERS_NEEDS_FILTER)).toBeNull();
+    });
   });
 
   // 2. toggleFormat adds format when unchecked
@@ -543,7 +631,28 @@ describe("RepoSelectorForm", () => {
     const selector = { match_formats: ["docker"] };
     await capturedMutationOpts.mutationFn(selector);
 
-    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(selector);
+    // The account id is passed alongside the selector so the backend can also
+    // report members it has no access to (artifact-keeper#4215); it is
+    // `undefined` when the form is used without an account.
+    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(selector, undefined);
+  });
+
+  it("passes the service account to the preview when the form has one", async () => {
+    render(
+      <RepoSelectorForm
+        value={{ match_formats: ["docker"] }}
+        onChange={vi.fn()}
+        serviceAccountId="acct-1"
+      />
+    );
+    mockPreviewRepoSelector.mockResolvedValueOnce({ matched_repositories: [], total: 0 });
+
+    await capturedMutationOpts.mutationFn({ match_formats: ["docker"] });
+
+    expect(mockPreviewRepoSelector).toHaveBeenCalledWith(
+      { match_formats: ["docker"] },
+      "acct-1"
+    );
   });
 
   // onError surfaces the backend error via toUserMessage (#207)
@@ -614,16 +723,42 @@ describe("RepoSelectorForm", () => {
 });
 
 describe("selectorHasFilters", () => {
-  it("is false for an empty or all-blank selector", () => {
+  it("is false for an empty selector", () => {
     expect(selectorHasFilters({})).toBe(false);
+  });
+
+  it("is false for empty formats, labels and pattern", () => {
     expect(
-      selectorHasFilters({ match_formats: [], match_labels: {}, match_pattern: "" })
+      selectorHasFilters({ match_formats: [], match_labels: {}, match_pattern: "" }),
     ).toBe(false);
   });
 
-  it("is true for a format, a label or a name pattern", () => {
-    expect(selectorHasFilters({ match_formats: ["npm"] })).toBe(true);
-    expect(selectorHasFilters({ match_labels: { env: "prod" } })).toBe(true);
-    expect(selectorHasFilters({ match_pattern: "prod-*" })).toBe(true);
+  it("ignores the virtual-members flag", () => {
+    expect(selectorHasFilters({ include_virtual_members: true })).toBe(false);
+  });
+
+  it.each([
+    ["formats", { match_formats: ["npm"] }],
+    ["labels", { match_labels: { env: "prod" } }],
+    ["pattern", { match_pattern: "prod-*" }],
+  ])("is true with %s", (_name, selector) => {
+    expect(selectorHasFilters(selector)).toBe(true);
+  });
+});
+
+describe("virtualMembersWithoutFilter", () => {
+  it("is true for a flag-only selector", () => {
+    expect(virtualMembersWithoutFilter({ include_virtual_members: true })).toBe(true);
+  });
+
+  it("is false when a filter accompanies the flag", () => {
+    expect(
+      virtualMembersWithoutFilter({ include_virtual_members: true, match_pattern: "prod-*" }),
+    ).toBe(false);
+  });
+
+  it("is false without the flag, filters or not", () => {
+    expect(virtualMembersWithoutFilter({})).toBe(false);
+    expect(virtualMembersWithoutFilter({ match_formats: ["npm"] })).toBe(false);
   });
 });
