@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
+import { INVALID_RULE_NOTE } from "@/lib/api/curation-rules";
 import {
   describe,
   it,
@@ -565,7 +566,8 @@ describe("CurationRulesManager", () => {
       const badge = screen.getByText("Invalid");
       expect(badge.closest("[title]")).toHaveAttribute(
         "title",
-        'Unknown match mode "signature"; Unknown action "audit"',
+        'Unknown match mode "signature"; Unknown action "audit"; ' +
+          INVALID_RULE_NOTE,
       );
       expect(screen.getByText("Unknown: audit")).toBeInTheDocument();
       expect(screen.getByText(/match: Unknown: signature/)).toBeInTheDocument();
@@ -587,7 +589,7 @@ describe("CurationRulesManager", () => {
       render(<CurationRulesManager />);
       expect(screen.getByText("Invalid").closest("[title]")).toHaveAttribute(
         "title",
-        "No trusted publishers",
+        "No trusted publishers; " + INVALID_RULE_NOTE,
       );
       expect(screen.getByText(/match: Declared metadata/)).toBeInTheDocument();
     });
