@@ -1,6 +1,6 @@
-# ---------- Base: Node.js 22 on UBI 9 ----------
+# ---------- Base: Node.js 24 on UBI 9 ----------
 FROM registry.access.redhat.com/ubi9/ubi:9.8 AS node-base
-RUN dnf module enable nodejs:22 -y && \
+RUN dnf module enable nodejs:24 -y && \
     dnf install -y --nodocs nodejs npm && \
     dnf clean all
 
