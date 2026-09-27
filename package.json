@@ -21,7 +21,7 @@
     "tutorial:generate-videos": "npx tsx e2e/tutorials/scripts/generate-videos.ts"
   },
   "dependencies": {
-    "@artifact-keeper/sdk": "^1.7.0",
+    "@artifact-keeper/sdk": "^1.10.0",
     "@hookform/resolvers": "^5.7.1",
     "@tanstack/react-query": "^5.101.4",
     "class-variance-authority": "^0.7.1",
