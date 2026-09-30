@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { packagesApi } from "@/lib/api/packages";
-import { getInstallCommand } from "@/lib/package-utils";
+import { getInstallCommand, currentRegistryHost } from "@/lib/package-utils";
 import { formatBytes, formatDate, formatNumber } from "@/lib/utils";
 import type { Package, PackageVersion } from "@/types/packages";
 
@@ -239,7 +239,13 @@ function PackageDetailView({
   onBack: () => void;
 }) {
   const [selectedFile, setSelectedFile] = useState<TreeNode | null>(null);
-  const installCmd = getInstallCommand(pkg.name, pkg.version, repositoryFormat);
+  const installLocation = { host: currentRegistryHost(), repoKey: repositoryKey };
+  const installCmd = getInstallCommand(
+    pkg.name,
+    pkg.version,
+    repositoryFormat,
+    installLocation
+  );
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
   const meta = pkg.metadata as Record<string, unknown> | undefined;
@@ -372,7 +378,12 @@ function PackageDetailView({
                     </TableCell>
                     <TableCell>
                       <CopyButton
-                        value={getInstallCommand(pkg.name, v.version, repositoryFormat)}
+                        value={getInstallCommand(
+                          pkg.name,
+                          v.version,
+                          repositoryFormat,
+                          installLocation
+                        )}
                         label="Copy install command"
                       />
                     </TableCell>

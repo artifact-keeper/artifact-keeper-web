@@ -116,6 +116,49 @@ describe("getInstallCommand", () => {
     );
   });
 
+  describe("with a registry location", () => {
+    const location = { host: "registry.example.com", repoKey: "images" };
+
+    it.each(["docker", "podman", "buildx"])(
+      "%s pulls from host/repoKey/name, not the client's default registry",
+      (format) => {
+        expect(getInstallCommand(pkg, ver, format, location)).toBe(
+          "docker pull registry.example.com/images/my-package:1.2.3"
+        );
+      }
+    );
+
+    it.each(["oras", "wasm_oci"])("%s pulls from host/repoKey/name", (format) => {
+      expect(getInstallCommand(pkg, ver, format, location)).toBe(
+        "oras pull registry.example.com/images/my-package:1.2.3"
+      );
+    });
+
+    it("helm_oci installs from the oci:// reference", () => {
+      expect(getInstallCommand(pkg, ver, "helm_oci", location)).toBe(
+        "helm install my-package oci://registry.example.com/images/my-package --version 1.2.3"
+      );
+    });
+
+    it("helm installs the chart through the repo alias the Setup Guide adds", () => {
+      expect(getInstallCommand(pkg, ver, "helm", location)).toBe(
+        "helm install my-package images/my-package --version 1.2.3"
+      );
+    });
+
+    it("keeps the bare name when the host is unknown", () => {
+      expect(getInstallCommand(pkg, ver, "docker", { repoKey: "images" })).toBe(
+        "docker pull my-package:1.2.3"
+      );
+    });
+
+    it("leaves formats that resolve through client config unchanged", () => {
+      expect(getInstallCommand(pkg, ver, "npm", location)).toBe(
+        "npm install my-package@1.2.3"
+      );
+    });
+  });
+
   it("maven output includes version element", () => {
     const result = getInstallCommand(pkg, ver, "maven");
     expect(result).toContain(`<version>${ver}</version>`);

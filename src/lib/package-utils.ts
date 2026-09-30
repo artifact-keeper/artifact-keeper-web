@@ -1,11 +1,34 @@
 import { buildPomDependencySnippet, parseMavenPackageName } from "./maven";
 
+/**
+ * Where the package lives, for formats whose client addresses a package by
+ * registry location (OCI images, OCI artifacts, Helm charts). Without it those
+ * commands fall back to the bare package name, which a client resolves
+ * against its default registry (Docker Hub for `docker pull`), not this one.
+ */
+export interface InstallLocation {
+  /** Registry host as the client sees it, e.g. `window.location.host`. */
+  host?: string;
+  repoKey?: string;
+}
+
+/** The registry host the browser reached the UI on, or undefined server-side. */
+export function currentRegistryHost(): string | undefined {
+  return typeof window !== "undefined" ? window.location.host : undefined;
+}
+
 export function getInstallCommand(
   packageName: string,
   version: string | undefined,
-  format: string
+  format: string,
+  location: InstallLocation = {}
 ): string {
   const v = version || "latest";
+  const { host, repoKey } = location;
+  // `host/repoKey/name` is how the OCI surface addresses a repository's image;
+  // the Setup Guide emits the same shape for `docker pull` and `helm push`.
+  const ociRef =
+    host && repoKey ? `${host}/${repoKey}/${packageName}` : packageName;
   switch (format) {
     case "npm":
     case "yarn":
@@ -50,13 +73,20 @@ export function getInstallCommand(
     case "docker":
     case "podman":
     case "buildx":
-      return `docker pull ${packageName}:${v}`;
+      return `docker pull ${ociRef}:${v}`;
     case "incus":
     case "lxc":
       return `incus image copy ${packageName} local: --alias ${packageName}`;
     case "helm":
+      // Assumes the repository was added under its key, as the Setup Guide's
+      // `helm repo add <repoKey> ...` does.
+      return repoKey
+        ? `helm install ${packageName} ${repoKey}/${packageName} --version ${v}`
+        : `helm install ${packageName} --version ${v}`;
     case "helm_oci":
-      return `helm install ${packageName} --version ${v}`;
+      return host && repoKey
+        ? `helm install ${packageName} oci://${ociRef} --version ${v}`
+        : `helm install ${packageName} --version ${v}`;
     case "composer":
       return `composer require ${packageName}:${v}`;
     case "hex":
@@ -105,7 +135,7 @@ export function getInstallCommand(
       return `apt-get install ${packageName}=${v}`;
     case "oras":
     case "wasm_oci":
-      return `oras pull ${packageName}:${v}`;
+      return `oras pull ${ociRef}:${v}`;
     case "bower":
       return `bower install ${packageName}#${v}`;
     case "gitlfs":
