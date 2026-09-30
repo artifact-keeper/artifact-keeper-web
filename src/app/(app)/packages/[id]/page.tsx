@@ -36,7 +36,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { packagesApi } from "@/lib/api/packages";
-import { getInstallCommand } from "@/lib/package-utils";
+import { getInstallCommand, currentRegistryHost } from "@/lib/package-utils";
 import {
   formatBytes as formatBytesUtil,
   formatDate,
@@ -201,7 +201,13 @@ function PackageDetailContent() {
     );
   }
 
-  const installCmd = getInstallCommand(pkg.name, pkg.version, pkg.format);
+  const installLocation = { host: currentRegistryHost(), repoKey: pkg.repository_key };
+  const installCmd = getInstallCommand(
+    pkg.name,
+    pkg.version,
+    pkg.format,
+    installLocation
+  );
   const license = (pkg.metadata as Record<string, unknown> | undefined)
     ?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)
@@ -382,7 +388,8 @@ function PackageDetailContent() {
                   const versionInstallCmd = getInstallCommand(
                     pkg.name,
                     v.version,
-                    pkg.format
+                    pkg.format,
+                    installLocation
                   );
                   return (
                     <TableRow key={v.version}>
