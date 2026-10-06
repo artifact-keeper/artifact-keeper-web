@@ -1223,6 +1223,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
   it("statusColor maps every job status to a color via rendered StatusBadge", async () => {
     const statuses: MigrationJobStatus[] = [
       "completed",
+      "completed_with_errors",
       "running",
       "assessing",
       "paused",
@@ -1242,7 +1243,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     await switchToJobsTab();
     // Every status string appears in a StatusBadge cell.
     for (const s of statuses) {
-      expect(screen.getAllByText(s).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(s.replace(/_/g, " ")).length).toBeGreaterThan(0);
     }
   });
 });
@@ -1629,6 +1630,39 @@ describe("MigrationPage — feature parity (#520)", () => {
       "job-term-0002",
       "html",
     );
+  });
+
+  // artifact-keeper-web#886: the backend's `completed_with_errors` fell back to
+  // "pending", so a finished job read as not started and its report stayed
+  // hidden behind the terminal-status gate.
+  it("treats a completed_with_errors job as finished: 100% and its report", async () => {
+    const job = makeJob({
+      id: "job-cwe-0001",
+      status: "completed_with_errors",
+      total_items: 145144,
+      completed_items: 145129,
+      failed_items: 15,
+      progress_percent: 99.99,
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: makeReport({ job_id: job.id }) },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    expect(screen.getAllByText("completed with errors").length).toBeGreaterThan(0);
+    expect(screen.queryByText("pending")).not.toBeInTheDocument();
+    expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
+    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
+
+    await act(async () => fireEvent.click(screen.getByText("job-cwe-...")));
+    const reportQuery = mockUseQuery.mock.calls
+      .map(([opts]) => opts as QueryOpts & { enabled?: boolean })
+      .filter((o) => o.queryKey[1] === "report")
+      .at(-1);
+    expect(reportQuery?.enabled).toBe(true);
+    expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
   });
 
   it("renders the assessment panel and runs an assessment for assessment jobs", async () => {

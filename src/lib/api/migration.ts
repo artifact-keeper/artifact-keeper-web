@@ -112,6 +112,7 @@ const MIGRATION_JOB_STATUSES = new Set<MigrationJobStatus>([
   'running',
   'paused',
   'completed',
+  'completed_with_errors',
   'failed',
   'cancelled',
 ]);
@@ -136,7 +137,15 @@ function adaptMigrationJob(sdk: SdkMigrationJobResponse): MigrationJob {
   return {
     id: sdk.id,
     source_connection_id: sdk.source_connection_id,
-    status: narrowEnum(sdk.status, MIGRATION_JOB_STATUSES, 'pending'),
+    // Warn on an unknown status: the silent 'pending' fallback is how a
+    // finished `completed_with_errors` job rendered as "Pending" with no
+    // report (artifact-keeper-web#886).
+    status: narrowEnum(
+      sdk.status,
+      MIGRATION_JOB_STATUSES,
+      'pending',
+      `migrationApi: unknown migration job status "${sdk.status}" — defaulting to 'pending'.`,
+    ),
     job_type: narrowEnum(sdk.job_type, MIGRATION_JOB_TYPES, 'full'),
     // SDK config is a free-form record; the local MigrationConfig models the
     // fields this UI knows how to render. Unknown keys are ignored at the boundary.
