@@ -76,8 +76,8 @@ vi.mock("@/components/common/page-header", () => ({
   ),
 }));
 vi.mock("@/components/common/stat-card", () => ({
-  StatCard: ({ label, value }: any) => (
-    <div data-testid={`stat-${label}`}>
+  StatCard: ({ label, value, href }: any) => (
+    <div data-testid={`stat-${label}`} data-href={href}>
       {label}: {value}
     </div>
   ),
@@ -204,6 +204,8 @@ describe("DashboardContent", () => {
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
     // Cards show the combined total: local + remote (200+50, 1024000+512000).
     expect(screen.getByTestId("stat-Artifacts")).toHaveTextContent("250");
+    // #822: the Repositories tile leads to the repositories page.
+    expect(screen.getByTestId("stat-Repositories")).toHaveAttribute("data-href", "/repositories");
     expect(screen.getByTestId("stat-Storage Used")).toHaveTextContent(
       "1536000 B"
     );

@@ -371,9 +371,7 @@ export function DashboardContent() {
                 label="Repositories"
                 value={stats.total_repositories}
                 color="blue"
-                onClick={() => {
-                  /* navigate to /repositories */
-                }}
+                href="/repositories"
               />
               <StatCard
                 icon={FileBox}

@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Tooltip,
@@ -17,6 +18,12 @@ interface StatCardProps {
   description?: string;
   color?: "default" | "blue" | "green" | "yellow" | "red" | "purple";
   onClick?: () => void;
+  /**
+   * Where the tile leads (#822). Renders the tile as a real link, so it is
+   * focusable and opens with the keyboard; prefer it over `onClick` for
+   * navigation.
+   */
+  href?: string;
   className?: string;
   /** Hover tooltip content. */
   tooltip?: ReactNode;
@@ -47,14 +54,16 @@ export function StatCard({
   description,
   color = "default",
   onClick,
+  href,
   className,
   tooltip,
 }: StatCardProps) {
+  const interactive = !!onClick || !!href;
   const card = (
     <Card
       className={cn(
         "transition-all duration-200",
-        onClick && "cursor-pointer hover:shadow-md hover:-translate-y-0.5",
+        interactive && "cursor-pointer hover:shadow-md hover:-translate-y-0.5",
         className
       )}
       onClick={onClick}
@@ -81,11 +90,23 @@ export function StatCard({
     </Card>
   );
 
-  if (!tooltip) return card;
+  const target = href ? (
+    <Link
+      href={href}
+      aria-label={`${label}: ${value}`}
+      className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {card}
+    </Link>
+  ) : (
+    card
+  );
+
+  if (!tooltip) return target;
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipTrigger asChild>{target}</TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   );
