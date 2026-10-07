@@ -8,18 +8,20 @@ import { Badge } from "@/components/ui/badge";
 
 /** Human label for a gate rule id; unknown ids are shown as sent. */
 const GATE_LABELS: Record<string, string> = {
-  attestation: "Verified attestation",
-  require_signature: "Verified attestation",
-  min_attestation_state: "Verified attestation",
-  vulnerability_scan: "Vulnerability scan",
-  scan: "Vulnerability scan",
-  license: "License allowed",
-  license_policy: "License allowed",
+  // Rule tokens the backend reports (promotion_policy_service / promotion).
+  "require-signature": "Verified signature or attestation",
+  "cve-severity-threshold": "Vulnerability scan",
+  "default-cve-policy": "Vulnerability scan (default policy)",
+  "block-unscanned": "Scanned before promotion",
+  "max-severity": "Vulnerability severity",
+  "license-compliance": "License allowed",
+  "max-artifact-age": "Artifact age",
+  "min-staging-time": "Minimum time in staging",
   "policy-predicate": "Scan policy predicate",
 };
 
 export function gateLabel(rule: string): string {
-  return GATE_LABELS[rule] ?? rule.replace(/_/g, " ");
+  return GATE_LABELS[rule] ?? rule.replace(/[-_]/g, " ");
 }
 
 /** Whether a bulk result has anything worth keeping the dialog open for. */
@@ -32,8 +34,24 @@ export function promotionNeedsReview(result: BulkPromotionResponse): boolean {
   );
 }
 
+const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
+
+/** The most severe violation reported under a gate's rule, if any. */
+export function worstSeverity(
+  result: PromotionResponse,
+  rule: string,
+): (typeof SEVERITY_ORDER)[number] | undefined {
+  const found = new Set(result.policy_violations.filter((v) => v.rule === rule).map((v) => v.severity));
+  return SEVERITY_ORDER.find((s) => found.has(s));
+}
+
 function ArtifactOutcome({ result }: { result: PromotionResponse }) {
   const gates = result.gate_results;
+  // A failed gate already carries its violations' messages as its reason
+  // (backend build_gate_results), so list separately only the violations no
+  // gate row covers; older backends send no gates and get the full list.
+  const gatedRules = new Set((gates ?? []).map((g) => g.rule));
+  const ungated = result.policy_violations.filter((v) => !gatedRules.has(v.rule));
   return (
     <li className="rounded-md border p-3 space-y-2" data-testid="promotion-outcome">
       <div className="flex items-start justify-between gap-2">
@@ -63,6 +81,13 @@ function ArtifactOutcome({ result }: { result: PromotionResponse }) {
                   aria-label="failed"
                 />
               )}
+              {!g.passed && worstSeverity(result, g.rule) && (
+                <Badge
+                  className={`shrink-0 text-[10px] ${SEVERITY_COLORS[worstSeverity(result, g.rule)!]}`}
+                >
+                  {worstSeverity(result, g.rule)}
+                </Badge>
+              )}
               <span>
                 <span className="font-medium">{gateLabel(g.rule)}</span>
                 {g.reason && <span className="text-muted-foreground">: {g.reason}</span>}
@@ -74,9 +99,9 @@ function ArtifactOutcome({ result }: { result: PromotionResponse }) {
       {/* Per-violation rule and severity (#917): the quality gate, CVE and
           licence policy, and the scan-policy predicates (`policy-predicate`)
           all report here, on bulk promotion as on single. */}
-      {result.policy_violations.length > 0 && (
+      {ungated.length > 0 && (
         <ul className="space-y-1" data-testid="promotion-violations">
-          {result.policy_violations.map((v, i) => (
+          {ungated.map((v, i) => (
             <li key={`${v.rule}-${i}`} className="flex items-start gap-2 text-xs">
               <Badge className={`shrink-0 text-[10px] ${SEVERITY_COLORS[v.severity]}`}>
                 {v.severity}

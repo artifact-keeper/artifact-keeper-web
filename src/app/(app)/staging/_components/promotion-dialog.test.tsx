@@ -154,8 +154,8 @@ describe("PromotionDialog gate results (conda walkthrough)", () => {
           target: "conda-internal/noarch/acme-report-1.0.0-py_0.conda",
           policy_violations: [],
           gate_results: [
-            { rule: "attestation", passed: true, reason: "verified with key SHA256:k" },
-            { rule: "vulnerability_scan", passed: true },
+            { rule: "require-signature", passed: true, reason: "verified with key SHA256:k" },
+            { rule: "cve-severity-threshold", passed: true },
           ],
         },
         {
@@ -163,7 +163,7 @@ describe("PromotionDialog gate results (conda walkthrough)", () => {
           source: "conda-staging/noarch/acme-unsigned-1.0.0-py_0.conda",
           target: "conda-internal/noarch/acme-unsigned-1.0.0-py_0.conda",
           policy_violations: [],
-          gate_results: [{ rule: "attestation", passed: false, reason: "no attestation stored" }],
+          gate_results: [{ rule: "require-signature", passed: false, reason: "no attestation stored" }],
         },
       ],
     });
@@ -174,7 +174,7 @@ describe("PromotionDialog gate results (conda walkthrough)", () => {
     expect(await screen.findByText("Promotion result")).toBeInTheDocument();
     expect(screen.getByText("Refused")).toBeInTheDocument();
     expect(screen.getByText(/no attestation stored/)).toBeInTheDocument();
-    expect(screen.getAllByText("Verified attestation")).toHaveLength(2);
+    expect(screen.getAllByText("Verified signature or attestation")).toHaveLength(2);
   });
 
   it("falls back to the server message when gate_results is absent", async () => {
@@ -227,5 +227,35 @@ describe("PromotionDialog gate results (conda walkthrough)", () => {
     expect(screen.getByText("Promoted")).toBeInTheDocument();
     expect(screen.getByText("Refused")).toBeInTheDocument();
     expect(screen.getByText(/Promoted 1 of 2/)).toBeInTheDocument();
+  });
+
+  it("folds a failed gate's violations into its row with the worst severity", async () => {
+    mockPromoteBulk.mockResolvedValue({
+      total: 1,
+      promoted: 0,
+      failed: 1,
+      results: [
+        {
+          promoted: false,
+          source: "stg/a",
+          target: "rel/a",
+          policy_violations: [
+            { rule: "cve-severity-threshold", severity: "high", message: "Found 7 high" },
+            { rule: "cve-severity-threshold", severity: "critical", message: "Found 1 critical" },
+          ],
+          gate_results: [
+            { rule: "cve-severity-threshold", passed: false, reason: "Found 7 high; Found 1 critical" },
+            { rule: "license-compliance", passed: true, reason: "MIT allowed" },
+          ],
+        },
+      ],
+    });
+    renderDialog();
+    await screen.findByText("Linked release target");
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    expect(await screen.findByText(/Found 7 high; Found 1 critical/)).toBeInTheDocument();
+    expect(screen.getByText("critical")).toBeInTheDocument();
+    expect(screen.queryByTestId("promotion-violations")).toBeNull();
+    expect(screen.getByText("License allowed")).toBeInTheDocument();
   });
 });
