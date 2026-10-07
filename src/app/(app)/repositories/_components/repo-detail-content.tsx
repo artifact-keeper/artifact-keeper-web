@@ -1149,7 +1149,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           repoFormat,
         )}
       >
-        <TabsList variant="line">
+        {/* Wraps instead of running past a narrow detail pane (split view). */}
+        <TabsList
+          variant="line"
+          className="max-w-full flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto [&>*]:flex-none"
+        >
           <TabsTrigger value="artifacts">
             <FileArchive className="size-3.5 mr-1" />
             Artifacts
