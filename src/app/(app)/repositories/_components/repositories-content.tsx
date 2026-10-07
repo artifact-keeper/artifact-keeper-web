@@ -312,7 +312,7 @@ export function RepositoriesContent() {
             value={typeFilter}
             onValueChange={(v) => { setTypeFilter(v); setPage(1); }}
           >
-            <SelectTrigger className="h-7 text-xs w-[100px]" aria-label="Filter by type">
+            <SelectTrigger className="h-7 text-xs w-auto min-w-[110px]" aria-label="Filter by type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>

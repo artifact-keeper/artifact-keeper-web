@@ -91,7 +91,8 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
               <span className={cn("text-[11px] font-medium", REPO_TYPE_COLORS[repo.repo_type] ? "" : "text-muted-foreground")}>
                 <span className={cn("inline-block size-1.5 rounded-full mr-1",
                   repo.repo_type === "local" ? "bg-green-500" :
-                  repo.repo_type === "remote" ? "bg-blue-500" : "bg-purple-500"
+                  repo.repo_type === "remote" ? "bg-blue-500" :
+                  repo.repo_type === "staging" ? "bg-amber-500" : "bg-purple-500"
                 )} />
                 {repo.repo_type}
               </span>

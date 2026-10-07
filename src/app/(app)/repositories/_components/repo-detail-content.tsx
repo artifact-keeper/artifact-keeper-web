@@ -683,9 +683,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       id: "path",
       header: "Path",
       accessor: (a) => a.path,
+      // Middle-elided with the full path on hover (#957): an end-truncated
+      // path hid exactly the part that differs between rows (version, build,
+      // `.noarch.rpm`, conda build string).
       cell: (a) => (
-        <code className="text-xs text-muted-foreground max-w-[200px] truncate block">
-          {a.path}
+        <code className="text-xs text-muted-foreground block max-w-[320px]">
+          <MiddleEllipsis text={a.path} tailLength={18} />
         </code>
       ),
     },
