@@ -14,12 +14,14 @@ vi.mock("@/lib/download", () => ({
   triggerBrowserDownload: (...a: unknown[]) => mockDownload(...a),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const mockTransitions = vi.fn().mockResolvedValue([]);
 vi.mock("@/lib/api/environments", () => ({
   environmentsApi: {
     list: (...a: unknown[]) => mockList(...a),
     lookup: (...a: unknown[]) => mockLookup(...a),
     generateSbom: (...a: unknown[]) => mockGenerate(...a),
     register: (...a: unknown[]) => mockRegister(...a),
+    transitions: (...a: unknown[]) => mockTransitions(...a),
   },
 }));
 
@@ -38,6 +40,7 @@ function renderTab(canRegister = false) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mockTransitions.mockResolvedValue([]);
 });
 
 describe("EnvironmentsTabContent", () => {
@@ -115,5 +118,30 @@ describe("EnvironmentsTabContent", () => {
     await vi.waitFor(() =>
       expect(mockRegister).toHaveBeenCalledWith("conda-internal", "pixi.lock", "x", "report-app"),
     );
+  });
+
+  it("shows this repository's advisory transitions (#919)", async () => {
+    mockList.mockResolvedValue([]);
+    mockTransitions.mockResolvedValue([
+      {
+        environment: { id: "e1", name: "report-app" },
+        repository: { key: "conda-internal" },
+        advisory: { id: "GHSA-aaaa-bbbb-cccc", severity: "high", fixedVersion: "1.0.1" },
+        package: { name: "acme-core", version: "1.0.0" },
+        kind: "new-affected",
+        detectedAt: "2026-10-07T00:00:00Z",
+      },
+      {
+        environment: { id: "e9", name: "elsewhere" },
+        repository: { key: "other-repo" },
+        advisory: { id: "GHSA-zzzz" },
+        package: { name: "x" },
+        kind: "no-longer-affected",
+      },
+    ]);
+    renderTab();
+    expect(await screen.findByText("Newly affected")).toBeInTheDocument();
+    expect(screen.getByText("GHSA-aaaa-bbbb-cccc")).toBeInTheDocument();
+    expect(screen.queryByText("elsewhere")).toBeNull();
   });
 });

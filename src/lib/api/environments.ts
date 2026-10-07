@@ -37,6 +37,27 @@ export interface EnvironmentLookup {
   hits: EnvironmentHit[];
 }
 
+/**
+ * One advisory affectedness transition (backend artifact-keeper#4055): an
+ * environment BECAME or CEASED to be affected by an advisory as the advisory
+ * data changed.
+ */
+export interface AdvisoryTransition {
+  environment: { id: string; name: string };
+  repository: { id?: string; key: string };
+  advisory: {
+    id: string;
+    summary?: string;
+    severity?: string;
+    fixedVersion?: string;
+    sourceUrl?: string;
+  };
+  package: { ecosystem?: string; name: string; version?: string };
+  /** `new-affected` or `no-longer-affected`; anything else is kept raw. */
+  kind: string;
+  detectedAt?: string;
+}
+
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (typeof v === 'object' && v !== null ? (v as Obj) : {});
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
@@ -130,6 +151,40 @@ export function adaptEnvironmentSbom(raw: unknown, filename: string): Environmen
 
 const RAW = { headers: { 'Content-Type': 'application/octet-stream' } };
 
+export function adaptTransitions(raw: unknown): AdvisoryTransition[] {
+  const list = obj(raw).transitions;
+  const out: AdvisoryTransition[] = [];
+  for (const t of Array.isArray(list) ? list : []) {
+    const r = obj(t);
+    const env = obj(r.environment);
+    const repo = obj(r.repository);
+    const adv = obj(r.advisory);
+    const pkg = obj(r.package);
+    const envId = str(env.id);
+    const envName = str(env.name);
+    const repoKey = str(repo.key);
+    const advId = str(adv.id);
+    const pkgName = str(pkg.name);
+    const kind = str(r.kind);
+    if (!envId || !envName || !repoKey || !advId || !pkgName || !kind) continue;
+    out.push({
+      environment: { id: envId, name: envName },
+      repository: { id: str(repo.id), key: repoKey },
+      advisory: {
+        id: advId,
+        summary: str(adv.summary),
+        severity: str(adv.severity),
+        fixedVersion: str(adv.fixedVersion),
+        sourceUrl: str(adv.sourceUrl),
+      },
+      package: { ecosystem: str(pkg.ecosystem), name: pkgName, version: str(pkg.version) },
+      kind,
+      detectedAt: str(r.detectedAt),
+    });
+  }
+  return out;
+}
+
 export const environmentsApi = {
   /**
    * Render a lockfile as SBOM documents, one per (environment, platform)
@@ -179,6 +234,15 @@ export const environmentsApi = {
       .map(adaptEnvironment)
       .filter((e): e is StoredEnvironment => e !== null);
   },
+
+  /**
+   * Advisory affectedness transitions across every environment the caller
+   * can read, newest first (`GET /api/v1/environments/advisory-transitions`).
+   */
+  transitions: async (limit = 100): Promise<AdvisoryTransition[]> =>
+    adaptTransitions(
+      await apiFetch<unknown>(`/api/v1/environments/advisory-transitions?limit=${limit}`),
+    ),
 
   lookup: async (purl: string): Promise<EnvironmentLookup> => {
     const data = await apiFetch<unknown>(

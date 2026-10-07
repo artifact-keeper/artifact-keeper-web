@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { adaptEnvironment, adaptLookup } from "../environments";
+import { adaptEnvironment, adaptLookup, adaptTransitions } from "../environments";
 
 describe("adaptEnvironment", () => {
   it("reads the stored envelope and its summary", () => {
@@ -63,5 +63,26 @@ describe("adaptEnvironmentSbom", () => {
     expect(s.graphs).toHaveLength(1);
     expect(s.graphs[0].platform).toBe("linux-64");
     expect(s.distinctPackages).toBe(12);
+  });
+});
+
+describe("adaptTransitions", () => {
+  it("keeps complete transitions and drops malformed ones", () => {
+    const t = adaptTransitions({
+      transitions: [
+        {
+          environment: { id: "e1", name: "app" },
+          repository: { id: "r", key: "conda-internal" },
+          advisory: { id: "GHSA-x", severity: "high", fixedVersion: "2.0" },
+          package: { ecosystem: "conda", name: "acme-core", version: "1.0" },
+          kind: "new-affected",
+          detectedAt: "2026-10-07T00:00:00Z",
+        },
+        { environment: { id: "e2" }, kind: "new-affected" },
+      ],
+    });
+    expect(t).toHaveLength(1);
+    expect(t[0].advisory.fixedVersion).toBe("2.0");
+    expect(adaptTransitions(undefined)).toEqual([]);
   });
 });

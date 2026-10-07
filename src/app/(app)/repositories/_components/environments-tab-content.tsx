@@ -8,6 +8,7 @@ import { EnvironmentLockfileTools } from "./environment-lockfile-tools";
 import { EnvironmentLookup } from "@/components/common/environment-lookup";
 import { ApiError } from "@/lib/api/fetch";
 import { toUserMessage } from "@/lib/error-utils";
+import { AdvisoryTransitionsFeed } from "./advisory-transitions-feed";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -120,6 +121,8 @@ export function EnvironmentsTabContent({
           </Table>
         )}
       </section>
+
+      <AdvisoryTransitionsFeed repoKey={repoKey} />
     </div>
   );
 }
