@@ -280,6 +280,10 @@ export interface VirtualRepoMember {
   virtual_repo_id: string;
   member_repo_id: string;
   member_repo_key: string;
+  /** Display name of the member repository; absent on older adapters. */
+  member_repo_name?: string;
+  /** `local`, `remote`, `staging` or `virtual`, as the backend reports it. */
+  member_repo_type?: string;
   priority: number;
   created_at: string;
 }

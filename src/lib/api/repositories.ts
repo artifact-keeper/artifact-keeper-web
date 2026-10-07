@@ -347,6 +347,8 @@ function adaptVirtualMember(sdk: VirtualMemberResponse): VirtualRepoMember {
     virtual_repo_id: '',
     member_repo_id: sdk.member_repo_id,
     member_repo_key: sdk.member_repo_key,
+    member_repo_name: sdk.member_repo_name ?? undefined,
+    member_repo_type: sdk.member_repo_type ?? undefined,
     priority: sdk.priority,
     created_at: sdk.created_at,
   };

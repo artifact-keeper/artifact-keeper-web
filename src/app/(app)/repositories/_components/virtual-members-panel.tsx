@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ShieldCheck } from "lucide-react";
 
 import { useRepositories } from "@/hooks/use-repositories";
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -34,8 +34,21 @@ interface VirtualMembersPanelProps {
   repository: Repository;
 }
 
+/**
+ * Member type as a reader of a channel thinks of it: a `local` repository is
+ * where packages are published, so it is "hosted"; the rest keep their names.
+ */
+export function memberTypeLabel(repoType: string): string {
+  return repoType === "local" ? "hosted" : repoType;
+}
+
 export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
   const queryClient = useQueryClient();
+  // Conda virtual channels exclude remote versions of a name any hosted member
+  // publishes (backend 1.11.0, dependency-confusion guard); say so where the
+  // member order is managed, because priority alone does not explain it.
+  const isConda =
+    repository.format === "conda" || repository.format === "conda_native";
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [memberToRemove, setMemberToRemove] = useState<VirtualRepoMember | null>(null);
@@ -161,6 +174,24 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
         </Button>
       </div>
 
+      {isConda && (
+        <div
+          className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground"
+          data-testid="conda-name-ownership-note"
+        >
+          <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <p>
+            <span className="font-medium text-foreground">
+              Hosted members own their package names.
+            </span>{" "}
+            When a hosted member publishes a package name, versions of that
+            name from remote members are left out of this channel&apos;s
+            repodata, so a public package cannot shadow an internal one. Other
+            names are merged in priority order. (Backend 1.11.0 and later.)
+          </p>
+        </div>
+      )}
+
       {sortedMembers.length === 0 ? (
         <div className="border rounded-lg p-6 text-center text-muted-foreground">
           <p className="text-sm">No member repositories configured.</p>
@@ -212,7 +243,23 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
                   <Badge variant="outline" className="text-xs shrink-0">
                     Priority {member.priority}
                   </Badge>
+                  {member.member_repo_type && (
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        REPO_TYPE_COLORS[member.member_repo_type] ??
+                        "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {memberTypeLabel(member.member_repo_type)}
+                    </span>
+                  )}
                 </div>
+                {member.member_repo_name &&
+                  member.member_repo_name !== member.member_repo_key && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {member.member_repo_name}
+                    </p>
+                  )}
               </div>
 
               <Tooltip>
