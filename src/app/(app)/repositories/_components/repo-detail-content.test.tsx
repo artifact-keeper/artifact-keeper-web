@@ -583,6 +583,20 @@ describe("RepoDetailContent flat view classifier column (#474)", () => {
       "classifier",
     );
   });
+
+  it("adds subdir and build columns for conda repos", async () => {
+    repository.format = "conda";
+    const table = await renderArtifactsTab();
+    const cols = table.getAttribute("data-columns")?.split(",");
+    expect(cols).toContain("subdir");
+    expect(cols).toContain("build");
+  });
+
+  it("omits the conda columns for other formats", async () => {
+    repository.format = "generic";
+    const table = await renderArtifactsTab();
+    expect(table.getAttribute("data-columns")?.split(",")).not.toContain("subdir");
+  });
 });
 
 describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", () => {

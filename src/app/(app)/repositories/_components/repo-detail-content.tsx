@@ -163,6 +163,7 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
+import { condaPackageFields, isCondaFormat } from "@/lib/conda";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -626,6 +627,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // coordinates come from the backend-parsed metadata when present, with the
   // path parser as fallback (#482).
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
+  const isConda = isCondaFormat(repoFormat);
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   // Whether a download count is a real number or an unmeasured blank (#808).
@@ -705,6 +707,42 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <span className="text-xs text-muted-foreground">-</span>
         ),
     },
+    // Conda packages differ by platform subdir and build string as often as
+    // by version (`linux-64` vs `noarch`, `py310h…` vs `py311h…`); neither was
+    // visible in the flat list.
+    ...(isConda
+      ? [
+          {
+            id: "subdir",
+            header: "Subdir",
+            accessor: (a: Artifact) => condaPackageFields(a.path, a.metadata).subdir ?? "",
+            sortable: true,
+            cell: (a: Artifact) => {
+              const subdir = condaPackageFields(a.path, a.metadata).subdir;
+              return subdir ? (
+                <Badge variant="secondary" className="text-xs font-normal font-mono">
+                  {subdir}
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">-</span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+          {
+            id: "build",
+            header: "Build",
+            accessor: (a: Artifact) => condaPackageFields(a.path, a.metadata).build ?? "",
+            cell: (a: Artifact) => {
+              const build = condaPackageFields(a.path, a.metadata).build;
+              return build ? (
+                <code className="text-xs text-muted-foreground">{build}</code>
+              ) : (
+                <span className="text-xs text-muted-foreground">-</span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+        ]
+      : []),
     ...(isMavenFamily
       ? [
           {
