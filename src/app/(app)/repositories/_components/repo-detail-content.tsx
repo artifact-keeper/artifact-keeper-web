@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1639,6 +1640,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                         artifactStats.last_downloaded
                       ).toLocaleString()}
                     />
+                  )}
+                  {/* Who pulled it: the admin download audit, filtered to this
+                      artifact. Proxy-cached rows have no artifact record. */}
+                  {user?.is_admin && selectedArtifact.analyzable !== false && (
+                    <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+                      <span className="text-muted-foreground text-xs font-medium pt-0.5">
+                        Download audit
+                      </span>
+                      <Link
+                        href={`/downloads?artifact_id=${encodeURIComponent(selectedArtifact.id)}`}
+                        className="text-sm underline underline-offset-2"
+                      >
+                        View who downloaded this artifact
+                      </Link>
+                    </div>
                   )}
                   {quarantineBlocked && (
                     <>

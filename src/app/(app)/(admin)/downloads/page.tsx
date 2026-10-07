@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Network, RefreshCw } from "lucide-react";
@@ -108,8 +109,24 @@ function truncateText(text: string, max: number): string {
 }
 
 export default function DownloadsPage() {
+  // useSearchParams requires a Suspense boundary during prerendering.
+  return (
+    <Suspense fallback={null}>
+      <DownloadsContent />
+    </Suspense>
+  );
+}
+
+function DownloadsContent() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  // Deep link from an artifact's detail (`?artifact_id=<uuid>`): start with
+  // that artifact's downloads. A malformed id is ignored.
+  const linkedArtifact = searchParams.get("artifact_id")?.trim() ?? "";
+  const initialFilters: DownloadFilters = isValidUuid(linkedArtifact)
+    ? { ...EMPTY_FILTERS, artifact_id: linkedArtifact }
+    : EMPTY_FILTERS;
 
   // -- view + pagination + filter state --
   const [view, setView] = useState<ViewMode>("events");
@@ -117,8 +134,8 @@ export default function DownloadsPage() {
   const [pageSize, setPageSize] = useState(DOWNLOADS_DEFAULT_PER_PAGE);
   // Draft filters live in the inputs; applied filters drive the query. This
   // avoids firing a request per keystroke on the free-text filters.
-  const [draft, setDraft] = useState<DownloadFilters>(EMPTY_FILTERS);
-  const [applied, setApplied] = useState<DownloadFilters>(EMPTY_FILTERS);
+  const [draft, setDraft] = useState<DownloadFilters>(initialFilters);
+  const [applied, setApplied] = useState<DownloadFilters>(initialFilters);
   const [filterError, setFilterError] = useState<string | null>(null);
 
   const hasAppliedFilters = Object.values(applied).some((v) => v !== "");

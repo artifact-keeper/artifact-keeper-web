@@ -50,6 +50,11 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("@/lib/sdk-client", () => ({}));
 
+let mockSearch = new URLSearchParams();
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => mockSearch,
+}));
+
 vi.mock("@/lib/api/downloads", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/downloads")>();
   return {
@@ -381,6 +386,38 @@ describe("DownloadsPage", () => {
       })
     );
     expect(eventOpts.placeholderData("previous")).toBe("previous");
+  });
+
+  it("starts filtered to one artifact when linked with ?artifact_id=", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams(`artifact_id=${ARTIFACT_ID}`);
+    try {
+      render(<DownloadsPage />);
+      expect(screen.getByLabelText(/artifact id/i)).toHaveValue(ARTIFACT_ID);
+      const eventOpts = mockUseQuery.mock.calls
+        .map(([o]) => o)
+        .filter(
+          (o) => o.queryKey?.[0] === "admin-downloads" && o.queryKey?.[1] !== "sample"
+        )
+        .at(-1);
+      await eventOpts.queryFn();
+      expect(mockList).toHaveBeenCalledWith(
+        expect.objectContaining({ artifact_id: ARTIFACT_ID })
+      );
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it("ignores a malformed ?artifact_id=", () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams("artifact_id=not-a-uuid");
+    try {
+      render(<DownloadsPage />);
+      expect(screen.getByLabelText(/artifact id/i)).toHaveValue("");
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
   });
 
   it("switches to the by-IP topology view and groups events by IP/subnet", () => {

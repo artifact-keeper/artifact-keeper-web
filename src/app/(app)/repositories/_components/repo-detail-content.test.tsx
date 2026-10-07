@@ -716,6 +716,13 @@ describe("RepoDetailContent artifact detail dialog — Origin (#914)", () => {
     }
   });
 
+  it("links admins to the download audit filtered to this artifact", async () => {
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).getByRole("link", { name: "View who downloaded this artifact" }),
+    ).toHaveAttribute("href", "/downloads?artifact_id=a1");
+  });
+
   it("does not show the conda blocks for other formats", async () => {
     h.artifactDetail = { ...artifactFixture, metadata: { attestation: {} } };
     const dialog = await openDetailDialog();
