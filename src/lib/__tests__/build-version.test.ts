@@ -9,6 +9,14 @@ describe("webBuildLabel", () => {
     expect(webBuildLabel("1.9.0", sha, "1.9.0").release).toBe(true);
   });
 
+  it("reports the release tag, not a stale package.json version (#842)", () => {
+    expect(webBuildLabel("1.7.0", sha, "v1.8.0")).toEqual({
+      label: "1.8.0",
+      title: "release v1.8.0 (package.json says 1.7.0)",
+      release: true,
+    });
+  });
+
   it("shows the short hash for a main, branch or dev build", () => {
     for (const ref of ["main", "feat/thing", "dev", "1.10.0-dev"]) {
       const l = webBuildLabel("1.9.0", sha, ref);

@@ -40,7 +40,18 @@ export function webBuildLabel(
   const short = shortSha(sha);
   if (ref !== undefined && ref !== "") {
     if (isReleaseRef(ref)) {
-      return { label: v, title: `release ${ref}`, release: true };
+      // The tag the image was built from is the version the image IS (#842).
+      // package.json is gated to match it at release time, but a build that
+      // slipped past that gate must not report the older package version.
+      const tagged = ref.trim().replace(/^v/, "");
+      return {
+        label: tagged,
+        title:
+          tagged === v
+            ? `release ${ref}`
+            : `release ${ref} (package.json says ${v})`,
+        release: true,
+      };
     }
     if (short) {
       return {
