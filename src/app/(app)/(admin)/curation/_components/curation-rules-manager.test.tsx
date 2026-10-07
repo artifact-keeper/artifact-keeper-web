@@ -176,7 +176,7 @@ vi.mock("@/components/ui/switch", () => ({
   ),
 }));
 
-import { CurationRulesManager, toRequest } from "./curation-rules-manager";
+import { CurationRulesManager, toRequest, condaVersionHelp } from "./curation-rules-manager";
 
 const PATTERN_RULE = {
   id: "r1",
@@ -804,5 +804,35 @@ describe("toRequest config building", () => {
       affix_check: false,
     });
     expect(withoutAffix.config).not.toHaveProperty("affix_max_downloads");
+  });
+});
+
+describe("conda version-constraint help (#916)", () => {
+  const CONDA_REPOS = {
+    items: [
+      { id: "c1", key: "conda-staging", repo_type: "staging", format: "conda" },
+      { id: "n1", key: "staging-npm", repo_type: "staging", format: "npm" },
+    ],
+  };
+
+  it("decides from the target repository's format, and always for global rules", () => {
+    const repos = CONDA_REPOS.items;
+    expect(condaVersionHelp({ scope: "repository", staging_repo_id: "c1" }, repos)).toBe(true);
+    expect(condaVersionHelp({ scope: "repository", staging_repo_id: "n1" }, repos)).toBe(false);
+    expect(condaVersionHelp({ scope: "repository", staging_repo_id: "" }, repos)).toBe(false);
+    expect(condaVersionHelp({ scope: "global", staging_repo_id: "" }, repos)).toBe(true);
+  });
+
+  it("shows the examples once a conda staging repository is picked", async () => {
+    const user = userEvent.setup();
+    reposData = CONDA_REPOS;
+    render(<CurationRulesManager />);
+    await user.click(screen.getByRole("button", { name: /new rule/i }));
+    expect(screen.queryByTestId("conda-version-help")).toBeNull();
+    await user.selectOptions(screen.getByLabelText("Staging repository"), "c1");
+    const help = screen.getByTestId("conda-version-help");
+    expect(help).toHaveTextContent("1.2.*");
+    expect(help).toHaveTextContent(">=1.2,<2");
+    expect(help).toHaveTextContent(/Build strings/);
   });
 });
