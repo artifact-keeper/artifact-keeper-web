@@ -42,6 +42,13 @@ import {
 } from "@/components/ui/tooltip";
 
 import { PageHeader } from "@/components/common/page-header";
+import { countPredicates, isInert } from "@/lib/policy-predicates";
+import {
+  PredicateFields,
+  draftFromPredicates,
+  predicatesFromDraft,
+  type PredicateDraft,
+} from "./_components/predicate-fields";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 
@@ -72,6 +79,12 @@ interface PolicyFormState {
   block_on_fail: boolean;
   is_enabled: boolean;
   repository_id: string;
+  predicates: PredicateDraft;
+  /**
+   * Whether the backend reported a predicate document for this policy. On
+   * edit, a backend that predates predicates (#4058) gets no document.
+   */
+  predicatesSupported: boolean;
 }
 
 const DEFAULT_FORM: PolicyFormState = {
@@ -81,6 +94,8 @@ const DEFAULT_FORM: PolicyFormState = {
   block_on_fail: false,
   is_enabled: true,
   repository_id: "",
+  predicates: draftFromPredicates(undefined),
+  predicatesSupported: true,
 };
 
 // Radix Select can't hold an empty-string value, so a global (unscoped) policy
@@ -185,6 +200,17 @@ function PolicyFormFields({
             Policy enabled
           </Label>
         </div>
+      )}
+      {form.predicatesSupported ? (
+        <PredicateFields
+          draft={form.predicates}
+          onChange={(predicates) => setForm((f) => ({ ...f, predicates }))}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          This backend does not report conda or origin predicates for this
+          policy, so none are shown or sent.
+        </p>
       )}
       {showRepoId && (
         <div className="space-y-2">
@@ -299,6 +325,8 @@ export default function SecurityPoliciesPage() {
       block_on_fail: policy.block_on_fail,
       is_enabled: policy.is_enabled,
       repository_id: policy.repository_id ?? "",
+      predicates: draftFromPredicates(policy.predicates),
+      predicatesSupported: policy.predicates !== undefined,
     });
     setEditOpen(true);
   }, []);
@@ -315,7 +343,17 @@ export default function SecurityPoliciesPage() {
       header: "Name",
       accessor: (r) => r.name,
       sortable: true,
-      cell: (r) => <span className="text-sm font-medium">{r.name}</span>,
+      cell: (r) => (
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-medium">{r.name}</span>
+          {r.predicates && !isInert(r.predicates) && (
+            <Badge variant="outline" className="text-[11px] font-normal">
+              {countPredicates(r.predicates)} predicate
+              {countPredicates(r.predicates) === 1 ? "" : "s"}
+            </Badge>
+          )}
+        </span>
+      ),
     },
     {
       id: "scope",
@@ -422,6 +460,7 @@ export default function SecurityPoliciesPage() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label={`Edit ${r.name}`}
                 onClick={() => handleEdit(r)}
               >
                 <Pencil className="size-3.5" />
@@ -477,7 +516,7 @@ export default function SecurityPoliciesPage() {
           if (!o) setCreateForm({ ...DEFAULT_FORM });
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create Security Policy</DialogTitle>
             <DialogDescription>
@@ -495,6 +534,10 @@ export default function SecurityPoliciesPage() {
                 block_unscanned: createForm.block_unscanned,
                 block_on_fail: createForm.block_on_fail,
                 repository_id: createForm.repository_id || null,
+                // An empty document is the same as none; only send real ones.
+                ...(isInert(predicatesFromDraft(createForm.predicates))
+                  ? {}
+                  : { predicates: predicatesFromDraft(createForm.predicates) }),
               });
             }}
           >
@@ -537,7 +580,7 @@ export default function SecurityPoliciesPage() {
           if (!o) setSelectedPolicy(null);
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Policy</DialogTitle>
             <DialogDescription>
@@ -557,6 +600,11 @@ export default function SecurityPoliciesPage() {
                     block_unscanned: editForm.block_unscanned,
                     block_on_fail: editForm.block_on_fail,
                     is_enabled: editForm.is_enabled,
+                    // The backend replaces the stored document wholesale, so
+                    // send the full edited document (clearing works too).
+                    ...(editForm.predicatesSupported
+                      ? { predicates: predicatesFromDraft(editForm.predicates) }
+                      : {}),
                   },
                 });
               }

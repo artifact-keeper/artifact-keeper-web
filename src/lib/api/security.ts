@@ -49,6 +49,7 @@ import type {
   UpsertScanConfigRequest,
 } from '@/types/security';
 import { assertData } from '@/lib/api/fetch';
+import { adaptPredicates } from '@/lib/policy-predicates';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ScanListResponse {
@@ -195,6 +196,10 @@ function adaptPolicy(sdk: SdkPolicyResponse): ScanPolicy {
     block_unscanned: sdk.block_unscanned,
     block_on_fail: sdk.block_on_fail,
     is_enabled: sdk.is_enabled,
+    // `predicates` is not in the generated SDK yet (#4058); read at runtime.
+    predicates: adaptPredicates(
+      (sdk as SdkPolicyResponse & { predicates?: unknown }).predicates,
+    ),
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
@@ -242,7 +247,9 @@ function adaptCreatePolicyRequest(req: CreatePolicyRequest): SdkCreatePolicyRequ
     max_severity: req.max_severity,
     block_unscanned: req.block_unscanned,
     block_on_fail: req.block_on_fail,
-  };
+    // Not in the SDK request type yet (#4058): attached only when set.
+    ...(req.predicates ? { predicates: req.predicates } : {}),
+  } as SdkCreatePolicyRequest;
 }
 
 function adaptUpdatePolicyRequest(req: UpdatePolicyRequest): SdkUpdatePolicyRequest {
@@ -252,7 +259,9 @@ function adaptUpdatePolicyRequest(req: UpdatePolicyRequest): SdkUpdatePolicyRequ
     block_unscanned: req.block_unscanned,
     block_on_fail: req.block_on_fail,
     is_enabled: req.is_enabled,
-  };
+    // Sent only when the editor owns a document; omitted keeps the stored one.
+    ...(req.predicates ? { predicates: req.predicates } : {}),
+  } as SdkUpdatePolicyRequest;
 }
 
 function adaptUpsertConfigRequest(

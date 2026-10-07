@@ -1,3 +1,4 @@
+import type { PolicyPredicates } from '@/lib/policy-predicates';
 export interface DashboardSummary {
   repos_with_scanning: number;
   total_scans: number;
@@ -73,6 +74,11 @@ export interface ScanPolicy {
   block_unscanned: boolean;
   block_on_fail: boolean;
   is_enabled: boolean;
+  /**
+   * Conda and origin predicates (backend #4058/#4050). Undefined when the
+   * backend predates them; the editor then never sends a document.
+   */
+  predicates?: PolicyPredicates;
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +106,8 @@ export interface CreatePolicyRequest {
   max_severity: string;
   block_unscanned: boolean;
   block_on_fail: boolean;
+  /** Omitted: no predicates. */
+  predicates?: PolicyPredicates;
 }
 
 export interface UpdatePolicyRequest {
@@ -108,6 +116,8 @@ export interface UpdatePolicyRequest {
   block_unscanned: boolean;
   block_on_fail: boolean;
   is_enabled: boolean;
+  /** Omitted: the stored document is left untouched; sent: replaces it. */
+  predicates?: PolicyPredicates;
 }
 
 export interface TriggerScanRequest {
