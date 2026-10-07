@@ -13,6 +13,14 @@
  * Render it only for a proxying (Remote/Virtual) repository: a hosted one
  * proxies nothing, so neither sentence applies.
  */
+/**
+ * Backend coverage doc for scan-on-proxy (artifact-keeper#4114): what it does,
+ * the fail-open / fail-closed / record-only actions, verdict freshness, the
+ * Virtual stricter-of-two rule and the per-format coverage table.
+ */
+export const SCAN_ON_PROXY_DOC_URL =
+  "https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/security/scan-on-proxy.md";
+
 export function ScanOnProxyNote({
   id,
   enforced,
@@ -38,7 +46,15 @@ export function ScanOnProxyNote({
           remotes. For {formatLabel} the backend accepts the setting but serves
           proxied content unscanned (artifact-keeper#1274).
         </>
-      )}
+      )}{" "}
+      <a
+        href={SCAN_ON_PROXY_DOC_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="underline underline-offset-2"
+      >
+        Which formats are covered?
+      </a>
     </p>
   );
 }
