@@ -47,6 +47,11 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }));
 
+// The trust-policy card has its own query and its own test.
+vi.mock("./_components/attestation-policy-card", () => ({
+  AttestationPolicyCard: () => <div data-stub="attestation-policy-card" />,
+}));
+
 const mockToastSuccess = vi.fn();
 vi.mock("sonner", () => ({
   toast: { success: (...a: unknown[]) => mockToastSuccess(...a), error: vi.fn() },
