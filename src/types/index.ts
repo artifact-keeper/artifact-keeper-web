@@ -352,6 +352,8 @@ export interface Artifact {
    * repository other than `repository_key`.
    */
   origin?: ArtifactOrigin | null;
+  /** Uploader's username, on the by-id detail response (#3271). */
+  uploaded_by_username?: string | null;
 }
 
 /**

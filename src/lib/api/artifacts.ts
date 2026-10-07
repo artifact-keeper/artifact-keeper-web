@@ -117,6 +117,7 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     quarantine_status?: string | null;
     quarantine_until?: string | null;
     origin?: unknown;
+    uploaded_by_username?: string | null;
   };
   return {
     id: sdk.id,
@@ -145,6 +146,7 @@ function adaptArtifact(sdk: ArtifactResponse): Artifact {
     // default so hosted artifacts always stay analyzable.
     analyzable: sdkAny.analyzable ?? true,
     origin: adaptArtifactOrigin(sdkAny.origin),
+    uploaded_by_username: sdkAny.uploaded_by_username ?? undefined,
   };
 }
 

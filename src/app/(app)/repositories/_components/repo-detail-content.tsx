@@ -164,6 +164,9 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { CopyButton } from "@/components/common/copy-button";
 import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
 import { condaPackageFields, isCondaFormat } from "@/lib/conda";
+import { withoutAttestationBundle } from "@/lib/attestation";
+import { ArtifactAttestationSection } from "./artifact-attestation-section";
+import { CondaPackageSection } from "./conda-package-section";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -378,6 +381,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const selectedOrigin =
     selectedArtifact?.origin ??
     (artifactDetail?.id === selectedArtifactId ? artifactDetail?.origin : null);
+  // The by-id record also carries the uploader and the full metadata
+  // (attestation and its verification); prefer it over the listing row.
+  const selectedDetail =
+    artifactDetail?.id === selectedArtifactId ? artifactDetail : undefined;
+  const selectedMetadata = selectedDetail?.metadata ?? selectedArtifact?.metadata;
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -1683,6 +1691,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     origin={selectedOrigin}
                     currentRepositoryKey={selectedArtifact.repository_key || repoKey}
                   />
+                  {isConda && (
+                    <>
+                      <CondaPackageSection
+                        path={selectedArtifact.path}
+                        metadata={selectedMetadata}
+                        uploadedBy={selectedDetail?.uploaded_by_username}
+                      />
+                      <ArtifactAttestationSection
+                        metadata={selectedMetadata}
+                        channel={{ repoKey, path: selectedArtifact.path }}
+                      />
+                    </>
+                  )}
                   {(repoFormat === "maven" || repoFormat === "gradle") && (
                     <MavenGavSection
                       path={selectedArtifact.path}
@@ -1696,7 +1717,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                           Metadata
                         </p>
                         <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-40">
-                          {JSON.stringify(selectedArtifact.metadata, null, 2)}
+                          {JSON.stringify(
+                            withoutAttestationBundle(selectedArtifact.metadata),
+                            null,
+                            2,
+                          )}
                         </pre>
                       </div>
                     )}
