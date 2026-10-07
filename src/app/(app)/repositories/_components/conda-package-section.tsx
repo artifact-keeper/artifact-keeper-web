@@ -1,6 +1,8 @@
 "use client";
 
 import { condaPackageFields } from "@/lib/conda";
+import { readPublisher } from "@/lib/attestation";
+import { PublisherBadge } from "@/components/package/publisher-badge";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -26,6 +28,7 @@ export function CondaPackageSection({
   uploadedBy?: string | null;
 }) {
   const f = condaPackageFields(path, metadata);
+  const publisher = readPublisher(metadata);
   return (
     <div className="space-y-3" data-testid="conda-package">
       <p className="text-xs font-medium text-muted-foreground">Conda package</p>
@@ -44,6 +47,13 @@ export function CondaPackageSection({
           </span>
         </Row>
       )}
+      <Row label="Publisher">
+        {publisher ? (
+          <PublisherBadge publisher={publisher} />
+        ) : (
+          <span className="text-muted-foreground">not declared</span>
+        )}
+      </Row>
       <Row label="License">
         {f.license ?? <span className="text-muted-foreground">not declared</span>}
       </Row>

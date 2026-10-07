@@ -75,4 +75,18 @@ describe("CondaPackageSection", () => {
     expect(screen.getByText("acme-core >=0.1")).toBeInTheDocument();
     expect(screen.getByText("ci-publisher")).toBeInTheDocument();
   });
+
+  it("shows a verified publisher badge distinctly from a declared maintainer (#921)", () => {
+    const { unmount } = render(
+      <CondaPackageSection
+        path={CHANNEL.path}
+        metadata={{ attestation: {}, attestation_verification: { state: "verified", owner: "acme" } }}
+      />,
+    );
+    expect(screen.getByTestId("publisher-badge")).toHaveTextContent("Verified publisher: acme");
+    unmount();
+    render(<CondaPackageSection path={CHANNEL.path} metadata={{ about: { maintainer: "Acme" } }} />);
+    expect(screen.getByTestId("publisher-badge")).toHaveTextContent("Declared maintainer: Acme (not verified)");
+  });
 });
+

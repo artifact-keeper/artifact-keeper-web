@@ -22,6 +22,8 @@ export interface AttestationSummary {
   /** `sigstore-keyless`, `sigstore-key`, or whatever the backend sent. */
   method?: string;
   identity?: string;
+  /** Certificate-bound repository owner (e.g. the GitHub org), when verified keyless. */
+  owner?: string;
   issuer?: string;
   keyFingerprint?: string;
   verifiedAt?: string;
@@ -67,6 +69,7 @@ export function readAttestation(
     state,
     method,
     identity,
+    owner: str(record.owner),
     issuer: str(record.issuer),
     keyFingerprint,
     verifiedAt: str(record.verified_at),
@@ -91,4 +94,49 @@ export function withoutAttestationBundle(
 ): Record<string, unknown> {
   if (!("attestation" in metadata)) return metadata;
   return { ...metadata, attestation: "<Sigstore bundle: see Attestation>" };
+}
+
+/**
+ * Who published a conda package, and how strongly that is known (#921).
+ *
+ * Mirrors the backend's publisher-trust tiers (artifact-keeper#4134,
+ * `publisher_source::extract_conda`):
+ * - `verified`: a CEP-27 attestation the registry verified (#4048/#4155); the
+ *   name is the certificate-bound owner, or the signing identity / key when
+ *   no owner is bound (key-signed bundles).
+ * - `metadata`: the maintainer the package declares in `info/about.json`.
+ *   Anyone can write any name there; it is a claim, not a check.
+ * There is no unverified-attestation tier for conda: CEP-27 carries no
+ * claimed publisher, so a stored but unverified bundle names nobody.
+ */
+export type PublisherTier = "verified" | "metadata";
+
+export interface PublisherInfo {
+  tier: PublisherTier;
+  name: string;
+}
+
+function aboutMaintainer(about: unknown): string | undefined {
+  if (!isObject(about)) return undefined;
+  const direct = str(about.maintainer);
+  if (direct) return direct.trim();
+  if (Array.isArray(about.maintainers)) {
+    for (const m of about.maintainers) {
+      const name = str(m) ?? (isObject(m) ? str(m.name) : undefined);
+      if (name) return name.trim();
+    }
+  }
+  return undefined;
+}
+
+export function readPublisher(
+  metadata: Record<string, unknown> | null | undefined,
+): PublisherInfo | null {
+  const att = readAttestation(metadata);
+  if (att.state === "verified") {
+    const name = att.owner ?? att.identity ?? att.keyFingerprint;
+    if (name) return { tier: "verified", name };
+  }
+  const declared = aboutMaintainer(metadata?.about);
+  return declared ? { tier: "metadata", name: declared } : null;
 }

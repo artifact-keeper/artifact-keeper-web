@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { readAttestation, withoutAttestationBundle, attestationMethodLabel } from "../attestation";
+import {
+  readAttestation,
+  readPublisher,
+  withoutAttestationBundle,
+  attestationMethodLabel,
+} from "../attestation";
 
 const BUNDLE = { mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json" };
 
@@ -65,5 +70,40 @@ describe("attestationMethodLabel", () => {
   it("labels the known methods and passes others through", () => {
     expect(attestationMethodLabel("sigstore-key")).toMatch(/configured key/);
     expect(attestationMethodLabel("x")).toBe("x");
+  });
+});
+
+
+describe("readPublisher (#921)", () => {
+  it("names the certificate-bound owner of a verified attestation", () => {
+    expect(
+      readPublisher({
+        attestation: {},
+        attestation_verification: { state: "verified", owner: "acme", identity: "https://github.com/acme/ci" },
+        about: { maintainer: "Someone Else" },
+      }),
+    ).toEqual({ tier: "verified", name: "acme" });
+  });
+
+  it("falls back to the key fingerprint for a key-signed bundle", () => {
+    expect(
+      readPublisher({
+        attestation: {},
+        attestation_verification: { verified: true, method: "sigstore-key", key_fingerprint: "SHA256:k" },
+      }),
+    ).toEqual({ tier: "verified", name: "SHA256:k" });
+  });
+
+  it("labels a declared maintainer as metadata, even next to an unverified bundle", () => {
+    expect(readPublisher({ attestation: {}, about: { maintainers: [{ name: "NumFOCUS" }] } })).toEqual({
+      tier: "metadata",
+      name: "NumFOCUS",
+    });
+    expect(readPublisher({ about: { maintainer: "  Acme  " } })?.name).toBe("Acme");
+  });
+
+  it("is null when nothing names a publisher", () => {
+    expect(readPublisher({ about: { home: "x" } })).toBeNull();
+    expect(readPublisher(undefined)).toBeNull();
   });
 });
