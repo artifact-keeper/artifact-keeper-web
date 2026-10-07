@@ -260,6 +260,18 @@ describe("SecurityScansPage scan-type filter (#858)", () => {
     expect(badge.title).toContain("acme-4.2");
   });
 
+  it("marks a not-cataloged scan instead of calling it clean (#4154)", () => {
+    setScansResult({
+      data: {
+        items: [scan({ findings_count: 0, critical_count: 0, high_count: 0, scan_completeness: "not_cataloged" })],
+        total: 1,
+      },
+    });
+    render(<SecurityScansPage />);
+    expect(screen.getByText("Not cataloged")).toBeInTheDocument();
+    expect(screen.queryByText(/^Clean$/)).toBeNull();
+  });
+
   it("shows the backend's message when a filter value is rejected", () => {
     setScansResult({
       data: undefined,

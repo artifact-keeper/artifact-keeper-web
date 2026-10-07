@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isScanIncomplete, isScanFailed, isScanClean } from "../scan-utils";
+import { isScanIncomplete, isScanFailed, isScanClean, isScanNotCataloged } from "../scan-utils";
 
 describe("isScanIncomplete", () => {
   it("returns false for completed scans", () => {
@@ -74,5 +74,20 @@ describe("isScanClean", () => {
 
   it("returns false for unknown status even with zero findings", () => {
     expect(isScanClean("cancelled", 0)).toBe(false);
+  });
+});
+
+describe("isScanNotCataloged (#4154)", () => {
+  it("is a completed scan whose completeness is not_cataloged", () => {
+    expect(isScanNotCataloged("completed", "not_cataloged")).toBe(true);
+    expect(isScanNotCataloged("completed", "complete")).toBe(false);
+    expect(isScanNotCataloged("completed", undefined)).toBe(false);
+    expect(isScanNotCataloged("failed", "not_cataloged")).toBe(false);
+  });
+
+  it("is never clean", () => {
+    expect(isScanClean("completed", 0, "not_cataloged")).toBe(false);
+    expect(isScanClean("completed", 0, "complete")).toBe(true);
+    expect(isScanClean("completed", 0)).toBe(true);
   });
 });

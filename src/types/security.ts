@@ -23,6 +23,14 @@ export interface RepoSecurityScore {
   acknowledged_count: number;
   last_scan_at: string | null;
   calculated_at: string;
+  /** The latest applicable scan errored; the grade is floored to F (#2167). */
+  has_failed_scan?: boolean;
+  /**
+   * Some artifact's latest completed scan cataloged nothing although its
+   * format expects a catalog (backend artifact-keeper#4154): its zero
+   * findings are "not assessed", not "clean". Absent on older backends.
+   */
+  has_uncataloged_scan?: boolean;
 }
 
 export interface ScanResult {
@@ -44,6 +52,13 @@ export interface ScanResult {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  /**
+   * `complete`, `partial` or `not_cataloged` (backend artifact-keeper#4154).
+   * Absent on older backends.
+   */
+  scan_completeness?: string | null;
+  /** Why the scan is not complete, when known. */
+  scan_completeness_reason?: string | null;
 }
 
 export interface ScanFinding {

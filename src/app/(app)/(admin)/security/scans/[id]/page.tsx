@@ -22,7 +22,11 @@ import { toast } from "sonner";
 import { securityApi } from "@/lib/api/security";
 import { blastRadiusHref } from "@/lib/api/blast-radius";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import { isScanIncomplete } from "@/lib/scan-utils";
+import {
+  isScanIncomplete,
+  isScanNotCataloged,
+  NOT_CATALOGED_EXPLANATION,
+} from "@/lib/scan-utils";
 import type { ScanFinding } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -499,6 +503,27 @@ export default function SecurityScanDetailPage() {
               {scan.error_message
                 ? scan.error_message
                 : "The scanner encountered an error. Findings data below may be incomplete or missing. Try triggering a new scan."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Not-cataloged scan warning (#4154): zero findings, nothing assessed */}
+      {scan && isScanNotCataloged(scan.status, scan.scan_completeness) && (
+        <div
+          className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/30"
+          data-testid="scan-not-cataloged"
+        >
+          <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Not cataloged
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+              {scan.scan_completeness_reason
+                ? `${scan.scan_completeness_reason}. `
+                : ""}
+              {NOT_CATALOGED_EXPLANATION}
             </p>
           </div>
         </div>
