@@ -212,6 +212,28 @@ describe("ArtifactFolderTree", () => {
     });
   });
 
+  it("shows every subfolder of a large folder, not one capped page (#955)", async () => {
+    const user = userEvent.setup();
+    // 150 builds under one branch folder: more than the artifact listing's
+    // 100-row page cap that the pre-#850 tree was built from.
+    const builds = Array.from({ length: 150 }, (_, i) =>
+      makeFolder(`raw-repo/master/${1000 + i}`),
+    );
+    getChildrenMock.mockImplementation(async (params) =>
+      params?.path === undefined
+        ? [makeFolder("raw-repo/master")]
+        : params.path === "master"
+          ? builds
+          : [],
+    );
+
+    renderTree();
+    await user.click(await screen.findByTestId("artifact-tree-folder"));
+
+    expect(await screen.findByText("1149")).toBeInTheDocument();
+    expect(screen.getAllByTestId("artifact-tree-folder")).toHaveLength(151);
+  });
+
   it("does not refetch a fresh folder when collapsed and re-expanded", async () => {
     const user = userEvent.setup();
 
