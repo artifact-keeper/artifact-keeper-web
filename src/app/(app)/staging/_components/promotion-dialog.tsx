@@ -8,7 +8,12 @@ import { toast } from "sonner";
 import { promotionApi } from "@/lib/api/promotion";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mutationErrorToast } from "@/lib/error-utils";
-import type { StagingArtifact, BulkPromoteRequest, PolicyViolation } from "@/types/promotion";
+import type {
+  StagingArtifact,
+  BulkPromoteRequest,
+  BulkPromotionResponse,
+  PolicyViolation,
+} from "@/types/promotion";
 import type { Repository } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -37,6 +42,7 @@ import {
 import { SEVERITY_COLORS } from "@/types/promotion";
 
 import { ArtifactListPreview } from "./artifact-list-preview";
+import { PromotionResult, promotionNeedsReview } from "./promotion-result";
 
 interface PromotionDialogProps {
   open: boolean;
@@ -101,6 +107,22 @@ export function PromotionDialog({
     (v) => v.violation.severity === "critical" || v.violation.severity === "high"
   );
 
+  // The last promotion's per-artifact outcome, kept on screen when it has
+  // something to read (a refusal, or per-rule gate decisions) instead of
+  // being reduced to a toast.
+  const [outcome, setOutcome] = useState<BulkPromotionResponse | null>(null);
+
+  const resetForm = () => {
+    setTargetRepo("");
+    setNotes("");
+    setSkipPolicyCheck(false);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) setOutcome(null);
+    onOpenChange(next);
+  };
+
   const promoteMutation = useMutation({
     mutationFn: (req: BulkPromoteRequest) => promotionApi.promoteBulk(sourceRepoKey, req),
     onSuccess: (result) => {
@@ -113,11 +135,13 @@ export function PromotionDialog({
       }
       queryClient.invalidateQueries({ queryKey: ["staging-artifacts", sourceRepoKey] });
       queryClient.invalidateQueries({ queryKey: ["promotion-history", sourceRepoKey] });
-      onOpenChange(false);
-      setTargetRepo("");
-      setNotes("");
-      setSkipPolicyCheck(false);
+      resetForm();
       onSuccess?.();
+      if (promotionNeedsReview(result)) {
+        setOutcome(result);
+      } else {
+        onOpenChange(false);
+      }
     },
     onError: mutationErrorToast("Promotion failed"),
   });
@@ -138,8 +162,27 @@ export function PromotionDialog({
 
   const targetRepoList = releaseRepos?.items ?? [];
 
+  if (outcome) {
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Promotion result</DialogTitle>
+            <DialogDescription>
+              Each artifact&apos;s gate decisions, as the server evaluated them.
+            </DialogDescription>
+          </DialogHeader>
+          <PromotionResult result={outcome} />
+          <DialogFooter>
+            <Button onClick={() => handleOpenChange(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -274,7 +317,7 @@ export function PromotionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button

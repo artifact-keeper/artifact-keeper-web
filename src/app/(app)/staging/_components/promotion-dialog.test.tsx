@@ -135,3 +135,97 @@ describe("PromotionDialog release-target linking (#658)", () => {
     );
   });
 });
+
+describe("PromotionDialog gate results (conda walkthrough)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetReleaseTarget.mockResolvedValue(LINKED);
+  });
+
+  it("keeps the dialog open with each rule's decision when an artifact is refused", async () => {
+    mockPromoteBulk.mockResolvedValue({
+      total: 2,
+      promoted: 1,
+      failed: 1,
+      results: [
+        {
+          promoted: true,
+          source: "conda-staging/noarch/acme-report-1.0.0-py_0.conda",
+          target: "conda-internal/noarch/acme-report-1.0.0-py_0.conda",
+          policy_violations: [],
+          gate_results: [
+            { rule: "attestation", passed: true, reason: "verified with key SHA256:k" },
+            { rule: "vulnerability_scan", passed: true },
+          ],
+        },
+        {
+          promoted: false,
+          source: "conda-staging/noarch/acme-unsigned-1.0.0-py_0.conda",
+          target: "conda-internal/noarch/acme-unsigned-1.0.0-py_0.conda",
+          policy_violations: [],
+          gate_results: [{ rule: "attestation", passed: false, reason: "no attestation stored" }],
+        },
+      ],
+    });
+    renderDialog();
+    await screen.findByText("Linked release target");
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+
+    expect(await screen.findByText("Promotion result")).toBeInTheDocument();
+    expect(screen.getByText("Refused")).toBeInTheDocument();
+    expect(screen.getByText(/no attestation stored/)).toBeInTheDocument();
+    expect(screen.getAllByText("Verified attestation")).toHaveLength(2);
+  });
+
+  it("falls back to the server message when gate_results is absent", async () => {
+    mockPromoteBulk.mockResolvedValue({
+      total: 1,
+      promoted: 0,
+      failed: 1,
+      results: [
+        {
+          promoted: false,
+          source: "stg/a",
+          target: "maven-release/a",
+          policy_violations: [],
+          message: "Promotion blocked by policy violations",
+        },
+      ],
+    });
+    renderDialog();
+    await screen.findByText("Linked release target");
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    expect(await screen.findByText("Promotion blocked by policy violations")).toBeInTheDocument();
+  });
+
+  it("lists each blocked artifact's violations with rule and severity (#917)", async () => {
+    mockPromoteBulk.mockResolvedValue({
+      total: 2,
+      promoted: 1,
+      failed: 1,
+      results: [
+        { promoted: true, source: "stg/a", target: "rel/a", policy_violations: [] },
+        {
+          promoted: false,
+          source: "stg/b",
+          target: "rel/b",
+          message: "Promotion blocked by policy violations",
+          policy_violations: [
+            { rule: "policy-predicate", severity: "high", message: "channel conda-forge is not allowed" },
+            { rule: "cve", severity: "critical", message: "CVE-2026-0001" },
+          ],
+        },
+      ],
+    });
+    renderDialog();
+    await screen.findByText("Linked release target");
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    const list = await screen.findByTestId("promotion-violations");
+    expect(list).toHaveTextContent("high");
+    expect(list).toHaveTextContent("Scan policy predicate: channel conda-forge is not allowed");
+    expect(list).toHaveTextContent("critical");
+    expect(screen.getByText("Promoted")).toBeInTheDocument();
+    expect(screen.getByText("Refused")).toBeInTheDocument();
+    expect(screen.getByText(/Promoted 1 of 2/)).toBeInTheDocument();
+  });
+});

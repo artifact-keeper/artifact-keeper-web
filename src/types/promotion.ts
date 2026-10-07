@@ -43,6 +43,18 @@ export interface BulkPromoteRequest {
   notes?: string;
 }
 
+/**
+ * One promotion gate's decision for one artifact (backend 1.11.0): e.g.
+ * `attestation` (a verified publish attestation), `vulnerability_scan`,
+ * `license`. Absent on older backends, which report only `message` and
+ * `policy_violations`.
+ */
+export interface PromotionGateResult {
+  rule: string;
+  passed: boolean;
+  reason?: string;
+}
+
 export interface PromotionResponse {
   promoted: boolean;
   source: string;
@@ -50,6 +62,7 @@ export interface PromotionResponse {
   promotion_id?: string;
   policy_violations: PolicyViolation[];
   message?: string;
+  gate_results?: PromotionGateResult[];
 }
 
 export interface BulkPromotionResponse {

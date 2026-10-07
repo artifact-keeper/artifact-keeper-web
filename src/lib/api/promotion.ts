@@ -34,6 +34,7 @@ import type {
   RejectArtifactRequest,
   RejectArtifactResponse,
   PromotionHistoryStatus,
+  PromotionGateResult,
 } from '@/types/promotion';
 import type {
   Repository,
@@ -142,14 +143,34 @@ function adaptPolicyViolation(sdk: SdkPolicyViolation): PolicyViolation {
   };
 }
 
+/**
+ * `gate_results` is not in the generated SDK yet (backend 1.11.0). Read it off
+ * the runtime object and keep only well-formed entries; a missing or malformed
+ * field leaves it undefined so the UI falls back to `message`.
+ */
+export function adaptGateResults(raw: unknown): PromotionGateResult[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PromotionGateResult[] = [];
+  for (const g of raw) {
+    if (typeof g !== 'object' || g === null) continue;
+    const { rule, passed, reason } = g as Record<string, unknown>;
+    if (typeof rule !== 'string' || typeof passed !== 'boolean') continue;
+    out.push({ rule, passed, reason: typeof reason === 'string' ? reason : undefined });
+  }
+  return out;
+}
+
 function adaptPromotionResponse(sdk: SdkPromotionResponse): PromotionResponse {
   return {
     promoted: sdk.promoted,
     source: sdk.source,
     target: sdk.target,
     promotion_id: sdk.promotion_id ?? undefined,
-    policy_violations: sdk.policy_violations.map(adaptPolicyViolation),
+    policy_violations: (sdk.policy_violations ?? []).map(adaptPolicyViolation),
     message: sdk.message ?? undefined,
+    gate_results: adaptGateResults(
+      (sdk as SdkPromotionResponse & { gate_results?: unknown }).gate_results,
+    ),
   };
 }
 
