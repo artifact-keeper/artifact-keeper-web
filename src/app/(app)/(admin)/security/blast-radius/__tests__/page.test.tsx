@@ -7,6 +7,13 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 // Mocks
 // ---------------------------------------------------------------------------
 
+// The environment lookup (#912) has its own test; it makes its own queries.
+vi.mock("@/components/common/environment-lookup", () => ({
+  EnvironmentLookup: ({ initialPurl }: { initialPurl?: string }) => (
+    <div data-testid="environment-lookup-stub" data-purl={initialPurl ?? ""} />
+  ),
+}));
+
 vi.mock("lucide-react", () => {
   const stub = (name: string) => {
     const Icon = (props: any) => (
@@ -861,5 +868,12 @@ describe("ipPreview", () => {
 
   it("collapses the remainder using the exact distinct count", () => {
     expect(ipPreview(["a", "b", "c", "d"], 6)).toBe("a, b, c +3 more");
+  });
+});
+
+describe("BlastRadiusPage environment lookup (#912)", () => {
+  it("renders the component-to-environments lookup", () => {
+    render(<BlastRadiusPage />);
+    expect(screen.getByTestId("environment-lookup-stub")).toBeInTheDocument();
   });
 });

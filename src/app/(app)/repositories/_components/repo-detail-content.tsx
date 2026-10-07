@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  Boxes,
   Bell,
   Check,
   Download,
@@ -167,6 +168,7 @@ import { condaPackageFields, isCondaFormat } from "@/lib/conda";
 import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
+import { EnvironmentsTabContent } from "./environments-tab-content";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -1135,6 +1137,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Tracks
               </TabsTrigger>
             )}
+          {isAuthenticated && (
+            <TabsTrigger value="environments">
+              <Boxes className="size-3.5 mr-1" />
+              Environments
+            </TabsTrigger>
+          )}
           {showSecurityTab && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
@@ -1370,6 +1378,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               <PypiTracksPanel repository={repository} />
             </TabsContent>
           )}
+
+        {/* --- Environments Tab (registered lockfiles, PURL lookup) --- */}
+        {isAuthenticated && (
+          <TabsContent value="environments" className="mt-4">
+            <EnvironmentsTabContent repoKey={repoKey} canRegister={!!user?.is_admin} />
+          </TabsContent>
+        )}
 
         {/* --- Security Tab --- */}
         {showSecurityTab && (

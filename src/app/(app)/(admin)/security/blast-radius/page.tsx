@@ -35,6 +35,7 @@ import { visibilityFromAccessScope } from "@/lib/repo-visibility";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { VisibilityBadge } from "@/components/common/visibility-badge";
+import { EnvironmentLookup } from "@/components/common/environment-lookup";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -234,6 +235,7 @@ function BlastRadiusContent() {
   // immediately; a malformed param just prefills the input for correction.
   const initialCve = searchParams.get("cve")?.trim() ?? "";
   const initialArtifact = searchParams.get("artifact")?.trim() ?? "";
+  const initialPurl = searchParams.get("purl")?.trim() ?? "";
 
   const [mode, setMode] = useState<TargetKind>(
     initialArtifact && !initialCve ? "artifact" : "cve"
@@ -814,6 +816,13 @@ function BlastRadiusContent() {
           </section>
         </>
       )}
+
+      {/* Component -> environments (#912): which registered lockfiles
+          contain a package, by package URL. Independent of the CVE /
+          artifact report above; `?purl=` deep-links a lookup. */}
+      <section className="rounded-lg border p-4" data-testid="blast-radius-environments">
+        <EnvironmentLookup initialPurl={initialPurl} />
+      </section>
     </div>
   );
 }
