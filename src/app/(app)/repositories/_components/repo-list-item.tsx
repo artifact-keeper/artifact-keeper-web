@@ -3,7 +3,8 @@
 import { Lock, Users, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
 import type { Repository, RepositoryVisibility } from "@/types";
 import { resolveVisibility } from "./visibility-select";
-import { formatBytes, REPO_TYPE_COLORS, cn } from "@/lib/utils";
+import { REPO_TYPE_COLORS, cn } from "@/lib/utils";
+import { repoSizeLabel } from "@/lib/repo-size";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -98,7 +99,7 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
               </span>
               <span className="text-muted-foreground">·</span>
               <span className="text-[11px] text-muted-foreground">
-                {formatBytes(repo.storage_used_bytes)}
+                {repoSizeLabel(repo).text}
               </span>
             </div>
             {artifactMatchCount && (

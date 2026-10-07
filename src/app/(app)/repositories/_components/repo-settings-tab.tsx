@@ -792,6 +792,16 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             <span className="font-medium text-foreground">
               {formatBytes(repository.storage_used_bytes)}
             </span>
+            {repository.repo_type === "virtual" &&
+              typeof repository.member_storage_used_bytes === "number" && (
+                <>
+                  {" "}(its members hold{" "}
+                  <span className="font-medium text-foreground">
+                    {formatBytes(repository.member_storage_used_bytes)}
+                  </span>
+                  )
+                </>
+              )}
             {repository.quota_bytes ? (
               <>
                 {" "}of{" "}

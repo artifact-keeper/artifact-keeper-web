@@ -1351,3 +1351,22 @@ describe("repositoriesApi — three-state visibility (backend artifact-keeper#38
     warn.mockRestore();
   });
 });
+
+describe("repositoriesApi — member_storage_used_bytes (#958, backend artifact-keeper#4423)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("carries a virtual repository's member bytes", async () => {
+    mockGetRepository.mockResolvedValue({
+      data: sdkRepo({ repo_type: "virtual", storage_used_bytes: 0, member_storage_used_bytes: 4096 }),
+      error: undefined,
+    });
+    const repo = await repositoriesApi.get("v");
+    expect(repo.storage_used_bytes).toBe(0);
+    expect(repo.member_storage_used_bytes).toBe(4096);
+  });
+
+  it("is null when the backend omits it", async () => {
+    mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
+    expect((await repositoriesApi.get("r")).member_storage_used_bytes).toBeNull();
+  });
+});

@@ -89,6 +89,14 @@ export interface Repository {
    */
   versioning_enabled?: boolean;
   storage_used_bytes: number;
+  /**
+   * Virtual repositories only (backend artifact-keeper#4423, 1.11.0): the
+   * combined size of the members the caller can see. A virtual repository's
+   * own `storage_used_bytes` is 0 from 1.11.0 (it stores nothing); totals
+   * across repositories keep summing `storage_used_bytes`. `null`/absent for
+   * other types and older backends.
+   */
+  member_storage_used_bytes?: number | null;
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;

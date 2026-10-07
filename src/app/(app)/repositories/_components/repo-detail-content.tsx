@@ -173,6 +173,7 @@ import {
   isCondaWithdrawal,
 } from "@/lib/conda";
 import { condaApi, noticeForPackage } from "@/lib/api/conda";
+import { repoHeaderSize } from "@/lib/repo-size";
 import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
@@ -1059,7 +1060,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
               <span className="text-sm text-muted-foreground ml-2">
-                {formatBytes(repository.storage_used_bytes)} used
+                {repoHeaderSize(repository)}
               </span>
             </div>
 
@@ -1105,7 +1106,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
             <span className="text-sm text-muted-foreground ml-2">
-              {formatBytes(repository.storage_used_bytes)} used
+              {repoHeaderSize(repository)}
             </span>
           </div>
           {repository.description && (
