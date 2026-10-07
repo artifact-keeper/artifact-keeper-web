@@ -12,6 +12,12 @@ interface QuarantineBadgeProps {
   reason?: string | null;
   quarantineUntil?: string | null;
   className?: string;
+  /**
+   * The hold is a conda channel withdrawal (backend artifact-keeper#4059): a
+   * permanent hold that also drops the package from repodata and names it in
+   * `removed`. Labelled as such instead of "Quarantined".
+   */
+  withdrawn?: boolean;
 }
 
 /**
@@ -23,7 +29,9 @@ export function QuarantineBadge({
   reason,
   quarantineUntil,
   className,
+  withdrawn,
 }: QuarantineBadgeProps) {
+  const label = withdrawn ? "Withdrawn" : "Quarantined";
   const expiry = formatQuarantineExpiry(quarantineUntil);
 
   const tooltipLines: string[] = [];
@@ -37,10 +45,10 @@ export function QuarantineBadge({
         "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400 gap-1",
         className
       )}
-      aria-label="Quarantined"
+      aria-label={label}
     >
       <ShieldAlert className="size-3" aria-hidden="true" />
-      Quarantined
+      {label}
     </Badge>
   );
 

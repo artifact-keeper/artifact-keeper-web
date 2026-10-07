@@ -45,3 +45,21 @@ describe("isCondaFormat", () => {
     expect(isCondaFormat("pypi")).toBe(false);
   });
 });
+
+import { isCondaWithdrawal, condaFilename } from "../conda";
+
+describe("isCondaWithdrawal", () => {
+  const noticed = new Set(["acme-core-0.1.0-py_0.conda"]);
+  it("needs a block and a channel notice naming the file", () => {
+    expect(isCondaWithdrawal("conda", true, "acme-core-0.1.0-py_0.conda", noticed)).toBe(true);
+    // A policy hold with no notice is not a withdrawal.
+    expect(isCondaWithdrawal("conda", true, "acme-report-1.0.0-py_0.conda", noticed)).toBe(false);
+    // Released again: the old notice no longer makes it withdrawn.
+    expect(isCondaWithdrawal("conda", false, "acme-core-0.1.0-py_0.conda", noticed)).toBe(false);
+    expect(isCondaWithdrawal("pypi", true, "acme-core-0.1.0-py_0.conda", noticed)).toBe(false);
+  });
+
+  it("takes the file name from the channel path", () => {
+    expect(condaFilename("noarch/acme-core-0.1.0-py_0.conda")).toBe("acme-core-0.1.0-py_0.conda");
+  });
+});

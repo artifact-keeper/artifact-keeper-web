@@ -69,3 +69,26 @@ export function condaPackageFields(
     depends,
   };
 }
+
+/**
+ * Whether a blocked conda artifact reads as withdrawn from its channel. A
+ * withdrawal (backend artifact-keeper#4059) is a permanent hold plus a CEP-6
+ * notice naming the package file. The hold alone is not enough: a promotion
+ * policy or a scan also places permanent holds, and those are not
+ * withdrawals. So a package reads as withdrawn only while it is blocked AND
+ * the channel's notices name its file.
+ */
+export function isCondaWithdrawal(
+  format: string | null | undefined,
+  blocked: boolean,
+  filename: string,
+  noticedFiles: ReadonlySet<string>,
+): boolean {
+  return isCondaFormat(format) && blocked && noticedFiles.has(filename);
+}
+
+/** The package file name of a conda artifact path (`<subdir>/<file>`). */
+export function condaFilename(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments[segments.length - 1] ?? path;
+}

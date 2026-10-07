@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Boxes,
+  Megaphone,
   Bell,
   Check,
   Download,
@@ -165,11 +166,19 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
-import { condaPackageFields, isCondaFormat } from "@/lib/conda";
+import {
+  condaFilename,
+  condaPackageFields,
+  isCondaFormat,
+  isCondaWithdrawal,
+} from "@/lib/conda";
+import { condaApi, noticeForPackage } from "@/lib/api/conda";
 import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
 import { EnvironmentsTabContent } from "./environments-tab-content";
+import { CondaWithdrawButton } from "./conda-withdraw-dialog";
+import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -356,6 +365,40 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     ? null
     : (fetchedQuarantine ?? selectedArtifact);
   const quarantineBlocked = isActivelyQuarantined(quarantine);
+  // A conda withdrawal is a permanent hold plus a CEP-6 notice naming the
+  // file; a policy or scan hold has no notice. One notices fetch per hosted
+  // conda channel tells the two apart for the rows and the dialog.
+  // Best-effort: no notices (older backend, fetch failure) keeps the generic
+  // quarantine wording.
+  const { data: channelNotices } = useQuery({
+    queryKey: ["conda-notices", repoKey],
+    queryFn: () => condaApi.getNotices(repoKey),
+    enabled:
+      isCondaFormat(repoFormat) &&
+      (repository?.repo_type === "local" || repository?.repo_type === "staging"),
+    retry: false,
+  });
+  const noticedFiles = useMemo(
+    () =>
+      new Set(
+        (channelNotices ?? [])
+          .map((n) => n.package)
+          .filter((f): f is string => !!f),
+      ),
+    [channelNotices],
+  );
+  const selectedWithdrawn =
+    !!selectedArtifact &&
+    isCondaWithdrawal(
+      repoFormat,
+      quarantineBlocked,
+      condaFilename(selectedArtifact.path),
+      noticedFiles,
+    );
+  const selectedNotice =
+    selectedWithdrawn && selectedArtifact
+      ? noticeForPackage(channelNotices, condaFilename(selectedArtifact.path))
+      : undefined;
   // Download stats for the detail dialog's "Last downloaded" row (#472).
   // Best-effort: if the stats fetch fails (older backend, transient error)
   // the row is simply hidden — the dialog itself is unaffected.
@@ -687,6 +730,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <QuarantineBadge
               quarantineUntil={a.quarantine_until}
               className="shrink-0"
+              withdrawn={isCondaWithdrawal(
+                repoFormat,
+                true,
+                condaFilename(a.path),
+                noticedFiles,
+              )}
             />
           )}
         </div>
@@ -1138,6 +1187,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Tracks
               </TabsTrigger>
             )}
+          {isConda &&
+            (repository.repo_type === "local" || repository.repo_type === "staging") && (
+              <TabsTrigger value="notices">
+                <Megaphone className="size-3.5 mr-1" />
+                Notices
+              </TabsTrigger>
+            )}
           {isAuthenticated && (
             <TabsTrigger value="environments">
               <Boxes className="size-3.5 mr-1" />
@@ -1380,6 +1436,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </TabsContent>
           )}
 
+        {/* --- Notices Tab (conda CEP-6 channel notices, #913) --- */}
+        {isConda &&
+          (repository.repo_type === "local" || repository.repo_type === "staging") && (
+            <TabsContent value="notices" className="mt-4">
+              <ChannelNoticesPanel repoKey={repoKey} />
+            </TabsContent>
+          )}
+
         {/* --- Environments Tab (registered lockfiles, PURL lookup) --- */}
         {isAuthenticated && (
           <TabsContent value="environments" className="mt-4">
@@ -1547,6 +1611,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               reason={quarantine?.quarantine_reason}
               quarantineUntil={quarantine?.quarantine_until}
               status={quarantine?.quarantine_status}
+              withdrawn={selectedWithdrawn}
+              notice={selectedNotice?.message}
             />
           )}
           {selectedArtifact && (
@@ -1848,6 +1914,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </Button>
                   </>
                 )}
+                {user?.is_admin &&
+                  isConda &&
+                  (repository.repo_type === "local" || repository.repo_type === "staging") &&
+                  !selectedWithdrawn && (
+                    <CondaWithdrawButton repoKey={repoKey} path={selectedArtifact.path} />
+                  )}
                 <Button
                   variant="destructive"
                   onClick={() => {

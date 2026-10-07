@@ -17,6 +17,13 @@ interface QuarantineBannerProps {
    * a release that will never come.
    */
   status?: string | null;
+  /**
+   * A conda channel withdrawal (backend artifact-keeper#4059): the package is
+   * gone from the channel's repodata and listed in its `removed` array, and a
+   * CEP-6 notice was published. `notice` is that notice's text when found.
+   */
+  withdrawn?: boolean;
+  notice?: string | null;
 }
 
 /**
@@ -28,9 +35,41 @@ export function QuarantineBanner({
   reason,
   quarantineUntil,
   status,
+  withdrawn,
+  notice,
 }: QuarantineBannerProps) {
   const expiry = formatQuarantineExpiry(quarantineUntil);
   const rejected = status === "rejected";
+
+  if (withdrawn) {
+    return (
+      <Alert
+        className="border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+        data-testid="withdrawn-banner"
+      >
+        <ShieldAlert className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <AlertTitle className="font-semibold">
+          This package was withdrawn from the channel
+        </AlertTitle>
+        <AlertDescription>
+          <div className="space-y-1">
+            <p>
+              It is no longer in the channel&apos;s repodata and is listed in its{" "}
+              <code>removed</code> array; downloads are refused. The record is
+              kept for audit and can be released by an administrator.
+            </p>
+            {notice ? (
+              <p>
+                <span className="font-medium">Channel notice (CEP-6):</span> {notice}
+              </p>
+            ) : (
+              reason && <p>{reason}</p>
+            )}
+          </div>
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <Alert
