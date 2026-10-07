@@ -21,6 +21,8 @@ describe("ArtifactAttestationSection", () => {
           attestation_verification: {
             verified: true,
             method: "sigstore-key",
+            identity: "ci",
+            issuer: "key:53ff3ea8b0f33847",
             key_fingerprint: "SHA256:k3y",
             verified_at: "2026-10-06T10:00:00Z",
           },
@@ -29,6 +31,10 @@ describe("ArtifactAttestationSection", () => {
     );
     expect(screen.getByText("Verified")).toBeInTheDocument();
     expect(screen.getByText("SHA256:k3y")).toBeInTheDocument();
+    // Key-based: the key's name is labelled as such and the synthetic
+    // `key:<id>` issuer is not shown as an OIDC issuer.
+    expect(screen.getByText("Key name")).toBeInTheDocument();
+    expect(screen.queryByText("Issuer")).toBeNull();
     expect(screen.getByText(/configured key/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /\.sigs sidecar/ })).toHaveAttribute(
       "href",

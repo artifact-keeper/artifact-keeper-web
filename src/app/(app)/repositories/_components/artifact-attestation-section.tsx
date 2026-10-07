@@ -67,6 +67,7 @@ export function ArtifactAttestationSection({
 }) {
   const att = readAttestation(metadata);
   const badge = STATE_BADGE[att.state];
+  const keyBased = att.method === "sigstore-key";
   const base = channel
     ? `/conda/${encodeURIComponent(channel.repoKey)}/${channel.path
         .split("/")
@@ -91,17 +92,20 @@ export function ArtifactAttestationSection({
         </p>
       )}
       {att.method && <Row label="Method">{attestationMethodLabel(att.method)}</Row>}
+      {/* A key-signed bundle has no certificate: the backend records the
+          trusted key's configured name as `identity` and `key:<id>` as
+          `issuer`, so show them as the key rather than as an OIDC identity. */}
       {att.identity && (
-        <Row label="Identity">
+        <Row label={keyBased ? "Key name" : "Identity"}>
           <span className="font-mono text-xs">{att.identity}</span>
         </Row>
       )}
       {att.keyFingerprint && (
-        <Row label="Key">
+        <Row label="Key fingerprint">
           <span className="font-mono text-xs">{att.keyFingerprint}</span>
         </Row>
       )}
-      {att.issuer && (
+      {att.issuer && !(keyBased && att.issuer.startsWith("key:")) && (
         <Row label="Issuer">
           <span className="font-mono text-xs">{att.issuer}</span>
         </Row>
