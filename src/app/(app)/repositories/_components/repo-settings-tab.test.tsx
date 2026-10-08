@@ -12,9 +12,15 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import type { Repository } from "@/types";
+import { backendAtLeast as realBackendAtLeast } from "@/lib/backend-version";
 
 // jsdom doesn't provide ResizeObserver
 beforeAll(() => {
+  // radix Select needs these in jsdom, same as `release-target-settings.test.tsx`
+  // and `promotion-dialog.test.tsx` do for their own Selects.
+  (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = () => {};
+  (Element.prototype as unknown as { hasPointerCapture: () => boolean }).hasPointerCapture = () => false;
+  (Element.prototype as unknown as { releasePointerCapture: () => void }).releasePointerCapture = () => {};
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -27,6 +33,18 @@ afterEach(() => {
 });
 
 // Mock sonner toast
+// The settings tab reads the server-wide guest-access policy to decide whether
+// the `public` visibility option is offered. Mocked the same way
+// `repo-dialogs.test.tsx` does, with a mutable object so a test can disable
+// guest access and a root-level reset so that never leaks into another suite.
+const mockFlags = { guestAccessEnabled: true };
+vi.mock("@/providers/system-config-provider", () => ({
+  useFeatureFlags: () => mockFlags,
+}));
+beforeEach(() => {
+  mockFlags.guestAccessEnabled = true;
+});
+
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
@@ -47,10 +65,20 @@ vi.mock("@/lib/api/repositories", () => ({
     getCacheTtl: (...args: unknown[]) => mockGetCacheTtl(...args),
     setCacheTtl: (...args: unknown[]) => mockSetCacheTtl(...args),
   },
-  // Mirrors the real predicate (#853): only the hosted types may enable the
-  // package age policy. Kept inline so the mock stays free of SDK imports.
-  supportsAgePolicy: (repoType: string) =>
-    repoType === "local" || repoType === "staging",
+  // Mirrors the real predicate (#853, artifact-keeper#4264): the hosted types
+  // always, remote from backend 1.11.0. Kept inline so the mock stays free of
+  // SDK imports; the version comparison is the real helper.
+  supportsAgePolicy: (repoType: string, version?: string | null) =>
+    repoType === "local" ||
+    repoType === "staging" ||
+    (repoType === "remote" && realBackendAtLeast(version, "1.11.0")),
+}));
+
+// The age-policy gate reads the backend version from the cached `/health`
+// query. Defaults to 1.10.0 (the #863 behaviour); gate tests override it.
+const mockGetHealth = vi.fn();
+vi.mock("@/lib/api/admin", () => ({
+  adminApi: { getHealth: (...args: unknown[]) => mockGetHealth(...args) },
 }));
 
 // Mock the shared admin-settings hook (used for the read-only upload limit, #189)
@@ -285,6 +313,8 @@ const defaultScanConfig = {
 };
 mockGetScanConfig.mockResolvedValue(defaultScanConfig);
 
+mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.0" });
+
 // Default age-gate config (#701): enabled with a 7-day minimum. Individual
 // tests override with mockResolvedValue/mockResolvedValueOnce.
 mockGetAgeGateConfig.mockResolvedValue({
@@ -301,6 +331,23 @@ function createWrapper() {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }
   return TestWrapper;
+}
+
+/**
+ * The `@/components/ui/select` mock above renders every Select as a bare
+ * `<select data-testid="mock-select">`, so the visibility control has to be
+ * picked out by its options rather than by an accessible name.
+ */
+function visibilitySelect(): HTMLSelectElement {
+  const select = screen
+    .getAllByTestId("mock-select")
+    .find((el) =>
+      Array.from((el as HTMLSelectElement).options).some(
+        (o) => o.value === "internal"
+      )
+    );
+  if (!select) throw new Error("visibility select not rendered");
+  return select as HTMLSelectElement;
 }
 
 describe("RepoSettingsTab - General Section", () => {
@@ -326,9 +373,8 @@ describe("RepoSettingsTab - General Section", () => {
       "value",
       "Production Maven artifacts"
     );
-    expect(
-      screen.getByLabelText("Public Access").getAttribute("aria-checked")
-    ).toBe("true");
+    // `baseRepo` is public, so the control reflects that.
+    expect(visibilitySelect().value).toBe("public");
   });
 
   it("renders the General section heading", () => {
@@ -444,16 +490,16 @@ describe("RepoSettingsTab - General Section", () => {
     await user.clear(descInput);
     await user.type(descInput, "New description");
 
-    // Toggle visibility
-    const visSwitch = screen.getByLabelText("Public Access");
-    await user.click(visSwitch);
+    // Change visibility public -> internal. The patch must carry `visibility`,
+    // not the legacy boolean: `is_public: false` cannot express `internal`.
+    fireEvent.change(visibilitySelect(), { target: { value: "internal" } });
 
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith("maven-releases", {
         description: "New description",
-        is_public: false,
+        visibility: "internal",
       });
     });
   });
@@ -508,7 +554,7 @@ describe("RepoSettingsTab - General Section", () => {
 
     expect(
       screen.getByText(
-        /public repositories allow unauthenticated read access/i
+        /anyone can read, including unauthenticated callers/i
       )
     ).toBeTruthy();
   });
@@ -1196,6 +1242,129 @@ describe("RepoSettingsTab - Package Age Policy on proxy types (#853)", () => {
     );
 
     expect(screen.getByLabelText("Enable age policy")).toBeTruthy();
+  });
+});
+
+describe("RepoSettingsTab - Package Age Policy version gate (artifact-keeper#4264)", () => {
+  const remoteRepo: Repository = { ...baseRepo, key: "npm-proxy", repo_type: "remote" };
+  const virtualRepo: Repository = { ...baseRepo, key: "npm-all", repo_type: "virtual" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockListPolicies.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.0" });
+  });
+
+  function renderOn(version: string, repository: Repository) {
+    mockGetHealth.mockResolvedValue({ status: "healthy", version });
+    return render(<RepoSettingsTab repository={repository} />, {
+      wrapper: createWrapper(),
+    });
+  }
+
+  describe("gate on (backend 1.11.0)", () => {
+    it("offers the editable form on a remote repository and saves it", async () => {
+      mockUpdateAgePolicy.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderOn("1.11.0", remoteRepo);
+
+      const toggle = await screen.findByLabelText("Enable age policy");
+      expect(screen.queryByTestId("age-policy-proxy-note")).toBeNull();
+      expect(screen.queryByTestId("age-policy-virtual-note")).toBeNull();
+      await user.click(toggle);
+      await user.click(screen.getByRole("button", { name: /save age policy/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateAgePolicy).toHaveBeenCalledWith(
+          "npm-proxy",
+          expect.objectContaining({ enabled: true })
+        );
+      });
+    });
+
+    it("shows the form locked on a virtual repository, pointing at member remotes", async () => {
+      renderOn("1.11.0", virtualRepo);
+
+      const note = await screen.findByTestId("age-policy-virtual-note");
+      expect(note.textContent).toMatch(/caches nothing itself/i);
+      expect(note.textContent).toMatch(/member Remote repositories/);
+      expect(screen.queryByTestId("age-policy-proxy-note")).toBeNull();
+      expect(
+        (screen.getByLabelText("Enable age policy") as HTMLButtonElement).disabled
+      ).toBe(true);
+      expect(
+        (screen.getByLabelText("Cooldown period") as HTMLInputElement).disabled
+      ).toBe(true);
+      expect(
+        (screen.getByRole("button", { name: /save age policy/i }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true);
+      expect(
+        screen.queryByRole("button", { name: /disable age policy/i })
+      ).toBeNull();
+    });
+
+    it("keeps the disable action for a virtual repository carrying an old policy", async () => {
+      mockUpdateAgePolicy.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderOn("1.11.0", {
+        ...virtualRepo,
+        quarantine_enabled: true,
+        quarantine_duration_minutes: 1440,
+      });
+
+      await screen.findByTestId("age-policy-virtual-note");
+      await user.click(screen.getByRole("button", { name: /disable age policy/i }));
+      await waitFor(() => {
+        expect(mockUpdateAgePolicy).toHaveBeenCalledWith("npm-all", {
+          enabled: false,
+          duration_minutes: 1440,
+        });
+      });
+    });
+
+    it("leaves local repositories editable", async () => {
+      renderOn("1.11.0", baseRepo);
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      expect(
+        (screen.getByLabelText("Enable age policy") as HTMLButtonElement).disabled
+      ).toBe(false);
+      expect(screen.queryByTestId("age-policy-virtual-note")).toBeNull();
+    });
+  });
+
+  describe("gate off (backend 1.10.0)", () => {
+    it("keeps the #863 read-only panel on a remote repository", async () => {
+      renderOn("1.10.0", remoteRepo);
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      expect(screen.getByTestId("age-policy-proxy-note")).toBeTruthy();
+      expect(screen.queryByLabelText("Enable age policy")).toBeNull();
+    });
+
+    it("keeps the #863 read-only panel on a virtual repository", async () => {
+      renderOn("1.10.0", virtualRepo);
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      expect(screen.getByTestId("age-policy-proxy-note")).toBeTruthy();
+      expect(screen.queryByTestId("age-policy-virtual-note")).toBeNull();
+      expect(screen.queryByLabelText("Enable age policy")).toBeNull();
+    });
+
+    it("treats an unreleased 1.11.0-dev build as the older backend", async () => {
+      renderOn("1.11.0-dev", remoteRepo);
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      expect(screen.getByTestId("age-policy-proxy-note")).toBeTruthy();
+    });
+
+    it("leaves local repositories editable", async () => {
+      renderOn("1.10.0", baseRepo);
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      expect(
+        (screen.getByLabelText("Enable age policy") as HTMLButtonElement).disabled
+      ).toBe(false);
+    });
   });
 });
 

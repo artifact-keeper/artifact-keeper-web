@@ -55,3 +55,10 @@ export function backendAtLeast(
  * tokens (`POST /api/v1/auth/tokens`, artifact-keeper#4219).
  */
 export const PERSONAL_TOKEN_REPO_SELECTOR_MIN = "1.11.0";
+
+/**
+ * Backend release that accepts the package age policy on Remote (proxy)
+ * repositories: proxied content carries a releasable, release-date-aware
+ * hold from artifact-keeper#4264 (#3912). Earlier backends answer 400.
+ */
+export const PROXY_AGE_POLICY_MIN = "1.11.0";

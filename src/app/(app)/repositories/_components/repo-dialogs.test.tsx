@@ -102,6 +102,22 @@ const defaultProps = {
   availableRepos: [],
 };
 
+/**
+ * The `@/components/ui/select` mock above renders every Select as a bare
+ * `<select data-testid="mock-select">`, so the visibility control is picked out
+ * by its options rather than by an accessible name.
+ */
+function visibilitySelect(scope?: HTMLElement): HTMLSelectElement {
+  const q = scope ? within(scope) : screen;
+  const select = q
+    .getAllByTestId('mock-select')
+    .find((el) =>
+      Array.from((el as HTMLSelectElement).options).some((o) => o.value === 'internal')
+    );
+  if (!select) throw new Error('visibility select not rendered');
+  return select as HTMLSelectElement;
+}
+
 describe('RepoDialogs - Staging Hint', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -327,22 +343,18 @@ describe('RepoDialogs - Create Dialog', () => {
     expect(screen.getByText(/no.*local or remote repositories available/i)).toBeTruthy();
   });
 
-  it('defaults the public switch to unchecked (private by default)', () => {
+  it('defaults visibility to private', () => {
     render(<RepoDialogs {...defaultProps} />);
 
-    const publicSwitch = screen.getByRole('switch');
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(visibilitySelect().value).toBe('private');
   });
 
-  it('toggles public switch', async () => {
-    const user = userEvent.setup();
+  it('changes visibility', () => {
     render(<RepoDialogs {...defaultProps} />);
 
-    const publicSwitch = screen.getByRole('switch');
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
-
-    await user.click(publicSwitch);
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('true');
+    expect(visibilitySelect().value).toBe('private');
+    fireEvent.change(visibilitySelect(), { target: { value: 'internal' } });
+    expect(visibilitySelect().value).toBe('internal');
   });
 
   // Regression: form state must reset when the dialog is reopened after a
@@ -384,24 +396,28 @@ describe('RepoDialogs - Guest access gating', () => {
     vi.clearAllMocks();
   });
 
-  it('hides the public switch and shows a note in the create dialog when guest access is disabled', () => {
+  it('withdraws the public option but keeps the control in the create dialog when guest access is disabled', () => {
     mockFlags.guestAccessEnabled = false;
     render(<RepoDialogs {...defaultProps} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).queryByRole('switch')).toBeNull();
+    // The control stays: choosing between internal and private is still the
+    // operator's call. Only `public` is withdrawn.
+    const values = Array.from(visibilitySelect(dialog).options).map((o) => o.value);
+    expect(values).toEqual(['internal', 'private']);
     expect(
-      within(dialog).getByText('Public repositories are disabled by the operator.')
+      within(dialog).getByText(/public repositories are disabled by the operator/i)
     ).toBeTruthy();
   });
 
-  it('shows the public switch in the create dialog when guest access is enabled', () => {
+  it('offers all three visibility states in the create dialog when guest access is enabled', () => {
     render(<RepoDialogs {...defaultProps} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('switch')).toBeTruthy();
+    const values = Array.from(visibilitySelect(dialog).options).map((o) => o.value);
+    expect(values).toEqual(['public', 'internal', 'private']);
     expect(
-      within(dialog).queryByText('Public repositories are disabled by the operator.')
+      within(dialog).queryByText(/public repositories are disabled by the operator/i)
     ).toBeNull();
   });
 
@@ -417,13 +433,18 @@ describe('RepoDialogs - Guest access gating', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).queryByRole('switch')).toBeNull();
+    // `mockEditRepo` is public, a state set before the policy changed. It must
+    // still render its own value rather than an empty box, or saving would
+    // silently move the repository.
+    const values = Array.from(visibilitySelect(dialog).options).map((o) => o.value);
+    expect(values).toEqual(['public', 'internal', 'private']);
+    expect(visibilitySelect(dialog).value).toBe('public');
     expect(
-      within(dialog).getByText('Public repositories are disabled by the operator.')
+      within(dialog).getByText(/public repositories are disabled by the operator/i)
     ).toBeTruthy();
   });
 
-  it('shows the public switch in the edit dialog when guest access is enabled', () => {
+  it('offers all three visibility states in the edit dialog when guest access is enabled', () => {
     render(
       <RepoDialogs
         {...defaultProps}
@@ -434,13 +455,14 @@ describe('RepoDialogs - Guest access gating', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByRole('switch')).toBeTruthy();
+    const values = Array.from(visibilitySelect(dialog).options).map((o) => o.value);
+    expect(values).toEqual(['public', 'internal', 'private']);
     expect(
-      within(dialog).queryByText('Public repositories are disabled by the operator.')
+      within(dialog).queryByText(/public repositories are disabled by the operator/i)
     ).toBeNull();
   });
 
-  it('submits is_public: false when the public switch is left untouched', async () => {
+  it('submits visibility: private when the control is left untouched', async () => {
     const onCreateSubmit = vi.fn();
     const user = userEvent.setup();
     render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
@@ -451,7 +473,7 @@ describe('RepoDialogs - Guest access gating', () => {
     await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
 
     expect(onCreateSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ is_public: false })
+      expect.objectContaining({ visibility: 'private' })
     );
   });
 });
@@ -530,6 +552,33 @@ describe('RepoDialogs - Edit Dialog', () => {
       'test-repo',
       expect.objectContaining({ name: 'Updated Repo' })
     );
+  });
+
+  it('omits visibility when only the name changed', async () => {
+    // Resending an unchanged `public` with guest access disabled would make
+    // the backend coerce the repository to `private` on an unrelated edit.
+    const onEditSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <RepoDialogs
+        {...defaultProps}
+        createOpen={false}
+        editOpen={true}
+        editRepo={mockEditRepo}
+        onEditSubmit={onEditSubmit}
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const nameInput = within(dialog).getByDisplayValue('Test Repo');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Renamed');
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
+
+    expect(onEditSubmit).toHaveBeenCalledTimes(1);
+    const submitData = onEditSubmit.mock.calls[0][1];
+    expect(submitData.name).toBe('Renamed');
+    expect('visibility' in submitData).toBe(false);
   });
 
   it('includes new key in submit data when key is changed', async () => {
@@ -1450,7 +1499,7 @@ describe('RepoDialogs - Edit Dialog Additional Coverage', () => {
     );
   });
 
-  it('toggles public switch in edit dialog', async () => {
+  it('changes visibility in edit dialog', async () => {
     const onEditSubmit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -1464,17 +1513,16 @@ describe('RepoDialogs - Edit Dialog Additional Coverage', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    const publicSwitch = within(dialog).getByRole('switch');
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('true');
-
-    await user.click(publicSwitch);
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
+    // `mockEditRepo` is public; move it to internal, the state the old boolean
+    // switch could not express at all.
+    expect(visibilitySelect(dialog).value).toBe('public');
+    fireEvent.change(visibilitySelect(dialog), { target: { value: 'internal' } });
 
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
 
     expect(onEditSubmit).toHaveBeenCalledWith(
       'test-repo',
-      expect.objectContaining({ is_public: false })
+      expect.objectContaining({ visibility: 'internal' })
     );
   });
 
@@ -1812,7 +1860,7 @@ describe('RepoDialogs - Edit Dialog Additional Coverage', () => {
     );
   });
 
-  it('toggles public switch in edit dialog', async () => {
+  it('changes visibility in edit dialog', async () => {
     const onEditSubmit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -1826,17 +1874,16 @@ describe('RepoDialogs - Edit Dialog Additional Coverage', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    const publicSwitch = within(dialog).getByRole('switch');
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('true');
-
-    await user.click(publicSwitch);
-    expect(publicSwitch.getAttribute('aria-checked')).toBe('false');
+    // `mockEditRepo` is public; move it to internal, the state the old boolean
+    // switch could not express at all.
+    expect(visibilitySelect(dialog).value).toBe('public');
+    fireEvent.change(visibilitySelect(dialog), { target: { value: 'internal' } });
 
     await user.click(within(dialog).getByRole('button', { name: /save changes/i }));
 
     expect(onEditSubmit).toHaveBeenCalledWith(
       'test-repo',
-      expect.objectContaining({ is_public: false })
+      expect.objectContaining({ visibility: 'internal' })
     );
   });
 

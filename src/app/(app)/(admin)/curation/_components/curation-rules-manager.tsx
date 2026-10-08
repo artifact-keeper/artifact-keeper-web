@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import {
+  INVALID_RULE_NOTE,
   curationRulesApi,
   type CurationRule,
   type CreateRuleRequest,
@@ -33,6 +34,7 @@ import {
   clampDistance,
 } from "@/lib/api/curation-rules";
 import { useRepositories } from "@/hooks/use-repositories";
+import { isCondaFormat } from "@/lib/conda";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 
 import { Button } from "@/components/ui/button";
@@ -139,6 +141,56 @@ interface RuleFormState {
   affix_max_downloads: number | undefined;
   pop_action: string;
   popular_packages: string; // comma/newline separated
+}
+
+/**
+ * Whether the rule's version constraint is evaluated with conda semantics:
+ * the target staging repository is conda, or the rule is global (it then
+ * also applies to conda repositories). artifact-keeper#4141.
+ */
+export function condaVersionHelp(
+  form: Pick<RuleFormState, "scope" | "staging_repo_id">,
+  stagingRepos: Array<{ id: string; format: string }>,
+): boolean {
+  if (form.scope === "global") return true;
+  const repo = stagingRepos.find((r) => r.id === form.staging_repo_id);
+  return isCondaFormat(repo?.format);
+}
+
+/**
+ * Conda version-constraint help (#916). Since artifact-keeper#4141 a conda
+ * repository's version constraint is a conda version spec evaluated with
+ * rattler: conda ordering (pre-releases below releases, epochs), `*` globs,
+ * and comma-joined bounds. It is not a full MatchSpec: no package name and
+ * no build string, and a bare or `=` version is exact, not a prefix.
+ */
+function CondaVersionHelp({ global }: { global: boolean }) {
+  return (
+    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1" data-testid="conda-version-help">
+      <p className="font-medium text-foreground">
+        {global ? "For conda repositories, the" : "The"} version is a conda version spec
+      </p>
+      <ul className="list-disc pl-4 space-y-0.5">
+        <li>
+          <code>1.2.*</code>: every 1.2 release (1.2, 1.2.0, 1.2.9).
+        </li>
+        <li>
+          <code>&gt;=1.2,&lt;2</code>: from 1.2 up to, not including, 2. Conda orders
+          pre-releases below their release, so <code>2.0a1</code> is inside this range
+          and <code>&lt;2.0a0</code> excludes it.
+        </li>
+        <li>
+          <code>1.2.3</code> or <code>=1.2.3</code>: exactly that version. Unlike a
+          conda MatchSpec, <code>=1.2</code> here is not a prefix match; write{" "}
+          <code>1.2.*</code>.
+        </li>
+      </ul>
+      <p>
+        Build strings (for example <code>py311_0</code>) are not matched by
+        curation rules; the rule applies to every build of a matching version.
+      </p>
+    </div>
+  );
 }
 
 const emptyForm: RuleFormState = {
@@ -460,12 +512,12 @@ export function CurationRulesManager() {
                         {pt && pt.problems.length > 0 && (
                           <Badge
                             variant="destructive"
-                            title={pt.problems.join("; ")}
+                            title={[...pt.problems, INVALID_RULE_NOTE].join("; ")}
                           >
                             <AlertCircle className="size-3" />
                             Invalid
                             <span className="sr-only">
-                              : {pt.problems.join("; ")}
+                              : {[...pt.problems, INVALID_RULE_NOTE].join("; ")}
                             </span>
                           </Badge>
                         )}
@@ -659,6 +711,9 @@ export function CurationRulesManager() {
                   />
                 </div>
               </div>
+              {condaVersionHelp(form, stagingRepos) && (
+                <CondaVersionHelp global={form.scope === "global"} />
+              )}
 
               {/* Action (pattern rules only; typed rules use their config
                   action) + priority */}

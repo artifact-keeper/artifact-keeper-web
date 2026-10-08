@@ -147,3 +147,23 @@ describe("QuarantineBanner", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("QuarantineBanner conda withdrawal", () => {
+  it("states the withdrawal and shows the CEP-6 notice text", () => {
+    render(
+      <QuarantineBanner
+        withdrawn
+        reason="CVE-2026-0001"
+        notice="Package acme-core-0.1.0-py_0.conda was withdrawn from this channel: CVE-2026-0001"
+      />,
+    );
+    expect(screen.getByText("This package was withdrawn from the channel")).toBeInTheDocument();
+    expect(screen.getByText(/was withdrawn from this channel: CVE-2026-0001/)).toBeInTheDocument();
+    expect(screen.getByText("removed")).toBeInTheDocument();
+  });
+
+  it("falls back to the hold reason when no notice is found", () => {
+    render(<QuarantineBanner withdrawn reason="Withdrawn by administrator" />);
+    expect(screen.getByText("Withdrawn by administrator")).toBeInTheDocument();
+  });
+});

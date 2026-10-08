@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { signingApi, type SigningKey, type CreateSigningKeyRequest } from "@/lib/api/signing";
 import { mutationErrorToast, toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
+import { AttestationPolicyCard } from "./_components/attestation-policy-card";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,6 +150,10 @@ export default function SigningPage() {
           New Key
         </Button>
       </div>
+
+      <AttestationPolicyCard />
+
+      <h2 className="text-sm font-medium">Signing keys</h2>
 
       {isLoading && (
         <div className="space-y-2" role="status" aria-busy="true">

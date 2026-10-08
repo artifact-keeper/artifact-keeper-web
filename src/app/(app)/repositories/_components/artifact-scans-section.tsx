@@ -7,6 +7,7 @@ import { ShieldAlert, AlertTriangle, Clock } from "lucide-react";
 import { securityApi } from "@/lib/api/security";
 import { PROXY_SCAN_AVAILABILITY_NOTE } from "@/lib/artifact-analyzable";
 import type { ScanResult } from "@/types/security";
+import { isScanNotCataloged, NOT_CATALOGED_EXPLANATION } from "@/lib/scan-utils";
 
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,14 +65,23 @@ export function ArtifactScansSection({
       id: "status",
       header: "Status",
       accessor: (s) => s.status,
-      cell: (s) => (
-        <Badge
-          variant="outline"
-          className={`border text-xs uppercase ${SCAN_STATUS_BADGE[s.status] ?? ""}`}
-        >
-          {s.status}
-        </Badge>
-      ),
+      cell: (s) =>
+        isScanNotCataloged(s.status, s.scan_completeness) ? (
+          <Badge
+            variant="outline"
+            className="border text-xs uppercase text-amber-700 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400"
+            title={s.scan_completeness_reason ?? NOT_CATALOGED_EXPLANATION}
+          >
+            not cataloged
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className={`border text-xs uppercase ${SCAN_STATUS_BADGE[s.status] ?? ""}`}
+          >
+            {s.status}
+          </Badge>
+        ),
     },
     {
       id: "scan_type",
@@ -89,7 +99,12 @@ export function ArtifactScansSection({
       header: "Findings",
       accessor: (s) => s.findings_count,
       sortable: true,
-      cell: (s) => (
+      cell: (s) =>
+        isScanNotCataloged(s.status, s.scan_completeness) ? (
+          <span className="text-xs text-muted-foreground" title={NOT_CATALOGED_EXPLANATION}>
+            not assessed
+          </span>
+        ) : (
         <div className="flex items-center gap-2 text-xs">
           <span className="font-medium">{s.findings_count}</span>
           {s.critical_count > 0 && (
@@ -103,7 +118,7 @@ export function ArtifactScansSection({
             </Badge>
           )}
         </div>
-      ),
+        ),
     },
     {
       id: "completed_at",

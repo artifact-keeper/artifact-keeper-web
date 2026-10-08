@@ -146,7 +146,7 @@ describe("curationRulesApi", () => {
         "block",
         "flag",
       ]);
-      expect(mod.PUBLISHER_TRUST_FORMATS).toEqual(["pypi", "npm", "conda"]);
+      expect(mod.PUBLISHER_TRUST_FORMATS).toEqual(["pypi", "npm", "conda", "conda_native"]);
     });
   });
 

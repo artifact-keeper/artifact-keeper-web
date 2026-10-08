@@ -31,8 +31,10 @@ import type {
   VirtualMembersResponse,
   RepositoryFormat,
   RepositoryType,
+  RepositoryVisibility,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
+import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '@/lib/backend-version';
 
 export interface ListRepositoriesParams {
   page?: number;
@@ -124,23 +126,78 @@ export interface AgePolicyPayload {
 }
 
 /**
- * Whether the package age policy can be *enabled* on a repository of this type.
+ * Whether the package age policy can be *enabled* on a repository of this
+ * type, against a backend reporting `backendVersion` (from `/health`).
  *
- * Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true` on
- * `remote` and `virtual` repositories with a 400: proxied content is recorded
- * in `proxy_cache_artifacts`, which carries no quarantine identity, so the hold
- * has no release path and degrades into a total block on everything not already
- * cached. Only the hosted types (`local` / `staging`) qualify.
+ * - Backend 1.10.0 (artifact-keeper#3647) rejects `quarantine_enabled: true`
+ *   on `remote` and `virtual` repositories with a 400: proxied content had no
+ *   quarantine identity, so a hold had no release path. Only the hosted types
+ *   (`local` / `staging`) qualify.
+ * - Backend 1.11.0 (artifact-keeper#4264) accepts it on `remote` too: proxied
+ *   content carries a releasable, release-date-aware hold. `virtual` is still
+ *   refused with a 400 — it caches nothing itself, so the policy belongs on
+ *   its member remote repositories.
  *
- * Disabling is still accepted on every type, which is the escape hatch for rows
- * written before the gate existed — so callers must gate the enable path on
- * this, not the whole panel.
+ * An unknown version is treated as the older backend. Disabling is still
+ * accepted on every type, which is the escape hatch for rows written before
+ * the gate existed — so callers must gate the enable path on this, not the
+ * whole panel.
  */
-export function supportsAgePolicy(repoType: RepositoryType): boolean {
-  return repoType === 'local' || repoType === 'staging';
+export function supportsAgePolicy(
+  repoType: RepositoryType,
+  backendVersion?: string | null
+): boolean {
+  if (repoType === 'local' || repoType === 'staging') return true;
+  return repoType === 'remote' && backendAtLeast(backendVersion, PROXY_AGE_POLICY_MIN);
 }
 
 const REPO_TYPES = new Set<RepositoryType>(['local', 'remote', 'virtual', 'staging']);
+
+const REPO_VISIBILITIES = new Set<RepositoryVisibility>(['public', 'internal', 'private']);
+
+/**
+ * Narrow a backend `visibility` value, keeping "absent" distinct from any
+ * concrete state.
+ *
+ * `narrowEnum` cannot be used here because it must fall back to a value, and
+ * every candidate fallback is wrong: `private` would hide a public repository,
+ * `public` would widen a private one. `undefined` is the honest answer for a
+ * backend that predates artifact-keeper#3813, and it routes the caller through
+ * `resolveVisibility`'s documented `is_public` fallback. An unrecognised
+ * string is treated the same way rather than trusted.
+ */
+function narrowVisibility(value: string | null | undefined): RepositoryVisibility | undefined {
+  if (value == null) return undefined;
+  if (REPO_VISIBILITIES.has(value as RepositoryVisibility)) return value as RepositoryVisibility;
+  console.warn(
+    `repositoriesApi: unknown repository visibility "${value}" — falling back to the ` +
+      `is_public boolean. This likely means the backend added a state the UI hasn't picked up yet.`,
+  );
+  return undefined;
+}
+
+/**
+ * Attach `visibility` to a create/update body.
+ *
+ * The SDK request types do not declare the field yet (it lands when the
+ * progenitor SDK is regenerated), and both body builders here are explicit
+ * allowlists rather than spreads, so an undeclared field is otherwise dropped
+ * on the floor — silently, since TypeScript is satisfied by the local request
+ * type that does declare it.
+ *
+ * `is_public` is sent alongside it, derived from `visibility` so the pair can
+ * never contradict (the backend rejects a pair that disagrees with a 400). A
+ * backend without artifact-keeper#3813 ignores the unknown `visibility` key and
+ * acts on `is_public` alone, so Public <-> Private still takes effect there and
+ * `internal` degrades to private (fails closed) instead of being silently
+ * dropped. When no visibility is supplied the body is left untouched, so a
+ * legacy `is_public`-only caller keeps working unchanged.
+ */
+function withVisibility<T extends object>(body: T, visibility?: RepositoryVisibility): T {
+  return visibility === undefined
+    ? body
+    : { ...body, visibility, is_public: visibility === 'public' };
+}
 
 const REPO_FORMATS = new Set<RepositoryFormat>([
   'maven',
@@ -225,11 +282,27 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     format_key:
       (sdk as RepositoryResponse & { format_key?: string | null }).format_key ?? null,
     is_public: sdk.is_public,
+    // `visibility` (backend artifact-keeper#3813) is the real state; `is_public` is
+    // its deprecated boolean mirror and cannot express `internal`. The
+    // generated SDK `RepositoryResponse` does not declare the field yet, so it
+    // is read defensively the same way `format_key` is. A backend that omits
+    // it yields `undefined`, and `resolveVisibility` falls back to the boolean
+    // — which is why this must be forwarded rather than dropped: without it
+    // every `internal` repository reads back as `private`.
+    visibility: narrowVisibility(
+      (sdk as RepositoryResponse & { visibility?: string | null }).visibility,
+    ),
     // `versioning_enabled` (artifact-keeper#2367) is now carried on the
     // generated SDK type; `?? false` stays defensive against a backend that
     // predates #2367 and omits the flag at runtime.
     versioning_enabled: sdk.versioning_enabled ?? false,
     storage_used_bytes: sdk.storage_used_bytes,
+    // `member_storage_used_bytes` (#4423): not in the generated SDK yet.
+    member_storage_used_bytes: (() => {
+      const v = (sdk as RepositoryResponse & { member_storage_used_bytes?: unknown })
+        .member_storage_used_bytes;
+      return typeof v === 'number' ? v : null;
+    })(),
     quota_bytes: sdk.quota_bytes ?? undefined,
     upstream_url: sdk.upstream_url ?? undefined,
     upstream_auth_type: sdk.upstream_auth_type ?? undefined,
@@ -280,6 +353,8 @@ function adaptVirtualMember(sdk: VirtualMemberResponse): VirtualRepoMember {
     virtual_repo_id: '',
     member_repo_id: sdk.member_repo_id,
     member_repo_key: sdk.member_repo_key,
+    member_repo_name: sdk.member_repo_name ?? undefined,
+    member_repo_type: sdk.member_repo_type ?? undefined,
     priority: sdk.priority,
     created_at: sdk.created_at,
   };
@@ -336,7 +411,7 @@ export const repositoriesApi = {
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
     };
-    const data = await unwrap(createRepository({ body }));
+    const data = await unwrap(createRepository({ body: withVisibility(body, input.visibility) }));
     return adaptRepository(assertData(data, 'repositoriesApi.create'));
   },
 
@@ -369,7 +444,9 @@ export const repositoriesApi = {
       // wire so update behavior is unchanged; the cast satisfies the
       // generated-required field without sending a spurious value.
     } as SdkUpdateRepositoryRequest;
-    const data = await unwrap(updateRepository({ path: { key }, body }));
+    const data = await unwrap(
+      updateRepository({ path: { key }, body: withVisibility(body, input.visibility) }),
+    );
     return adaptRepository(assertData(data, 'repositoriesApi.update'));
   },
 
@@ -481,8 +558,10 @@ export const repositoriesApi = {
    * preserved and re-enabling does not lose the previously configured window.
    *
    * Backend 1.10.0 (artifact-keeper#3647) answers 400 when `enabled` is true on
-   * a `remote` or `virtual` repository; callers must check `supportsAgePolicy`
-   * first and surface the rejection message when a request is sent anyway.
+   * a `remote` or `virtual` repository; from 1.11.0 (artifact-keeper#4264)
+   * only `virtual` is refused. Callers must check `supportsAgePolicy` with the
+   * backend version first and surface the rejection message when a request is
+   * sent anyway.
    */
   updateAgePolicy: async (repoKey: string, payload: AgePolicyPayload): Promise<void> => {
     await apiFetch<void>(`/api/v1/repositories/${encodeURIComponent(repoKey)}`, {

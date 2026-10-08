@@ -347,6 +347,32 @@ describe("RepoDetailContent tab strip", () => {
   });
 });
 
+describe("RepoDetailContent visibility badge (#839)", () => {
+  const mutable = repository as { visibility?: string; is_public?: boolean };
+  afterEach(() => {
+    cleanup();
+    delete mutable.visibility;
+    delete mutable.is_public;
+  });
+
+  // Both header variants (panel and standalone page) render the badge.
+  it.each([false, true])(
+    "labels an internal repository Internal, not Private (standalone=%s)",
+    (standalone) => {
+      mutable.visibility = "internal";
+      render(<RepoDetailContent repoKey="demo" standalone={standalone} />);
+      expect(screen.getByText("Internal")).toBeTruthy();
+      expect(screen.queryByText("Private")).toBeNull();
+    },
+  );
+
+  it("falls back to the legacy boolean when the backend omits visibility", () => {
+    mutable.is_public = true;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(screen.getByText("Public")).toBeTruthy();
+  });
+});
+
 describe("RepoDetailContent Setup tab (#560)", () => {
   beforeEach(() => {
     cleanup();
@@ -557,6 +583,20 @@ describe("RepoDetailContent flat view classifier column (#474)", () => {
       "classifier",
     );
   });
+
+  it("adds subdir and build columns for conda repos", async () => {
+    repository.format = "conda";
+    const table = await renderArtifactsTab();
+    const cols = table.getAttribute("data-columns")?.split(",");
+    expect(cols).toContain("subdir");
+    expect(cols).toContain("build");
+  });
+
+  it("omits the conda columns for other formats", async () => {
+    repository.format = "generic";
+    const table = await renderArtifactsTab();
+    expect(table.getAttribute("data-columns")?.split(",")).not.toContain("subdir");
+  });
 });
 
 describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", () => {
@@ -654,6 +694,39 @@ describe("RepoDetailContent artifact detail dialog — Origin (#914)", () => {
     expect(within(dialog).queryByTestId("artifact-origin")).toBeNull();
     // The rest of the dialog is unaffected.
     expect(within(dialog).getByText("SHA-256")).toBeInTheDocument();
+  });
+
+  it("shows the conda package fields and attestation from the by-id record", async () => {
+    repository.format = "conda";
+    h.artifactDetail = {
+      ...artifactFixture,
+      uploaded_by_username: "ci-publisher",
+      metadata: {
+        license: "MIT",
+        attestation: { mediaType: "bundle" },
+        attestation_verification: { verified: true, method: "sigstore-key", key_fingerprint: "SHA256:k" },
+      },
+    };
+    try {
+      const dialog = await openDetailDialog();
+      expect(within(dialog).getByTestId("conda-package")).toHaveTextContent("ci-publisher");
+      expect(within(dialog).getByTestId("artifact-attestation")).toHaveTextContent("Verified");
+    } finally {
+      repository.format = "generic";
+    }
+  });
+
+  it("links admins to the download audit filtered to this artifact", async () => {
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).getByRole("link", { name: "View who downloaded this artifact" }),
+    ).toHaveAttribute("href", "/downloads?artifact_id=a1");
+  });
+
+  it("does not show the conda blocks for other formats", async () => {
+    h.artifactDetail = { ...artifactFixture, metadata: { attestation: {} } };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByTestId("artifact-attestation")).toBeNull();
   });
 });
 

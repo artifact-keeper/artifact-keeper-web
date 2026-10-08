@@ -133,13 +133,16 @@ function art(overrides: Partial<Artifact> = {}): Artifact {
 // all-clear needs an actual scan on record, so a test that wants it has to say
 // so. Defaulting it to false keeps "never scanned" the state a test falls into
 // by accident, which is the safe direction.
-function stubEmptyQueries({ scanned = false }: { scanned?: boolean } = {}) {
+function stubEmptyQueries({
+  scanned = false,
+  scans,
+}: { scanned?: boolean; scans?: unknown[] } = {}) {
   mockUseQuery.mockImplementation((opts: { queryKey: unknown[] }) => {
     const key = opts.queryKey[0];
     if (key === "cve-history") return { data: [], isLoading: false };
     if (key === "security" && opts.queryKey[1] === "artifact-scans") {
       return {
-        data: { items: scanned ? [{ id: "s1" }] : [] },
+        data: { items: scans ?? (scanned ? [{ id: "s1" }] : []) },
         isLoading: false,
       };
     }
@@ -167,6 +170,37 @@ describe("SecurityTabContent — CVE empty state (#3344)", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/This reflects the most recent scan/i)).toBeInTheDocument();
     expect(screen.queryByText(/CVE history is not available/i)).toBeNull();
+  });
+
+  it("says not cataloged, not clean, when the latest scan cataloged nothing (#4154)", () => {
+    stubEmptyQueries({
+      scans: [
+        { id: "old", scan_type: "grype", status: "completed", created_at: "2026-01-01", scan_completeness: "complete" },
+        {
+          id: "new",
+          scan_type: "grype",
+          status: "completed",
+          created_at: "2026-02-01",
+          scan_completeness: "not_cataloged",
+          scan_completeness_reason: "grype cataloged no packages",
+        },
+      ],
+    });
+    render(<SecurityTabContent artifact={art({ analyzable: true })} />);
+    expect(screen.getByTestId("vulns-not-cataloged")).toBeInTheDocument();
+    expect(screen.queryByText(/No vulnerabilities detected/i)).toBeNull();
+    expect(screen.getByText(/grype cataloged no packages/)).toBeInTheDocument();
+  });
+
+  it("keeps the all-clear once a complete scan supersedes a not-cataloged one", () => {
+    stubEmptyQueries({
+      scans: [
+        { id: "old", scan_type: "grype", status: "completed", created_at: "2026-01-01", scan_completeness: "not_cataloged" },
+        { id: "new", scan_type: "grype", status: "completed", created_at: "2026-02-01", scan_completeness: "complete" },
+      ],
+    });
+    render(<SecurityTabContent artifact={art({ analyzable: true })} />);
+    expect(screen.getByTestId("vulns-none-found")).toBeInTheDocument();
   });
 
   it("withholds the green all-clear from an analyzable artifact nothing has scanned (#883)", () => {

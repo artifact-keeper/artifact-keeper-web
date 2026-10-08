@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  Boxes,
+  Megaphone,
   Bell,
   Check,
   Download,
@@ -101,6 +104,8 @@ import { ArtifactFolderTree } from "./artifact-folder-tree";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
+import { VisibilityBadge } from "@/components/common/visibility-badge";
+import { resolveVisibility } from "@/lib/repo-visibility";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
 import { resolveInitialRepoTab } from "@/lib/repo-tabs";
@@ -161,6 +166,20 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { CopyButton } from "@/components/common/copy-button";
 import { MiddleEllipsis } from "@/components/common/middle-ellipsis";
+import {
+  condaFilename,
+  condaPackageFields,
+  isCondaFormat,
+  isCondaWithdrawal,
+} from "@/lib/conda";
+import { condaApi, noticeForPackage } from "@/lib/api/conda";
+import { repoHeaderSize } from "@/lib/repo-size";
+import { withoutAttestationBundle } from "@/lib/attestation";
+import { ArtifactAttestationSection } from "./artifact-attestation-section";
+import { CondaPackageSection } from "./conda-package-section";
+import { EnvironmentsTabContent } from "./environments-tab-content";
+import { CondaWithdrawButton } from "./conda-withdraw-dialog";
+import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 
@@ -347,6 +366,40 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     ? null
     : (fetchedQuarantine ?? selectedArtifact);
   const quarantineBlocked = isActivelyQuarantined(quarantine);
+  // A conda withdrawal is a permanent hold plus a CEP-6 notice naming the
+  // file; a policy or scan hold has no notice. One notices fetch per hosted
+  // conda channel tells the two apart for the rows and the dialog.
+  // Best-effort: no notices (older backend, fetch failure) keeps the generic
+  // quarantine wording.
+  const { data: channelNotices } = useQuery({
+    queryKey: ["conda-notices", repoKey],
+    queryFn: () => condaApi.getNotices(repoKey),
+    enabled:
+      isCondaFormat(repoFormat) &&
+      (repository?.repo_type === "local" || repository?.repo_type === "staging"),
+    retry: false,
+  });
+  const noticedFiles = useMemo(
+    () =>
+      new Set(
+        (channelNotices ?? [])
+          .map((n) => n.package)
+          .filter((f): f is string => !!f),
+      ),
+    [channelNotices],
+  );
+  const selectedWithdrawn =
+    !!selectedArtifact &&
+    isCondaWithdrawal(
+      repoFormat,
+      quarantineBlocked,
+      condaFilename(selectedArtifact.path),
+      noticedFiles,
+    );
+  const selectedNotice =
+    selectedWithdrawn && selectedArtifact
+      ? noticeForPackage(channelNotices, condaFilename(selectedArtifact.path))
+      : undefined;
   // Download stats for the detail dialog's "Last downloaded" row (#472).
   // Best-effort: if the stats fetch fails (older backend, transient error)
   // the row is simply hidden — the dialog itself is unaffected.
@@ -375,6 +428,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const selectedOrigin =
     selectedArtifact?.origin ??
     (artifactDetail?.id === selectedArtifactId ? artifactDetail?.origin : null);
+  // The by-id record also carries the uploader and the full metadata
+  // (attestation and its verification); prefer it over the listing row.
+  const selectedDetail =
+    artifactDetail?.id === selectedArtifactId ? artifactDetail : undefined;
+  const selectedMetadata = selectedDetail?.metadata ?? selectedArtifact?.metadata;
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -624,6 +682,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // coordinates come from the backend-parsed metadata when present, with the
   // path parser as fallback (#482).
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
+  const isConda = isCondaFormat(repoFormat);
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   // Whether a download count is a real number or an unmeasured blank (#808).
@@ -672,6 +731,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <QuarantineBadge
               quarantineUntil={a.quarantine_until}
               className="shrink-0"
+              withdrawn={isCondaWithdrawal(
+                repoFormat,
+                true,
+                condaFilename(a.path),
+                noticedFiles,
+              )}
             />
           )}
         </div>
@@ -681,9 +746,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       id: "path",
       header: "Path",
       accessor: (a) => a.path,
+      // Middle-elided with the full path on hover (#957): an end-truncated
+      // path hid exactly the part that differs between rows (version, build,
+      // `.noarch.rpm`, conda build string).
       cell: (a) => (
-        <code className="text-xs text-muted-foreground max-w-[200px] truncate block">
-          {a.path}
+        <code className="text-xs text-muted-foreground block max-w-[320px]">
+          <MiddleEllipsis text={a.path} tailLength={18} />
         </code>
       ),
     },
@@ -700,6 +768,42 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <span className="text-xs text-muted-foreground">-</span>
         ),
     },
+    // Conda packages differ by platform subdir and build string as often as
+    // by version (`linux-64` vs `noarch`, `py310h…` vs `py311h…`); neither was
+    // visible in the flat list.
+    ...(isConda
+      ? [
+          {
+            id: "subdir",
+            header: "Subdir",
+            accessor: (a: Artifact) => condaPackageFields(a.path, a.metadata).subdir ?? "",
+            sortable: true,
+            cell: (a: Artifact) => {
+              const subdir = condaPackageFields(a.path, a.metadata).subdir;
+              return subdir ? (
+                <Badge variant="secondary" className="text-xs font-normal font-mono">
+                  {subdir}
+                </Badge>
+              ) : (
+                <span className="text-xs text-muted-foreground">-</span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+          {
+            id: "build",
+            header: "Build",
+            accessor: (a: Artifact) => condaPackageFields(a.path, a.metadata).build ?? "",
+            cell: (a: Artifact) => {
+              const build = condaPackageFields(a.path, a.metadata).build;
+              return build ? (
+                <code className="text-xs text-muted-foreground">{build}</code>
+              ) : (
+                <span className="text-xs text-muted-foreground">-</span>
+              );
+            },
+          } satisfies DataTableColumn<Artifact>,
+        ]
+      : []),
     ...(isMavenFamily
       ? [
           {
@@ -950,15 +1054,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               >
                 {repository.repo_type}
               </span>
-              <Badge
-                variant={repository.is_public ? "outline" : "secondary"}
+              <VisibilityBadge
+                visibility={resolveVisibility(repository)}
                 className="text-xs font-normal"
-              >
-                {repository.is_public ? "Public" : "Private"}
-              </Badge>
+              />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
               <span className="text-sm text-muted-foreground ml-2">
-                {formatBytes(repository.storage_used_bytes)} used
+                {repoHeaderSize(repository)}
               </span>
             </div>
 
@@ -998,15 +1100,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             >
               {repository.repo_type}
             </span>
-            <Badge
-              variant={repository.is_public ? "outline" : "secondary"}
+            <VisibilityBadge
+              visibility={resolveVisibility(repository)}
               className="text-xs font-normal"
-            >
-              {repository.is_public ? "Public" : "Private"}
-            </Badge>
+            />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
             <span className="text-sm text-muted-foreground ml-2">
-              {formatBytes(repository.storage_used_bytes)} used
+              {repoHeaderSize(repository)}
             </span>
           </div>
           {repository.description && (
@@ -1049,7 +1149,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           repoFormat,
         )}
       >
-        <TabsList variant="line">
+        {/* Wraps instead of running past a narrow detail pane (split view). */}
+        <TabsList
+          variant="line"
+          className="max-w-full flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto [&>*]:flex-none"
+        >
           <TabsTrigger value="artifacts">
             <FileArchive className="size-3.5 mr-1" />
             Artifacts
@@ -1088,6 +1192,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Tracks
               </TabsTrigger>
             )}
+          {isConda &&
+            (repository.repo_type === "local" || repository.repo_type === "staging") && (
+              <TabsTrigger value="notices">
+                <Megaphone className="size-3.5 mr-1" />
+                Notices
+              </TabsTrigger>
+            )}
+          {isAuthenticated && (
+            <TabsTrigger value="environments">
+              <Boxes className="size-3.5 mr-1" />
+              Environments
+            </TabsTrigger>
+          )}
           {showSecurityTab && (
             <TabsTrigger value="security">
               <Shield className="size-3.5 mr-1" />
@@ -1324,6 +1441,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </TabsContent>
           )}
 
+        {/* --- Notices Tab (conda CEP-6 channel notices, #913) --- */}
+        {isConda &&
+          (repository.repo_type === "local" || repository.repo_type === "staging") && (
+            <TabsContent value="notices" className="mt-4">
+              <ChannelNoticesPanel repoKey={repoKey} />
+            </TabsContent>
+          )}
+
+        {/* --- Environments Tab (registered lockfiles, PURL lookup) --- */}
+        {isAuthenticated && (
+          <TabsContent value="environments" className="mt-4">
+            <EnvironmentsTabContent repoKey={repoKey} canRegister={!!user?.is_admin} />
+          </TabsContent>
+        )}
+
         {/* --- Security Tab --- */}
         {showSecurityTab && (
           <TabsContent value="security" className="mt-4 space-y-6">
@@ -1484,6 +1616,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               reason={quarantine?.quarantine_reason}
               quarantineUntil={quarantine?.quarantine_until}
               status={quarantine?.quarantine_status}
+              withdrawn={selectedWithdrawn}
+              notice={selectedNotice?.message}
             />
           )}
           {selectedArtifact && (
@@ -1578,6 +1712,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       ).toLocaleString()}
                     />
                   )}
+                  {/* Who pulled it: the admin download audit, filtered to this
+                      artifact. Proxy-cached rows have no artifact record. */}
+                  {user?.is_admin && selectedArtifact.analyzable !== false && (
+                    <div className="grid grid-cols-[100px_1fr] gap-2 items-start">
+                      <span className="text-muted-foreground text-xs font-medium pt-0.5">
+                        Download audit
+                      </span>
+                      <Link
+                        href={`/downloads?artifact_id=${encodeURIComponent(selectedArtifact.id)}`}
+                        className="text-sm underline underline-offset-2"
+                      >
+                        View who downloaded this artifact
+                      </Link>
+                    </div>
+                  )}
                   {quarantineBlocked && (
                     <>
                       <DetailRow
@@ -1644,6 +1793,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     origin={selectedOrigin}
                     currentRepositoryKey={selectedArtifact.repository_key || repoKey}
                   />
+                  {isConda && (
+                    <>
+                      <CondaPackageSection
+                        path={selectedArtifact.path}
+                        metadata={selectedMetadata}
+                        uploadedBy={selectedDetail?.uploaded_by_username}
+                      />
+                      <ArtifactAttestationSection
+                        metadata={selectedMetadata}
+                        channel={{ repoKey, path: selectedArtifact.path }}
+                      />
+                    </>
+                  )}
                   {(repoFormat === "maven" || repoFormat === "gradle") && (
                     <MavenGavSection
                       path={selectedArtifact.path}
@@ -1657,7 +1819,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                           Metadata
                         </p>
                         <pre className="rounded-md bg-muted p-3 text-xs overflow-auto max-h-40">
-                          {JSON.stringify(selectedArtifact.metadata, null, 2)}
+                          {JSON.stringify(
+                            withoutAttestationBundle(selectedArtifact.metadata),
+                            null,
+                            2,
+                          )}
                         </pre>
                       </div>
                     )}
@@ -1753,6 +1919,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </Button>
                   </>
                 )}
+                {user?.is_admin &&
+                  isConda &&
+                  (repository.repo_type === "local" || repository.repo_type === "staging") &&
+                  !selectedWithdrawn && (
+                    <CondaWithdrawButton repoKey={repoKey} path={selectedArtifact.path} />
+                  )}
                 <Button
                   variant="destructive"
                   onClick={() => {

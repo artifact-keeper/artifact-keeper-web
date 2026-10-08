@@ -246,7 +246,20 @@ export default function SecurityDashboardPage() {
       header: "Grade",
       accessor: (r) => r.score,
       sortable: true,
-      cell: (r) => <GradeBadge grade={r.grade} />,
+      cell: (r) => (
+        <span className="flex items-center gap-1.5">
+          <GradeBadge grade={r.grade} />
+          {r.has_uncataloged_scan && (
+            <Badge
+              variant="outline"
+              className="text-[11px] font-normal text-amber-700 border-amber-300 dark:text-amber-400"
+              title="An artifact's latest scan cataloged nothing; its zero findings are not a clean result."
+            >
+              not cataloged
+            </Badge>
+          )}
+        </span>
+      ),
     },
     {
       id: "score",

@@ -17,6 +17,7 @@ import type { PeerInstance, PeerConnection } from "@/lib/api/replication";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/utils";
 import { useRepositories } from "@/hooks/use-repositories";
+import { refreshReplicationDashboard } from "./_lib/refresh";
 import type { Repository } from "@/types";
 
 import { Button } from "@/components/ui/button";
@@ -104,7 +105,7 @@ export default function ReplicationPage() {
   const { data: reposData } = useRepositories({ per_page: 200 });
   const repositories = reposData?.items ?? [];
 
-  const { data: assignedSubs = [] } = useQuery({
+  const { data: assignedSubs = [], isFetching: subsFetching } = useQuery({
     queryKey: ["peer-repos", selectedPeerId],
     queryFn: () => peersApi.getRepositories(selectedPeerId),
     enabled: selectedPeerId !== "__none__",
@@ -123,7 +124,11 @@ export default function ReplicationPage() {
   );
 
   // Topology tab queries
-  const { data: connections = [], isLoading: connectionsLoading } = useQuery({
+  const {
+    data: connections = [],
+    isLoading: connectionsLoading,
+    isFetching: connectionsFetching,
+  } = useQuery({
     queryKey: ["peer-connections", topologyPeerId],
     queryFn: () => peersApi.getConnections(topologyPeerId),
     enabled: topologyPeerId !== "__none__",
@@ -358,12 +363,20 @@ export default function ReplicationPage() {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() =>
-                  queryClient.invalidateQueries({ queryKey: ["peers"] })
-                }
+                aria-label="Refresh"
+                onClick={() => {
+                  // Drop unsaved mode picks so the refreshed server values
+                  // show, then re-read every tab's data (#841).
+                  setRepoModes({});
+                  void refreshReplicationDashboard(queryClient);
+                }}
               >
                 <RefreshCw
-                  className={`size-4 ${isFetching ? "animate-spin" : ""}`}
+                  className={`size-4 ${
+                    isFetching || subsFetching || connectionsFetching
+                      ? "animate-spin"
+                      : ""
+                  }`}
                 />
               </Button>
             </TooltipTrigger>

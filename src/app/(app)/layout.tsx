@@ -12,11 +12,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <SkipNavLink />
       <EventStreamProvider />
       <AppSidebar />
-      <div className="flex flex-1 flex-col">
+      {/* min-w-0: a flex item defaults to min-width:auto, so one wide child
+          (the repositories split view, a long table) widened the whole
+          column past the viewport instead of being bounded by it. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <DemoBanner />
         <PasswordExpiryBanner />
         <AppHeader />
-        <main id="main-content" tabIndex={-1} className="flex-1 p-6">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-6">
           {children}
         </main>
       </div>

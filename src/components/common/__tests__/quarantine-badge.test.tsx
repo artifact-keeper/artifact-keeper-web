@@ -112,3 +112,10 @@ describe("QuarantineBadge", () => {
     expect(badge.className).toContain("my-custom-class");
   });
 });
+
+describe("QuarantineBadge withdrawn", () => {
+  it("labels a conda withdrawal as Withdrawn", () => {
+    render(<QuarantineBadge withdrawn />);
+    expect(screen.getByLabelText("Withdrawn")).toHaveTextContent("Withdrawn");
+  });
+});

@@ -89,9 +89,19 @@ const PUBLISHER_TRUST_ACTION_SET = new Set<PublisherTrustAction>(
 /**
  * Package formats a publisher_trust rule evaluates (backend
  * `publisher_source::APPLICABLE_FORMATS`, plus the jupyter/poetry and yarn/pnpm
- * aliases). Every other format passes through the rule untouched.
+ * aliases). `conda_native` repositories evaluate as conda's publisher family
+ * since artifact-keeper#4253. Every other format passes through the rule
+ * untouched.
  */
-export const PUBLISHER_TRUST_FORMATS = ["pypi", "npm", "conda"] as const;
+export const PUBLISHER_TRUST_FORMATS = ["pypi", "npm", "conda", "conda_native"] as const;
+
+/**
+ * Shown with a publisher-trust rule whose stored values the backend does not
+ * accept. Backend 1.11.0 (artifact-keeper#4248) rejects such values at write
+ * time, so any rule like this was saved before that check existed.
+ */
+export const INVALID_RULE_NOTE =
+  "Saved before the backend validated rule values; edit the rule to choose valid ones.";
 
 // ---------------------------------------------------------------------------
 // Config shapes (engine-specific `config` JSON)

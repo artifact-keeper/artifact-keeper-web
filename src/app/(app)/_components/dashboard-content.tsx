@@ -23,6 +23,7 @@ import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { sbomApi } from "@/lib/api/sbom";
 import { formatBytes } from "@/lib/utils";
+import { repoSizeLabel } from "@/lib/repo-size";
 import type { Repository } from "@/types";
 import type { CveTrends } from "@/types/sbom";
 import { PageHeader } from "@/components/common/page-header";
@@ -164,7 +165,7 @@ function RepoRow({ repo }: Readonly<{ repo: Repository }>) {
         <StatusBadge status={repo.repo_type} />
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {formatBytes(repo.storage_used_bytes)}
+        {repoSizeLabel(repo).text}
       </TableCell>
     </TableRow>
   );
@@ -370,9 +371,7 @@ export function DashboardContent() {
                 label="Repositories"
                 value={stats.total_repositories}
                 color="blue"
-                onClick={() => {
-                  /* navigate to /repositories */
-                }}
+                href="/repositories"
               />
               <StatCard
                 icon={FileBox}

@@ -261,6 +261,43 @@ describe("ArtifactScansSection (#368)", () => {
     expect(link.getAttribute("href")).toBe("/security/scans/scan-1");
   });
 
+  it("shows a not-cataloged scan as not assessed, never as zero findings (#4154)", () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: "scan-nc",
+            artifact_id: "a1",
+            artifact_name: "pkg.conda",
+            artifact_version: "1.0",
+            repository_id: "r1",
+            scan_type: "grype",
+            status: "completed",
+            findings_count: 0,
+            critical_count: 0,
+            high_count: 0,
+            medium_count: 0,
+            low_count: 0,
+            info_count: 0,
+            scanner_version: null,
+            error_message: null,
+            started_at: null,
+            completed_at: "2026-05-01T00:01:00Z",
+            created_at: "2026-05-01T00:00:00Z",
+            scan_completeness: "not_cataloged",
+            scan_completeness_reason: "grype cataloged no packages",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ArtifactScansSection artifactId="a1" />);
+    expect(screen.getByText("not cataloged").getAttribute("title")).toBe("grype cataloged no packages");
+    expect(screen.getByText("not assessed")).toBeDefined();
+  });
+
   it("hides crit/high pills when those counts are zero", () => {
     mockUseQuery.mockReturnValue({
       data: {

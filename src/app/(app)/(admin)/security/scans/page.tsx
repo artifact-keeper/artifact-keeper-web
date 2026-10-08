@@ -12,7 +12,13 @@ import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
-import { isScanIncomplete, isScanFailed, isScanClean } from "@/lib/scan-utils";
+import {
+  isScanIncomplete,
+  isScanFailed,
+  isScanClean,
+  isScanNotCataloged,
+  NOT_CATALOGED_EXPLANATION,
+} from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
 
 import { Button } from "@/components/ui/button";
@@ -244,7 +250,18 @@ export default function SecurityScansPage() {
             <span className="text-xs text-muted-foreground">-</span>
           );
         }
-        if (isScanClean(r.status, r.findings_count)) {
+        if (isScanNotCataloged(r.status, r.scan_completeness)) {
+          return (
+            <Badge
+              variant="outline"
+              className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-xs font-medium"
+              title={r.scan_completeness_reason ?? NOT_CATALOGED_EXPLANATION}
+            >
+              Not cataloged
+            </Badge>
+          );
+        }
+        if (isScanClean(r.status, r.findings_count, r.scan_completeness)) {
           return (
             <Badge
               variant="outline"

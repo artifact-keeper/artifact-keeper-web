@@ -39,9 +39,28 @@ export async function seedRepositories(request: APIRequestContext): Promise<void
     { key: 'e2e-maven-local', name: 'E2E Maven Local', format: 'maven', repo_type: 'local' },
     { key: 'e2e-npm-remote', name: 'E2E NPM Remote', format: 'npm', repo_type: 'remote', upstream_url: 'https://registry.npmjs.org' },
     { key: 'e2e-docker-virtual', name: 'E2E Docker Virtual', format: 'docker', repo_type: 'virtual' },
-    // Visibility test repos: one public, one private (default)
-    { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', is_public: true },
-    { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', is_public: false },
+    // Visibility test repos: one public, one private (default).
+    //
+    // Both fields are sent on purpose. The backend accepts the pair whenever
+    // they AGREE (it rejects only a `visibility` whose anonymous-readability
+    // contradicts the boolean), and a backend that predates the visibility
+    // column ignores the unknown field entirely rather than rejecting it —
+    // `CreateRepositoryRequest` does not use `deny_unknown_fields`. Sending
+    // `visibility` alone therefore created a PRIVATE repository against such a
+    // backend, silently breaking the five pre-existing anonymous-read
+    // assertions in `private-repo-visibility.spec.ts` that depend on
+    // `e2e-public-pypi` actually being public. Keeping the boolean makes the
+    // seed correct against both.
+    { key: 'e2e-public-pypi', name: 'E2E Public PyPI', format: 'pypi', repo_type: 'local', visibility: 'public', is_public: true },
+    { key: 'e2e-private-pypi', name: 'E2E Private PyPI', format: 'pypi', repo_type: 'local', visibility: 'private', is_public: false },
+    // Readable by every signed-in user, never anonymously. Seeded so the
+    // role-visibility and search suites can assert the state that neither of
+    // the two above can stand in for.
+    { key: 'e2e-internal-pypi', name: 'E2E Internal PyPI', format: 'pypi', repo_type: 'local', visibility: 'internal', is_public: false },
+    // OCI counterpart. `/v2/*` is mounted outside the repo-visibility
+    // middleware and was allowlisted wholesale by the guest-access guard, so
+    // the anonymous-pull assertions need a Docker repo of their own.
+    { key: 'e2e-internal-docker', name: 'E2E Internal Docker', format: 'docker', repo_type: 'local', visibility: 'internal', is_public: false },
     // Pub (Dart) repo so the Dart-specific setup-guide snippets (#748) have a
     // real target in the repo detail Setup tab.
     { key: 'e2e-pub-local', name: 'E2E Pub Local', format: 'pub', repo_type: 'local' },

@@ -66,6 +66,19 @@ export interface Repository {
    */
   format_key?: string | null;
   repo_type: RepositoryType;
+  /**
+   * Baseline read audience. `public` is readable by anyone including anonymous
+   * callers, `internal` by any signed-in principal with no grant, `private`
+   * only by grant holders.
+   *
+   * Optional so the UI stays safe against a backend that predates the field:
+   * treat a missing value as derived from `is_public`.
+   */
+  visibility?: RepositoryVisibility;
+  /**
+   * @deprecated Equal to `visibility === "public"`. Cannot distinguish
+   * `internal` from `private` — read `visibility` instead.
+   */
   is_public: boolean;
   /**
    * First-class artifact versioning opt-in (#571, backend
@@ -76,6 +89,14 @@ export interface Repository {
    */
   versioning_enabled?: boolean;
   storage_used_bytes: number;
+  /**
+   * Virtual repositories only (backend artifact-keeper#4423, 1.11.0): the
+   * combined size of the members the caller can see. A virtual repository's
+   * own `storage_used_bytes` is 0 from 1.11.0 (it stores nothing); totals
+   * across repositories keep summing `storage_used_bytes`. `null`/absent for
+   * other types and older backends.
+   */
+  member_storage_used_bytes?: number | null;
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;
@@ -203,6 +224,14 @@ export type RepositoryFormat =
 
 export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
 
+/**
+ * Baseline read audience of a repository.
+ *
+ * Orthogonal to grants: this is who may read BEFORE any grant is consulted,
+ * and it never confers write, delete, or admin.
+ */
+export type RepositoryVisibility = "public" | "internal" | "private";
+
 export interface CreateRepositoryRequest {
   key: string;
   name: string;
@@ -215,6 +244,9 @@ export interface CreateRepositoryRequest {
    */
   format_key?: string;
   repo_type: RepositoryType;
+  /** Baseline read audience. Preferred over the legacy `is_public` flag. */
+  visibility?: RepositoryVisibility;
+  /** @deprecated Send `visibility` instead. Means `visibility === "public"`. */
   is_public?: boolean;
   /** Opt a Generic/Mlmodel repository into first-class versioning (#571). */
   versioning_enabled?: boolean;
@@ -256,6 +288,10 @@ export interface VirtualRepoMember {
   virtual_repo_id: string;
   member_repo_id: string;
   member_repo_key: string;
+  /** Display name of the member repository; absent on older adapters. */
+  member_repo_name?: string;
+  /** `local`, `remote`, `staging` or `virtual`, as the backend reports it. */
+  member_repo_type?: string;
   priority: number;
   created_at: string;
 }
@@ -324,6 +360,8 @@ export interface Artifact {
    * repository other than `repository_key`.
    */
   origin?: ArtifactOrigin | null;
+  /** Uploader's username, on the by-id detail response (#3271). */
+  uploaded_by_username?: string | null;
 }
 
 /**

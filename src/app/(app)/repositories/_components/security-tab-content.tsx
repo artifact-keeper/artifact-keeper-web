@@ -29,6 +29,8 @@ import { ArtifactScansSection } from "./artifact-scans-section";
 import { InstallScriptFindingsSummary } from "./install-script-findings-summary";
 import { ProxyScanPanel } from "./proxy-scan-panel";
 import { securityApi } from "@/lib/api/security";
+import { isScanNotCataloged } from "@/lib/scan-utils";
+import type { ScanResult } from "@/types/security";
 import type { CveHistoryEntry, CveStatus } from "@/types/sbom";
 import type { Artifact } from "@/types";
 import type {
@@ -170,7 +172,12 @@ export function SecurityTabContent({
   // all empty for it no matter what the download-time proxy scan found. A
   // 403-blocked vulnerable artifact used to land here and render green. Its
   // real verdict is digest-keyed and comes from `ProxyScanPanel` above.
-  const allClear = analyzable && hasEverBeenScanned;
+  // A completed scan that cataloged nothing (#4154) graded nothing, so its
+  // zero findings must not turn the shield green. Judged on the latest scan of
+  // each scanner type: an older not-cataloged scan superseded by a complete
+  // one no longer counts.
+  const notCatalogedScan = latestNotCatalogedScan(scanList?.items ?? []);
+  const allClear = analyzable && hasEverBeenScanned && !notCatalogedScan;
   const [page, setPage] = useState(1);
   const [dtFindingsPage, setDtFindingsPage] = useState(1);
 
@@ -625,7 +632,13 @@ export function SecurityTabContent({
       {total === 0 ? (
         <div
           className="flex flex-col items-center justify-center py-12 text-center"
-          data-testid={allClear ? "vulns-none-found" : "vulns-not-assessed"}
+          data-testid={
+            allClear
+              ? "vulns-none-found"
+              : notCatalogedScan && analyzable
+                ? "vulns-not-cataloged"
+                : "vulns-not-assessed"
+          }
         >
           {allClear ? (
             <ShieldCheck className="size-12 text-green-500/50 mb-4" />
@@ -635,16 +648,20 @@ export function SecurityTabContent({
           <p className="text-sm text-muted-foreground">
             {allClear
               ? "No vulnerabilities detected for this artifact."
-              : analyzable
-                ? "This artifact has not been scanned for vulnerabilities."
-                : "CVE history is not available for this artifact."}
+              : !analyzable
+                ? "CVE history is not available for this artifact."
+                : notCatalogedScan
+                  ? "Not cataloged: the last scan could not read this package's contents."
+                  : "This artifact has not been scanned for vulnerabilities."}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {!analyzable
               ? ANALYZABLE_DISABLED_REASON
               : allClear
                 ? "This reflects the most recent scan."
-                : "Nothing has been checked yet — this is not a clean result. Generate an SBOM and run a security scan to check for CVEs."}
+                : notCatalogedScan
+                  ? `${notCatalogedScan.scan_completeness_reason ? `${notCatalogedScan.scan_completeness_reason}. ` : ""}Nothing was assessed — this is not a clean result.`
+                  : "Nothing has been checked yet — this is not a clean result. Generate an SBOM and run a security scan to check for CVEs."}
           </p>
         </div>
       ) : (
@@ -931,5 +948,21 @@ function DtMetricsSummary({ metrics }: { metrics: DtProjectMetrics }) {
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * The most recent not-cataloged scan among the latest completed scan of each
+ * scanner type (#4154), or undefined when every latest scan cataloged.
+ */
+export function latestNotCatalogedScan(scans: ScanResult[]): ScanResult | undefined {
+  const latest = new Map<string, ScanResult>();
+  for (const s of scans) {
+    if (s.status !== "completed") continue;
+    const prev = latest.get(s.scan_type);
+    if (!prev || s.created_at > prev.created_at) latest.set(s.scan_type, s);
+  }
+  return [...latest.values()].find((s) =>
+    isScanNotCataloged(s.status, s.scan_completeness),
   );
 }

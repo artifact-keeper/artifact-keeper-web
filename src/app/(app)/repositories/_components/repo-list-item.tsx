@@ -1,8 +1,10 @@
 "use client";
 
-import { Lock, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
-import type { Repository } from "@/types";
-import { formatBytes, REPO_TYPE_COLORS, cn } from "@/lib/utils";
+import { Lock, Users, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
+import type { Repository, RepositoryVisibility } from "@/types";
+import { resolveVisibility } from "./visibility-select";
+import { REPO_TYPE_COLORS, cn } from "@/lib/utils";
+import { repoSizeLabel } from "@/lib/repo-size";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +12,35 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+/**
+ * Visibility marker for the repository row.
+ *
+ * `public` is unmarked, as it always was — an open repository is the state that
+ * needs no warning. The other two are now distinguished: a padlock no longer
+ * stands for "not public", because that would render `internal` (readable by
+ * everyone signed in) identically to `private` (readable by a named few), which
+ * is the single most consequential difference a list row can show.
+ */
+function VisibilityIcon({ visibility }: { visibility: RepositoryVisibility }) {
+  if (visibility === "public") return null;
+  if (visibility === "internal") {
+    return (
+      <Users
+        className="size-3 shrink-0 text-muted-foreground"
+        role="img"
+        aria-label="Internal — readable by any signed-in user"
+      />
+    );
+  }
+  return (
+    <Lock
+      className="size-3 shrink-0 text-muted-foreground"
+      role="img"
+      aria-label="Private — readable only by users granted access"
+    />
+  );
+}
 
 interface RepoListItemProps {
   repo: Repository;
@@ -48,7 +79,7 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-medium truncate">{repo.key}</span>
-              {!repo.is_public && <Lock className="size-3 shrink-0 text-muted-foreground" />}
+              <VisibilityIcon visibility={resolveVisibility(repo)} />
             </div>
             <p className="text-xs text-muted-foreground truncate" aria-hidden={repo.name === repo.key}>
               {repo.name}
@@ -61,13 +92,14 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
               <span className={cn("text-[11px] font-medium", REPO_TYPE_COLORS[repo.repo_type] ? "" : "text-muted-foreground")}>
                 <span className={cn("inline-block size-1.5 rounded-full mr-1",
                   repo.repo_type === "local" ? "bg-green-500" :
-                  repo.repo_type === "remote" ? "bg-blue-500" : "bg-purple-500"
+                  repo.repo_type === "remote" ? "bg-blue-500" :
+                  repo.repo_type === "staging" ? "bg-amber-500" : "bg-purple-500"
                 )} />
                 {repo.repo_type}
               </span>
               <span className="text-muted-foreground">·</span>
               <span className="text-[11px] text-muted-foreground">
-                {formatBytes(repo.storage_used_bytes)}
+                {repoSizeLabel(repo).text}
               </span>
             </div>
             {artifactMatchCount && (

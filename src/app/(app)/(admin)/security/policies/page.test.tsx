@@ -178,3 +178,87 @@ describe("SecurityPoliciesPage repository scope (#489)", () => {
     );
   });
 });
+
+describe("SecurityPoliciesPage conda and origin predicates (#911)", () => {
+  const PREDICATES = {
+    conda: {
+      allowed_channels: ["conda-forge"],
+      denied_channels: [],
+      denied_licenses: ["gpl-3.0-only"],
+      denied_license_families: [],
+      block_install_scripts: true,
+      max_install_script_severity: null,
+      min_attestation_state: "verified",
+    },
+    origin: {
+      allowed_upstreams: [],
+      denied_upstreams: [],
+      allowed_repositories: [],
+      denied_repositories: [],
+      allowed_kinds: ["hosted"],
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRepoList.mockResolvedValue({
+      items: [REPO],
+      pagination: { page: 1, per_page: 200, total: 1, total_pages: 1 },
+    });
+    mockCreatePolicy.mockResolvedValue({});
+    mockUpdatePolicy.mockResolvedValue({});
+  });
+
+  it("summarises configured predicates in the list", async () => {
+    mockListPolicies.mockResolvedValue([policy({ predicates: PREDICATES })]);
+    renderPage();
+    expect(await screen.findByText("5 predicates")).toBeInTheDocument();
+  });
+
+  it("sends a predicate document on create only when one is set", async () => {
+    mockListPolicies.mockResolvedValue([]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /create policy/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Policy Name"), { target: { value: "Conda gate" } });
+    fireEvent.change(within(dialog).getByLabelText("Allowed channels"), {
+      target: { value: "conda-forge, internal" },
+    });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Hosted (uploaded)" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /create policy/i }));
+    await waitFor(() => expect(mockCreatePolicy).toHaveBeenCalled());
+    const req = mockCreatePolicy.mock.calls[0][0];
+    expect(req.predicates.conda.allowed_channels).toEqual(["conda-forge", "internal"]);
+    expect(req.predicates.origin.allowed_kinds).toEqual(["hosted"]);
+
+    mockCreatePolicy.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /create policy/i }));
+    const d2 = screen.getByRole("dialog");
+    fireEvent.change(within(d2).getByLabelText("Policy Name"), { target: { value: "Plain" } });
+    fireEvent.click(within(d2).getByRole("button", { name: /create policy/i }));
+    await waitFor(() => expect(mockCreatePolicy).toHaveBeenCalled());
+    expect(mockCreatePolicy.mock.calls[0][0]).not.toHaveProperty("predicates");
+  });
+
+  it("round-trips the stored document on edit", async () => {
+    mockListPolicies.mockResolvedValue([policy({ predicates: PREDICATES })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Block criticals" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Allowed channels")).toHaveValue("conda-forge");
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(mockUpdatePolicy).toHaveBeenCalled());
+    expect(mockUpdatePolicy.mock.calls[0][1].predicates).toEqual(PREDICATES);
+  });
+
+  it("sends no document when the backend reported none", async () => {
+    mockListPolicies.mockResolvedValue([policy()]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Block criticals" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByTestId("policy-predicates")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(mockUpdatePolicy).toHaveBeenCalled());
+    expect(mockUpdatePolicy.mock.calls[0][1]).not.toHaveProperty("predicates");
+  });
+});
