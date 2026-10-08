@@ -57,6 +57,11 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
+import {
+  selectorHasFilters,
+  virtualMembersWithoutFilter,
+  VIRTUAL_MEMBERS_NEEDS_FILTER,
+} from "@/components/common/repo-selector-form";
 
 function renderRepoAccess(t: ServiceAccountToken) {
   if (t.repo_selector) {
@@ -661,10 +666,11 @@ export default function ServiceAccountsPage() {
               isPending={createTokenMutation.isPending}
               onSubmit={() => {
                 if (tokenAccount) {
-                  const hasSelector =
-                    (tokenRepoSelector.match_formats?.length ?? 0) > 0 ||
-                    Object.keys(tokenRepoSelector.match_labels ?? {}).length > 0 ||
-                    !!tokenRepoSelector.match_pattern;
+                  if (virtualMembersWithoutFilter(tokenRepoSelector)) {
+                    toast.error(VIRTUAL_MEMBERS_NEEDS_FILTER);
+                    return;
+                  }
+                  const hasSelector = selectorHasFilters(tokenRepoSelector);
                   createTokenMutation.mutate({
                     id: tokenAccount.id,
                     req: {

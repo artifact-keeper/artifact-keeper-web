@@ -48,6 +48,21 @@ export interface RepoSelector {
   match_formats?: string[];
   match_pattern?: string;
   match_repos?: string[];
+  /**
+   * Add the members of every matched virtual repository to the token's scope
+   * (backend artifact-keeper#4130).
+   *
+   * A token scoped to a virtual repository alone reads nothing through it: the
+   * listing and download paths resolve the virtual's MEMBERS and drop the ones
+   * outside the token's scope. With this set, the selector is re-resolved at
+   * authentication time, so a member added to the virtual later is covered
+   * without minting a new token.
+   *
+   * It widens a match rather than filtering, so it is NOT one of the filters
+   * that make a selector non-empty — the backend refuses a selector that sets
+   * only this, because an empty selector means unrestricted.
+   */
+  include_virtual_members?: boolean;
 }
 
 export interface MatchedRepository {

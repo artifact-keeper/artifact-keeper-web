@@ -30,6 +30,9 @@ const COMMON_FORMATS = [
 
 /**
  * Whether a selector carries a real filter (format, label or name pattern).
+ * The virtual-members flag is deliberately absent: it widens a match rather
+ * than filtering, so on its own it selects nothing and the backend refuses
+ * such a token (an empty selector means unrestricted) - artifact-keeper#4130.
  * Token submit handlers omit the selector entirely when this is false: the
  * backend reads an empty selector as unrestricted, and the personal-token
  * endpoint refuses one with a 400 (artifact-keeper#4219).
@@ -41,6 +44,19 @@ export function selectorHasFilters(selector: RepoSelector): boolean {
     !!selector.match_pattern
   );
 }
+
+/**
+ * True when the virtual-members flag is set with no filter beside it. Submit
+ * handlers must refuse this state: dropping the flag-only selector would mint
+ * an unrestricted token, and sending it would be read as empty (so also
+ * unrestricted) by a backend without artifact-keeper#4213.
+ */
+export function virtualMembersWithoutFilter(selector: RepoSelector): boolean {
+  return selector.include_virtual_members === true && !selectorHasFilters(selector);
+}
+
+export const VIRTUAL_MEMBERS_NEEDS_FILTER =
+  "Include members of matched virtual repositories needs a format, label or name pattern; on its own it would create an unrestricted token.";
 
 interface RepoSelectorFormProps {
   readonly value: RepoSelector;
@@ -109,7 +125,19 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
     [value, onChange]
   );
 
+  const toggleVirtualMembers = useCallback(
+    (checked: boolean) => {
+      onChange({ ...value, include_virtual_members: checked || undefined });
+      setPreviewResults(null);
+    },
+    [value, onChange]
+  );
+
+  // The virtual-members flag is deliberately not a filter: it widens a match,
+  // so on its own it selects nothing and the backend refuses such a token (an
+  // empty selector means unrestricted) - artifact-keeper#4130.
   const hasFilters = selectorHasFilters(value);
+  const flagWithoutFilter = virtualMembersWithoutFilter(value);
 
   return (
     <div className="space-y-4">
@@ -119,7 +147,7 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
         <p className="text-xs text-muted-foreground">
           Restrict access to repositories of specific types.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2" data-testid="format-checkboxes">
           {COMMON_FORMATS.map((fmt) => (
             <label key={fmt} className="flex items-center gap-2 text-sm">
               <Checkbox
@@ -198,6 +226,32 @@ export function RepoSelectorForm({ value, onChange }: RepoSelectorFormProps) {
             <Plus className="size-4" />
           </Button>
         </div>
+      </div>
+
+      {/* Virtual repository members (artifact-keeper#4130) */}
+      <div className="space-y-2">
+        <Label>Virtual Repositories</Label>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            id="include-virtual-members"
+            className="mt-0.5"
+            checked={value.include_virtual_members === true}
+            onCheckedChange={(checked) => toggleVirtualMembers(checked === true)}
+          />
+          <span>Include members of matched virtual repositories</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          A token scoped to a virtual repository alone reads nothing through it,
+          because its contents belong to the member repositories. Members are
+          re-resolved on every request, so one added later is covered without a
+          new token. This only adds members to a match - it selects nothing on
+          its own.
+        </p>
+        {flagWithoutFilter && (
+          <p className="text-xs text-destructive" role="alert">
+            {VIRTUAL_MEMBERS_NEEDS_FILTER}
+          </p>
+        )}
       </div>
 
       {/* Preview */}
