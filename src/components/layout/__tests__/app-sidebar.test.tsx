@@ -82,7 +82,9 @@ vi.mock("lucide-react", () => {
     PackageCheck: icon,
     FileSignature: icon,
     Shield: icon,
+    ShieldAlert: icon,
     ShieldCheck: icon,
+    Ban: icon,
     ListChecks: icon,
     Search: icon,
     FileCheck: icon,
@@ -370,5 +372,14 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.getByText("Blast Radius")).toBeDefined();
+  });
+
+  it("renders Quarantine and Policy blocks admin entries", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Quarantine")).toBeDefined();
+    expect(screen.getByText("Policy blocks")).toBeDefined();
   });
 });
