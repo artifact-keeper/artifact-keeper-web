@@ -33,8 +33,10 @@ vi.mock("@/providers/auth-provider", () => ({
 }));
 
 const mockUseFeatureFlags = vi.fn();
+const mockUseHiddenNavItems = vi.fn();
 vi.mock("@/providers/system-config-provider", () => ({
   useFeatureFlags: () => mockUseFeatureFlags(),
+  useHiddenNavItems: () => mockUseHiddenNavItems(),
 }));
 
 const mockUseQuery = vi.fn();
@@ -159,6 +161,7 @@ describe("AppSidebar", () => {
     delete process.env.NEXT_PUBLIC_BUILD_REF;
     mockUseQuery.mockReturnValue({ data: undefined });
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
+    mockUseHiddenNavItems.mockReturnValue([]);
   });
 
   it("shows the commit hash instead of the version for a build that is not a release tag", () => {
@@ -370,5 +373,69 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.getByText("Blast Radius")).toBeDefined();
+  });
+  it("shows Migration to admins only", () => {
+    authState({ isAuthenticated: true, isAdmin: false });
+    render(<AppSidebar />);
+    expect(screen.queryByText("Migration")).toBeNull();
+    cleanup();
+
+    authState({ isAuthenticated: true, isAdmin: true });
+    render(<AppSidebar />);
+    expect(screen.getByText("Migration")).toBeDefined();
+  });
+
+  it("hides the entries an admin hid for everyone (#968)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockUseHiddenNavItems.mockReturnValue(["/peers", "/webhooks", "/security/scans"]);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Peers")).toBeNull();
+    expect(screen.queryByText("Webhooks")).toBeNull();
+    expect(screen.queryByText("Scan Results")).toBeNull();
+    expect(screen.getByText("Replication")).toBeDefined();
+    expect(screen.getByText("Repositories")).toBeDefined();
+  });
+
+  it("applies the hidden list to guests too (#968)", () => {
+    authState({ isAuthenticated: false });
+    mockUseHiddenNavItems.mockReturnValue(["/builds", "/staging"]);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Builds")).toBeNull();
+    expect(screen.queryByText("Staging")).toBeNull();
+    expect(screen.getByText("Packages")).toBeDefined();
+  });
+
+  it("drops a group whose entries are all hidden (#968)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockUseHiddenNavItems.mockReturnValue([
+      "/analytics",
+      "/downloads",
+      "/approvals",
+      "/promotion-rules",
+      "/system-health",
+      "/lifecycle",
+      "/monitoring",
+      "/telemetry",
+    ]);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Operations")).toBeNull();
+    expect(screen.getByText("Security")).toBeDefined();
+  });
+
+  it("always shows the Settings entry, even if the list names it (#968)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockUseHiddenNavItems.mockReturnValue(["/settings", "/users"]);
+
+    render(<AppSidebar />);
+
+    expect(screen.getByText("Settings")).toBeDefined();
+    expect(screen.queryByText("Users")).toBeNull();
+    expect(screen.getByText("Administration")).toBeDefined();
   });
 });

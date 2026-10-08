@@ -46,6 +46,11 @@ vi.mock("@/components/settings/maintenance-card", () => ({
   MaintenanceCard: () => <div data-testid="maintenance-card" />,
 }));
 
+// The Navigation card (#968) has its own test.
+vi.mock("@/components/settings/navigation-visibility-card", () => ({
+  NavigationVisibilityCard: () => <div data-testid="navigation-visibility-card" />,
+}));
+
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
@@ -58,6 +63,7 @@ vi.mock("lucide-react", () => {
     Shield: icon,
     ExternalLink: icon,
     Loader2: icon,
+    PanelLeft: icon,
   };
 });
 
@@ -503,6 +509,16 @@ describe("SettingsPage", () => {
     expect(screen.getByText("npm Upstream Change-Feed")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_ENABLED")).toBeDefined();
     expect(screen.getByText("NPM_UPSTREAM_FEED_URL")).toBeDefined();
+  });
+
+  it("renders the Navigation tab and its card (#968)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings();
+
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Navigation")).toBeDefined();
+    expect(screen.getByTestId("navigation-visibility-card")).toBeDefined();
   });
 
   it("mounts the admin Maintenance card (#859)", () => {

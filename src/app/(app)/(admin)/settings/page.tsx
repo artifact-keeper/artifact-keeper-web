@@ -8,7 +8,7 @@ import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { Server, HardDrive, Lock, Info, Mail, Rss, Shield, Loader2 } from "lucide-react";
+import { Server, HardDrive, Lock, Info, Mail, Rss, Shield, Loader2, PanelLeft } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
+import { NavigationVisibilityCard } from "@/components/settings/navigation-visibility-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
 
@@ -411,6 +412,10 @@ export default function SettingsPage() {
             <Rss className="size-4 mr-1.5" />
             npm Upstream
           </TabsTrigger>
+          <TabsTrigger value="navigation">
+            <PanelLeft className="size-4 mr-1.5" />
+            Navigation
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4">
@@ -545,6 +550,10 @@ export default function SettingsPage() {
 
         <TabsContent value="npm-upstream" className="mt-4">
           <NpmUpstreamFeedCard />
+        </TabsContent>
+
+        <TabsContent value="navigation" className="mt-4">
+          <NavigationVisibilityCard />
         </TabsContent>
       </Tabs>
       <MaintenanceCard />

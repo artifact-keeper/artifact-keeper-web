@@ -3,54 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Database,
-  Boxes,
-  Hammer,
-  Globe,
-  RefreshCw,
-  Puzzle,
-  Blocks,
-  Webhook,
-  ArrowRightLeft,
-  Bot,
-  BookOpen,
-  GitPullRequestArrow,
-  Workflow,
-  Key,
-  PackageCheck,
-  FileSignature,
-  Shield,
-  ShieldCheck,
-  ListChecks,
-  Search,
-  FileCheck,
-  Lock,
-  Users,
-  UsersRound,
-  HardDrive,
-  KeyRound,
-  GitBranch,
-  Settings,
-  BarChart3,
-  Recycle,
-  Radio,
-  Activity,
-  HeartPulse,
-  Scale,
-  FolderSearch,
-  ClipboardCheck,
-  Filter,
-  Gauge,
-  ScrollText,
-  Network,
-  Crosshair,
-  Hourglass,
-} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
-import { useFeatureFlags } from "@/providers/system-config-provider";
+import {
+  useFeatureFlags,
+  useHiddenNavItems,
+} from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
 import {
   Sidebar,
@@ -65,75 +23,14 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { currentWebBuildLabel } from "@/lib/build-version";
+import {
+  NAV_GROUPS,
+  filterHiddenNavItems,
+  type NavGroup,
+  type NavItem,
+} from "./nav-items";
 
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const overviewItems: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
-];
-
-const artifactItems: NavItem[] = [
-  { title: "Repositories", href: "/repositories", icon: Database },
-  { title: "Packages", href: "/packages", icon: Boxes },
-  { title: "Builds", href: "/builds", icon: Hammer },
-  { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
-  { title: "Setup Guide", href: "/setup", icon: BookOpen },
-];
-
-const integrationItems: NavItem[] = [
-  { title: "Peers", href: "/peers", icon: Globe },
-  { title: "Replication", href: "/replication", icon: RefreshCw },
-  { title: "Sync Policies", href: "/sync-policies", icon: Workflow },
-  { title: "Plugins", href: "/plugins", icon: Puzzle },
-  { title: "Format Handlers", href: "/format-handlers", icon: Blocks },
-  { title: "Webhooks", href: "/webhooks", icon: Webhook },
-  { title: "Access Tokens", href: "/access-tokens", icon: Key },
-  { title: "Migration", href: "/migration", icon: ArrowRightLeft },
-];
-
-const securityItems: NavItem[] = [
-  { title: "Dashboard", href: "/security", icon: Shield },
-  { title: "Scan Results", href: "/security/scans", icon: Search },
-  { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
-  { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
-  { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
-  { title: "Quality Checks", href: "/quality-checks", icon: ListChecks },
-  { title: "Policies", href: "/security/policies", icon: FileCheck },
-  { title: "License Policies", href: "/license-policies", icon: Scale },
-  { title: "Curation", href: "/curation", icon: PackageCheck },
-  { title: "Age Gate", href: "/age-gate", icon: Hourglass },
-  { title: "Signing", href: "/signing", icon: FileSignature },
-  { title: "Permissions", href: "/permissions", icon: Lock },
-];
-
-const operationsItems: NavItem[] = [
-  { title: "Analytics", href: "/analytics", icon: BarChart3 },
-  { title: "Downloads", href: "/downloads", icon: Network },
-  { title: "Approvals", href: "/approvals", icon: ClipboardCheck },
-  { title: "Promotion Rules", href: "/promotion-rules", icon: Filter },
-  { title: "Health", href: "/system-health", icon: HeartPulse },
-  { title: "Lifecycle", href: "/lifecycle", icon: Recycle },
-  { title: "Monitoring", href: "/monitoring", icon: Activity },
-  { title: "Telemetry", href: "/telemetry", icon: Radio },
-];
-
-const adminItems: NavItem[] = [
-  { title: "Users", href: "/users", icon: Users },
-  { title: "Groups", href: "/groups", icon: UsersRound },
-  { title: "Service Accounts", href: "/service-accounts", icon: Bot },
-  { title: "Rate Limits", href: "/rate-limits", icon: Gauge },
-  { title: "Audit Log", href: "/audit", icon: ScrollText },
-  { title: "Backups", href: "/backups", icon: HardDrive },
-  { title: "SSO Providers", href: "/settings/sso", icon: KeyRound },
-  { title: "CI/CD OIDC", href: "/settings/sso/ci", icon: GitBranch },
-  { title: "Settings", href: "/settings", icon: Settings },
-];
-
-function NavGroup({
+function NavGroupSection({
   label,
   items,
   pathname,
@@ -178,17 +75,14 @@ export function AppSidebar() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // For integration items, non-admin authenticated users don't see Migration
-  const visibleIntegrationItems = isAdmin
-    ? integrationItems
-    : integrationItems.filter((item) => item.href !== "/migration");
+  const hiddenNavItems = useHiddenNavItems();
 
-  // Hide scanner-dependent security entries when the backend reports no
-  // scanner configured (#271). "Scan Results" needs Trivy or OpenSCAP;
+  // Scanner-dependent security entries are hidden when the backend reports
+  // no scanner configured (#271). "Scan Results" needs Trivy or OpenSCAP;
   // "DT Projects" needs the Dependency-Track integration. The rest of the
   // Security group (policies, permissions, quality gates) is always shown
   // since it doesn't depend on a scanner being wired up.
-  const visibleSecurityItems = securityItems.filter((item) => {
+  const featureAvailable = (item: NavItem): boolean => {
     if (item.href === "/security/scans") {
       return flags.trivyEnabled || flags.openscapEnabled;
     }
@@ -196,7 +90,28 @@ export function AppSidebar() {
       return flags.dependencyTrackEnabled;
     }
     return true;
-  });
+  };
+
+  const groupVisible = (group: NavGroup): boolean => {
+    if (group.audience === "admin") return isAdmin;
+    if (group.audience === "authenticated") return isAuthenticated;
+    return true;
+  };
+
+  // Entries an administrator hid for everyone are dropped last (#968). That
+  // only changes the menu: the pages keep their own permission checks. A
+  // group left with no entries is not rendered at all.
+  const visibleGroups = NAV_GROUPS.filter(groupVisible)
+    .map((group) => ({
+      ...group,
+      items: filterHiddenNavItems(
+        group.items.filter(
+          (item) => (!item.adminOnly || isAdmin) && featureAvailable(item),
+        ),
+        hiddenNavItems,
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const webBuild = currentWebBuildLabel();
   return (
@@ -229,34 +144,14 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="pb-4">
-        <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
-        <NavGroup label="Artifacts" items={artifactItems} pathname={pathname} />
-        {isAuthenticated && (
-          <NavGroup
-            label="Integration"
-            items={visibleIntegrationItems}
+        {visibleGroups.map((group) => (
+          <NavGroupSection
+            key={group.label}
+            label={group.label}
+            items={group.items}
             pathname={pathname}
           />
-        )}
-        {isAdmin && (
-          <>
-            <NavGroup
-              label="Security"
-              items={visibleSecurityItems}
-              pathname={pathname}
-            />
-            <NavGroup
-              label="Operations"
-              items={operationsItems}
-              pathname={pathname}
-            />
-            <NavGroup
-              label="Administration"
-              items={adminItems}
-              pathname={pathname}
-            />
-          </>
-        )}
+        ))}
       </SidebarContent>
       <SidebarFooter />
       <SidebarRail />

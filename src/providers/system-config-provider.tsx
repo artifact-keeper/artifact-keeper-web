@@ -92,6 +92,15 @@ export function useSystemConfig(): SystemConfigContextValue {
   return ctx;
 }
 
+/**
+ * Sidebar entries an administrator hid for every user (#968). Empty while the
+ * config loads or when the backend predates the setting, so nothing is hidden
+ * by accident.
+ */
+export function useHiddenNavItems(): string[] {
+  return useSystemConfig().config.ui.hidden_nav_items;
+}
+
 /** Just the derived feature flags, the common case for gating UI. */
 export function useFeatureFlags(): FeatureFlags {
   return useSystemConfig().flags;

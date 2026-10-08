@@ -193,4 +193,33 @@ describe("systemConfigApi", () => {
     expect(config.auth.silent_sso_enabled).toBe(true);
     expect(mod.DEFAULT_SYSTEM_CONFIG.auth.silent_sso_enabled).toBe(true);
   });
+  it("reads ui.hidden_nav_items from the public tier (#968)", async () => {
+    const mod = await import("../system-config");
+    const config = mod.parseSystemConfig({
+      ...ANONYMOUS,
+      ui: { hidden_nav_items: ["/peers", "/webhooks"] },
+    });
+    expect(config.ui.hidden_nav_items).toEqual(["/peers", "/webhooks"]);
+  });
+
+  it("hides nothing when the backend predates ui.hidden_nav_items (#968)", async () => {
+    const mod = await import("../system-config");
+    expect(mod.parseSystemConfig(VALID).ui.hidden_nav_items).toEqual([]);
+    expect(
+      mod.parseSystemConfig({ ...VALID, ui: {} }).ui.hidden_nav_items,
+    ).toEqual([]);
+    expect(mod.DEFAULT_SYSTEM_CONFIG.ui.hidden_nav_items).toEqual([]);
+  });
+
+  it("treats a malformed ui block as nothing hidden instead of failing the parse (#968)", async () => {
+    const mod = await import("../system-config");
+    const bad = mod.parseSystemConfig({ ...ANONYMOUS, ui: "nope" });
+    expect(bad.ui.hidden_nav_items).toEqual([]);
+    expect(bad.auth.oidc_enabled).toBe(true);
+    const badList = mod.parseSystemConfig({
+      ...ANONYMOUS,
+      ui: { hidden_nav_items: ["/peers", 3] },
+    });
+    expect(badList.ui.hidden_nav_items).toEqual([]);
+  });
 });
