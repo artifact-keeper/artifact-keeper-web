@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Admins can hide sidebar entries the instance does not use** (#968, backend artifact-keeper#4574) - the sidebar always listed every feature (security scanning, Dependency-Track, peers, replication, plugins, webhooks and more), so teams that only host a few package types got a long menu full of entries nobody used. A new Navigation tab on the admin Settings page has one switch per sidebar entry. The hidden list is stored on the server, applies to every user including guests, and the sidebar reads it from `GET /api/v1/system/config` (`ui.hidden_nav_items`), so it needs no extra request. Hiding is navigation only: hidden pages stay reachable by URL and keep their permission checks. The Settings entry cannot be hidden, so an admin can always get back to the setting. A group whose entries are all hidden is dropped. Nothing is hidden by default, and against a backend without the setting the tab says so and every entry stays visible. Entries are identified by route, so a renamed route shows up again until it is hidden anew.
+
 ## [1.12.0] - 2026-11-18
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
