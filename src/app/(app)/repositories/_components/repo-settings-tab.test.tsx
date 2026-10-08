@@ -274,6 +274,12 @@ vi.mock("@/components/ui/separator", () => ({
   Separator: () => <hr />,
 }));
 
+// The allowlist section has its own suite (conda-allowlist-settings.test.tsx);
+// here only where it appears matters.
+vi.mock("./conda-allowlist-settings", () => ({
+  CondaAllowlistSettings: () => <div data-testid="allowlist-section-stub" />,
+}));
+
 const baseRepo: Repository = {
   id: "repo-1",
   key: "maven-releases",
@@ -2510,5 +2516,22 @@ describe("RepoSettingsTab - Scan on proxy format coverage (#1274)", () => {
     mockGetScanConfig.mockResolvedValue(defaultScanConfig);
 
     expect(await renderScanSection("npm")).toHaveProperty("disabled", true);
+  });
+});
+
+describe("RepoSettingsTab - conda allowlist section (#971)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ["conda", "virtual", true],
+    ["conda_native", "virtual", true],
+    ["conda", "remote", false],
+    ["conda", "local", false],
+    ["pypi", "virtual", false],
+  ] as const)("format %s, type %s: shown=%s", (format, repo_type, shown) => {
+    render(<RepoSettingsTab repository={{ ...baseRepo, key: "c", format, repo_type }} />, {
+      wrapper: createWrapper(),
+    });
+    expect(!!screen.queryByTestId("allowlist-section-stub")).toBe(shown);
   });
 });

@@ -208,6 +208,13 @@ vi.mock("./notifications-tab-content", () => ({ NotificationsTabContent: () => <
 vi.mock("./virtual-members-panel", () => ({ VirtualMembersPanel: () => <div data-stub="members" /> }));
 vi.mock("./packages-tab-content", () => ({ PackagesTabContent: () => <div data-stub="packages" /> }));
 vi.mock("./repo-settings-tab", () => ({ RepoSettingsTab: () => <div data-stub="settings" /> }));
+vi.mock("./conda-allowlist-summary", () => ({
+  CondaAllowlistSummary: ({ onOpen }: { onOpen: () => void }) => (
+    <button type="button" onClick={onOpen}>
+      Allowlist: on, 2 entries
+    </button>
+  ),
+}));
 vi.mock("./maven-component-list", () => ({ MavenComponentList: () => <div data-stub="maven" /> }));
 vi.mock("./docker-tag-list", () => ({
   // Interactive stand-in: renders one row per supplied tag and exposes the
@@ -922,5 +929,17 @@ describe("RepoDetailContent header storage backend (#918)", () => {
     repository.storage_backend = undefined;
     render(<RepoDetailContent repoKey="demo" standalone />);
     expect(screen.queryByText(/^Storage:/)).not.toBeInTheDocument();
+  });
+});
+
+describe("RepoDetailContent allowlist summary (#971)", () => {
+  beforeEach(() => cleanup());
+  afterEach(() => cleanup());
+
+  it("opens the Settings tab, where admins edit the allowlist", async () => {
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Allowlist: on, 2 entries" }));
+    expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "true");
   });
 });

@@ -78,6 +78,9 @@ import { ProxyScanSummarySection } from "./proxy-scan-summary";
 import { HealthTabContent } from "./health-tab-content";
 import { NotificationsTabContent } from "./notifications-tab-content";
 import { VirtualMembersPanel } from "./virtual-members-panel";
+import { CondaAllowlistSettings } from "./conda-allowlist-settings";
+import { CondaAllowlistSummary } from "./conda-allowlist-summary";
+import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
 import { StorageBackendBadge } from "./storage-backend-badge";
@@ -224,6 +227,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // reader straight to the Analysis tab. Reset to "details" on every open,
   // which is what the previously uncontrolled Tabs did by unmounting.
   const [artifactTab, setArtifactTab] = useState("details");
+
+  // The repository tab, once the user (or the allowlist summary line) picks
+  // one. Until then the Tabs show the URL/format default, exactly as the
+  // former uncontrolled `defaultValue` did.
+  const [repoTab, setRepoTab] = useState<string | null>(null);
 
   // Which quarantine decision the admin is confirming, and the optional reason
   // recorded with a rejection (#650).
@@ -1120,6 +1128,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           the instance total and reclaimable estimate. Field visibility for
           non-admins on instance-scope backends is enforced by the backend and
           handled gracefully by the panel. */}
+      {/* Package allowlist state of a virtual conda channel (#971). Admins
+          edit it on Settings; anyone else the backend shows it to reads it
+          on Members. */}
+      <CondaAllowlistSummary
+        repository={repository}
+        enabled={isAuthenticated}
+        onOpen={() => {
+          setRepoTab(user?.is_admin ? "settings" : "members");
+          // After the tab panel mounts.
+          setTimeout(() => {
+            document
+              .getElementById("settings-allowlist")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 50);
+        }}
+      />
+
       <RepoStoragePanel
         repository={repository}
         isAdmin={!!user?.is_admin}
@@ -1143,11 +1168,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           is loaded before this renders (guards above), so the format is known
           when the uncontrolled Tabs mounts. */}
       <Tabs
-        defaultValue={resolveInitialRepoTab(
-          searchParams.get("tab"),
-          searchParams.get("view"),
-          repoFormat,
-        )}
+        value={
+          repoTab ??
+          resolveInitialRepoTab(
+            searchParams.get("tab"),
+            searchParams.get("view"),
+            repoFormat,
+          )
+        }
+        onValueChange={setRepoTab}
       >
         {/* Wraps instead of running past a narrow detail pane (split view). */}
         <TabsList
@@ -1429,6 +1458,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {repository.repo_type === "virtual" && (
           <TabsContent value="members" className="mt-4">
             <VirtualMembersPanel repository={repository} />
+            {!user?.is_admin && isAuthenticated && supportsCondaAllowlist(repository) && (
+              <div className="mt-8">
+                <CondaAllowlistSettings repository={repository} readOnly />
+              </div>
+            )}
           </TabsContent>
         )}
 

@@ -467,6 +467,43 @@ describe("AuditLogPage", () => {
     const expectedPreview = `${JSON.stringify(longDetails).slice(0, 80)}…`;
     expect(screen.getByText(expectedPreview)).toBeInTheDocument();
   });
+
+  it("renders an allowlist change with the previous and current entry counts", () => {
+    const details = {
+      repository: "conda-virtual",
+      previous: { enabled: false, entry_count: 43 },
+      current: { enabled: true, entry_count: 43 },
+    };
+    queryState({
+      audit: {
+        data: {
+          items: [
+            { ...EVENT, id: "a1", action: "REPOSITORY_ALLOWLIST_CHANGED", resource_type: "repository", details },
+            {
+              ...EVENT,
+              id: "a2",
+              action: "REPOSITORY_ALLOWLIST_CHANGED",
+              resource_type: "repository",
+              details: { repository: "conda-virtual", previous: { enabled: true, entry_count: 43 }, current: null },
+            },
+          ],
+          total: 2,
+          page: 1,
+          per_page: 50,
+        },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+      },
+    });
+
+    render(<AuditLogPage />);
+
+    const line = screen.getByText("conda-virtual: off, 43 → on, 43 entries");
+    // The raw JSON stays available on hover.
+    expect(line).toHaveAttribute("title", JSON.stringify(details, null, 2));
+    expect(screen.getByText("conda-virtual: allowlist removed (was on, 43 entries)")).toBeInTheDocument();
+  });
 });
 
 describe("AuditLogPage export", () => {

@@ -46,6 +46,8 @@ import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ReleaseTargetSettings } from "./release-target-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
+import { CondaAllowlistSettings } from "./conda-allowlist-settings";
+import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { CleanupPolicySettings } from "./cleanup-policy-settings";
 import {
   RpmTrustedKeyField,
@@ -1284,6 +1286,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {repository.repo_type === "staging" && (
         <>
           <ReleaseTargetSettings repository={repository} />
+          <Separator />
+        </>
+      )}
+
+      {/* -- Package allowlist (virtual conda channels, #971) -- */}
+      {supportsCondaAllowlist(repository) && (
+        <>
+          <CondaAllowlistSettings repository={repository} />
           <Separator />
         </>
       )}

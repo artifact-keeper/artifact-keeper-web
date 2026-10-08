@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/audit";
 import { adminApi } from "@/lib/api/admin";
 import { triggerBrowserDownload } from "@/lib/download";
+import { ALLOWLIST_AUDIT_ACTION, describeAllowlistAudit } from "@/lib/conda-allowlist";
 
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
@@ -77,6 +78,15 @@ export function dateBoundsToIso(filters: Pick<AuditFilters, "from" | "to">): {
 
 function truncateId(id: string): string {
   return id.length > 13 ? `${id.slice(0, 13)}…` : id;
+}
+
+/**
+ * A readable line for actions whose details have a known shape, else null
+ * (the raw JSON preview is shown).
+ */
+function describeAuditDetails(item: Pick<AuditLogItem, "action" | "details">): string | null {
+  if (item.action === ALLOWLIST_AUDIT_ACTION) return describeAllowlistAudit(item.details);
+  return null;
 }
 
 function detailsPreview(details: unknown): string {
@@ -277,7 +287,7 @@ export default function AuditLogPage() {
                 : JSON.stringify(r.details, null, 2)
           }
         >
-          {detailsPreview(r.details)}
+          {describeAuditDetails(r) ?? detailsPreview(r.details)}
         </span>
       ),
     },
