@@ -258,6 +258,14 @@ vi.mock("@/components/common/token-create-form", () => ({
           >
             Change Selector
           </button>
+          <button
+            data-testid="repo-selector-flag-only-btn"
+            onClick={() =>
+              onRepoSelectorChange?.({ include_virtual_members: true })
+            }
+          >
+            Flag Only
+          </button>
         </div>
       )}
       {notice}
@@ -1591,6 +1599,27 @@ describe("AccessTokensPage", () => {
         scopes: ["read:artifacts"],
         repo_selector: { match_formats: ["docker"] },
       });
+    });
+
+    // A flag-only selector matches nothing, so `selectorHasFilters` is false
+    // and the page would drop it - minting an UNRESTRICTED token while the
+    // user asked for the members of a virtual repository. Refused instead,
+    // as on the service-account form (artifact-keeper#4130).
+    it("refuses the virtual-members flag without a filter", async () => {
+      const { profileApi } = await import("@/lib/api/profile");
+      const { toast } = await import("sonner");
+      setupDefaultMocks({ serverVersion: "1.11.0" });
+      render(<AccessTokensPage />);
+      fireEvent.click(
+        screen.getByTestId("tab-content-access-tokens").querySelector("button")!
+      );
+      fireEvent.click(screen.getByTestId("repo-selector-flag-only-btn"));
+      fireEvent.click(screen.getByTestId("form-submit-btn"));
+
+      expect(profileApi.createAccessToken).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("needs a format, label or name pattern")
+      );
     });
 
     it("sends no repo_selector on 1.11.0 when no filter is chosen", async () => {
