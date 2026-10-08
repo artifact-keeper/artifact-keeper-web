@@ -85,12 +85,6 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
   const keyTypeMismatch =
     !!selectedKey && !keyTypeMatchesFormat(selectedKey.key_type, repository.format);
 
-  const { data: trustAttestation } = useQuery({
-    queryKey: ["signing-key-trust", selectedKey?.id],
-    queryFn: () => signingApi.getTrustAttestation(selectedKey!.id),
-    enabled: !!selectedKey?.id,
-  });
-
   const saveMutation = useMutation({
     mutationFn: () =>
       signingApi.updateRepoConfig(repository.id, {
@@ -158,10 +152,6 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
   }
 
   const loading = configLoading || keysLoading;
-  const showAttestationWarning =
-    effectiveSignMetadata &&
-    effectiveKeyId !== NONE_KEY &&
-    trustAttestation?.verification_status !== "verified";
 
   return (
     <section aria-labelledby="settings-signing-heading">
@@ -318,36 +308,13 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
             </Alert>
           )}
 
-          {showAttestationWarning && !keyTypeMismatch && (
-            <Alert>
-              <ShieldAlert className="size-4" />
-              <AlertTitle>Key is not attested</AlertTitle>
-              <AlertDescription>
-                Metadata signing is enabled with a key that has no external trust attestation.
-                Consider attesting the key on the Signing page so operators can prove it was
-                authorized by your root key (for example on a YubiKey).
-              </AlertDescription>
-            </Alert>
-          )}
-
           {selectedKey && (
             <div className="rounded-md border p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium">Selected key details</p>
-                <div className="flex items-center gap-1">
-                  <Badge variant="outline" className="uppercase text-xs">
-                    {selectedKey.key_type}
-                  </Badge>
-                  {trustAttestation?.verification_status === "verified" ? (
-                    <Badge variant="secondary" className="text-xs">
-                      Attested
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">
-                      Not attested
-                    </Badge>
-                  )}
-                </div>
+                <Badge variant="outline" className="uppercase text-xs">
+                  {selectedKey.key_type}
+                </Badge>
               </div>
               <p className="font-mono text-xs text-muted-foreground break-all">
                 {selectedKey.fingerprint ?? selectedKey.key_id ?? selectedKey.algorithm}

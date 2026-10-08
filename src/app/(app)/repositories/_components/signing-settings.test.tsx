@@ -31,7 +31,6 @@ const mockGetRepoConfig = vi.fn();
 const mockUpdateRepoConfig = vi.fn();
 const mockListKeys = vi.fn();
 const mockCreateKey = vi.fn();
-const mockGetTrustAttestation = vi.fn();
 
 vi.mock("@/lib/api/signing", () => ({
   default: {
@@ -39,7 +38,6 @@ vi.mock("@/lib/api/signing", () => ({
     updateRepoConfig: (...a: unknown[]) => mockUpdateRepoConfig(...a),
     listKeys: (...a: unknown[]) => mockListKeys(...a),
     createKey: (...a: unknown[]) => mockCreateKey(...a),
-    getTrustAttestation: (...a: unknown[]) => mockGetTrustAttestation(...a),
   },
 }));
 
@@ -153,7 +151,6 @@ beforeEach(() => {
       created_at: "2026-01-01T00:00:00Z",
     },
   ]);
-  mockGetTrustAttestation.mockResolvedValue(null);
   mockUpdateRepoConfig.mockResolvedValue({
     repository_id: "repo-1",
     signing_key_id: "k-global",
