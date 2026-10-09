@@ -81,6 +81,47 @@
   --sidebar-ring: oklch(0.5 0.14 260);
 }
 
+/*
+ * "Light (neutral)": white and neutral-gray surfaces instead of the warm
+ * palette above. Primary, ring, destructive and chart colors stay the same;
+ * accent surfaces take a faint tint of the primary hue. Text pairs meet
+ * WCAG AA (checked in globals-css.test.ts).
+ */
+.light-neutral {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0 0);
+  --primary: oklch(0.45 0.14 265);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.25 0 0);
+  --muted: oklch(0.965 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.95 0.02 265);
+  --accent-foreground: oklch(0.25 0.06 265);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.88 0 0);
+  --ring: oklch(0.5 0.14 260);
+  --chart-1: oklch(0.68 0.16 55);
+  --chart-2: oklch(0.45 0.15 260);
+  --chart-3: oklch(0.38 0.08 325);
+  --chart-4: oklch(0.8 0.14 75);
+  --chart-5: oklch(0.55 0.14 345);
+  --sidebar: oklch(0.975 0 0);
+  --sidebar-foreground: oklch(0.2 0 0);
+  --sidebar-primary: oklch(0.45 0.14 265);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.94 0.02 265);
+  --sidebar-accent-foreground: oklch(0.25 0.06 265);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.5 0.14 260);
+}
+
 .dark {
   --background: oklch(0.1 0.025 270);
   --foreground: oklch(0.92 0.04 85);

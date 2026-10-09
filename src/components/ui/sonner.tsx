@@ -15,7 +15,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      // Sonner only knows light/dark/system; the neutral light theme is light.
+      theme={(theme === "light-neutral" ? "light" : theme) as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

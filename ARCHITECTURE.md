@@ -157,12 +157,17 @@ UI is built on shadcn/ui (the "new-york" style) over Radix primitives.
 
 Styling is Tailwind CSS 4, configured entirely in `src/app/globals.css` (there
 is no `tailwind.config`). Colors are CSS custom properties defined as
-`oklch(...)` under `:root` and overridden under `.dark`, surfaced to Tailwind
-via `@theme inline`. Use the semantic tokens (`bg-background`, `text-foreground`,
-`bg-muted`, `border-border`, and so on) rather than raw palette values so both
-themes stay correct. Dark mode is class-based (`@custom-variant dark`) and driven
-by `next-themes` (`attribute="class"`, `defaultTheme="system"`). The design is
-dark-mode-first, so verify both themes when you touch visual code.
+`oklch(...)` under `:root` (the warm light theme) and overridden under
+`.light-neutral` (white and neutral-gray light theme) and `.dark`, surfaced to
+Tailwind via `@theme inline`. Use the semantic tokens (`bg-background`,
+`text-foreground`, `bg-muted`, `border-border`, and so on) rather than raw
+palette values so every theme stays correct. Themes are class-based
+(`@custom-variant dark`) and driven by `next-themes` (`attribute="class"`,
+`defaultTheme="system"`); the selectable list is `THEME_OPTIONS` in
+`src/providers/theme-provider.tsx`, picked from the header's theme menu. A new
+token must be defined in all three blocks (`src/app/__tests__/globals-css.test.ts`
+checks the neutral block). The design is dark-mode-first, so verify the themes
+when you touch visual code.
 
 ## State rules
 

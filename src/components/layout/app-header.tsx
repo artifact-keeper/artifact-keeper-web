@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import {
-  Sun,
-  Moon,
   SearchIcon,
   User,
   LogOut,
@@ -24,10 +21,10 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { QuickSearch } from "@/components/search/quick-search";
 import { InstanceSwitcher } from "./instance-switcher";
+import { ThemeMenu } from "./theme-menu";
 
 export function AppHeader() {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
   const { user, isAuthenticated, logout } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -94,16 +91,8 @@ export function AppHeader() {
           {/* Instance switcher */}
           <InstanceSwitcher />
 
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
+          {/* Theme picker */}
+          <ThemeMenu />
 
           {/* User menu or sign in */}
           {isAuthenticated ? (
