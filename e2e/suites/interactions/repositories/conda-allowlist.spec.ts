@@ -60,6 +60,10 @@ test.describe.serial('Conda virtual allowlist', () => {
   });
 
   test('an invalid entry is rejected and named', async ({ request }) => {
+    if ((await request.get(api)).status() === 404) {
+      test.skip(true, 'Backend predates the conda allowlist (artifact-keeper#4576)');
+      return;
+    }
     const resp = await request.put(api, {
       data: { enabled: true, entries: [{ name: 'numpy' }, { name: 'pandas', version: '>=>2' }] },
     });
@@ -68,6 +72,10 @@ test.describe.serial('Conda virtual allowlist', () => {
   });
 
   test('UI: enable with two entries, see the summary, disable', async ({ page, request }) => {
+    if ((await request.get(api)).status() === 404) {
+      test.skip(true, 'Backend predates the conda allowlist (artifact-keeper#4576)');
+      return;
+    }
     await request.delete(api).catch(() => {});
 
     await page.goto(`/repositories/${REPO_KEY}`);
