@@ -5,6 +5,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import React from "react";
 
 import type { Artifact } from "@/types";
+import type { CveHistoryEntry } from "@/types/sbom";
 import { ANALYZABLE_DISABLED_REASON } from "@/lib/artifact-analyzable";
 
 // ---------------------------------------------------------------------------
@@ -245,6 +246,71 @@ describe("SecurityTabContent — CVE empty state (#3344)", () => {
     expect(
       screen.getByText(/No vulnerabilities detected for this artifact/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("SecurityTabContent — severity bar counts open CVEs only (#4338)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => cleanup());
+
+  function cve(overrides: Partial<CveHistoryEntry>): CveHistoryEntry {
+    return {
+      id: "c",
+      artifact_id: "a1",
+      sbom_id: null,
+      component_id: null,
+      scan_result_id: null,
+      cve_id: "CVE-2026-0000",
+      affected_component: null,
+      affected_version: null,
+      fixed_version: null,
+      severity: "high",
+      cvss_score: null,
+      cve_published_at: null,
+      first_detected_at: "2026-06-01T10:00:00Z",
+      last_detected_at: "2026-06-01T10:00:00Z",
+      status: "open",
+      ...overrides,
+    } as CveHistoryEntry;
+  }
+
+  it("sizes the bar by open CVEs and tallies the other statuses in the status row", () => {
+    // The issue's reproduction after a rescan: one fixed critical, one open
+    // critical, one open low, one acknowledged high. Before #4338 the bar
+    // counted all four and the critical segment was 50% wide.
+    mockUseQuery.mockImplementation((opts: { queryKey: unknown[] }) => {
+      if (opts.queryKey[0] === "cve-history") {
+        return {
+          data: [
+            cve({ id: "c1", cve_id: "CVE-2026-0001", severity: "critical", status: "fixed" }),
+            cve({ id: "c2", cve_id: "CVE-2026-0002", severity: "critical", status: "open" }),
+            cve({ id: "c3", cve_id: "CVE-2026-0003", severity: "low", status: "open" }),
+            cve({ id: "c4", cve_id: "CVE-2026-0004", severity: "high", status: "acknowledged" }),
+          ],
+          isLoading: false,
+        };
+      }
+      return { data: undefined, isLoading: false };
+    });
+    render(<SecurityTabContent artifact={art({ analyzable: true })} />);
+
+    expect(screen.getByText("Open CVEs by severity")).toBeInTheDocument();
+    const critical = screen.getByTitle("critical: 1");
+    expect(critical).toHaveStyle({ width: "50%" });
+    expect(screen.getByTitle("low: 1")).toHaveStyle({ width: "50%" });
+    // No segment for the acknowledged high, and no fixed count in the bar.
+    expect(screen.queryByTitle(/^high:/)).toBeNull();
+    expect(screen.queryByTitle("critical: 2")).toBeNull();
+
+    // The status row still accounts for every entry in the history.
+    const row = (label: string) =>
+      screen.getByText(label).parentElement?.querySelector("p.text-lg")?.textContent;
+    expect(row("Open")).toBe("2");
+    expect(row("Fixed")).toBe("1");
+    expect(row("Acknowledged")).toBe("1");
+    expect(row("False Positive")).toBe("0");
   });
 });
 
