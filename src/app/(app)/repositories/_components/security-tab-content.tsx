@@ -52,6 +52,7 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { VulnIdLink } from "@/components/common/vuln-id-link";
 import { VendoredAdvisoriesSummary } from "./vendored-advisories-summary";
+import { openSeverityBreakdown, OPEN_SEVERITY_COUNTS_HINT } from "@/lib/severity-counts";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -261,21 +262,27 @@ export function SecurityTabContent({
   // CVE severity breakdown (existing logic)
   // -------------------------------------------------------------------------
 
-  const breakdown = (cveHistory ?? []).reduce(
-    (acc, cve) => {
-      const sev = (cve.severity?.toLowerCase() ?? "low") as keyof typeof acc.severity;
-      if (sev in acc.severity) acc.severity[sev]++;
-      const status = cve.status as keyof typeof acc.status;
-      if (status in acc.status) acc.status[status]++;
-      return acc;
-    },
-    {
-      severity: { critical: 0, high: 0, medium: 0, low: 0 },
-      status: { open: 0, fixed: 0, acknowledged: 0, false_positive: 0 },
-    },
-  );
+  // #4338: the severity bar counts OPEN CVEs only, the same definition the
+  // dashboards use (see lib/severity-counts.ts); fixed, acknowledged and
+  // false-positive entries are tallied in the status row below instead.
+  const breakdown = {
+    severity: openSeverityBreakdown(cveHistory ?? []),
+    status: (cveHistory ?? []).reduce(
+      (acc, cve) => {
+        const status = cve.status as keyof typeof acc;
+        if (status in acc) acc[status]++;
+        return acc;
+      },
+      { open: 0, fixed: 0, acknowledged: 0, false_positive: 0 },
+    ),
+  };
 
   const total = cveHistory?.length ?? 0;
+  const openTotal =
+    breakdown.severity.critical +
+    breakdown.severity.high +
+    breakdown.severity.medium +
+    breakdown.severity.low;
 
   // Sort by severity (critical first), then by date
   const sortedCves = [...(cveHistory ?? [])].sort((a, b) => {
@@ -666,13 +673,14 @@ export function SecurityTabContent({
         </div>
       ) : (
         <>
-          {/* Severity Breakdown Bar */}
-          <div className="space-y-3">
+          {/* Severity Breakdown Bar: open CVEs only (#4338) */}
+          <div className="space-y-3" title={OPEN_SEVERITY_COUNTS_HINT}>
+            <p className="text-xs text-muted-foreground">Open CVEs by severity</p>
             <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
               {(["critical", "high", "medium", "low"] as const).map((sev) => {
                 const count = breakdown.severity[sev];
                 if (count === 0) return null;
-                const pct = (count / total) * 100;
+                const pct = (count / openTotal) * 100;
                 return (
                   <div
                     key={sev}

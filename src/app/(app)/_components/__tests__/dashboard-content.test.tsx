@@ -460,7 +460,7 @@ describe("DashboardContent", () => {
     });
     render(<DashboardContent />);
     // Severity breakdown section should not render when total_cves = 0
-    expect(screen.queryByText("Severity Breakdown")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open CVEs by Severity")).not.toBeInTheDocument();
     // But Security Overview stats should still render
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
   });

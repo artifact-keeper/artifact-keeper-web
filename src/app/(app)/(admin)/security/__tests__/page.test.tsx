@@ -578,8 +578,8 @@ describe("SecurityDashboardPage", () => {
 
       expect(screen.getByTestId("stat-Repos with Scanning")).toHaveTextContent("5");
       expect(screen.getByTestId("stat-Total Scans")).toHaveTextContent("42");
-      expect(screen.getByTestId("stat-Critical Findings")).toHaveTextContent("3");
-      expect(screen.getByTestId("stat-High Findings")).toHaveTextContent("7");
+      expect(screen.getByTestId("stat-Open Critical")).toHaveTextContent("3");
+      expect(screen.getByTestId("stat-Open High")).toHaveTextContent("7");
       expect(screen.getByTestId("stat-Open Findings")).toHaveTextContent("15");
       expect(screen.getByTestId("stat-Grade A Repos")).toHaveTextContent("2");
       expect(screen.getByTestId("stat-Grade F Repos")).toHaveTextContent("1");

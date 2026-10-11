@@ -57,6 +57,7 @@ import {
 
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
+import { OPEN_SEVERITY_COUNTS_HINT } from "@/lib/severity-counts";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
@@ -378,20 +379,23 @@ export default function SecurityDashboardPage() {
           />
           <StatCard
             icon={AlertCircle}
-            label="Critical Findings"
+            label="Open Critical"
             value={dashboard.critical_findings}
+            tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.critical_findings > 0 ? "red" : "green"}
           />
           <StatCard
             icon={AlertTriangle}
-            label="High Findings"
+            label="Open High"
             value={dashboard.high_findings}
+            tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.high_findings > 0 ? "yellow" : "green"}
           />
           <StatCard
             icon={Bug}
             label="Open Findings"
             value={dashboard.total_findings}
+            tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.total_findings > 0 ? "yellow" : "green"}
           />
           <StatCard

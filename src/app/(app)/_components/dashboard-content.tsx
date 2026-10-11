@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OPEN_SEVERITY_COUNTS_HINT } from "@/lib/severity-counts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -430,17 +431,20 @@ export function DashboardContent() {
                   label="Total CVEs"
                   value={cveTrends.total_cves}
                   color="blue"
+                  tooltip="Open plus acknowledged, from each artifact's latest scans."
                 />
                 <StatCard
                   icon={ShieldAlert}
                   label="Open CVEs"
                   value={cveTrends.open_cves}
+                  tooltip={OPEN_SEVERITY_COUNTS_HINT}
                   color="yellow"
                 />
                 <StatCard
                   icon={ShieldX}
-                  label="Critical"
+                  label="Open Critical"
                   value={cveTrends.critical_count}
+                  tooltip={OPEN_SEVERITY_COUNTS_HINT}
                   color="red"
                 />
                 <StatCard
@@ -455,7 +459,8 @@ export function DashboardContent() {
               {cveTrends.total_cves > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Severity Breakdown</CardTitle>
+                    <CardTitle className="text-sm font-medium">Open CVEs by Severity</CardTitle>
+                    <p className="text-xs text-muted-foreground">{OPEN_SEVERITY_COUNTS_HINT}</p>
                   </CardHeader>
                   <CardContent>
                     <SeverityBreakdown trends={cveTrends} />
