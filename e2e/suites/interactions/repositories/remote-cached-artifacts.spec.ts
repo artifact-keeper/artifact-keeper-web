@@ -20,8 +20,11 @@ import { test, expect } from '@playwright/test';
  *
  * Uses the seeded `e2e-npm-remote` repository (proxies registry.npmjs.org,
  * see e2e/setup/seed-data.ts). The NPM proxy routes are mounted at
- * `/npm/{repo_key}/...`; fetching package metadata caches an entry under the
- * package path, which the listing surfaces with `path === <package>`.
+ * `/npm/{repo_key}/...`. Since backend #4305 a cached packument is metadata,
+ * not a package: it is not an artifact and the listing leaves it out. What
+ * the listing surfaces is the cached tarball, under
+ * `<package>/-/<package>-<version>.tgz`, so the pull-through below does what
+ * `npm install` does: read the packument, then fetch one tarball.
  */
 test.describe('Remote repository cached artifacts (#424)', () => {
   const REPO_KEY = 'e2e-npm-remote';
@@ -38,7 +41,20 @@ test.describe('Remote repository cached artifacts (#424)', () => {
     request: import('@playwright/test').APIRequestContext
   ): Promise<boolean> {
     const resp = await request.get(`/npm/${REPO_KEY}/${PACKAGE}`);
-    return resp.ok();
+    if (!resp.ok()) return false;
+    // The packument alone is metadata (backend #4305); fetch one tarball so
+    // the proxy caches an artifact the listing can show.
+    const packument = (await resp.json()) as {
+      'dist-tags'?: Record<string, string>;
+      versions?: Record<string, unknown>;
+    };
+    const version =
+      packument['dist-tags']?.latest ?? Object.keys(packument.versions ?? {}).pop();
+    if (!version) return false;
+    const tarball = await request.get(
+      `/npm/${REPO_KEY}/${PACKAGE}/-/${PACKAGE}-${version}.tgz`
+    );
+    return tarball.ok();
   }
 
   test('proxy-cached package appears in the artifact listing API', async ({ request }) => {
@@ -110,7 +126,7 @@ test.describe('Remote repository cached artifacts (#424)', () => {
             (item.name ?? '').includes(PACKAGE)
         );
       }
-      if (!listed) await request.get(`/npm/${REPO_KEY}/${PACKAGE}`).catch(() => {});
+      if (!listed) await pullThroughProxy(request).catch(() => false);
       if (!listed) await page.waitForTimeout(1500);
     }
     test.skip(
