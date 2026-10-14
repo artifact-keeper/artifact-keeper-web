@@ -513,7 +513,7 @@ describe("PermissionsPage", () => {
       expect(getFormSelects().length).toBe(2);
     });
 
-    it("shows Target Group label and group select for group target type", async () => {
+    it("shows the group label and group select for group target type", async () => {
       const user = userEvent.setup();
       renderPage();
       await waitForTableLoaded();
@@ -522,7 +522,7 @@ describe("PermissionsPage", () => {
       const selects = getFormSelects();
       await user.selectOptions(selects[1], "group");
 
-      expect(screen.getByText("Target Group")).toBeTruthy();
+      expect(screen.getByText("Group (view / manage access)")).toBeTruthy();
 
       // The target_id select should contain group options
       const updatedSelects = getFormSelects();
@@ -551,6 +551,35 @@ describe("PermissionsPage", () => {
 
       const refreshed = getFormSelects();
       expect(refreshed[2].value).toBe("");
+    });
+
+    // #4653: a group-target rule is about the group object (read to see it,
+    // admin to manage it); it is not membership. The form says so, and links
+    // to the Groups page where membership is managed.
+    it("explains that a group target is not membership, and links to the Groups page (#4653)", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      const hint = /This controls who can view or manage the group itself/;
+
+      // Default target type is repository: no hint.
+      expect(screen.queryByText(hint)).toBeNull();
+
+      const selects = getFormSelects();
+      await user.selectOptions(selects[1], "group");
+
+      const hintEl = screen.getByText(hint);
+      expect(hintEl.textContent).toContain(
+        "To give this principal the group's repository access, add it as a member on the Groups page.",
+      );
+      const link = screen.getByRole("link", { name: "Groups page" });
+      expect(link.getAttribute("href")).toBe("/groups");
+
+      // Switching back to repository removes it again.
+      await user.selectOptions(getFormSelects()[1], "repository");
+      expect(screen.queryByText(hint)).toBeNull();
     });
   });
 

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The permissions form says what a group target is, and is not** (backend artifact-keeper#4653) - choosing principal type Service Account or User and target type Group creates a rule like `service_account X -> group G -> read`, which grants X the ability to view (`read`) or manage (`admin`) the group object. It does not add X to G and gives X none of G's repository access; membership is managed on the Groups page. The target label was just "Target Group", and a user read it as "give this account the group's access" (artifact-keeper#4593). The label now reads "Group (view / manage access)" and a hint under the picker says what the rule does and links to the Groups page for membership. Frontend only; the backend split between a group-target rule and `user_group_members` is correct and unchanged.
+
 ## [1.11.0] - 2026-10-11
 
 ### Added

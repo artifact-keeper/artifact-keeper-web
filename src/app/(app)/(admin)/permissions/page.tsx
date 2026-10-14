@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus, Pencil, Trash2, Shield } from "lucide-react";
 import { toast } from "sonner";
@@ -554,7 +555,7 @@ export default function PermissionsPage() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>{form.target_type === "repository" ? "Repository" : form.target_type === "group" ? "Target Group" : "Artifact ID"}</Label>
+          <Label>{form.target_type === "repository" ? "Repository" : form.target_type === "group" ? "Group (view / manage access)" : "Artifact ID"}</Label>
           {form.target_type === "artifact" ? (
             <Input
               placeholder="Artifact UUID"
@@ -587,6 +588,20 @@ export default function PermissionsPage() {
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {form.target_type === "group" && (
+            // #4653: a group-target rule grants read/admin on the group
+            // object, not membership and not the group's repository access.
+            // A user read "Target Group" as "add this account to the group".
+            <p className="text-xs text-muted-foreground">
+              This controls who can view or manage the group itself. To give
+              this principal the group&apos;s repository access, add it as a
+              member on the{" "}
+              <Link href="/groups" className="underline underline-offset-2">
+                Groups page
+              </Link>
+              .
+            </p>
           )}
         </div>
       </div>
