@@ -412,7 +412,9 @@ describe("SetupPage - conda client variants (#908)", () => {
       expect(within(dialog).getByRole("tab", { name: "Conda", selected: true })).toBeTruthy();
       expect(within(dialog).getByRole("tab", { name: "Mamba / Micromamba" })).toBeTruthy();
       const panel = within(dialog).getByRole("tabpanel", { name: "Conda" });
-      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/my-conda");
+      expect(panel.textContent).toContain("://YOUR_USERNAME:YOUR_TOKEN@");
+      expect(panel.textContent).toContain("/conda/my-conda");
+      expect(panel.textContent).not.toContain("/conda/t/");
       expect(dialog.textContent).not.toContain("pip.conf");
       expect(dialog.textContent).not.toContain("/api/v1/repositories/");
     },

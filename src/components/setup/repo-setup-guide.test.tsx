@@ -90,7 +90,7 @@ describe("RepoSetupGuide", () => {
   // Both formats are served by the backend's conda channel routes
   // (/conda/<key>/..., artifact-keeper handlers/conda.rs), never by /pypi (#908).
   it.each(["conda", "conda_native"] as const)(
-    "gives a local %s repo conda channel setup with a token URL and an upload tab (#908)",
+    "gives a local %s repo conda channel setup with a Basic-auth channel URL and an upload tab (#908)",
     (format) => {
       const { container } = render(
         <RepoSetupGuide repo={makeRepo({ format, key: "sci", repo_type: "local" })} />,
@@ -101,7 +101,8 @@ describe("RepoSetupGuide", () => {
       const panel = screen.getByRole("tabpanel", { name: "Conda" });
       expect(panel.textContent).toContain("~/.condarc");
       expect(panel.textContent).toContain("channels:");
-      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/sci");
+      expect(panel.textContent).toContain("://YOUR_USERNAME:YOUR_TOKEN@");
+      expect(panel.textContent).toContain("/conda/sci");
       expect(panel.textContent).toContain("conda install -c ");
       expect(panel.textContent).toContain("ahead of the channels you already use");
       expect(container.textContent).not.toContain("/pypi/");
@@ -134,8 +135,30 @@ describe("RepoSetupGuide", () => {
       render(<RepoSetupGuide repo={makeRepo({ format: "conda", key: "cf", repo_type })} />);
       expect(screen.queryByRole("tab", { name: "Upload" })).toBeNull();
       const panel = screen.getByRole("tabpanel", { name: "Conda" });
-      expect(panel.textContent).toContain("/conda/t/YOUR_TOKEN/cf");
+      expect(panel.textContent).toContain("://YOUR_USERNAME:YOUR_TOKEN@");
+      expect(panel.textContent).toContain("/conda/cf");
       expect(panel.textContent).toContain("routes every install through the repository");
+    },
+  );
+
+  // Artifact Keeper tokens are `<8 hex>_<32 hex>`; conda's `split_anaconda_token`
+  // (regex `/t/([a-zA-Z0-9-]*)`) stops at the underscore, so a `/conda/t/<token>/`
+  // channel makes conda request `/t/<8 hex>/conda_<32 hex>/<key>/...` and 404.
+  // Basic auth in the URL is what conda, mamba and micromamba all send intact.
+  it.each(["local", "remote"] as const)(
+    "never embeds the token as an anaconda.org-style /t/ segment on a %s conda repo",
+    async (repo_type) => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <RepoSetupGuide repo={makeRepo({ format: "conda", key: "sci", repo_type })} />,
+      );
+      expect(container.textContent).not.toContain("/conda/t/");
+      expect(container.textContent).not.toContain("/t/YOUR_TOKEN");
+      await user.click(screen.getByRole("tab", { name: "Mamba / Micromamba" }));
+      const mamba = screen.getByRole("tabpanel", { name: "Mamba / Micromamba" });
+      expect(mamba.textContent).toContain("://YOUR_USERNAME:YOUR_TOKEN@");
+      expect(mamba.textContent).not.toContain("/conda/t/");
+      expect(container.textContent).toContain("drop YOUR_USERNAME:YOUR_TOKEN@");
     },
   );
 

@@ -505,21 +505,34 @@ const PYPI_DEFAULT_VARIANT: Record<"pypi" | "poetry" | "jupyter", string> = {
  *  served by the same channel routes (`/conda/<key>/<subdir>/repodata.json`,
  *  artifact-keeper `handlers/conda.rs`), so both formats get this content.
  *
- *  Credentials ride in the channel URL as `/conda/t/<token>/<key>` — the form
- *  conda clients understand natively (they mask the `/t/<token>` segment in
- *  output). The backend validates that segment as an API token, so a login
- *  password does not work there. Remote and virtual channels reject writes, so
- *  the upload tab is only offered for local/staging repos. `channel_alias` is
- *  deliberately not suggested: it re-roots every short channel name (e.g.
- *  `conda-forge`) onto this server, which only resolves if a repo has that key. */
+ *  Credentials ride in the channel URL as HTTP Basic auth
+ *  (`https://USER:TOKEN@host/conda/<key>`). conda, mamba and micromamba all
+ *  turn that into an `Authorization: Basic` header, and the backend's format
+ *  routes accept an API token as the Basic password (`allow_basic_api_token`,
+ *  `middleware/auth.rs`), as the pip and twine tabs rely on.
+ *
+ *  The backend also serves anaconda.org-style token channels
+ *  (`/conda/t/<token>/<key>`), and this guide used to recommend them, but they
+ *  do not work with real Artifact Keeper tokens. A token is `<8 hex>_<32 hex>`
+ *  and conda's token parser (`conda.common.url.split_anaconda_token`, regex
+ *  `/t/([a-zA-Z0-9-]*)`) stops at the underscore: conda 26.x then requests
+ *  `/t/<8 hex>/conda_<32 hex>/<key>/<subdir>/repodata.json`, which 404s.
+ *  mamba and micromamba happen to send the path unchanged, which is why the
+ *  breakage was not caught. The `/t/` form is therefore not offered at all.
+ *
+ *  Remote and virtual channels reject writes, so the upload tab is only
+ *  offered for local/staging repos. `channel_alias` is deliberately not
+ *  suggested: it re-roots every short channel name (e.g. `conda-forge`) onto
+ *  this server, which only resolves if a repo has that key. */
 function getCondaClientVariants(
   repoKey: string,
   repoType: RepositoryType,
 ): SetupClientVariant[] {
-  const channelUrl = `${REGISTRY_URL}/conda/t/YOUR_TOKEN/${repoKey}`;
+  const authenticatedOrigin = REGISTRY_URL.replace("://", "://YOUR_USERNAME:YOUR_TOKEN@");
+  const channelUrl = `${authenticatedOrigin}/conda/${repoKey}`;
   const isProxy = repoType === "remote" || repoType === "virtual";
   const tokenNote =
-    "YOUR_TOKEN must be an API access token; for a public channel you can drop the /t/YOUR_TOKEN segment.";
+    "YOUR_TOKEN is an API access token (percent-encode any @ or : in the username). For a public channel, drop YOUR_USERNAME:YOUR_TOKEN@.";
   const condarcStep: SetupStep = {
     title: "Configure channel",
     description: isProxy
@@ -547,7 +560,7 @@ function getCondaClientVariants(
       steps: [
         {
           ...condarcStep,
-          description: `mamba and micromamba read ~/.condarc (micromamba also reads ~/.mambarc). ${tokenNote}`,
+          description: `mamba and micromamba read ~/.condarc (micromamba also reads ~/.mambarc) and send the same credentials. ${tokenNote}`,
         },
         {
           title: "Install a package",
