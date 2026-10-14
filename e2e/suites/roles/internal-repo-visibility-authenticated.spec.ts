@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { TEST_ROLES } from '../../setup/auth-states';
 
 /**
  * Authenticated half of the `internal` repository visibility contract.
@@ -68,7 +69,19 @@ test.describe('Internal repository visibility (authenticated, no grant)', () => 
   test('OCI read against an internal repo succeeds', async ({ request }) => {
     // The tag list is the cheapest authenticated read that exercises the
     // `/v2` gate; an empty repository still answers 200 with an empty list.
-    const resp = await request.get('/v2/e2e-internal-docker/tags/list');
+    //
+    // The registry API authenticates like a docker client, from the
+    // Authorization header only (Bearer or Basic): `extract_oci_credential`
+    // in the backend's oci_v2 handler never reads the web session cookie, so
+    // the project's storage state alone is answered with the 401 challenge
+    // (#966). Present the same user over Basic auth instead. What the test
+    // proves is unchanged: `e2e-restricted` holds no grant on this repository
+    // and is admitted on the strength of `internal` visibility alone.
+    const { username, password } = TEST_ROLES.restricted;
+    const basic = Buffer.from(`${username}:${password}`).toString('base64');
+    const resp = await request.get('/v2/e2e-internal-docker/tags/list', {
+      headers: { Authorization: `Basic ${basic}` },
+    });
     expect(resp.status()).toBe(200);
   });
 

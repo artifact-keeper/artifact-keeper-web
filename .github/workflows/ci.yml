@@ -46,7 +46,20 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high
+      # The blocking gate covers what ships: the production dependency tree
+      # that ends up in the web image. The full tree (lint, test and build
+      # tooling) is reported but does not fail the job, because it can carry
+      # advisories with no fix anywhere upstream — `braces` <=3.0.3
+      # (GHSA-vfj7-8cjw-p6xm), reached only through eslint-config-next and
+      # eslint, has no patched release, and it kept every push to main red
+      # from 2026-10-07 while nothing in the image was affected. Dependabot
+      # still opens PRs for dev-tree advisories; this step is where to look
+      # when one has no bump to offer.
+      - name: Audit production dependencies (blocking)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Audit the full dependency tree (informational)
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
   test:
     name: Unit Tests
