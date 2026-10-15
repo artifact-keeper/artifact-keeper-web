@@ -34,8 +34,14 @@ import {
 /**
  * Path prefixes proxied to the backend server: the management API plus every
  * native package-format endpoint the backend serves through the web UI.
+ *
+ * Keep the format entries in step with `format_routes` in the backend's
+ * `backend/src/api/routes.rs`: a format mounted there but missing here falls
+ * through to the Next.js 404 when the web container fronts the backend.
+ * `src/__tests__/middleware.test.ts` pins this list against a copy of that
+ * set, so adding a format to one without the other fails the test.
  */
-const PROXY_PATH_PREFIXES: readonly string[] = [
+export const PROXY_PATH_PREFIXES: readonly string[] = [
   "/api",
   "/health",
   // Native package format endpoints proxied to the backend.
@@ -56,7 +62,11 @@ const PROXY_PATH_PREFIXES: readonly string[] = [
   "/composer",
   "/conan",
   "/alpine",
+  "/pacman",
   "/conda",
+  // rattler (pixi `auth login --conda-token`) puts the token in front of the
+  // whole conda path: /t/<TOKEN>/conda/<repo_key>/... (#996).
+  "/t",
   "/swift",
   "/terraform",
   "/cocoapods",
@@ -67,6 +77,7 @@ const PROXY_PATH_PREFIXES: readonly string[] = [
   "/puppet",
   "/ansible",
   "/cran",
+  "/bazel",
   "/ivy",
   "/vscode",
   "/proto",

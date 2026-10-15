@@ -175,6 +175,10 @@ describe("middleware proxying", () => {
       "/helm/my-repo/index.yaml",
       "/cargo/my-repo/api/v1/crates",
       "/general/gh-mirror/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64",
+      // #996: served at top level by the backend, previously the SPA 404.
+      "/bazel/my-cache/ac/0123abcd",
+      "/pacman/my-repo/x86_64/my-repo.db",
+      "/t/ak_token123/conda/my-channel/noarch/repodata.json",
     ];
 
     for (const path of formatPaths) {
@@ -184,6 +188,48 @@ describe("middleware proxying", () => {
       const url = mockRewrite.mock.calls[0][0] as URL;
       expect(url.pathname).toBe(path);
       expect(url.origin).toBe("http://backend:8080");
+    }
+  });
+
+  it("proxies exactly the top-level prefixes the backend's format_routes mounts (#996)", async () => {
+    // Copy of the top-level `.nest(...)` prefixes in the backend's
+    // `format_routes` (backend/src/api/routes.rs). `/api/cargo`, `/api/helm`
+    // and `/conda/t` are nested under `/api` and `/conda` and need no entry.
+    // When the backend mounts a new format, add it here AND to
+    // PROXY_PATH_PREFIXES; this test fails if the two drift apart.
+    const BACKEND_FORMAT_PREFIXES = [
+      "/general", "/npm", "/maven", "/pypi", "/debian", "/nuget", "/rpm",
+      "/cargo", "/gems", "/lfs", "/pub", "/go", "/helm", "/composer",
+      "/conan", "/alpine", "/pacman", "/conda", "/t", "/swift", "/terraform",
+      "/cocoapods", "/hex", "/huggingface", "/jetbrains", "/chef", "/puppet",
+      "/ansible", "/cran", "/bazel", "/ivy", "/vscode", "/proto", "/incus",
+      "/lxc", "/ext",
+    ];
+    // Mounted outside format_routes: the management API, health, and OCI.
+    const NON_FORMAT_PREFIXES = ["/api", "/health", "/v2"];
+
+    const { PROXY_PATH_PREFIXES } = await import("../middleware");
+    expect([...PROXY_PATH_PREFIXES].sort()).toEqual(
+      [...BACKEND_FORMAT_PREFIXES, ...NON_FORMAT_PREFIXES].sort(),
+    );
+    expect(new Set(PROXY_PATH_PREFIXES).size).toBe(PROXY_PATH_PREFIXES.length);
+  });
+
+  it("does not treat a page path that merely starts with a short prefix as proxied", async () => {
+    // `/t` is a one-letter prefix; matching is per path segment, so a page
+    // like /tokens (or /bazelisk) must still render in Next.js.
+    const { middleware } = await import("../middleware");
+    for (const path of ["/t", "/t/x/conda/c/noarch/repodata.json"]) {
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expectRewriteTo(path);
+    }
+    for (const path of ["/tokens", "/bazelisk", "/pacmans"]) {
+      mockNext.mockClear();
+      mockRewrite.mockClear();
+      middleware(createMockNextRequest(path));
+      expect(mockRewrite).not.toHaveBeenCalled();
+      expect(mockNext).toHaveBeenCalledTimes(1);
     }
   });
 
