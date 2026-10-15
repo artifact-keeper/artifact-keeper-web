@@ -40,10 +40,11 @@ describe("QUERY_KEYS", () => {
     PLUGINS: ["plugins"],
     CI_OIDC: ["ci-oidc"],
     CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
+    RPM_REPODATA_CAPABILITIES: ["rpm-repodata-capabilities"],
   };
 
-  it("has 16 key constants (#213, #669)", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(16);
+  it("has 17 key constants (#213, #669, #906)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(17);
   });
 
   it.each(Object.entries(expectedKeys))(
