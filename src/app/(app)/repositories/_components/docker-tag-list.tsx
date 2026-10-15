@@ -139,10 +139,10 @@ export function DockerTagList({
               <th scope="col" className="px-3 py-2 font-medium">
                 Digest
               </th>
-              <th scope="col" className="px-3 py-2 font-medium text-right">
+              <th scope="col" className="px-3 py-2 font-medium text-right whitespace-nowrap">
                 Size
               </th>
-              <th scope="col" className="px-3 py-2 font-medium">
+              <th scope="col" className="px-3 py-2 font-medium whitespace-nowrap">
                 Last pushed
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
@@ -175,11 +175,22 @@ export function DockerTagList({
                     onClick={() => onTagClick?.(t)}
                   >
                     <Container className="size-4 text-muted-foreground" aria-hidden="true" />
-                    <div className="flex flex-col">
-                      <span className="flex items-center gap-1.5 font-medium">
-                        {t.tag}
+                    {/*
+                      Long tags (cosign's `sha256-<64 hex>.sig`) are cut to
+                      one line with the full name on hover (#957); wrapping
+                      them mid-token made the row three lines tall.
+                    */}
+                    <div className="flex min-w-0 flex-col">
+                      <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                        <span
+                          className="max-w-[20rem] truncate"
+                          title={t.tag}
+                          data-testid="docker-tag-name"
+                        >
+                          {t.tag}
+                        </span>
                         {t.is_index && (
-                          <Badge variant="outline" className="font-normal">
+                          <Badge variant="outline" className="shrink-0 font-normal">
                             multi-arch
                           </Badge>
                         )}
@@ -207,10 +218,13 @@ export function DockerTagList({
                     <CopyButton value={t.manifest_digest} />
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                <td
+                  className="px-3 py-2 text-right text-xs text-muted-foreground whitespace-nowrap"
+                  data-testid="docker-tag-size"
+                >
                   {formatBytes(t.total_size_bytes)}
                 </td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">
+                <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
                   {new Date(t.last_pushed_at).toLocaleDateString()}
                 </td>
                 <td className="px-3 py-2">
