@@ -59,6 +59,32 @@ const GENERIC_LABEL_BY_PROTOCOL: Partial<
   saml: "Sign in with SSO (SAML)",
 };
 
+/**
+ * Which credentials tab is active (#899). `chosen` is the tab the user clicked,
+ * or null before they have clicked one. The "Local" tab is the default only
+ * when local login is offered at all; when the backend reports it disabled
+ * (and neither `?fallback=local` nor first-time setup asks for it), the first
+ * LDAP provider is selected instead, so the first form a user sees is one the
+ * server will accept. A chosen tab that is no longer offered (the provider
+ * list or config changed under it) falls back the same way.
+ */
+export function resolveSelectedProvider(
+  chosen: SelectedProvider | null,
+  localOffered: boolean,
+  ldapProviders: readonly SsoProvider[],
+): SelectedProvider {
+  if (
+    chosen?.type === "ldap" &&
+    ldapProviders.some((p) => p.id === chosen.id)
+  ) {
+    return chosen;
+  }
+  if (chosen?.type === "local" && localOffered) return chosen;
+  const first = ldapProviders[0];
+  if (localOffered || !first) return { type: "local" };
+  return { type: "ldap", id: first.id, name: first.name };
+}
+
 export function ssoButtonLabel(provider: SsoProvider): string {
   const name = provider.name?.trim();
   if (!name || GENERIC_PROVIDER_NAMES.has(name.toLowerCase())) {
@@ -82,9 +108,9 @@ function LoginContent() {
   const [totpCode, setTotpCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
   const [providersLoaded, setProvidersLoaded] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<SelectedProvider>({
-    type: "local",
-  });
+  // null until the user picks a tab; the effective tab is derived below.
+  const [chosenProvider, setSelectedProvider] =
+    useState<SelectedProvider | null>(null);
 
   useEffect(() => {
     ssoApi
@@ -132,11 +158,20 @@ function LoginContent() {
   // shows it too, so an admin can complete the initial password change with
   // the bootstrap account.
   const forceLocalFallback = searchParams?.get("fallback")?.toLowerCase() === "local";
-  const showLocalForm =
-    forceLocalFallback ||
-    setupRequired ||
-    ldapProviders.length > 0 ||
-    localLoginEnabled;
+  // Whether local (non-LDAP) password login is offered, as its own form or
+  // as the "Local" tab next to the LDAP providers (#899).
+  const localLoginOffered =
+    forceLocalFallback || setupRequired || localLoginEnabled;
+  const showLocalForm = localLoginOffered || ldapProviders.length > 0;
+  const selectedProvider = resolveSelectedProvider(
+    chosenProvider,
+    localLoginOffered,
+    ldapProviders,
+  );
+  // The tab bar only appears when there is a choice to make: with local
+  // login off and a single LDAP provider, its form is shown directly.
+  const showProviderTabs =
+    ldapProviders.length > (localLoginOffered ? 0 : 1);
 
   // Both the provider list and the system config feed the form decision, so
   // wait for both before rendering sign-in options. `?fallback=local` short
@@ -320,23 +355,36 @@ function LoginContent() {
             </div>
           )}
 
-          {ldapProviders.length > 0 && (
-            <div className="mb-4 flex gap-1 rounded-lg bg-muted p-1">
-              <button
-                type="button"
-                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  selectedProvider.type === "local"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setSelectedProvider({ type: "local" })}
-              >
-                Local
-              </button>
+          {optionsLoaded && showProviderTabs && (
+            <div
+              role="tablist"
+              aria-label="Sign-in method"
+              className="mb-4 flex gap-1 rounded-lg bg-muted p-1"
+            >
+              {localLoginOffered && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedProvider.type === "local"}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    selectedProvider.type === "local"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setSelectedProvider({ type: "local" })}
+                >
+                  Local
+                </button>
+              )}
               {ldapProviders.map((provider) => (
                 <button
                   key={provider.id}
                   type="button"
+                  role="tab"
+                  aria-selected={
+                    selectedProvider.type === "ldap" &&
+                    selectedProvider.id === provider.id
+                  }
                   className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     selectedProvider.type === "ldap" &&
                     selectedProvider.id === provider.id
@@ -367,6 +415,14 @@ function LoginContent() {
               <span className="sr-only">Loading sign-in options</span>
             </div>
           )}
+
+          {optionsLoaded &&
+            !showProviderTabs &&
+            selectedProvider.type === "ldap" && (
+              <p className="mb-4 text-center text-sm text-muted-foreground">
+                Sign in with your {selectedProvider.name} account
+              </p>
+            )}
 
           {optionsLoaded && showLocalForm && (
             <Form {...form}>

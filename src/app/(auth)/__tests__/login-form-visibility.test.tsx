@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  act,
+  fireEvent,
+} from "@testing-library/react";
 import React from "react";
 import type { SsoProvider } from "@/types/sso";
 
@@ -116,7 +123,7 @@ vi.mock("@/lib/api/sso", () => ({
 }));
 
 // Import under test (after mocks)
-import LoginPage from "../login/page";
+import LoginPage, { resolveSelectedProvider } from "../login/page";
 
 // Helpers --------------------------------------------------------------------
 
@@ -417,5 +424,156 @@ describe("LoginPage username/password form visibility", () => {
       screen.queryByPlaceholderText("Enter your username")
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("icon-Loader2")).toBeInTheDocument();
+  });
+});
+
+const secondLdapProvider: SsoProvider = {
+  id: "ldap-2",
+  name: "Partner LDAP",
+  provider_type: "ldap",
+  login_url: "",
+};
+
+describe("LoginPage LDAP tabs when local login is disabled (#899)", () => {
+  beforeEach(() => {
+    mockLogin.mockReset();
+    mockRefreshUser.mockReset();
+    mockListProviders.mockReset();
+    mockLdapLogin.mockReset().mockResolvedValue(undefined);
+    mockSearchParams = new URLSearchParams();
+    authState = { ...authState, setupRequired: false, totpRequired: false };
+    systemConfigState = {
+      config: { auth: { local_login_enabled: false } },
+      isLoading: false,
+      isError: false,
+    };
+  });
+
+  afterEach(() => {
+    cleanup();
+    mockSearchParams = new URLSearchParams();
+  });
+
+  async function submitCredentials() {
+    fireEvent.change(screen.getByPlaceholderText("Enter your username"), {
+      target: { value: "alice" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter your password"), {
+      target: { value: "secret" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign In"));
+    });
+  }
+
+  it("with one LDAP provider: no tab bar, no Local tab, and the form signs in through LDAP", async () => {
+    mockListProviders.mockResolvedValue([ldapProvider]);
+
+    await renderAndWaitForProviders();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Sign in with your Corp LDAP account"),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByText("Local")).not.toBeInTheDocument();
+
+    await submitCredentials();
+    await waitFor(() => {
+      expect(mockLdapLogin).toHaveBeenCalledWith("ldap-1", "alice", "secret");
+    });
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it("with several LDAP providers: tabs for each, the first selected, no Local tab", async () => {
+    mockListProviders.mockResolvedValue([ldapProvider, secondLdapProvider]);
+
+    await renderAndWaitForProviders();
+
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Corp LDAP",
+      "Partner LDAP",
+    ]);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(tabs[1]);
+    expect(screen.getByRole("tab", { name: "Partner LDAP" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await submitCredentials();
+    await waitFor(() => {
+      expect(mockLdapLogin).toHaveBeenCalledWith("ldap-2", "alice", "secret");
+    });
+  });
+
+  it("keeps Local as the default tab when local login is enabled", async () => {
+    systemConfigState.config.auth.local_login_enabled = true;
+    mockListProviders.mockResolvedValue([ldapProvider]);
+
+    await renderAndWaitForProviders();
+
+    const local = await screen.findByRole("tab", { name: "Local" });
+    expect(local).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Corp LDAP" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+  });
+
+  it("?fallback=local brings the Local tab back, selected, next to LDAP", async () => {
+    mockSearchParams = new URLSearchParams("?fallback=local");
+    mockListProviders.mockResolvedValue([ldapProvider]);
+
+    await renderAndWaitForProviders();
+
+    const local = await screen.findByRole("tab", { name: "Local" });
+    expect(local).toHaveAttribute("aria-selected", "true");
+    await submitCredentials();
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith("alice", "secret");
+    });
+    expect(mockLdapLogin).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveSelectedProvider (#899)", () => {
+  const ldap = [ldapProvider, secondLdapProvider];
+
+  it("defaults to Local when local login is offered", () => {
+    expect(resolveSelectedProvider(null, true, ldap)).toEqual({ type: "local" });
+  });
+
+  it("defaults to the first LDAP provider when local login is not offered", () => {
+    expect(resolveSelectedProvider(null, false, ldap)).toEqual({
+      type: "ldap",
+      id: "ldap-1",
+      name: "Corp LDAP",
+    });
+  });
+
+  it("keeps the user's LDAP choice while that provider exists", () => {
+    const chosen = { type: "ldap" as const, id: "ldap-2", name: "Partner LDAP" };
+    expect(resolveSelectedProvider(chosen, false, ldap)).toBe(chosen);
+    expect(resolveSelectedProvider(chosen, false, [ldapProvider])).toEqual({
+      type: "ldap",
+      id: "ldap-1",
+      name: "Corp LDAP",
+    });
+  });
+
+  it("drops a Local choice that is no longer offered", () => {
+    expect(resolveSelectedProvider({ type: "local" }, false, ldap)).toEqual({
+      type: "ldap",
+      id: "ldap-1",
+      name: "Corp LDAP",
+    });
+  });
+
+  it("falls back to Local when there is no LDAP provider", () => {
+    expect(resolveSelectedProvider(null, false, [])).toEqual({ type: "local" });
   });
 });
