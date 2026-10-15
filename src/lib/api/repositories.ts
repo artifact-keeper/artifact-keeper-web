@@ -41,6 +41,10 @@ import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
 const REPODATA_UPGRADE_MESSAGE =
   'This backend does not confirm RPM Repodata Depth support. Upgrade the backend before changing Repodata Depth.';
 
+// Use the configured SDK transport for the not-yet-generated endpoint so cookie
+// auth, CSRF, token refresh and remote-instance routing remain unchanged.
+// `/repositories/_/capabilities`, `repodata_depth` and `repodata_depth_editable`:
+// not in the generated SDK yet (backend 1.11.0, artifact-keeper#4230)
 async function requireRepodataSupport(): Promise<RpmRepodataCapabilities> {
   const result = await client.get<{ 200: unknown }>({
     url: '/api/v1/repositories/_/capabilities',
@@ -51,7 +55,7 @@ async function requireRepodataSupport(): Promise<RpmRepodataCapabilities> {
     if (status === 401 || status === 403) {
       throw new Error(`Not permitted to check RPM Repodata Depth support (HTTP ${status}). Check your session and permissions.`);
     }
-    if (result.error) throw result.error;
+    // Never surface the body: behind a proxy a 502 is an HTML page.
     throw new Error(`Cannot verify RPM Repodata Depth support (HTTP ${status ?? 'unknown'}).`);
   }
   if (result.error) throw result.error;
