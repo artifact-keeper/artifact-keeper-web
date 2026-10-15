@@ -55,7 +55,11 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
-import { selectorHasFilters } from "@/components/common/repo-selector-form";
+import {
+  selectorHasFilters,
+  virtualMembersWithoutFilter,
+  VIRTUAL_MEMBERS_NEEDS_FILTER,
+} from "@/components/common/repo-selector-form";
 
 /**
  * A refused mint is shown with the backend's own words: since backend 1.10.0
@@ -527,7 +531,14 @@ export default function AccessTokensPage() {
               onScopesChange={setTokenScopes}
               availableScopes={availableScopes}
               isPending={createTokenMutation.isPending}
-              onSubmit={() =>
+              onSubmit={() => {
+                // Same refusal as the service-account form: dropping a
+                // flag-only selector would mint an unrestricted token, the
+                // opposite of what was ticked.
+                if (personalRepoSelector && virtualMembersWithoutFilter(tokenRepoSelector)) {
+                  toast.error(VIRTUAL_MEMBERS_NEEDS_FILTER);
+                  return;
+                }
                 createTokenMutation.mutate({
                   name: tokenName,
                   expires_in_days:
@@ -539,8 +550,8 @@ export default function AccessTokensPage() {
                   selectorHasFilters(tokenRepoSelector)
                     ? { repo_selector: tokenRepoSelector }
                     : {}),
-                })
-              }
+                });
+              }}
               onCancel={() => setCreateTokenOpen(false)}
               submitLabel="Create Token"
               showRepoSelector={personalRepoSelector}

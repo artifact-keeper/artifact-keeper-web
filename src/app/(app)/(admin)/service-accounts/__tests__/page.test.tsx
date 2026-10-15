@@ -118,10 +118,22 @@ vi.mock("@/components/common/data-table", () => ({
   ),
 }));
 vi.mock("@/components/common/token-create-form", () => ({
-  TokenCreateForm: ({ onSubmit }: any) => (
-    <button data-testid="form-submit-btn" onClick={onSubmit}>
-      Create
-    </button>
+  TokenCreateForm: ({ onSubmit, onRepoSelectorChange }: any) => (
+    <>
+      <button data-testid="form-submit-btn" onClick={onSubmit}>
+        Create
+      </button>
+      <button
+        data-testid="set-selector-flag-only"
+        onClick={() => onRepoSelectorChange({ include_virtual_members: true })}
+      />
+      <button
+        data-testid="set-selector-flag-and-pattern"
+        onClick={() =>
+          onRepoSelectorChange({ match_pattern: "prod-*", include_virtual_members: true })
+        }
+      />
+    </>
   ),
 }));
 vi.mock("@/components/common/token-created-alert", () => ({
@@ -159,6 +171,12 @@ let mutationConfigs: any[] = [];
 /** Index of `createTokenMutation` among the page's useMutation calls. */
 const CREATE_TOKEN_MUTATION = 3;
 
+/** useMutation calls per render (create, update, delete, createToken, revokeToken). */
+const MUTATIONS_PER_RENDER = 5;
+
+/** One stable `mutate` mock per mutation, shared across re-renders. */
+let mutateFns: ReturnType<typeof vi.fn>[] = [];
+
 function setupMocks() {
   mutationConfigs = [];
   mockUseQuery.mockImplementation((opts: any) =>
@@ -166,9 +184,12 @@ function setupMocks() {
       ? { data: [ACCOUNT], isLoading: false }
       : { data: [], isLoading: false },
   );
+  mutateFns = [];
   mockUseMutation.mockImplementation((opts: any) => {
+    const index = mutationConfigs.length % MUTATIONS_PER_RENDER;
     mutationConfigs.push(opts);
-    return { mutate: vi.fn(), isPending: false };
+    mutateFns[index] ??= vi.fn();
+    return { mutate: mutateFns[index], isPending: false };
   });
 }
 
@@ -252,5 +273,54 @@ describe("ServiceAccountsPage — token reveal (#854)", () => {
     });
 
     expect(toast.error).toHaveBeenCalledWith("Failed to create token");
+  });
+});
+
+describe("ServiceAccountsPage — virtual-members flag needs a filter (#897)", () => {
+  /** Open the dialog, then the Create Token form inside it. */
+  function openCreateTokenForm() {
+    render(<ServiceAccountsPage />);
+    openTokenDialog();
+    fireEvent.click(screen.getAllByRole("button", { name: /Create Token/ })[0]);
+  }
+
+  it("refuses a flag-only selector instead of minting an unrestricted token", async () => {
+    const { toast } = await import("sonner");
+    openCreateTokenForm();
+
+    fireEvent.click(screen.getByTestId("set-selector-flag-only"));
+    fireEvent.click(screen.getByTestId("form-submit-btn"));
+
+    expect(mutateFns[CREATE_TOKEN_MUTATION]).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      "Include members of matched virtual repositories needs a format, label or name pattern; on its own it would create an unrestricted token.",
+    );
+  });
+
+  it("sends the flag alongside a real filter", () => {
+    openCreateTokenForm();
+
+    fireEvent.click(screen.getByTestId("set-selector-flag-and-pattern"));
+    fireEvent.click(screen.getByTestId("form-submit-btn"));
+
+    expect(mutateFns[CREATE_TOKEN_MUTATION]).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "sa-1",
+        req: expect.objectContaining({
+          repo_selector: { match_pattern: "prod-*", include_virtual_members: true },
+        }),
+      }),
+    );
+  });
+
+  it("still mints an unrestricted token when neither flag nor filter is set", async () => {
+    const { toast } = await import("sonner");
+    openCreateTokenForm();
+
+    fireEvent.click(screen.getByTestId("form-submit-btn"));
+
+    expect(toast.error).not.toHaveBeenCalled();
+    const [{ req }] = mutateFns[CREATE_TOKEN_MUTATION].mock.calls[0];
+    expect(req.repo_selector).toBeUndefined();
   });
 });

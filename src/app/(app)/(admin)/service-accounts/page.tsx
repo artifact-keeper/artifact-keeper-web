@@ -57,6 +57,12 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { EmptyState } from "@/components/common/empty-state";
 import { TokenCreatedAlert } from "@/components/common/token-created-alert";
 import { TokenCreateForm } from "@/components/common/token-create-form";
+import {
+  selectorHasFilters,
+  virtualMembersWithoutFilter,
+  VIRTUAL_MEMBERS_NEEDS_FILTER,
+} from "@/components/common/repo-selector-form";
+import { TokenScopeWarning } from "@/components/common/token-scope-warning";
 
 function renderRepoAccess(t: ServiceAccountToken) {
   if (t.repo_selector) {
@@ -413,7 +419,21 @@ export default function ServiceAccountsPage() {
     {
       id: "repo_access",
       header: "Repo Access",
-      cell: renderRepoAccess,
+      // The scope summary, plus the flag for a scope that reaches nothing
+      // (backend artifact-keeper#4215). Older backends omit the count, so the
+      // flag simply never renders against one.
+      cell: (t) => (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {renderRepoAccess(t)}
+          {tokenAccount && (
+            <TokenScopeWarning
+              accountId={tokenAccount.id}
+              tokenId={t.id}
+              count={t.unreachable_member_count ?? 0}
+            />
+          )}
+        </div>
+      ),
     },
     {
       id: "last_used",
@@ -661,10 +681,11 @@ export default function ServiceAccountsPage() {
               isPending={createTokenMutation.isPending}
               onSubmit={() => {
                 if (tokenAccount) {
-                  const hasSelector =
-                    (tokenRepoSelector.match_formats?.length ?? 0) > 0 ||
-                    Object.keys(tokenRepoSelector.match_labels ?? {}).length > 0 ||
-                    !!tokenRepoSelector.match_pattern;
+                  if (virtualMembersWithoutFilter(tokenRepoSelector)) {
+                    toast.error(VIRTUAL_MEMBERS_NEEDS_FILTER);
+                    return;
+                  }
+                  const hasSelector = selectorHasFilters(tokenRepoSelector);
                   createTokenMutation.mutate({
                     id: tokenAccount.id,
                     req: {
@@ -682,6 +703,7 @@ export default function ServiceAccountsPage() {
               showRepoSelector
               repoSelector={tokenRepoSelector}
               onRepoSelectorChange={setTokenRepoSelector}
+              serviceAccountId={tokenAccount?.id}
             />
           ) : (
             <div className="space-y-4">
