@@ -34,6 +34,7 @@ export const QUERY_KEYS = {
   PLUGINS: ["plugins"],
   CI_OIDC: ["ci-oidc"],
   CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
+  RPM_REPODATA_CAPABILITIES: ["rpm-repodata-capabilities"],
 } as const;
 
 /**

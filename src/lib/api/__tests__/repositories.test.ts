@@ -86,6 +86,17 @@ describe("RPM Repodata Depth API", () => {
     expect(mockUpdateRepository).not.toHaveBeenCalled();
   });
 
+  it("reports a proxy error page as an HTTP status, not its body", async () => {
+    mockCapabilities.mockResolvedValue({
+      response: new Response("<html>Bad Gateway</html>", { status: 502 }),
+      error: "<html>Bad Gateway</html>",
+    });
+    await expect(repositoriesApi.create({ ...input, repodata_depth: 1 })).rejects.toThrow(
+      "Cannot verify RPM Repodata Depth support (HTTP 502).",
+    );
+    expect(mockCreateRepository).not.toHaveBeenCalled();
+  });
+
   it("does not mistake transport failures for support", async () => {
     mockCapabilities.mockRejectedValue(new Error("Network unavailable"));
     await expect(repositoriesApi.create({ ...input, repodata_depth: 1 })).rejects.toThrow("Network unavailable");
