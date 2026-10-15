@@ -102,6 +102,76 @@ test.describe('Downloads admin', () => {
     }
   });
 
+  test('proxy pull-through serves render by repository and path (#960)', async ({ page }) => {
+    // Backend 1.11.0 (artifact-keeper#4539) lists proxy serves with a null
+    // artifact_id. A stubbed page with one of each pins the rendering
+    // regardless of what this backend has recorded.
+    const stamp = new Date().toISOString();
+    await page.route(/\/api\/v1\/admin\/downloads(\?|$)/, (route) =>
+      route.fulfill({
+        json: {
+          downloads: [
+            {
+              source: 'proxy',
+              artifact_id: null,
+              repository_id: '5a5a5a5a-3333-4f2b-9f7d-1c2d3e4f5a6b',
+              path: 'left-pad/-/left-pad-1.3.0.tgz',
+              user_id: null,
+              username: null,
+              ip_address: '203.0.113.7',
+              user_agent: 'npm/10.2.4',
+              downloaded_at: stamp,
+            },
+            {
+              source: 'hosted',
+              artifact_id: '0d9c34a6-9a2e-4f2b-9f7d-1c2d3e4f5a6b',
+              repository_id: '5a5a5a5a-3333-4f2b-9f7d-1c2d3e4f5a6b',
+              path: 'lodash/-/lodash-4.17.21.tgz',
+              user_id: null,
+              username: null,
+              ip_address: '203.0.113.7',
+              user_agent: 'npm/10.2.4',
+              downloaded_at: stamp,
+            },
+          ],
+          total: 2,
+          page: 1,
+          per_page: 20,
+        },
+      }),
+    );
+    await page.goto('/downloads');
+
+    const downloads = new DownloadsPage(page);
+    await expect(downloads.table).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Download attribution unavailable')).toHaveCount(0);
+    await expect(downloads.table.getByText('Proxy', { exact: true })).toBeVisible();
+    await expect(downloads.table.getByText('Hosted', { exact: true })).toBeVisible();
+    await expect(downloads.table.getByText('left-pad/-/left-pad-1.3.0.tgz')).toBeVisible();
+    await expect(downloads.table.getByText('lodash/-/lodash-4.17.21.tgz')).toBeVisible();
+  });
+
+  test('the source filter is sent to the backend (#960)', async ({ page, request }) => {
+    const probe = await request.get('/api/v1/admin/downloads?source=proxy&per_page=1');
+    test.skip(
+      !probe.ok(),
+      `Backend does not accept the source filter (status ${probe.status()})`
+    );
+    for (const row of (await probe.json()).downloads) {
+      expect(row.source).toBe('proxy');
+    }
+
+    const downloads = new DownloadsPage(page);
+    await expect(downloads.sourceFilter).toBeVisible({ timeout: 10000 });
+    const sent = page.waitForRequest((req) =>
+      /\/api\/v1\/admin\/downloads\?.*source=proxy/.test(req.url()),
+    );
+    await downloads.sourceFilter.click();
+    await page.getByRole('option', { name: 'Proxy only' }).click();
+    await sent;
+    await expect(page.getByText('Download attribution unavailable')).toHaveCount(0);
+  });
+
   test('malformed user-id filter is rejected client-side', async ({ page }) => {
     const downloads = new DownloadsPage(page);
     await downloads.userIdFilter.fill('not-a-uuid');

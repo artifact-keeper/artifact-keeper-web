@@ -8,8 +8,13 @@ vi.mock("@/lib/api/fetch", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
+const REPO_ID = "5a5a5a5a-3333-4f2b-9f7d-1c2d3e4f5a6b";
+
 const ROW = {
+  source: "hosted" as const,
   artifact_id: "0d9c34a6-9a2e-4f2b-9f7d-1c2d3e4f5a6b",
+  repository_id: REPO_ID,
+  path: "lodash/-/lodash-4.17.21.tgz",
   user_id: "0e8b23a5-1111-4f2b-9f7d-1c2d3e4f5a6b",
   username: "alice",
   ip_address: "10.1.2.3",
@@ -132,6 +137,108 @@ describe("downloadsApi", () => {
       `/api/v1/admin/downloads/by-user/${ROW.user_id}`,
       { method: "GET" }
     );
+  });
+});
+
+describe("proxy pull-through serves (#960, backend artifact-keeper#4539)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const PROXY_ROW = {
+    source: "proxy",
+    artifact_id: null,
+    repository_id: REPO_ID,
+    path: "left-pad/-/left-pad-1.3.0.tgz",
+    user_id: null,
+    username: null,
+    ip_address: "10.1.2.3",
+    user_agent: "npm/10.2.4",
+    downloaded_at: "2026-10-14T12:00:00Z",
+  };
+
+  it("parses a proxy row with a null artifact_id instead of rejecting the page", async () => {
+    mockApiFetch.mockResolvedValue({
+      downloads: [ROW, PROXY_ROW],
+      total: 2,
+      page: 1,
+      per_page: 20,
+    });
+    const mod = await import("../downloads");
+    const res = await mod.downloadsApi.list();
+    expect(res.downloads).toHaveLength(2);
+    expect(res.downloads[0]).toMatchObject({
+      source: "hosted",
+      artifact_id: ROW.artifact_id,
+      path: ROW.path,
+    });
+    expect(res.downloads[1]).toMatchObject({
+      source: "proxy",
+      artifact_id: null,
+      repository_id: REPO_ID,
+      path: "left-pad/-/left-pad-1.3.0.tgz",
+    });
+  });
+
+  it("reads a pre-1.11.0 row (no source, repository or path) as hosted", async () => {
+    const legacy = {
+      artifact_id: ROW.artifact_id,
+      user_id: null,
+      username: null,
+      ip_address: null,
+      user_agent: null,
+      downloaded_at: ROW.downloaded_at,
+    };
+    mockApiFetch.mockResolvedValue({ downloads: [legacy], total: 1, page: 1, per_page: 20 });
+    const mod = await import("../downloads");
+    const [row] = (await mod.downloadsApi.list()).downloads;
+    expect(row.source).toBe("hosted");
+    expect(row.repository_id).toBeNull();
+    expect(row.path).toBeNull();
+  });
+
+  it("infers proxy from a missing artifact_id when source is absent or unknown", async () => {
+    mockApiFetch.mockResolvedValue({
+      downloads: [
+        { ...PROXY_ROW, source: undefined },
+        { ...PROXY_ROW, source: "mirror" },
+        { ...ROW, source: "mirror" },
+      ],
+      total: 3,
+      page: 1,
+      per_page: 20,
+    });
+    const mod = await import("../downloads");
+    const res = await mod.downloadsApi.list();
+    expect(res.downloads.map((r) => r.source)).toEqual(["proxy", "proxy", "hosted"]);
+  });
+
+  it("serializes the source and repository filters", async () => {
+    mockApiFetch.mockResolvedValue({ downloads: [], total: 0, page: 1, per_page: 20 });
+    const mod = await import("../downloads");
+    await mod.downloadsApi.list({ source: "proxy", repository_id: ` ${REPO_ID} ` });
+    const url = mockApiFetch.mock.calls[0][0] as string;
+    const qs = new URLSearchParams(url.split("?")[1]);
+    expect(qs.get("source")).toBe("proxy");
+    expect(qs.get("repository_id")).toBe(REPO_ID);
+  });
+
+  it("counts distinct proxied paths as distinct items in the grouped views", async () => {
+    const mod = await import("../downloads");
+    const proxy = (path: string) => ({
+      ...ROW,
+      source: "proxy" as const,
+      artifact_id: null,
+      path,
+    });
+    const rows = [
+      ROW,
+      proxy("left-pad/-/left-pad-1.3.0.tgz"),
+      proxy("left-pad/-/left-pad-1.3.0.tgz"),
+      proxy("is-odd/-/is-odd-3.0.1.tgz"),
+    ];
+    expect(mod.groupDownloadsByIp(rows)[0].unique_artifacts).toBe(3);
+    expect(mod.groupDownloadsByUser(rows)[0].unique_artifacts).toBe(3);
+    expect(mod.downloadItemKey(rows[1])).toBe(`${REPO_ID}:left-pad/-/left-pad-1.3.0.tgz`);
+    expect(mod.downloadItemKey(ROW)).toBe(ROW.artifact_id);
   });
 });
 

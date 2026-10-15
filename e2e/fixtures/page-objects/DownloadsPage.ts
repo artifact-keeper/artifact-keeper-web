@@ -7,6 +7,7 @@ export class DownloadsPage {
   readonly ipFilter: Locator;
   readonly fromFilter: Locator;
   readonly toFilter: Locator;
+  readonly sourceFilter: Locator;
   readonly applyButton: Locator;
   readonly clearButton: Locator;
   readonly eventsTab: Locator;
@@ -22,6 +23,7 @@ export class DownloadsPage {
     this.ipFilter = page.locator('#downloads-filter-ip');
     this.fromFilter = page.locator('#downloads-filter-from');
     this.toFilter = page.locator('#downloads-filter-to');
+    this.sourceFilter = page.locator('#downloads-filter-source');
     this.applyButton = page.getByRole('button', { name: /apply filters/i });
     this.clearButton = page.getByRole('button', { name: /clear filters/i });
     this.eventsTab = page.getByRole('tab', { name: /events/i });

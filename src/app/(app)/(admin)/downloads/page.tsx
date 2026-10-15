@@ -14,11 +14,13 @@ import {
   DOWNLOADS_MAX_PER_PAGE,
   UNKNOWN_NETWORK,
   type DownloadRecord,
+  type DownloadSource,
   type DownloadsQuery,
   type IpGroup,
   type UserGroup,
 } from "@/lib/api/downloads";
 import { isValidUuid } from "@/lib/api/audit";
+import { useRepositories } from "@/hooks/use-repositories";
 
 import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
@@ -27,6 +29,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const DOWNLOADS_QUERY_KEY = ["admin-downloads"] as const;
@@ -39,6 +48,8 @@ interface DownloadFilters {
   ip: string;
   from: string;
   to: string;
+  /** "" for both hosted downloads and proxy serves (#960). */
+  source: "" | DownloadSource;
 }
 
 const EMPTY_FILTERS: DownloadFilters = {
@@ -47,7 +58,10 @@ const EMPTY_FILTERS: DownloadFilters = {
   ip: "",
   from: "",
   to: "",
+  source: "",
 };
+
+const ALL_SOURCES = "__all__";
 
 /**
  * Convert the date-input values (yyyy-mm-dd, local time) to the inclusive
@@ -83,6 +97,7 @@ export function fetchDownloads(
     page,
     per_page: perPage,
     artifact_id: filters.artifact_id || undefined,
+    source: filters.source || undefined,
     ...dateBoundsToIso(filters),
   };
   const ip = filters.ip.trim();
@@ -102,6 +117,57 @@ export function fetchDownloads(
 
 function truncateId(id: string): string {
   return id.length > 13 ? `${id.slice(0, 13)}…` : id;
+}
+
+/**
+ * What a download fetched, as one cell (#960). Since backend 1.11.0 the
+ * listing includes proxy pull-through serves, which have no artifact row
+ * (`artifact_id` null), so a row is described by its repository and path,
+ * with the artifact id underneath when there is one. A row from an older
+ * backend carries only the artifact id.
+ */
+export function DownloadItemCell({
+  record,
+  repositoryKey,
+}: {
+  record: DownloadRecord;
+  repositoryKey?: string;
+}) {
+  const repo =
+    repositoryKey ??
+    (record.repository_id ? truncateId(record.repository_id) : null);
+  if (!record.path) {
+    return record.artifact_id ? (
+      <span className="font-mono text-xs" title={record.artifact_id}>
+        {truncateId(record.artifact_id)}
+      </span>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
+  }
+  return (
+    <div className="min-w-0 max-w-[360px]">
+      {repo && (
+        <span
+          className="block text-xs text-muted-foreground"
+          title={record.repository_id ?? undefined}
+        >
+          {repo}
+        </span>
+      )}
+      <span className="block truncate font-mono text-xs" title={record.path}>
+        {record.path}
+      </span>
+      {record.artifact_id && (
+        <span
+          className="block font-mono text-[11px] text-muted-foreground"
+          title={record.artifact_id}
+        >
+          {truncateId(record.artifact_id)}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function truncateText(text: string, max: number): string {
@@ -139,6 +205,17 @@ function DownloadsContent() {
   const [filterError, setFilterError] = useState<string | null>(null);
 
   const hasAppliedFilters = Object.values(applied).some((v) => v !== "");
+
+  // Proxy rows carry only a repository id; show its key when known. Shares the
+  // cache entry other admin pages use for the full repository list.
+  const { data: repositories } = useRepositories(
+    { per_page: 1000 },
+    { enabled: !!user?.is_admin },
+  );
+  const repositoryKeys = useMemo(
+    () => new Map((repositories?.items ?? []).map((r) => [r.id, r.key])),
+    [repositories?.items],
+  );
 
   // -- queries --
   const { data, isLoading, isError, isFetching } = useQuery({
@@ -188,6 +265,15 @@ function DownloadsContent() {
     }
     setFilterError(null);
     setApplied({ ...draft, artifact_id: artifactId, user_id: userId });
+    setPage(1);
+  }
+
+  /** The source filter applies as soon as it is picked, like a tab. */
+  function changeSource(value: string) {
+    const source: DownloadFilters["source"] =
+      value === "hosted" || value === "proxy" ? value : "";
+    setDraft({ ...draft, source });
+    setApplied({ ...applied, source });
     setPage(1);
   }
 
@@ -256,12 +342,26 @@ function DownloadsContent() {
       sortable: true,
     },
     {
+      id: "source",
+      header: "Source",
+      accessor: (r) => r.source,
+      cell: (r) => (
+        <Badge variant={r.source === "proxy" ? "outline" : "secondary"}>
+          {r.source === "proxy" ? "Proxy" : "Hosted"}
+        </Badge>
+      ),
+      sortable: true,
+    },
+    {
       id: "artifact",
       header: "Artifact",
       cell: (r) => (
-        <span className="font-mono text-xs" title={r.artifact_id}>
-          {truncateId(r.artifact_id)}
-        </span>
+        <DownloadItemCell
+          record={r}
+          repositoryKey={
+            r.repository_id ? repositoryKeys.get(r.repository_id) : undefined
+          }
+        />
       ),
     },
     {
@@ -445,7 +545,7 @@ function DownloadsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Downloads"
-        description="Attributed download events — who pulled what, from which network location. Group by IP/subnet for a network-topology view or by user for per-user activity."
+        description="Attributed download events — who pulled what, from which network location, from hosted repositories and through proxy (Remote) repositories. Group by IP/subnet for a network-topology view or by user for per-user activity."
         actions={
           <div className="flex items-center gap-2">
             <Network className="size-5 text-muted-foreground" />
@@ -531,6 +631,26 @@ function DownloadsContent() {
               onChange={(e) => setDraft({ ...draft, to: e.target.value })}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="downloads-filter-source">Source</Label>
+            <Select
+              value={applied.source || ALL_SOURCES}
+              onValueChange={changeSource}
+            >
+              <SelectTrigger
+                id="downloads-filter-source"
+                className="w-[150px]"
+                aria-label="Source"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SOURCES}>Hosted and proxy</SelectItem>
+                <SelectItem value="hosted">Hosted only</SelectItem>
+                <SelectItem value="proxy">Proxy only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={applyFilters}>Apply Filters</Button>
           {hasAppliedFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -581,7 +701,9 @@ function DownloadsContent() {
           pageSizeOptions={[20, 50, 100]}
           loading={isLoading}
           emptyMessage="No downloads recorded."
-          rowKey={(r) => `${r.artifact_id}:${r.downloaded_at}:${r.ip_address}`}
+          rowKey={(r) =>
+            `${r.source}:${r.artifact_id ?? `${r.repository_id}:${r.path}`}:${r.downloaded_at}:${r.ip_address}`
+          }
         />
       ) : (
         <div className="space-y-2">

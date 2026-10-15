@@ -1,10 +1,40 @@
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/fetch";
-import type { DownloadRecord, DownloadListResponse } from "@artifact-keeper/sdk";
 
-// Re-export the generated SDK types (regenerated from the OpenAPI spec). The
-// zod schema below still validates responses at the trust boundary.
-export type { DownloadRecord, DownloadListResponse };
+/**
+ * Where a download was served from (backend artifact-keeper#4539): a hosted
+ * artifact, or a proxy pull-through serve from a Remote repository.
+ */
+export type DownloadSource = "hosted" | "proxy";
+
+/**
+ * One attributed download event. Defined here rather than taken from the
+ * generated SDK, whose `DownloadRecord` (SDK 1.7) predates backend
+ * artifact-keeper#4539: since backend 1.11.0 the listing also returns proxy
+ * pull-through serves, which have no artifact row, so `artifact_id` is null
+ * for them and the item is identified by `repository_id` + `path` instead.
+ */
+export interface DownloadRecord {
+  source: DownloadSource;
+  /** The hosted artifact downloaded; null for a proxy serve. */
+  artifact_id: string | null;
+  /** The serving repository (the Remote, for a proxy serve). Null on backends before 1.11.0. */
+  repository_id: string | null;
+  /** The artifact's path, or the proxied path. Null on backends before 1.11.0. */
+  path: string | null;
+  user_id: string | null;
+  username: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  downloaded_at: string;
+}
+
+export interface DownloadListResponse {
+  downloads: DownloadRecord[];
+  total: number;
+  page: number;
+  per_page: number;
+}
 
 /**
  * Admin client for the download-attribution endpoints (#569, backend #2365).
@@ -22,8 +52,10 @@ export type { DownloadRecord, DownloadListResponse };
  *   GET /api/v1/admin/downloads/by-user/{user_id}  -> DownloadListResponse
  *
  * Query filters (shared by all three): artifact_id, user_id, ip (exact
- * match), from / to (inclusive RFC 3339 bounds on downloaded_at), page /
- * per_page (default 20, max 100). Results are ordered newest-first. On the
+ * match), from / to (inclusive RFC 3339 bounds on downloaded_at), source
+ * (`hosted` | `proxy`) and repository_id (backend 1.11.0, #4539), page /
+ * per_page (default 20, max 100). Results are ordered newest-first, and
+ * include proxy pull-through serves unless `source=hosted` is passed. On the
  * by-ip / by-user endpoints the path parameter overrides the corresponding
  * query filter.
  */
@@ -39,6 +71,10 @@ export interface DownloadsQuery {
   from?: string;
   /** Inclusive upper bound on downloaded_at, RFC 3339. */
   to?: string;
+  /** Only hosted downloads or only proxy serves; both when omitted. */
+  source?: DownloadSource;
+  /** Filter to downloads served from one repository (UUID). */
+  repository_id?: string;
   /** 1-based page index (default 1). */
   page?: number;
   /** Page size (backend default 20, max 100). */
@@ -52,7 +88,12 @@ export const DOWNLOADS_DEFAULT_PER_PAGE = 20;
 
 const DownloadRecordSchema = z
   .object({
-    artifact_id: z.string(),
+    // Null for a proxy serve since backend artifact-keeper#4539; a strict
+    // string here threw on the whole page as soon as one proxy row appeared.
+    artifact_id: z.string().nullish(),
+    source: z.string().nullish(),
+    repository_id: z.string().nullish(),
+    path: z.string().nullish(),
     user_id: z.string().nullish(),
     username: z.string().nullish(),
     ip_address: z.string().nullish(),
@@ -70,6 +111,29 @@ const DownloadListSchema = z
   })
   .passthrough();
 
+/**
+ * `source` as the backend sent it, or inferred from `artifact_id` when absent
+ * or unrecognised: only a proxy serve lacks an artifact row. Backends before
+ * 1.11.0 send no `source` and list hosted downloads only.
+ */
+function normalizeSource(
+  source: string | null | undefined,
+  artifactId: string | null | undefined,
+): DownloadSource {
+  if (source === "hosted" || source === "proxy") return source;
+  return artifactId ? "hosted" : "proxy";
+}
+
+/**
+ * A stable identity for the item a download fetched, for counting distinct
+ * items: the artifact id for a hosted download, the repository and path for
+ * a proxy serve (which has no artifact id).
+ */
+export function downloadItemKey(r: DownloadRecord): string {
+  if (r.artifact_id) return r.artifact_id;
+  return `${r.repository_id ?? ""}:${r.path ?? ""}`;
+}
+
 export function parseDownloadList(data: unknown): DownloadListResponse {
   const parsed = DownloadListSchema.safeParse(data);
   if (!parsed.success) {
@@ -77,7 +141,10 @@ export function parseDownloadList(data: unknown): DownloadListResponse {
   }
   return {
     downloads: parsed.data.downloads.map((r) => ({
-      artifact_id: r.artifact_id,
+      source: normalizeSource(r.source, r.artifact_id),
+      artifact_id: r.artifact_id ?? null,
+      repository_id: r.repository_id ?? null,
+      path: r.path ?? null,
       user_id: r.user_id ?? null,
       username: r.username ?? null,
       ip_address: r.ip_address ?? null,
@@ -99,6 +166,9 @@ export function buildDownloadsQueryString(query: DownloadsQuery): string {
   if (query.ip?.trim()) params.set("ip", query.ip.trim());
   if (query.from) params.set("from", query.from);
   if (query.to) params.set("to", query.to);
+  if (query.source) params.set("source", query.source);
+  if (query.repository_id?.trim())
+    params.set("repository_id", query.repository_id.trim());
   if (query.page != null) params.set("page", String(Math.max(1, query.page)));
   if (query.per_page != null) {
     params.set(
@@ -168,7 +238,7 @@ export interface IpGroup {
   downloads: number;
   /** Distinct authenticated users seen from this IP. */
   unique_users: number;
-  /** Distinct artifacts pulled from this IP. */
+  /** Distinct items pulled from this IP (hosted artifacts and proxied paths). */
   unique_artifacts: number;
   /** True when at least one download from this IP was anonymous. */
   has_anonymous: boolean;
@@ -184,7 +254,7 @@ export interface UserGroup {
   downloads: number;
   /** Distinct client IPs this user pulled from. */
   unique_ips: number;
-  /** Distinct artifacts this user pulled. */
+  /** Distinct items this user pulled (hosted artifacts and proxied paths). */
   unique_artifacts: number;
   /** Most recent downloaded_at for this user, RFC 3339. */
   last_downloaded_at: string;
@@ -221,7 +291,7 @@ export function groupDownloadsByIp(records: DownloadRecord[]): IpGroup[] {
     entry.g.downloads += 1;
     if (r.user_id) entry.users.add(r.user_id);
     else entry.g.has_anonymous = true;
-    entry.artifacts.add(r.artifact_id);
+    entry.artifacts.add(downloadItemKey(r));
     if (r.downloaded_at > entry.g.last_downloaded_at) {
       entry.g.last_downloaded_at = r.downloaded_at;
     }
@@ -265,7 +335,7 @@ export function groupDownloadsByUser(records: DownloadRecord[]): UserGroup[] {
     }
     entry.g.downloads += 1;
     if (r.ip_address) entry.ips.add(r.ip_address);
-    entry.artifacts.add(r.artifact_id);
+    entry.artifacts.add(downloadItemKey(r));
     if (!entry.g.username && r.user_id) entry.g.username = r.username ?? null;
     if (r.downloaded_at > entry.g.last_downloaded_at) {
       entry.g.last_downloaded_at = r.downloaded_at;
