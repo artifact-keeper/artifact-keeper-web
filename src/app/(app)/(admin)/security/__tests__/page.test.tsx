@@ -48,6 +48,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
   useMutation: (opts: any) => mockUseMutation(opts),
@@ -186,9 +194,14 @@ vi.mock("@/components/common/page-header", () => ({
 }));
 
 vi.mock("@/components/common/stat-card", () => ({
-  StatCard: ({ label, value }: any) => (
-    <div data-testid={`stat-${label}`}>{value}</div>
-  ),
+  StatCard: ({ label, value, href }: any) =>
+    href ? (
+      <a data-testid={`stat-${label}`} href={href}>
+        {value}
+      </a>
+    ) : (
+      <div data-testid={`stat-${label}`}>{value}</div>
+    ),
 }));
 
 vi.mock("@/components/common/data-table", () => ({
@@ -1188,6 +1201,121 @@ describe("SecurityDashboardPage", () => {
       // Each grade badge renders the grade letter
       expect(screen.getByText("A")).toBeInTheDocument();
       expect(screen.getByText("F")).toBeInTheDocument();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+
+  describe("drill-down links", () => {
+    const DASHBOARD = {
+      repos_with_scanning: 5,
+      total_scans: 42,
+      critical_findings: 3,
+      high_findings: 7,
+      total_findings: 15,
+      repos_grade_a: 2,
+      repos_grade_f: 1,
+      policy_violations_blocked: 4,
+    };
+
+    it("points each finding tile at the list it counts", () => {
+      setupQueries({ dashboard: DASHBOARD });
+
+      render(<SecurityDashboardPage />);
+
+      // Every tile counts OPEN findings, so every link carries state=open.
+      expect(screen.getByTestId("stat-Open Critical")).toHaveAttribute(
+        "href",
+        "/security/findings?severity=critical&state=open"
+      );
+      expect(screen.getByTestId("stat-Open High")).toHaveAttribute(
+        "href",
+        "/security/findings?severity=high&state=open"
+      );
+      expect(screen.getByTestId("stat-Open Findings")).toHaveAttribute(
+        "href",
+        "/security/findings?state=open"
+      );
+    });
+
+    it("leaves a zero tile inert rather than linking to an empty list", () => {
+      setupQueries({
+        dashboard: { ...DASHBOARD, critical_findings: 0, high_findings: 0 },
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(screen.getByTestId("stat-Open Critical")).not.toHaveAttribute(
+        "href"
+      );
+      expect(screen.getByTestId("stat-Open High")).not.toHaveAttribute("href");
+    });
+
+    it("leaves the non-finding tiles inert", () => {
+      setupQueries({ dashboard: DASHBOARD });
+
+      render(<SecurityDashboardPage />);
+
+      for (const label of [
+        "Total Scans",
+        "Grade A Repos",
+        "Grade F Repos",
+        "Policy Blocks",
+      ]) {
+        expect(screen.getByTestId(`stat-${label}`)).not.toHaveAttribute("href");
+      }
+    });
+
+    it("scopes a severity pill drill-down to its repository", () => {
+      setupQueries({
+        scores: [
+          makeScore({
+            repository_id: "repo-7",
+            critical_count: 0,
+            high_count: 3,
+            medium_count: 0,
+            low_count: 0,
+            acknowledged_count: 2,
+          }),
+        ],
+        repos: [],
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(
+        screen.getByLabelText(
+          "View 3 open high vulnerabilities in this repository"
+        )
+      ).toHaveAttribute(
+        "href",
+        "/security/findings?severity=high&state=open&repository_id=repo-7"
+      );
+      expect(
+        screen.getByLabelText(
+          "View 2 acknowledged vulnerabilities in this repository"
+        )
+      ).toHaveAttribute(
+        "href",
+        "/security/findings?state=acknowledged&repository_id=repo-7"
+      );
+      // A zero count is a plain span, not a link to an empty list.
+      expect(screen.getAllByText("0")[0].closest("a")).toBeNull();
+    });
+
+    it("leaves a zero acknowledged count inert", () => {
+      setupQueries({
+        scores: [
+          makeScore({ repository_id: "repo-8", acknowledged_count: 0 }),
+        ],
+        repos: [],
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(
+        screen.queryByLabelText(/acknowledged vulnerabilities/i)
+      ).toBeNull();
     });
   });
 });

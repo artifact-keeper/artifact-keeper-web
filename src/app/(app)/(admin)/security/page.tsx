@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -87,9 +88,11 @@ function GradeBadge({ grade }: { grade: string }) {
 function SeverityPill({
   count,
   level,
+  repositoryId,
 }: {
   count: number;
   level: "critical" | "high" | "medium" | "low";
+  repositoryId: string;
 }) {
   if (count === 0) {
     return <span className="text-sm text-muted-foreground">0</span>;
@@ -102,12 +105,17 @@ function SeverityPill({
       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     low: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   };
+  const className = `inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[level]}`;
+  // `state=open`: these counts exclude acknowledged findings, so the list has
+  // to as well, or it returns more rows than the number that was clicked.
   return (
-    <span
-      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[level]}`}
+    <Link
+      href={`/security/findings?severity=${level}&state=open&repository_id=${repositoryId}`}
+      className={`${className} hover:ring-2 hover:ring-offset-1 hover:ring-current focus-visible:ring-2 focus-visible:ring-ring outline-none`}
+      aria-label={`View ${count} open ${level} vulnerabilities in this repository`}
     >
       {count}
-    </span>
+    </Link>
   );
 }
 
@@ -278,7 +286,11 @@ export default function SecurityDashboardPage() {
       accessor: (r) => r.critical_count,
       sortable: true,
       cell: (r) => (
-        <SeverityPill count={r.critical_count} level="critical" />
+        <SeverityPill
+          count={r.critical_count}
+          level="critical"
+          repositoryId={r.repository_id}
+        />
       ),
     },
     {
@@ -286,32 +298,57 @@ export default function SecurityDashboardPage() {
       header: "High",
       accessor: (r) => r.high_count,
       sortable: true,
-      cell: (r) => <SeverityPill count={r.high_count} level="high" />,
+      cell: (r) => (
+        <SeverityPill
+          count={r.high_count}
+          level="high"
+          repositoryId={r.repository_id}
+        />
+      ),
     },
     {
       id: "medium",
       header: "Medium",
       accessor: (r) => r.medium_count,
       sortable: true,
-      cell: (r) => <SeverityPill count={r.medium_count} level="medium" />,
+      cell: (r) => (
+        <SeverityPill
+          count={r.medium_count}
+          level="medium"
+          repositoryId={r.repository_id}
+        />
+      ),
     },
     {
       id: "low",
       header: "Low",
       accessor: (r) => r.low_count,
       sortable: true,
-      cell: (r) => <SeverityPill count={r.low_count} level="low" />,
+      cell: (r) => (
+        <SeverityPill
+          count={r.low_count}
+          level="low"
+          repositoryId={r.repository_id}
+        />
+      ),
     },
     {
       id: "acknowledged",
       header: "Ack'd",
       accessor: (r) => r.acknowledged_count,
       sortable: true,
-      cell: (r) => (
-        <span className="text-sm text-muted-foreground">
-          {r.acknowledged_count}
-        </span>
-      ),
+      cell: (r) =>
+        r.acknowledged_count > 0 ? (
+          <Link
+            href={`/security/findings?state=acknowledged&repository_id=${r.repository_id}`}
+            className="text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring outline-none rounded"
+            aria-label={`View ${r.acknowledged_count} acknowledged vulnerabilities in this repository`}
+          >
+            {r.acknowledged_count}
+          </Link>
+        ) : (
+          <span className="text-sm text-muted-foreground">0</span>
+        ),
     },
     {
       id: "last_scan",
@@ -384,6 +421,11 @@ export default function SecurityDashboardPage() {
             value={dashboard.critical_findings}
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.critical_findings > 0 ? "red" : "green"}
+            href={
+              dashboard.critical_findings > 0
+                ? "/security/findings?severity=critical&state=open"
+                : undefined
+            }
           />
           <StatCard
             icon={AlertTriangle}
@@ -391,6 +433,11 @@ export default function SecurityDashboardPage() {
             value={dashboard.high_findings}
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.high_findings > 0 ? "yellow" : "green"}
+            href={
+              dashboard.high_findings > 0
+                ? "/security/findings?severity=high&state=open"
+                : undefined
+            }
           />
           <StatCard
             icon={Bug}
@@ -398,6 +445,11 @@ export default function SecurityDashboardPage() {
             value={dashboard.total_findings}
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.total_findings > 0 ? "yellow" : "green"}
+            href={
+              dashboard.total_findings > 0
+                ? "/security/findings?state=open"
+                : undefined
+            }
           />
           <StatCard
             icon={Award}
