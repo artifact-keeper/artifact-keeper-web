@@ -4,7 +4,9 @@ import { test, expect } from '@playwright/test';
  * Regression tests for private repository visibility.
  *
  * Verifies that unauthenticated (anonymous) users cannot see or access
- * private repositories through any API endpoint. The seed data creates
+ * private repositories through any API endpoint. Metadata routes hide a
+ * private repository behind a 404; the download route answers 401 with a
+ * challenge, identically for private and nonexistent repositories. The seed data creates
  * two repos for this purpose:
  *   - e2e-public-pypi  (is_public: true)
  *   - e2e-private-pypi (is_public: false)
@@ -91,13 +93,42 @@ test.describe('Private repository visibility (anonymous)', () => {
     expect(repoKeys).not.toContain('e2e-private-pypi');
   });
 
-  test('download endpoint for private repo returns 404', async ({ request }) => {
-    // Even if we guess an artifact path, the download should be blocked
+  // Since backend artifact-keeper#4654 the download route challenges a request
+  // that carries no credential instead of hiding the repository behind a 404,
+  // so curl/wget clients know to retry with Basic or Bearer auth. The answer is
+  // the same for a private and a nonexistent repository, so it still reveals
+  // nothing about which repositories exist (#999).
+  async function anonymousDownload(
+    request: import('@playwright/test').APIRequestContext,
+    repoKey: string,
+  ) {
     const resp = await request.get(
-      `${API}/repositories/e2e-private-pypi/download/nonexistent.tar.gz`
+      `${API}/repositories/${repoKey}/download/nonexistent.tar.gz`
     );
-    // 404 from visibility check (not from missing artifact)
-    expect(resp.status()).toBe(404);
+    // Each challenge is its own header at the backend; the web proxy may fold
+    // them into one comma-joined value, so compare the joined text.
+    const challenges = resp
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'www-authenticate')
+      .map((h) => h.value)
+      .join(', ');
+    return { status: resp.status(), challenges, body: await resp.text() };
+  }
+
+  test('download endpoint for private repo challenges with 401', async ({ request }) => {
+    // Even if we guess an artifact path, the download is refused without a credential.
+    const priv = await anonymousDownload(request, 'e2e-private-pypi');
+    expect(priv.status).toBe(401);
+    expect(priv.challenges).toContain('Basic realm="artifact-keeper"');
+    expect(priv.challenges).toContain('Bearer realm="artifact-keeper"');
+  });
+
+  test('download endpoint answers a nonexistent repo exactly like a private one', async ({ request }) => {
+    const priv = await anonymousDownload(request, 'e2e-private-pypi');
+    const missing = await anonymousDownload(request, 'e2e-no-such-repo-999');
+    expect(missing.status).toBe(priv.status);
+    expect(missing.challenges).toEqual(priv.challenges);
+    expect(missing.body).toBe(priv.body);
   });
 
   test('artifact metadata for private repo returns 404', async ({ request }) => {
