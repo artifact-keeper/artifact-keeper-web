@@ -49,7 +49,11 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useRepositories } from "@/hooks/use-repositories";
 import { packagesApi } from "@/lib/api/packages";
-import { getInstallCommand, FORMAT_OPTIONS } from "@/lib/package-utils";
+import {
+  getInstallCommand,
+  currentRegistryHost,
+  FORMAT_OPTIONS,
+} from "@/lib/package-utils";
 import { formatBytes as formatBytesUtil, formatDate, formatNumber, isSafeUrl } from "@/lib/utils";
 import type {
   Package,
@@ -197,7 +201,8 @@ function PackageDetailPanel({
   const installCmd = getInstallCommand(
     pkg.name,
     pkg.version,
-    pkg.format
+    pkg.format,
+    { host: currentRegistryHost(), repoKey: pkg.repository_key }
   );
 
   const handleCopyInstall = useCallback(() => {

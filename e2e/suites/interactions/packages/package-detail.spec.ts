@@ -48,10 +48,14 @@ test.describe('Package Detail Page', () => {
     const heading = page.getByRole('heading').first();
     await expect(heading).toBeVisible({ timeout: 10000 });
 
-    // Format badge should be present
-    const hasBadge = await page.getByText(/maven|npm|pypi|docker|cargo|helm|go|nuget|generic|debian|rpm|rubygems|composer|hex|terraform|alpine|conda/i).first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-    expect(hasBadge).toBeTruthy();
+    // Format badge should be present. Web-first assertion: `isVisible()`
+    // does not wait, so it raced the package fetch whenever a package existed.
+    await expect(
+      page
+        .getByText(/^(maven|npm|pypi|docker|cargo|helm|go|nuget|generic|debian|rpm|rubygems|composer|hex|terraform|alpine|conda)$/i)
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('detail page shows breadcrumb navigation', async ({ page }) => {
@@ -62,9 +66,9 @@ test.describe('Package Detail Page', () => {
     await page.waitForLoadState('domcontentloaded');
 
     // Breadcrumb should contain "Packages" link
-    const breadcrumbLink = page.locator('nav, [aria-label*="breadcrumb"], ol').getByText(/packages/i).first();
-    const hasBreadcrumb = await breadcrumbLink.isVisible({ timeout: 5000 }).catch(() => false);
-    expect(hasBreadcrumb).toBeTruthy();
+    await expect(
+      page.getByRole('navigation', { name: /breadcrumb/i }).getByRole('link', { name: /packages/i }),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('overview tab shows install command with copy button', async ({ page }) => {
@@ -97,14 +101,10 @@ test.describe('Package Detail Page', () => {
     await page.goto(`/packages/${packageId}`);
     await page.waitForLoadState('domcontentloaded');
 
-    // Metadata fields should be visible
-    const hasFormat = await page.getByText(/^format$/i).isVisible({ timeout: 5000 }).catch(() => false);
-    const hasRepository = await page.getByText(/^repository$/i).isVisible({ timeout: 3000 }).catch(() => false);
-    const hasSize = await page.getByText(/^size$/i).isVisible({ timeout: 3000 }).catch(() => false);
-    const hasDownloads = await page.getByText(/^downloads$/i).isVisible({ timeout: 3000 }).catch(() => false);
-
-    // At least some metadata should be displayed
-    expect(hasFormat || hasRepository || hasSize || hasDownloads).toBeTruthy();
+    // At least some metadata fields should be displayed
+    await expect(
+      page.getByText(/^(format|repository|size|downloads)$/i).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('versions tab shows version table', async ({ page }) => {
