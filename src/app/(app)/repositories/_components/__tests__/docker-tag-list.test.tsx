@@ -139,6 +139,29 @@ describe("DockerTagList", () => {
     expect(screen.getAllByText(/2026/).length).toBeGreaterThanOrEqual(1);
   });
 
+  // #957: sizes and dates stay on one line, long tag names are cut to one
+  // line with the full name on hover instead of wrapping mid-token.
+  it("keeps the size, the last-pushed date and their headers on one line (#957)", () => {
+    render(<DockerTagList tags={[TAG_14]} />);
+    expect(screen.getByTestId("docker-tag-size")).toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("Size")).toHaveClass("whitespace-nowrap");
+    expect(screen.getByText("Last pushed")).toHaveClass("whitespace-nowrap");
+    const dateCell = screen.getByText(new Date(TAG_14.last_pushed_at).toLocaleDateString());
+    expect(dateCell).toHaveClass("whitespace-nowrap");
+  });
+
+  it("truncates a long tag name to one line and keeps the full name in its title (#957)", () => {
+    const sigTag = `sha256-${"a".repeat(64)}.sig`;
+    render(<DockerTagList tags={[tag({ id: "sig", tag: sigTag, is_index: true })]} />);
+    const name = screen.getByTestId("docker-tag-name");
+    expect(name).toHaveTextContent(sigTag);
+    expect(name).toHaveAttribute("title", sigTag);
+    expect(name).toHaveClass("truncate");
+    expect(name.className).toMatch(/max-w-/);
+    // The badge must not be squeezed by the truncated name.
+    expect(screen.getByText("multi-arch")).toHaveClass("shrink-0");
+  });
+
   it("marks multi-arch (image index) tags with a badge", () => {
     render(<DockerTagList tags={[tag({ id: "idx", tag: "v2", is_index: true })]} />);
     expect(screen.getByText("multi-arch")).toBeInTheDocument();

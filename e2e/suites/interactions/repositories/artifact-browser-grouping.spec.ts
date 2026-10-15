@@ -197,6 +197,73 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     expect(bodyText).not.toMatch(/\/blobs\/sha256:[0-9a-f]/);
   });
 
+  test('Docker grouped view keeps sizes and tag names on one line (#957)', async ({
+    page,
+  }) => {
+    const key = await findRepoByFormat(page, ['docker']);
+    test.skip(!key, 'No docker repository available');
+
+    // The seeded repositories hold no images, so stub the grouped rollup with
+    // the two rows #957 reported: a size that wrapped ("365.93" / "MB") and a
+    // 71-character cosign signature tag that wrapped mid-token.
+    const digest = `sha256:${'b'.repeat(64)}`;
+    const sigTag = `sha256-${'a'.repeat(64)}.sig`;
+    const row = (id: string, tag: string) => ({
+      id,
+      repository_key: key,
+      image: 'edge/site-config',
+      tag,
+      manifest_digest: digest,
+      total_size_bytes: 383_707_054,
+      layer_count: 0,
+      is_index: false,
+      last_pushed_at: new Date().toISOString(),
+    });
+    await page.route(/\/api\/v1\/repositories\/[^/]+\/artifacts\?.*group_by=docker_tag/, (route) =>
+      route.fulfill({
+        json: {
+          items: [],
+          pagination: { page: 1, per_page: 20, total: 2, total_pages: 1 },
+          docker_tags: [row('t1', '1.0.0'), row('t2', sigTag)],
+          has_more: false,
+        },
+      }),
+    );
+    await gotoArtifactsTab(page, key!);
+
+    const groupedBtn = page.getByTestId('toggle-grouped');
+    if ((await groupedBtn.getAttribute('aria-pressed')) !== 'true') {
+      await groupedBtn.click();
+    }
+    await expect(page.getByTestId('docker-tag-list')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('docker-tag-name')).toHaveCount(2);
+
+    // Number of line boxes the element's text occupies: 1 when it fits on
+    // one line, 2+ when it wraps ("365.93" / "MB").
+    const lineCount = (el: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const tops = new Set(
+        Array.from(range.getClientRects()).map((r) => Math.round(r.top)),
+      );
+      return tops.size;
+    };
+
+    const sizes = page.getByTestId('docker-tag-size');
+    const names = page.getByTestId('docker-tag-name');
+    await expect(sizes.first()).toHaveText(/MB/);
+    for (const cell of await sizes.all()) {
+      expect(await cell.evaluate(lineCount)).toBe(1);
+    }
+    for (const name of await names.all()) {
+      expect(await name.evaluate(lineCount)).toBe(1);
+      // The full tag stays available on hover.
+      expect(await name.getAttribute('title')).toBe(await name.textContent());
+    }
+    const header = page.getByRole('columnheader', { name: 'Last pushed' });
+    expect(await header.evaluate(lineCount)).toBe(1);
+  });
+
   // (The "Show layers" disclosure test was removed with the client-side
   // grouping: the grouped view now consumes the server's
   // `?group_by=docker_tag` rollup, which returns only tag rows — raw layer

@@ -89,6 +89,47 @@ vi.mock("@/components/ui/label", () => ({
   Label: ({ children, ...props }: any) => <label {...props}>{children}</label>,
 }));
 
+// Native <select> stand-in for the Radix Select (the source filter).
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  return {
+    Select: ({ value, onValueChange, children }: any) => {
+      const items: Array<{ value: string; label: string }> = [];
+      let ariaLabel = "";
+      React.Children.forEach(children, (child: any) => {
+        if (!React.isValidElement(child)) return;
+        const props = child.props as any;
+        if (props["aria-label"]) ariaLabel = props["aria-label"];
+        React.Children.forEach(props.children, (sub: any) => {
+          if (React.isValidElement(sub) && (sub.props as any).value) {
+            const sp = sub.props as any;
+            items.push({ value: sp.value, label: String(sp.children) });
+          }
+        });
+      });
+      return (
+        <select
+          aria-label={ariaLabel}
+          value={value}
+          onChange={(e) => onValueChange?.(e.target.value)}
+        >
+          {items.map((i) => (
+            <option key={i.value} value={i.value}>
+              {i.label}
+            </option>
+          ))}
+        </select>
+      );
+    },
+    SelectTrigger: ({ children }: any) => <>{children}</>,
+    SelectValue: () => null,
+    SelectContent: ({ children }: any) => <>{children}</>,
+    SelectItem: ({ value, children }: any) => (
+      <option value={value}>{children}</option>
+    ),
+  };
+});
+
 vi.mock("@/components/ui/badge", () => ({
   Badge: ({ children }: any) => <span data-testid="badge">{children}</span>,
 }));
@@ -171,6 +212,8 @@ const ADMIN = { id: "admin-id", username: "admin", is_admin: true };
 const USER_ID = "0e8b23a5-1111-4f2b-9f7d-1c2d3e4f5a6b";
 const ARTIFACT_ID = "0d9c34a6-9a2e-4f2b-9f7d-1c2d3e4f5a6b";
 
+const REPO_ID = "5a5a5a5a-3333-4f2b-9f7d-1c2d3e4f5a6b";
+
 const EVENT = {
   artifact_id: ARTIFACT_ID,
   user_id: USER_ID,
@@ -190,14 +233,17 @@ const IDLE = { isLoading: false, isError: false, isFetching: false };
 function queryState({
   events = { data: undefined, ...IDLE },
   sample = { data: undefined, ...IDLE },
+  repositories = { data: undefined, ...IDLE },
 }: {
   events?: any;
   sample?: any;
+  repositories?: any;
 } = {}) {
   mockUseQuery.mockImplementation((opts: any) => {
     if (opts.queryKey?.[0] === "admin-downloads") {
       return opts.queryKey?.[1] === "sample" ? sample : events;
     }
+    if (opts.queryKey?.[0] === "repositories") return repositories;
     throw new Error(`Unexpected query key: ${JSON.stringify(opts.queryKey)}`);
   });
 }
@@ -240,6 +286,97 @@ describe("DownloadsPage", () => {
     // Artifact id renders truncated with the full id as a tooltip.
     expect(screen.getByTitle(ARTIFACT_ID)).toBeInTheDocument();
     expect(screen.getByText(/npm\/10\.2\.4/)).toBeInTheDocument();
+  });
+
+  it("renders a proxy pull-through serve by repository and path (#960)", () => {
+    const proxyRow = {
+      ...EVENT,
+      source: "proxy",
+      artifact_id: null,
+      repository_id: REPO_ID,
+      path: "left-pad/-/left-pad-1.3.0.tgz",
+    };
+    const hostedRow = {
+      ...EVENT,
+      source: "hosted",
+      repository_id: REPO_ID,
+      path: "lodash/-/lodash-4.17.21.tgz",
+      downloaded_at: "2026-07-10T11:00:00Z",
+    };
+    queryState({
+      events: { data: page([proxyRow, hostedRow]), ...IDLE },
+      repositories: {
+        data: { items: [{ id: REPO_ID, key: "npm-remote" }] },
+        ...IDLE,
+      },
+    });
+
+    render(<DownloadsPage />);
+
+    expect(screen.getByText("Proxy")).toBeInTheDocument();
+    expect(screen.getByText("Hosted")).toBeInTheDocument();
+    expect(screen.getByTitle("left-pad/-/left-pad-1.3.0.tgz")).toBeInTheDocument();
+    // The repository id resolves to its key, on both rows.
+    expect(screen.getAllByText("npm-remote")).toHaveLength(2);
+    // Only the hosted row has an artifact id to show.
+    expect(screen.getAllByTitle(ARTIFACT_ID)).toHaveLength(1);
+  });
+
+  it("falls back to a truncated repository id when the key is unknown (#960)", () => {
+    queryState({
+      events: {
+        data: page([
+          {
+            ...EVENT,
+            source: "proxy",
+            artifact_id: null,
+            repository_id: REPO_ID,
+            path: "a/b.tgz",
+          },
+        ]),
+        ...IDLE,
+      },
+    });
+
+    render(<DownloadsPage />);
+
+    expect(screen.getByTitle(REPO_ID)).toHaveTextContent("5a5a5a5a-3333…");
+    expect(screen.getByTitle("a/b.tgz")).toBeInTheDocument();
+  });
+
+  it("filters by source as soon as one is picked (#960)", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+
+    render(<DownloadsPage />);
+
+    fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "proxy" },
+    });
+
+    const eventOpts = mockUseQuery.mock.calls
+      .map(([o]) => o)
+      .filter(
+        (o) => o.queryKey?.[0] === "admin-downloads" && o.queryKey?.[1] !== "sample"
+      )
+      .at(-1);
+    await eventOpts.queryFn();
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "proxy", page: 1 })
+    );
+
+    // Back to both: the parameter is omitted.
+    fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "__all__" },
+    });
+    const latest = mockUseQuery.mock.calls
+      .map(([o]) => o)
+      .filter(
+        (o) => o.queryKey?.[0] === "admin-downloads" && o.queryKey?.[1] !== "sample"
+      )
+      .at(-1);
+    mockList.mockClear();
+    await latest.queryFn();
+    expect(mockList.mock.calls[0][0].source).toBeUndefined();
   });
 
   it("shows 'anonymous' for unauthenticated downloads and a truncated id for unknown users", () => {
@@ -510,6 +647,7 @@ describe("fetchDownloads endpoint routing", () => {
     ip: "",
     from: "",
     to: "",
+    source: "" as const,
   };
 
   beforeEach(() => vi.clearAllMocks());
