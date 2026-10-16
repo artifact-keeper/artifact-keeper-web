@@ -343,7 +343,7 @@ export function NotificationsTabContent({ repositoryId }: NotificationsTabConten
 
       {/* Create Webhook Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Webhook</DialogTitle>
           </DialogHeader>

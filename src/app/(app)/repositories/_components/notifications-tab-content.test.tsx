@@ -106,8 +106,16 @@ vi.mock("@/components/ui/dialog", () => ({
     onOpenChange: (v: boolean) => void;
     children: React.ReactNode;
   }) => (open ? <div data-testid="dialog">{children}</div> : null),
-  DialogContent: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="dialog-content">{children}</div>
+  DialogContent: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <div data-testid="dialog-content" className={className}>
+      {children}
+    </div>
   ),
   DialogHeader: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => (
@@ -337,6 +345,24 @@ describe("NotificationsTabContent", () => {
     expect(dialog).toBeInTheDocument();
     // The dialog title is rendered as an h2
     expect(within(dialog).getByRole("heading", { name: "Add Webhook" })).toBeInTheDocument();
+  });
+
+  it("caps the create dialog height so its footer stays reachable", async () => {
+    // #1003: the dialog holds three inputs plus all 12 events as bordered rows
+    // with descriptions, which outgrows a laptop viewport. Radix renders
+    // DialogContent as a fixed-position portal, so without its own height cap
+    // and scroll the footer buttons cannot be reached at all.
+    queryResponses["webhooks"] = {
+      data: { items: [], total: 0 },
+      isLoading: false,
+    };
+    render(<NotificationsTabContent repositoryId="repo-123" />);
+
+    await userEvent.click(screen.getByTestId("add-webhook-button"));
+
+    const content = screen.getByTestId("dialog-content");
+    expect(content.className).toMatch(/\bmax-h-\[/);
+    expect(content.className).toMatch(/\boverflow-y-auto\b/);
   });
 
   it("renders all event checkboxes in the create dialog", async () => {
