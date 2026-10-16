@@ -179,6 +179,7 @@ vi.mock("../artifact-browser-toggle", () => ({
   ArtifactBrowserToggle: () => <div />,
   supportsGrouping: () => false,
   supportsTree: () => false,
+  DOCKER_FAMILY_FORMATS: new Set(["docker", "podman", "buildx", "oras", "helm_oci", "wasm_oci"]),
 }));
 vi.mock("@/components/common/data-table", () => ({
   DataTable: ({
