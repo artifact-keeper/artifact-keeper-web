@@ -38,6 +38,8 @@ vi.mock("@tanstack/react-query", () => ({
     }
     return queryResponse;
   },
+  useQueries: ({ queries }: { queries: Array<{ queryFn?: () => unknown }> }) =>
+    queries.map(() => ({ data: undefined, isLoading: false })),
   useMutation: (config: MutationConfig) => {
     mutationConfigs.push(config);
     const mutate = vi.fn();
@@ -65,6 +67,13 @@ vi.mock("@/lib/api/signing", () => ({
     rotateKey: (...a: unknown[]) => api.rotateKey(...a),
     revokeKey: (...a: unknown[]) => api.revokeKey(...a),
     deleteKey: (...a: unknown[]) => api.deleteKey(...a),
+    getRepoConfig: vi.fn().mockResolvedValue(null),
+  },
+}));
+
+vi.mock("@/lib/api/repositories", () => ({
+  repositoriesApi: {
+    list: vi.fn().mockResolvedValue({ items: [] }),
   },
 }));
 
