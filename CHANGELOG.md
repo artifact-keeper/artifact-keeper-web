@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-16
+
 ### Fixed
 - **Bazel, pacman and rattler token-in-path conda clients work through the web origin** (#996) - requests to `/bazel/...`, `/pacman/...` and `/t/<TOKEN>/conda/...` (the form pixi writes after `auth login --conda-token`) got the web UI's 404 page instead of reaching the backend, because the web proxy's list of format prefixes did not include them, the same gap #504 and #846 closed for `/lxc` and `/general`. The three prefixes are now forwarded. A unit test now compares the list with a copy of the backend's top-level format routes, so a format added to one without the other fails CI; the copy is maintained by hand, since the web build has no access to the backend source. The Helm chart's HTTPRoute has the same gap and is tracked separately (artifact-keeper/artifact-keeper-iac#374).
 - **The permissions form says what a group target is, and is not** (backend artifact-keeper#4653) - choosing principal type Service Account or User and target type Group creates a rule like `service_account X -> group G -> read`, which grants X the ability to view (`read`) or manage (`admin`) the group object. It does not add X to G and gives X none of G's repository access; membership is managed on the Groups page. The target label was just "Target Group", and a user read it as "give this account the group's access" (artifact-keeper#4593). The label now reads "Group (view / manage access)" and a hint under the picker says what the rule does and links to the Groups page for membership. Frontend only; the backend split between a group-target rule and `user_group_members` is correct and unchanged.
