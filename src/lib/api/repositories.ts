@@ -305,6 +305,15 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     })(),
     quota_bytes: sdk.quota_bytes ?? undefined,
     upstream_url: sdk.upstream_url ?? undefined,
+    // `upstream_url_has_credentials` (artifact-keeper#4452) lands on the
+    // generated type in SDK 1.11.0; this build pins 1.7.0, so read it
+    // defensively like `member_storage_used_bytes` above. Absent means
+    // "cannot tell", which the URL editor treats as "no embedded credentials".
+    upstream_url_has_credentials: (() => {
+      const v = (sdk as RepositoryResponse & { upstream_url_has_credentials?: unknown })
+        .upstream_url_has_credentials;
+      return typeof v === 'boolean' ? v : undefined;
+    })(),
     upstream_auth_type: sdk.upstream_auth_type ?? undefined,
     upstream_auth_configured: sdk.upstream_auth_configured,
     // --- 1.6.0 format-specific config (#602) ---
@@ -425,6 +434,11 @@ export const repositoriesApi = {
       quota_bytes: input.quota_bytes,
       key: input.key,
       versioning_enabled: input.versioning_enabled,
+      // Replace a Remote's upstream URL (artifact-keeper#4467). Omitted when
+      // undefined, so an unrelated edit never rewrites it. The field is on the
+      // PATCH type from SDK 1.11.0; the body is already cast below, which is
+      // what carries it on the 1.7.0 types this build pins.
+      upstream_url: input.upstream_url,
       // --- 1.6.0 format-specific config (#602). `trusted_gpg_key` uses
       // three-way semantics: omit (undefined) = unchanged, `null` = clear,
       // string = set. Undefined fields are dropped by JSON serialization.
@@ -443,7 +457,11 @@ export const repositoriesApi = {
       // dialog does not edit curation policy. Intentionally omit it from the
       // wire so update behavior is unchanged; the cast satisfies the
       // generated-required field without sending a spurious value.
-    } as SdkUpdateRepositoryRequest;
+      // `upstream_url` is on the PATCH type from SDK 1.11.0 but not on the
+      // 1.7.0 types this build pins, so it is named here rather than widening
+      // the cast to `unknown`: dropping the intersection once the SDK is
+      // bumped is then a type error, not a silent no-op.
+    } as SdkUpdateRepositoryRequest & { upstream_url?: string };
     const data = await unwrap(
       updateRepository({ path: { key }, body: withVisibility(body, input.visibility) }),
     );
