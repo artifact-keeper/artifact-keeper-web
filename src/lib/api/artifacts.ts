@@ -26,6 +26,7 @@ import type {
   PaginatedResponse,
 } from '@/types';
 import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
+import { encodeArtifactPath } from '@/lib/api/versions';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListArtifactsParams {
@@ -267,6 +268,20 @@ export const artifactsApi = {
 
   delete: async (repoKey: string, artifactPath: string): Promise<void> => {
     await unwrap(deleteArtifact({ path: { key: repoKey, path: artifactPath } }));
+  },
+
+  /**
+   * Delete an artifact and purge it from the trash at once, so its path can
+   * be re-uploaded with different bytes (admin only). Routes through
+   * `apiFetch` because the generated SDK has no `permanent` query parameter
+   * yet.
+   */
+  deletePermanently: async (repoKey: string, artifactPath: string): Promise<void> => {
+    await apiFetch<void>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/artifacts/` +
+        `${encodeArtifactPath(artifactPath)}?permanent=true`,
+      { method: 'DELETE' },
+    );
   },
 
   /**

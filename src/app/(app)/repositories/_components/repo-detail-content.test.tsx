@@ -21,6 +21,7 @@ import userEvent from "@testing-library/user-event";
 // component issued (so tests can observe page/pageSize state), and the props
 // the DockerTagList stub was last rendered with.
 const h = vi.hoisted(() => ({
+  isAdmin: true,
   searchParams: new URLSearchParams(),
   artifactsQueryKeys: [] as unknown[][],
   // The artifacts `queryFn`, recorded but not executed by the useQuery mock.
@@ -141,7 +142,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ isAuthenticated: true, user: { is_admin: true } }),
+  useAuth: () => ({ isAuthenticated: true, user: { is_admin: h.isAdmin } }),
 }));
 
 vi.mock("@/providers/system-config-provider", () => ({
@@ -653,6 +654,53 @@ describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", 
     h.artifactStats = { download_count: 0, last_downloaded: null };
     const dialog = await openDetailDialog();
     expect(within(dialog).queryByText("Last downloaded")).toBeNull();
+  });
+});
+
+describe("RepoDetailContent artifact detail dialog — Delete permanently", () => {
+  beforeEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.isAdmin = true;
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.isAdmin = true;
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
+    row.click();
+    return await screen.findByRole("dialog", {}, { timeout: 2000 });
+  }
+
+  it("offers admins a permanent delete next to Delete", async () => {
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).getByRole("button", { name: /delete permanently/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides it from non-admins, who keep the ordinary Delete", async () => {
+    h.isAdmin = false;
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).queryByRole("button", { name: /delete permanently/i }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByRole("button", { name: /^delete$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides it for OCI repositories, where the backend refuses it", async () => {
+    repository.format = "docker";
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).queryByRole("button", { name: /delete permanently/i }),
+    ).toBeNull();
   });
 });
 
