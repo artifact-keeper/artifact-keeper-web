@@ -789,7 +789,7 @@ describe("RepoSettingsTab - Repository Info Section", () => {
     expect(screen.getByText("local")).toBeTruthy();
   });
 
-  it("shows upstream URL for remote repos", () => {
+  it("shows the upstream URL of a remote repo in an editable field", () => {
     const remoteRepo = {
       ...baseRepo,
       repo_type: "remote" as const,
@@ -802,8 +802,50 @@ describe("RepoSettingsTab - Repository Info Section", () => {
 
     expect(screen.getByText("Upstream URL")).toBeTruthy();
     expect(
-      screen.getByText("https://repo.maven.apache.org/maven2")
-    ).toBeTruthy();
+      (screen.getByLabelText("Upstream URL") as HTMLInputElement).value
+    ).toBe("https://repo.maven.apache.org/maven2");
+  });
+
+  it("does not raise the save bar when a pre-filled upstream URL is cleared", async () => {
+    // #1002: blank means "leave the stored URL alone", which is what handleSave
+    // sends. Counting a cleared field as a pending change would show the save
+    // bar for an edit that sends nothing, and the bar only clears on a
+    // successful mutation, so it would sit there for good.
+    const user = userEvent.setup();
+    const remote = {
+      ...baseRepo,
+      repo_type: "remote" as const,
+      upstream_url: "https://repo.maven.apache.org/maven2",
+    };
+
+    render(<RepoSettingsTab repository={remote} />, {
+      wrapper: createWrapper(),
+    });
+
+    await user.clear(screen.getByLabelText("Upstream URL"));
+
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+  });
+
+  it("starts the upstream URL field empty when the stored URL carries credentials", () => {
+    // #1002: the backend redacts userinfo out of `upstream_url`, so seeding the
+    // input with what it returned and saving would write the redacted form back
+    // and drop the credentials. The field starts blank and shows the redacted
+    // URL as a placeholder instead.
+    const remoteRepo = {
+      ...baseRepo,
+      repo_type: "remote" as const,
+      upstream_url: "https://nexus.example.com/repo",
+      upstream_url_has_credentials: true,
+    };
+
+    render(<RepoSettingsTab repository={remoteRepo} />, {
+      wrapper: createWrapper(),
+    });
+
+    const input = screen.getByLabelText("Upstream URL") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("https://nexus.example.com/repo");
   });
 
   it("does not show upstream URL for local repos", () => {

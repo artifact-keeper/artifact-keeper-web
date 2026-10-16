@@ -153,6 +153,8 @@ export interface UpdateRepositoryFields {
   quota_bytes?: number | null;
   /** First-class artifact versioning opt-in (#571, Generic/Mlmodel only). */
   versioning_enabled?: boolean;
+  /** Replace a Remote's upstream URL (#1002, backend artifact-keeper#4467). */
+  upstream_url?: string;
   // --- 1.6.0 format-specific config (#602) ---
   /** RPM curation trusted GPG key (#2568): string to set, `null` to clear. */
   trusted_gpg_key?: string | null;
@@ -199,6 +201,16 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       description: repository.description ?? "",
       visibility: resolveVisibility(repository),
       versioning_enabled: repository.versioning_enabled ?? false,
+      // #1002: the backend strips userinfo out of `upstream_url` and reports
+      // its presence separately, so what we were handed is not the whole URL
+      // when credentials are embedded. Seeding the input with it and saving
+      // would write the redacted form back and drop the credentials. In that
+      // case the field starts empty and shows the redacted URL as a
+      // placeholder instead, so changing it means typing it out in full and
+      // leaving it alone changes nothing.
+      upstream_url: repository.upstream_url_has_credentials
+        ? ""
+        : repository.upstream_url ?? "",
     }),
     [repository]
   );
@@ -345,6 +357,16 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (form.visibility !== resolveVisibility(repository)) return true;
     if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
       return true;
+    // Blank means "leave the stored URL alone", matching what handleSave
+    // sends, so clearing a pre-filled field is not a pending change. Treating
+    // it as one would raise the save bar for an edit that sends nothing, and
+    // the bar only clears on a successful mutation.
+    if (
+      isRemote &&
+      form.upstream_url.trim() &&
+      form.upstream_url.trim() !== (repository.upstream_url ?? "")
+    )
+      return true;
     const currentQuotaBytes = quotaToBytes(quotaValue, quotaUnit);
     const originalQuotaBytes = repository.quota_bytes ?? null;
     if (currentQuotaBytes !== originalQuotaBytes) return true;
@@ -353,6 +375,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     return false;
   }, [
     form,
+    isRemote,
     quotaValue,
     quotaUnit,
     repository,
@@ -415,6 +438,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (form.versioning_enabled !== (repository.versioning_enabled ?? false))
       fields.versioning_enabled = form.versioning_enabled;
     if (keyChanged) fields.key = form.key;
+    if (isRemote) {
+      const typedUpstream = form.upstream_url.trim();
+      // An empty field means "leave the stored URL alone". That is what keeps a
+      // save touching only the name from wiping the URL of a Remote whose
+      // credentials are embedded, since that field deliberately starts blank.
+      if (typedUpstream && typedUpstream !== (repository.upstream_url ?? "")) {
+        fields.upstream_url = typedUpstream;
+      }
+    }
 
     const newQuota = quotaToBytes(quotaValue, quotaUnit);
     const originalQuota = repository.quota_bytes ?? null;
@@ -453,6 +485,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     quotaUnit,
     repository,
     keyChanged,
+    isRemote,
     saveMutation,
     cacheTtlChanged,
     cacheTtlIsValid,
@@ -771,6 +804,35 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               rows={3}
             />
           </div>
+
+          {isRemote && (
+            <div className="space-y-2">
+              <Label htmlFor="settings-upstream-url">Upstream URL</Label>
+              <Input
+                id="settings-upstream-url"
+                value={form.upstream_url}
+                onChange={(e) =>
+                  setOverrides((o) => ({ ...o, upstream_url: e.target.value }))
+                }
+                placeholder={
+                  repository.upstream_url_has_credentials
+                    ? repository.upstream_url
+                    : "https://registry.example.com"
+                }
+                className="font-mono text-xs"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                {repository.upstream_url_has_credentials
+                  ? "This upstream URL carries credentials, which are never sent back to the browser, so the field starts empty and shows the redacted URL. Leave it blank to keep the stored URL; to change it, enter the full URL including the credentials."
+                  : "Leave blank to keep the stored URL."}{" "}
+                Moving to a different host, scheme or port while separate
+                upstream credentials are configured is refused — clear those
+                first.
+              </p>
+            </div>
+          )}
 
           <VisibilitySelect
             idPrefix="settings"
@@ -1623,14 +1685,6 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <dd>{new Date(repository.created_at).toLocaleDateString()}</dd>
           <dt className="text-muted-foreground">Last Updated</dt>
           <dd>{new Date(repository.updated_at).toLocaleDateString()}</dd>
-          {repository.upstream_url && (
-            <>
-              <dt className="text-muted-foreground">Upstream URL</dt>
-              <dd className="font-mono text-xs break-all">
-                {repository.upstream_url}
-              </dd>
-            </>
-          )}
         </dl>
       </section>
 

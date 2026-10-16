@@ -100,6 +100,13 @@ export interface Repository {
   quota_bytes?: number;
   // For remote repositories
   upstream_url?: string;
+  /**
+   * Whether the stored `upstream_url` carries embedded userinfo credentials
+   * that the backend stripped out of `upstream_url` above (artifact-keeper#4452).
+   * The credentials themselves are never returned, so an editor must treat the
+   * URL it was given as incomplete when this is true.
+   */
+  upstream_url_has_credentials?: boolean;
   upstream_auth_type?: string | null;
   upstream_auth_configured?: boolean;
   // For virtual repositories
