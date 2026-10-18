@@ -50,6 +50,28 @@ function getActiveInstanceBaseUrl(): string {
   }
 }
 
+/**
+ * Requests that belong to the browser's session with THIS backend and must
+ * never be relayed to a remote instance, even while one is active:
+ *
+ * - the session endpoints (login, logout, refresh, TOTP verify, SSO): the
+ *   proxy is authenticated by the local session cookie, so a login relayed
+ *   to the remote could never restore it and a user whose local session
+ *   expired while a remote instance was active had no way back in;
+ * - the remote-instance registry itself (`/api/v1/instances...`): it lives
+ *   on this backend, and a path that already carries the proxy prefix must
+ *   not get it a second time (#829).
+ */
+const LOCAL_ONLY_PATHS = [
+  /^\/api\/v1\/auth\/(login|logout|refresh|totp\/verify)\/?$/,
+  /^\/api\/v1\/auth\/sso(\/|$)/,
+  /^\/api\/v1\/instances(\/|$)/,
+];
+
+export function isLocalOnlyPath(pathname: string): boolean {
+  return LOCAL_ONLY_PATHS.some((re) => re.test(pathname));
+}
+
 function isRemoteInstance(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -64,8 +86,13 @@ function isRemoteInstance(): boolean {
 // Configure the global SDK client
 // ---------------------------------------------------------------------------
 
+// The base URL never carries the remote-instance proxy prefix: the request
+// interceptor below is the one place that adds it. Setting it here too made
+// every SDK request go to /api/v1/instances/<id>/proxy/api/v1/instances/<id>/
+// proxy/..., which the remote answered with 404 "Remote instance not found"
+// (#829).
 client.setConfig({
-  baseUrl: getActiveInstanceBaseUrl(),
+  baseUrl: API_BASE_URL,
   credentials: 'include',
 });
 
@@ -93,7 +120,14 @@ client.interceptors.request.use((request) => {
   // open redirect attacks via localStorage instance poisoning.
   const url = new URL(withCsrfHeader.url);
   const target = new URL(base, window.location.origin);
-  url.pathname = target.pathname + url.pathname;
+  // The API path relative to the backend root, i.e. without any path that
+  // NEXT_PUBLIC_API_URL itself carries.
+  const apiRoot = new URL(API_BASE_URL || '/', window.location.origin).pathname.replace(/\/$/, '');
+  const apiPath = apiRoot && url.pathname.startsWith(`${apiRoot}/`)
+    ? url.pathname.slice(apiRoot.length)
+    : url.pathname;
+  if (isLocalOnlyPath(apiPath)) return withCsrfHeader;
+  url.pathname = target.pathname + apiPath;
 
   return new Request(url.toString(), withCsrfHeader);
 });
@@ -116,8 +150,10 @@ function addRefreshSubscriber(cb: () => void) {
 
 async function attemptRefresh(): Promise<boolean> {
   try {
+    // Always the local session: with a remote instance active, the proxy
+    // is still authenticated by this backend's cookies (#829).
     const refreshResponse = await fetch(
-      `${getActiveInstanceBaseUrl()}/api/v1/auth/refresh`,
+      `${API_BASE_URL}/api/v1/auth/refresh`,
       {
         method: 'POST',
         headers: {
@@ -168,8 +204,11 @@ client.interceptors.response.use(async (response, request) => {
   }
 
   // --- 401 token refresh ---
+  // With a remote instance active a 401 usually means the local session
+  // behind the proxy expired, so it is refreshed the same way. If the remote
+  // itself refused the stored API key, the single retry gets the same 401
+  // and it is returned unchanged.
   if (response.status !== 401 || typeof window === 'undefined') return response;
-  if (isRemoteInstance()) return response;
 
   const url = request.url;
   const isAuthEndpoint =
