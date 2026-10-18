@@ -3,6 +3,7 @@ import {
   TYPE_OPTIONS,
   FORMAT_OPTIONS,
   FORMAT_GROUPS,
+  FILTER_HIDDEN_FORMATS,
   hasRpmTrustedKeyConfig,
   hasDebianConfig,
   hasNpmScopePolicy,
@@ -60,12 +61,12 @@ describe('FORMAT_OPTIONS', () => {
 });
 
 describe('FORMAT_GROUPS', () => {
-  it('groups all format options by group name', () => {
+  it('groups every format option except the filter-hidden aliases by group name', () => {
     const totalFromGroups = FORMAT_GROUPS.reduce(
       (sum, [, opts]) => sum + opts.length,
       0
     );
-    expect(totalFromGroups).toBe(FORMAT_OPTIONS.length);
+    expect(totalFromGroups).toBe(FORMAT_OPTIONS.length - FILTER_HIDDEN_FORMATS.size);
   });
 });
 
@@ -101,5 +102,29 @@ describe('1.6.0 format-specific config gating (#602)', () => {
 describe("GitHub mirror format options", () => {
   it.each(["github", "mise", "aqua"])("offers %s as a distinct format", (value) => {
     expect(FORMAT_OPTIONS.filter((option) => option.value === value)).toHaveLength(1);
+  });
+});
+
+// Gradle is served by the Maven handler and Gradle clients use Maven
+// repositories, so a separate "Gradle" entry in the list filter matched
+// nothing (#814). It stays a format the create dialog can pick.
+describe('format filter vs create picker (#814)', () => {
+  const filterValues = FORMAT_GROUPS.flatMap(([, options]) => options.map((o) => o.value));
+
+  it('does not offer Gradle as a separate filter option', () => {
+    expect(filterValues).not.toContain('gradle');
+  });
+
+  it('still offers Maven in the filter', () => {
+    expect(filterValues).toContain('maven');
+  });
+
+  it('keeps Gradle in the create-dialog format list', () => {
+    expect(FORMAT_OPTIONS.map((o) => o.value)).toContain('gradle');
+  });
+
+  it('leaves out only Gradle from the filter', () => {
+    const missing = FORMAT_OPTIONS.map((o) => o.value).filter((v) => !filterValues.includes(v));
+    expect(missing).toEqual(['gradle']);
   });
 });
