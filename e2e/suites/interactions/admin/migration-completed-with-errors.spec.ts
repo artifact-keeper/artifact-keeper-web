@@ -128,5 +128,9 @@ test.describe('Migration job finished with errors (#886)', () => {
     await expect(dialog.getByText('Reconciliation Report')).toBeVisible();
     // Both render only once the report query has resolved.
     await expect(dialog.getByRole('button', { name: 'HTML' })).toBeVisible();
+    // The failed items the report carries are listed by path and error.
+    const failed = dialog.getByTestId('report-failed-items');
+    await expect(failed).toContainText('maven-releases/com/acme/lib/1.0/lib-1.0.jar');
+    await expect(failed).toContainText('checksum mismatch');
   });
 });

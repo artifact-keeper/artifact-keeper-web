@@ -183,6 +183,21 @@ function effectiveTotal(job: MigrationJob): number {
   return Math.max(job.total_items, processed);
 }
 
+// The backend lists at most this many failed items in a report's `errors`.
+const REPORT_ERROR_CAP = 100;
+
+// Backend reports carry recommendations as `{ repository, action }` objects
+// (artifact-keeper#3925); older ones, and the local type, are plain strings.
+// Rendering an object as a React child throws, so read either shape.
+function recommendationText(rec: unknown): string {
+  if (typeof rec === "string") return rec;
+  if (rec && typeof rec === "object" && "action" in rec) {
+    const action = (rec as { action?: unknown }).action;
+    if (typeof action === "string") return action;
+  }
+  return JSON.stringify(rec);
+}
+
 // "completed_with_errors" -> "completed with errors" for the status badge.
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
@@ -1847,10 +1862,32 @@ export default function MigrationPage() {
                       <p className="font-semibold">{report.errors?.length ?? 0}</p>
                     </div>
                   </div>
+                  {(report.errors?.length ?? 0) > 0 && (
+                    <div className="space-y-1" data-testid="report-failed-items">
+                      <p className="text-xs font-medium">
+                        Failed items
+                        {report.errors.length >= REPORT_ERROR_CAP &&
+                          ` (first ${REPORT_ERROR_CAP})`}
+                      </p>
+                      <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
+                        {report.errors.map((err, i) => (
+                          <li key={i} className="break-all">
+                            {err.item_path && (
+                              <span className="font-mono">{err.item_path}</span>
+                            )}
+                            {err.item_path && err.message && " — "}
+                            <span className="text-muted-foreground">
+                              {err.message || err.code}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   {(report.recommendations?.length ?? 0) > 0 && (
                     <ul className="list-disc pl-5 text-xs text-muted-foreground">
                       {report.recommendations.map((rec, i) => (
-                        <li key={i}>{rec}</li>
+                        <li key={i}>{recommendationText(rec)}</li>
                       ))}
                     </ul>
                   )}

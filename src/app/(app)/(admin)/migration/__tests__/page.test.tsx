@@ -14,6 +14,7 @@ import {
   cleanup,
   fireEvent,
   act,
+  within,
 } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
@@ -1663,6 +1664,47 @@ describe("MigrationPage — feature parity (#520)", () => {
       .at(-1);
     expect(reportQuery?.enabled).toBe(true);
     expect(screen.getByText("Reconciliation Report")).toBeInTheDocument();
+  });
+
+  // #886 asks which items failed. The backend's report lists up to 100 failed
+  // items in `errors` ({ code, message, item_path }); its recommendations are
+  // `{ repository, action }` objects, which must not reach React as children.
+  it("lists the report's failed items and renders object recommendations", async () => {
+    const job = makeJob({
+      id: "job-cwe-0002",
+      status: "completed_with_errors",
+      failed_items: 2,
+    });
+    const report = makeReport({
+      job_id: job.id,
+      errors: [
+        {
+          code: "MIGRATION_FAILED",
+          message: "upstream returned 404",
+          item_path: "com/acme/lib/1.0/lib-1.0.jar",
+        },
+        { code: "MIGRATION_FAILED", message: "checksum mismatch", item_path: "com/acme/b/2.0/b.pom" },
+      ],
+      recommendations: [
+        { repository: "conan-local", action: "Repository 'conan-local' needs re-publishing." },
+      ] as unknown as string[],
+    });
+    configureQueries({
+      connections: { data: [makeConnection()] },
+      migrations: { data: { items: [job], pagination: {} } },
+      report: { data: report },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () => fireEvent.click(screen.getByText("job-cwe-...")));
+
+    const list = screen.getByTestId("report-failed-items");
+    expect(within(list).getByText("com/acme/lib/1.0/lib-1.0.jar")).toBeInTheDocument();
+    expect(within(list).getByText("upstream returned 404")).toBeInTheDocument();
+    expect(within(list).getByText("checksum mismatch")).toBeInTheDocument();
+    expect(
+      screen.getByText("Repository 'conan-local' needs re-publishing."),
+    ).toBeInTheDocument();
   });
 
   it("renders the assessment panel and runs an assessment for assessment jobs", async () => {
