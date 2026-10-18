@@ -848,6 +848,56 @@ describe("RepoSettingsTab - Repository Info Section", () => {
     expect(input.placeholder).toBe("https://nexus.example.com/repo");
   });
 
+  it("does not resend an unchanged upstream URL on an unrelated save", async () => {
+    // #1002: PATCH with `upstream_url` re-validates it and, with upstream-auth
+    // configured, can be refused (409); an edit to the name must not risk that.
+    const remote = {
+      ...baseRepo,
+      repo_type: "remote" as const,
+      upstream_url: "https://repo.maven.apache.org/maven2",
+    };
+    mockUpdate.mockResolvedValue({ ...remote, name: "Renamed" });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remote} />, {
+      wrapper: createWrapper(),
+    });
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("maven-releases", {
+        name: "Renamed",
+      });
+    });
+  });
+
+  it("sends a changed upstream URL, trimmed", async () => {
+    const remote = {
+      ...baseRepo,
+      repo_type: "remote" as const,
+      upstream_url: "https://repo.maven.apache.org/maven2",
+    };
+    mockUpdate.mockResolvedValue(remote);
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={remote} />, {
+      wrapper: createWrapper(),
+    });
+
+    const input = screen.getByLabelText("Upstream URL");
+    await user.clear(input);
+    await user.type(input, "  https://mirror.example.com/maven2 ");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith("maven-releases", {
+        upstream_url: "https://mirror.example.com/maven2",
+      });
+    });
+  });
+
   it("does not show upstream URL for local repos", () => {
     render(<RepoSettingsTab repository={baseRepo} />, {
       wrapper: createWrapper(),

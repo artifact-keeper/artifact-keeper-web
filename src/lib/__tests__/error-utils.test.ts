@@ -572,6 +572,25 @@ describe("apiErrorHint", () => {
     ).toMatch(/environment variables/i);
   });
 
+  it("explains a refused upstream_url origin change in UI terms (#1002)", () => {
+    // Backend UPSTREAM_ORIGIN_CHANGE_WITH_AUTH, verbatim: 269 chars, so the
+    // raw body would be truncated before its last step.
+    const body = {
+      code: "CONFLICT",
+      message:
+        "upstream_url cannot move to a different origin (scheme, host or port) while upstream " +
+        "credentials are configured: remove them first (PUT /api/v1/repositories/{key}/upstream-auth " +
+        'with auth_type "none"), change upstream_url, then configure credentials for the new upstream',
+    };
+    for (const err of [{ status: 409, ...body }, body]) {
+      // With a status (fetch paths) and without one (an SDK call throws the
+      // bare body).
+      const msg = toUserMessage(err, FALLBACK);
+      expect(msg).toMatch(/Upstream Authentication to None/);
+      expect(msg).not.toMatch(/truncated/);
+    }
+  });
+
   it("leaves every other conflict and status untouched", () => {
     expect(apiErrorHint({ status: 409, error: "Permission already exists" })).toBeUndefined();
     expect(

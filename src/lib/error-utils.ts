@@ -172,11 +172,30 @@ const CONFLICT_MESSAGES: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 /**
+ * Backend UPSTREAM_ORIGIN_CHANGE_WITH_AUTH (artifact-keeper#4467). The raw
+ * message names the REST call to make and runs past the toast cap, which cut
+ * off its last step. Matched on the message alone: the settings tab saves
+ * through the SDK, which throws the bare `{ code, message }` body with no
+ * HTTP status on it, and the wording is specific enough not to misfire.
+ */
+const UPSTREAM_ORIGIN_CHANGE: readonly [RegExp, string] = [
+  /upstream_url cannot move to a different origin/i,
+  'The upstream URL cannot move to a different scheme, host or port while ' +
+    'upstream credentials are configured. Set Upstream Authentication to None ' +
+    'in the Edit Repository dialog, save the new URL, then configure ' +
+    'credentials for the new upstream.',
+];
+
+/**
  * Friendly replacement copy for an error whose status (or conflict wording)
  * the UI knows how to explain. Returns undefined for everything else, which
  * leaves `toUserMessage` behaving exactly as before.
  */
 export function apiErrorHint(error: unknown): string | undefined {
+  if (UPSTREAM_ORIGIN_CHANGE[0].test(extractDetail(error) ?? '')) {
+    return UPSTREAM_ORIGIN_CHANGE[1];
+  }
+
   const status = isPlainObject(error) ? extractHttpStatus(error) : undefined;
   if (status === undefined) return undefined;
 
