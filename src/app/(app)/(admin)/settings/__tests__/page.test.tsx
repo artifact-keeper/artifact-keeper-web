@@ -216,6 +216,20 @@ describe("SettingsPage", () => {
     expect(serverInput).toBeDefined();
   });
 
+  it("marks the server and web version rows with the app-version testid the visual mask hides (#786)", () => {
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
+    process.env.NEXT_PUBLIC_GIT_SHA = "cf1b0d2abc1234567890";
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockUseQuery.mockReturnValue({ data: { version: "1.11.2" } });
+
+    render(<SettingsPage />);
+
+    const values = (screen.getAllByTestId("app-version") as HTMLInputElement[]).map(
+      (el) => el.value,
+    );
+    expect(values).toEqual(["1.11.2", "1.1.0"]);
+  });
+
   it("shows server commit hash when dirty", () => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockUseQuery.mockReturnValue({

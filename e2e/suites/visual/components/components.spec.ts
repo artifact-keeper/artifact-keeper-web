@@ -6,7 +6,12 @@ test.describe('Visual regression: components', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     const sidebar = page.locator('[data-slot="sidebar"]').first();
-    await expect(sidebar).toHaveScreenshot('sidebar-expanded.png', { maxDiffPixelRatio: 0.01 });
+    // The sidebar header carries the web and server versions; the mask hides
+    // them so a version bump does not shift this baseline (#786).
+    await expect(sidebar).toHaveScreenshot('sidebar-expanded.png', {
+      maxDiffPixelRatio: 0.01,
+      stylePath: './e2e/visual-mask.css',
+    });
   });
 
   test('app header', async ({ page }) => {

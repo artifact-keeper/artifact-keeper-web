@@ -187,6 +187,17 @@ describe("AppSidebar", () => {
     expect(versionEl.textContent).not.toContain("cf1b0d2");
   });
 
+  it("marks the version line with the app-version testid the visual mask hides (#786)", () => {
+    authState({ isAuthenticated: true });
+    mockUseQuery.mockReturnValue({ data: { version: "1.11.2" } });
+
+    render(<AppSidebar />);
+
+    const versionEl = screen.getByTestId("app-version");
+    expect(versionEl.textContent).toContain("Web 1.1.0");
+    expect(versionEl.textContent).toContain("Server 1.11.2");
+  });
+
   it("shows web version only when health data is not available", () => {
     authState({ isAuthenticated: true });
     mockUseQuery.mockReturnValue({ data: undefined });
