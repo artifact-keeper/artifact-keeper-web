@@ -40,7 +40,10 @@ vi.mock("@/lib/api/packages", () => ({
   },
 }));
 
-vi.mock("@/components/package/file-tree", () => ({ FileTree: () => <div /> }));
+vi.mock("@/components/package/file-tree", () => ({
+  FileTree: () => <div />,
+  PackageFileTree: () => <div />,
+}));
 vi.mock("@/components/package/file-viewer", () => ({ FileViewer: () => <div /> }));
 
 const queryKeys: unknown[][] = [];

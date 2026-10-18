@@ -17,7 +17,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/hooks/use-document-title", () => ({ useDocumentTitle: () => {} }));
-vi.mock("@/components/package/file-tree", () => ({ FileTree: () => <div /> }));
+vi.mock("@/components/package/file-tree", () => ({
+  FileTree: () => <div />,
+  PackageFileTree: () => <div />,
+}));
 
 const mockGet = vi.fn();
 const mockGetVersions = vi.fn();

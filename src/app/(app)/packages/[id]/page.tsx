@@ -43,7 +43,7 @@ import {
   formatNumber,
   isSafeUrl,
 } from "@/lib/utils";
-import { FileTree } from "@/components/package/file-tree";
+import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
 
 // ---- Helpers ----
@@ -419,9 +419,10 @@ function PackageDetailContent() {
         {/* Files Tab */}
         <TabsContent value="files" className="pt-4">
           <div className="border rounded-lg">
-            <FileTree
+            <PackageFileTree
               repositoryKey={pkg.repository_key}
-              rootPath={`/${pkg.name}`}
+              format={pkg.format}
+              packageName={pkg.name}
             />
           </div>
         </TabsContent>

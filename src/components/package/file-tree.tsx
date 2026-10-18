@@ -22,6 +22,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { treeApi } from "@/lib/api/tree";
 import { cn, formatBytes } from "@/lib/utils";
 import type { TreeNode } from "@/types/tree";
+import {
+  packageFilesRootPath,
+  repositoryRelativeTreePath,
+} from "@/lib/package-files";
 
 // ---- Helpers ----
 
@@ -90,12 +94,16 @@ function TreeNodeRow({
   const [isOpen, setIsOpen] = useState(false);
   const isFolder = isFolderLike(node);
 
+  // Tree nodes come back with the repository key prepended
+  // ("maven-releases/com/example"), but `path` is a repository-relative
+  // prefix, so sending `node.path` as-is listed nothing (#987).
+  const childPath = repositoryRelativeTreePath(repositoryKey, node.path);
   const { data: children, isLoading } = useQuery({
-    queryKey: ["tree-children", repositoryKey, node.path],
+    queryKey: ["tree-children", repositoryKey, childPath],
     queryFn: () =>
       treeApi.getChildren({
         repository_key: repositoryKey,
-        path: node.path,
+        path: childPath,
         include_metadata: true,
       }),
     enabled: isFolder && isOpen && node.has_children,
@@ -214,12 +222,15 @@ export function FileTree({
   onFileSelect?: (node: TreeNode) => void;
   selectedPath?: string | null;
 }) {
+  // The tree endpoint matches `path` as a repository-relative prefix with no
+  // leading or trailing slash.
+  const rootPrefix = rootPath?.replace(/^\/+|\/+$/g, "") || undefined;
   const { data: nodes, isLoading } = useQuery({
-    queryKey: ["tree-children", repositoryKey, rootPath ?? "/"],
+    queryKey: ["tree-children", repositoryKey, rootPrefix ?? ""],
     queryFn: () =>
       treeApi.getChildren({
         repository_key: repositoryKey,
-        path: rootPath,
+        path: rootPrefix,
         include_metadata: true,
       }),
   });
@@ -258,5 +269,52 @@ export function FileTree({
         />
       ))}
     </div>
+  );
+}
+
+// ---- PackageFileTree ----
+
+/**
+ * The Files tab of a package: the tree under the directory that holds the
+ * package's files, derived from its format and catalog name (#987). Formats
+ * that keep files flat (rpm, debian, conda, alpine, pacman) have no such
+ * directory, so the tab says so instead of showing an empty tree.
+ */
+export function PackageFileTree({
+  repositoryKey,
+  format,
+  packageName,
+  onFileSelect,
+  selectedPath,
+}: {
+  repositoryKey: string;
+  format: string | undefined;
+  packageName: string;
+  onFileSelect?: (node: TreeNode) => void;
+  selectedPath?: string | null;
+}) {
+  const rootPath = packageFilesRootPath(format, packageName);
+  if (rootPath === null) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center py-12 text-center"
+        data-testid="package-files-flat-layout"
+      >
+        <Folder className="size-8 text-muted-foreground/40 mb-2" />
+        <p className="text-sm text-muted-foreground max-w-md">
+          This format stores package files in a shared folder layout, not one
+          folder per package. Browse them from the repository&apos;s Artifacts
+          tab.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <FileTree
+      repositoryKey={repositoryKey}
+      rootPath={rootPath}
+      onFileSelect={onFileSelect}
+      selectedPath={selectedPath}
+    />
   );
 }
