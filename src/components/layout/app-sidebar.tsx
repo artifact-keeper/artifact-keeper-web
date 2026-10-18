@@ -215,7 +215,11 @@ export function AppSidebar() {
                 />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
-                  <span className="text-xs text-muted-foreground" title={webBuild.title}>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title={webBuild.title}
+                    data-testid="app-version"
+                  >
                     Web {webBuild.label}
                     {health?.version ? ` / Server ${health.version}` : ""}
                     {health?.dirty && health?.commit

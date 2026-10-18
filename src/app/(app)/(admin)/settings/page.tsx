@@ -39,15 +39,17 @@ function SettingRow({
   label,
   value,
   description,
+  testId,
 }: {
   label: string;
   value: string;
   description?: string;
+  testId?: string;
 }) {
   return (
     <div className="space-y-2">
       <Label className="text-sm">{label}</Label>
-      <Input value={value} disabled className="bg-muted/50" />
+      <Input value={value} disabled className="bg-muted/50" data-testid={testId} />
       {description && (
         <p className="text-xs text-muted-foreground">{description}</p>
       )}
@@ -442,12 +444,14 @@ export default function SettingsPage() {
                     : "..."
                 }
                 description="Current Artifact Keeper server version."
+                testId="app-version"
               />
               <Separator />
               <SettingRow
                 label="Web Version"
                 value={currentWebBuildLabel().label}
                 description={`Current web frontend build: ${currentWebBuildLabel().title}.`}
+                testId="app-version"
               />
               <Separator />
               <div className="space-y-2">
