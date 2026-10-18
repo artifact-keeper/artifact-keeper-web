@@ -2,9 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { axe, toHaveNoViolations } from "jest-axe";
-
-expect.extend(toHaveNoViolations);
+import { axe } from "jest-axe";
 
 vi.mock("lucide-react", () => {
   const stub = (name: string) => {
@@ -145,7 +143,7 @@ describe("DataTable", () => {
     const { container } = render(<DataTable columns={columns} data={testData} />);
 
     const results = await axe(container);
-    expect(results).toHaveNoViolations();
+    expect(results.violations).toEqual([]);
   });
 
   // ---- Sorting ----
