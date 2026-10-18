@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import '@/lib/sdk-client';
 import {
   createInstance as sdkCreateInstance,
@@ -34,7 +34,28 @@ const LOCAL_INSTANCE: InstanceConfig = {
   url: "",  // empty = use relative URLs (same origin)
 };
 
+/** What the server can know: only the local instance. */
+const SERVER_INSTANCES: InstanceConfig[] = [LOCAL_INSTANCE];
+
 const InstanceContext = createContext<InstanceContextValue | null>(null);
+
+const noopSubscribe = () => () => {};
+
+/**
+ * False while the server renders and while React hydrates that HTML, true on
+ * every client render after that. The instance list and the active instance
+ * live in localStorage, which the server cannot see, so the server always
+ * renders "Local". If the first client render used the stored remote
+ * instance instead, the header's switcher label would differ from the server
+ * HTML and React would throw hydration error #418 (#829).
+ */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
+}
 
 export function InstanceProvider({ children }: { children: ReactNode }) {
   const [instances, setInstances] = useState<InstanceConfig[]>(() => {
@@ -142,11 +163,15 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
     [activeId, persist]
   );
 
-  const activeInstance = instances.find((i) => i.id === activeId) ?? LOCAL_INSTANCE;
+  const hydrated = useHydrated();
+  const visibleInstances = hydrated ? instances : SERVER_INSTANCES;
+  const activeInstance = hydrated
+    ? (instances.find((i) => i.id === activeId) ?? LOCAL_INSTANCE)
+    : LOCAL_INSTANCE;
 
   return (
     <InstanceContext.Provider
-      value={{ instances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses }}
+      value={{ instances: visibleInstances, activeInstance, switchInstance, addInstance, removeInstance, instanceStatuses, refreshStatuses }}
     >
       {children}
     </InstanceContext.Provider>

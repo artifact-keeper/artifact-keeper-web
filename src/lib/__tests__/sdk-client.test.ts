@@ -233,14 +233,71 @@ describe("sdk-client", () => {
       });
     });
 
-    it("is called with proxy baseUrl for remote instance", async () => {
+    it("keeps the plain baseUrl for a remote instance; only the interceptor adds the proxy prefix (#829)", async () => {
       setupBrowserEnv();
       mockStorage["ak_active_instance"] = "remote-1";
       await import("../sdk-client");
       expect(mockSetConfig).toHaveBeenCalledWith({
-        baseUrl: "/api/v1/instances/remote-1/proxy",
+        baseUrl: "",
         credentials: "include",
       });
+    });
+
+    it("sends an SDK request through the proxy exactly once (#829)", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      await import("../sdk-client");
+      // The generated client builds `${baseUrl}${url}` and then runs the
+      // request interceptors; reproduce that composition.
+      const { baseUrl } = mockSetConfig.mock.calls[0][0];
+      for (const path of ["/api/v1/repositories", "/api/v1/auth/me", "/api/v1/setup/status"]) {
+        const built = new Request(new URL(`${baseUrl}${path}`, "http://localhost:3000"));
+        const result = requestInterceptors[0](built);
+        expect(new URL(result.url).pathname).toBe(
+          `/api/v1/instances/remote-1/proxy${path}`
+        );
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Local-only paths with a remote instance active (#829)
+  // -------------------------------------------------------------------------
+
+  describe("local-only paths with a remote instance active (#829)", () => {
+    const local = [
+      "/api/v1/auth/login",
+      "/api/v1/auth/logout",
+      "/api/v1/auth/refresh",
+      "/api/v1/auth/totp/verify",
+      "/api/v1/auth/sso/providers",
+      "/api/v1/auth/sso/oidc/abc/login",
+      "/api/v1/instances",
+      "/api/v1/instances/remote-1",
+      "/api/v1/instances/remote-1/proxy/api/v1/repositories",
+    ];
+    const proxied = [
+      "/api/v1/auth/me",
+      "/api/v1/auth/tokens",
+      "/api/v1/auth/totp/setup",
+      "/api/v1/repositories",
+      "/api/v1/instancesfoo",
+    ];
+
+    it.each(local)("does not proxy %s", async (path) => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      await import("../sdk-client");
+      const result = requestInterceptors[0](new Request(`http://localhost:3000${path}`));
+      expect(new URL(result.url).pathname).toBe(path);
+    });
+
+    it.each(proxied)("proxies %s", async (path) => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      await import("../sdk-client");
+      const result = requestInterceptors[0](new Request(`http://localhost:3000${path}`));
+      expect(new URL(result.url).pathname).toBe(`/api/v1/instances/remote-1/proxy${path}`);
     });
   });
 
@@ -653,17 +710,51 @@ describe("sdk-client", () => {
       expect(result.status).toBe(401);
     });
 
-    it("skips refresh for remote instance (returns 401 directly)", async () => {
+    it("refreshes the local session, not the remote one, for a remote instance (#829)", async () => {
       setupBrowserEnv();
       mockStorage["ak_active_instance"] = "remote-1";
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+
       await import("../sdk-client");
       const interceptor = responseInterceptors[0];
 
       const response = new Response("Unauthorized", { status: 401 });
-      const request = new Request("http://localhost:3000/api/v1/repos");
+      const request = new Request(
+        "http://localhost:3000/api/v1/instances/remote-1/proxy/api/v1/repos"
+      );
 
       const result = await interceptor(response, request);
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        "/api/v1/auth/refresh",
+        expect.objectContaining({ method: "POST", credentials: "include" })
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(result.status).toBe(200);
+    });
+
+    it("returns the remote's 401 when the retry is refused again", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+
+      const mockFetch = vi.fn();
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response("Unauthorized", { status: 401 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await import("../sdk-client");
+      const interceptor = responseInterceptors[0];
+      const result = await interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request("http://localhost:3000/api/v1/instances/remote-1/proxy/api/v1/repos")
+      );
       expect(result.status).toBe(401);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(window.location.href).toBe("/");
     });
 
     it("redirects to /login when refresh fails", async () => {
