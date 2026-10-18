@@ -71,8 +71,24 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   { value: "protobuf", label: "Protobuf (BSR)", group: "Other" },
 ];
 
+/**
+ * Format values the create dialog offers but the list's format filter leaves
+ * out (#814). `gradle` is a real, stored format value, but the backend serves
+ * it with the Maven handler (`handler_key()` maps Gradle to `maven`, and
+ * `GET /api/v1/formats` lists a single Maven entry), the wire format is
+ * identical, and Gradle clients normally use a `maven` repository. A separate
+ * "Gradle" filter therefore looked like it should list the Maven repositories
+ * and instead matched almost nothing. The list endpoint filters on exactly one
+ * stored value, so a repository created as `gradle` still appears under
+ * "All formats".
+ */
+export const FILTER_HIDDEN_FORMATS: ReadonlySet<RepositoryFormat> = new Set<RepositoryFormat>([
+  "gradle",
+]);
+
+/** Grouped format options for the Repositories list filter. */
 export const FORMAT_GROUPS = Array.from(
-  FORMAT_OPTIONS.reduce((map, o) => {
+  FORMAT_OPTIONS.filter((o) => !FILTER_HIDDEN_FORMATS.has(o.value)).reduce((map, o) => {
     if (!map.has(o.group)) map.set(o.group, []);
     map.get(o.group)!.push(o);
     return map;

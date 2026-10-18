@@ -1,8 +1,10 @@
 import type { RepositoryFormat } from "@/types";
 
+// Format filter for the staging list. No separate "Gradle" entry: Gradle is
+// served by the Maven handler and Gradle clients use Maven repositories, so
+// the option matched nothing (#814).
 export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string }[] = [
   { value: "maven", label: "Maven" },
-  { value: "gradle", label: "Gradle" },
   { value: "npm", label: "NPM" },
   { value: "pypi", label: "PyPI" },
   { value: "nuget", label: "NuGet" },
