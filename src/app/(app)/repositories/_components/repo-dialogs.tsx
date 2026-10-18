@@ -326,6 +326,8 @@ export function RepoDialogs({
   // stale form values would otherwise persist into the next open.
   useEffect(() => {
     if (createOpen) {
+      // Deliberate: Radix gives no event for a programmatic open, so the reset has to follow the prop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       resetCreateForm();
     }
     // resetCreateForm only sets local state via stable setters; safe to omit.

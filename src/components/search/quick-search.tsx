@@ -36,6 +36,8 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
   // Debounced search
   useEffect(() => {
     if (!query || query.length < 2) {
+      // Deliberate: clears stale results when the query drops below the search threshold.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setIsLoading(false);
       return;
@@ -68,6 +70,8 @@ export function QuickSearch({ open, onOpenChange }: QuickSearchProps) {
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
+      // Deliberate: the parent owns `open`, so the close reset follows the prop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery("");
       setResults([]);
       setIsLoading(false);
