@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   systemConfigApi,
@@ -14,8 +14,9 @@ import {
  * (`GET /api/v1/system/config`) to the whole app and derives the feature flags
  * the UI uses to show or hide gated surfaces (#271).
  *
- * The query runs once and is cached for the session; config rarely changes at
- * runtime and is cheap to re-fetch on a hard reload. While loading or on error
+ * The query runs once and is cached; config rarely changes at runtime. The
+ * payload depends on the caller (admins get extra fields), so the AuthProvider
+ * invalidates it on sign-in and resets it on sign-out (#844). While loading or on error
  * the context exposes `DEFAULT_SYSTEM_CONFIG` so consumers always read a
  * concrete object and never have to null-check.
  */
@@ -63,12 +64,23 @@ const SystemConfigContext = createContext<SystemConfigContextValue | null>(null)
 export const SYSTEM_CONFIG_QUERY_KEY = ["system-config"] as const;
 
 export function SystemConfigProvider({ children }: { children: ReactNode }) {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: SYSTEM_CONFIG_QUERY_KEY,
     queryFn: () => systemConfigApi.getConfig(),
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
+
+  // The fallback reports no OIDC provider, which hides the SSO buttons on the
+  // login page. Say so in the console, so a schema drift or an unreachable
+  // endpoint is diagnosable instead of a silently downgraded login page (#844).
+  useEffect(() => {
+    if (!error) return;
+    console.warn(
+      "System config unavailable, using built-in defaults (SSO buttons hidden, local login shown):",
+      error instanceof Error ? error.message : error
+    );
+  }, [error]);
 
   const config = data ?? DEFAULT_SYSTEM_CONFIG;
 

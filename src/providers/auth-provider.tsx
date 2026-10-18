@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import type {
 import type { User, LoginResponse } from "@/types";
 import { unwrap } from "@/lib/sdk-utils";
 import { clearSilentSsoAttempt } from "@/lib/silent-sso";
+import { SYSTEM_CONFIG_QUERY_KEY } from "./system-config-provider";
 
 interface AuthContextType {
   user: User | null;
@@ -75,7 +77,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAuthenticated = !!user;
 
-  const refreshUser = useCallback(async () => {
+  // The principal the cached queries were fetched under: a user id, or null
+  // for anonymous. Starts as anonymous, which is what the app fetches as
+  // before anyone signs in; initAuth records a cookie session it restores.
+  const principalRef = useRef<string | null>(null);
+
+  /**
+   * Bring the query cache in line with a new principal (#844, #487).
+   *
+   * `GET /api/v1/system/config` answers anonymous callers with its public tier
+   * and admins with extra fields, and the SystemConfigProvider fetches it once
+   * at app start with a 10-minute staleTime. Signing in (password, TOTP, LDAP,
+   * SSO callback, demo auto-login) or out without a reload must refetch it, or
+   * the session keeps the payload of whoever was there before.
+   *
+   * Signing in invalidates every query, the #487 rule for auth-scoped data,
+   * which refetches system-config with the rest while keeping the old payload
+   * on screen until the new one lands. Becoming anonymous resets system-config
+   * instead, so admin-tier fields are dropped at once rather than shown until
+   * the anonymous refetch completes. `force` re-invalidates even when the id
+   * is unchanged, for the explicit login paths that always did so.
+   */
+  const syncPrincipal = useCallback(
+    async (next: string | null, force = false) => {
+      const changed = principalRef.current !== next;
+      principalRef.current = next;
+      if (!changed && !force) return;
+      if (next === null) {
+        await queryClient.resetQueries({ queryKey: SYSTEM_CONFIG_QUERY_KEY, exact: true });
+      } else {
+        await queryClient.invalidateQueries();
+      }
+    },
+    [queryClient]
+  );
+
+  /** Load the current user into state; returns its id, or null when signed out. */
+  const loadUser = useCallback(async (): Promise<string | null> => {
     try {
       const data = await unwrap(sdkGetCurrentUser());
       const userData = data as unknown as User;
@@ -86,12 +124,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // silent-SSO once-per-session guard so a later anonymous session can
       // probe afresh.
       clearSilentSsoAttempt();
+      return userData.id;
     } catch {
       setUser(null);
       setPasswordExpiresAt(null);
       clearTokens();
+      return null;
     }
   }, []);
+
+  // Public: used by the SSO callback, LDAP login and the profile page. Only a
+  // change of principal touches the query cache, so a profile refresh does not
+  // refetch everything.
+  const refreshUser = useCallback(async () => {
+    await syncPrincipal(await loadUser());
+  }, [loadUser, syncPrincipal]);
 
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
@@ -106,12 +153,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       storeTokens(loginData as unknown as LoginResponse);
-      await refreshUser();
       // #487: the anonymous session may have cached auth-scoped queries
       // (e.g. the repositories list returns only public repos when
-      // unauthenticated). Invalidate so they refetch under the new identity
-      // instead of showing stale/empty data until a manual refresh.
-      await queryClient.invalidateQueries();
+      // unauthenticated), and system-config its public tier (#844).
+      // Invalidate so they refetch under the new identity instead of showing
+      // stale/empty data until a manual refresh.
+      await syncPrincipal(await loadUser(), true);
 
       if (loginData.must_change_password) {
         setMustChangePassword(true);
@@ -119,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [refreshUser, queryClient]
+    [loadUser, syncPrincipal]
   );
 
   const verifyTotp = useCallback(
@@ -131,14 +178,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeTokens(tokenData as unknown as LoginResponse);
       setTotpRequired(false);
       setTotpToken(null);
-      await refreshUser();
-      // #487: refetch auth-scoped queries under the now-authenticated identity.
-      await queryClient.invalidateQueries();
+      // #487 / #844: refetch auth-scoped queries and system-config under the
+      // now-authenticated identity.
+      await syncPrincipal(await loadUser(), true);
       if (tokenData.must_change_password) {
         setMustChangePassword(true);
       }
     },
-    [totpToken, refreshUser, queryClient]
+    [totpToken, loadUser, syncPrincipal]
   );
 
   const clearTotpRequired = useCallback(() => {
@@ -163,9 +210,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSilentSsoAttempt();
       // #487 / security: drop every cached query so the next (anonymous or
       // next-user) session never sees the previous identity's private data.
-      queryClient.clear();
+      // system-config is reset rather than removed (#844): its observer lives
+      // in SystemConfigProvider, which sits above this provider and does not
+      // re-render on sign-out, so a removed query would leave it holding the
+      // admin payload with nothing in the cache to refetch, now or after the
+      // next login.
+      queryClient.removeQueries({
+        predicate: (q) => q.queryKey[0] !== SYSTEM_CONFIG_QUERY_KEY[0],
+      });
+      queryClient.getMutationCache().clear();
+      // The reset drops the admin payload synchronously; the anonymous
+      // refetch it starts is not awaited, so sign-out does not wait on it.
+      void syncPrincipal(null, true);
     }
-  }, [queryClient]);
+  }, [queryClient, syncPrincipal]);
 
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
@@ -215,6 +273,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await sdkGetCurrentUser();
         if (!error && data) {
           const userData = data as unknown as User;
+          // The session cookie went out with the initial system-config
+          // request too, so the cache already matches this principal.
+          principalRef.current = userData.id;
           setUser(userData);
           setPasswordExpiresAt(userData.password_expires_at ?? null);
           setMustChangePassword(!!userData.must_change_password);
