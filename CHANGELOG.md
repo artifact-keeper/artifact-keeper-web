@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-10-18
+
+### Sponsors
+
+Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
+
+**Backers**
+
+- **Advailo, SIA** ([@advailo](https://github.com/advailo))
+- **stringke** ([@StringKe](https://github.com/StringKe))
+- **Ash A.** ([@dragonpaw](https://github.com/dragonpaw))
+- **Mike** ([@huylv95](https://github.com/huylv95))
+- **Gabriel Rodriguez** ([@injectedfusion](https://github.com/injectedfusion))
+- **Narek Engibaryan** ([@narek01](https://github.com/narek01))
+- and one sponsor who chose to stay private
+
+[Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
+
+### Thank You
+
+- **[@der-eismann](https://github.com/der-eismann)** for reporting the empty Maven Files tab (#987), type-to-confirm dialogs that kept the previous name (#973) and the migration that stayed "Pending" with failed items (#886), and for the fixes for that migration status (#931) and the move to Node.js 24 (#932, #933).
+- **[@kakawait](https://github.com/kakawait)** for reporting that the login page defaulted to a Local tab that could not succeed when local login is disabled (#899).
+- **[@lboclboc](https://github.com/lboclboc)** for reporting that uploads of 2 GiB or larger failed before any request was sent (#887).
+- **[@major-sam](https://github.com/major-sam)** for reporting that switching to a remote instance ended on "Remote instance not found" (#829).
+- **[@groboclown](https://github.com/groboclown)** for reporting the Gradle filter option that matched nothing (artifact-keeper#3425, #814).
+- **[@berat-samli](https://github.com/berat-samli)** for the fix that lets a remote repository's upstream URL be edited (#1002, #1005).
+- **[@garrettKelleyCyOne](https://github.com/garrettKelleyCyOne)** for the fix that puts the registry host and repository into the OCI and Helm install commands (#951, #952).
+- **[@damjanek](https://github.com/damjanek)** for the RPM Repodata Depth controls (#906, #907).
+- **[@Spenhouet](https://github.com/Spenhouet)** for the neutral white light theme (#967, #969).
+- **[@vvs9896](https://github.com/vvs9896)** for the repository signing settings on the repository and Signing pages (#937, #935).
+
 ### Added
 - **Repository signing can be set up from the repository and the Signing pages** (#937) - turning on metadata signing for a Debian, RPM, Alpine or Conda repository took raw calls to `/api/v1/signing/repositories/{id}/config`, and the Signing page listed keys without saying which repositories use them. The repository Settings tab now has a Repository Signing section for instance admins (local, staging and virtual repositories of those formats): pick a global or repository-scoped key, or create one of the type the format needs (GPG for Debian and RPM, RSA for Alpine and Conda), and choose metadata signing, package-signature verification and required signatures; a key of the wrong type is flagged and cannot be used for metadata signing. The Signing page lists each signable repository with the key bound to it, read from each repository's stored config. Trade-offs: the Signing page checks the first 200 repositories, one config request each, and says so when the instance has more; the section is hidden from repository admins who are not instance admins, because the backend only lets instance admins change signing config.
 - **A neutral white light theme, "Light (neutral)"** (#967) - the light theme uses a warm beige palette for the page, cards, sidebar and inputs, which on some screens reads as a tinted background, and there was no plain white alternative. The header theme button now opens a menu with Light, Light (neutral), Dark and System instead of flipping between light and dark. Light (neutral) uses white and neutral-gray surfaces, borders and muted text with the same primary, ring, destructive and chart colors; text pairs meet WCAG AA, which a unit test checks. The warm light theme stays the default and the choice is persisted by next-themes as before. "System" still follows the OS between the warm light theme and dark; there is no setting to make it pick the neutral one.
