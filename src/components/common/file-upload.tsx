@@ -250,6 +250,8 @@ export function FileUpload({
   // Reset uploading state when chunked upload completes or errors
   useEffect(() => {
     if (chunked.status === "complete" || chunked.status === "error") {
+      // Deliberate: mirrors the chunked-upload hook's terminal status into local state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUploading(false);
     }
   }, [chunked.status]);
