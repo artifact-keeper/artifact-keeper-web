@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 export function SigningRepositoriesPanel() {
   const { data: repoList, isLoading: reposLoading } = useQuery({
@@ -57,57 +58,65 @@ export function SigningRepositoriesPanel() {
     );
   }
 
-  return (
-    <ul className="divide-y rounded-md border">
-      {signableRepos.map((repo, index) => {
-        const config = configQueries[index]?.data;
-        const enabled =
-          !!config?.signing_key_id &&
-          (config.sign_metadata || config.sign_packages || config.require_signatures);
-        const keyName = config?.key?.name;
+  const fetched = repoList?.items.length ?? 0;
+  const total = repoList?.pagination?.total ?? fetched;
 
-        return (
-          <li key={repo.id} className="flex items-center justify-between gap-4 px-4 py-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-medium">{repo.name}</span>
-                <Badge variant="outline" className="font-mono text-xs">
-                  {repo.key}
-                </Badge>
-                <Badge variant="secondary" className="uppercase text-xs">
-                  {repo.format}
-                </Badge>
-                <Badge variant="outline" className="capitalize text-xs">
-                  {repo.repo_type}
-                </Badge>
-                {enabled ? (
-                  <Badge variant="secondary">Signing enabled</Badge>
-                ) : (
-                  <Badge variant="outline">Not configured</Badge>
-                )}
+  return (
+    <div className="space-y-2">
+      <ul className="divide-y rounded-md border">
+        {signableRepos.map((repo, index) => {
+          const config = configQueries[index]?.data;
+          const enabled =
+            !!config?.signing_key_id &&
+            (config.sign_metadata || config.sign_packages || config.require_signatures);
+          const keyName = config?.key?.name;
+
+          return (
+            <li key={repo.id} className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate font-medium">{repo.name}</span>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {repo.key}
+                  </Badge>
+                  <Badge variant="secondary" className="uppercase text-xs">
+                    {repo.format}
+                  </Badge>
+                  <Badge variant="outline" className="capitalize text-xs">
+                    {repo.repo_type}
+                  </Badge>
+                  {enabled ? (
+                    <Badge variant="secondary">Signing enabled</Badge>
+                  ) : (
+                    <Badge variant="outline">Not configured</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {enabled && keyName ? (
+                    <>
+                      Key: <span className="font-medium text-foreground">{keyName}</span>
+                      {config?.sign_metadata && (
+                        <> · signs {metadataLabel(repo.format)}</>
+                      )}
+                    </>
+                  ) : (
+                    <>No signing key bound to this repository yet.</>
+                  )}
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {enabled && keyName ? (
-                  <>
-                    Key: <span className="font-medium text-foreground">{keyName}</span>
-                    {config?.sign_metadata && (
-                      <> · signs {metadataLabel(repo.format)}</>
-                    )}
-                  </>
-                ) : (
-                  <>No signing key bound to this repository yet.</>
-                )}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/repositories/${encodeURIComponent(repo.key)}?tab=settings`}>
-                <Settings2 className="size-4" />
-                Configure
-              </Link>
-            </Button>
-          </li>
-        );
-      })}
-    </ul>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/repositories/${encodeURIComponent(repo.key)}?tab=settings`}>
+                  <Settings2 className="size-4" />
+                  Configure
+                </Link>
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+      {/* Only the first page of repositories is checked; say so when the
+          instance has more than that page. */}
+      <ListTruncationNotice shown={fetched} total={total} />
+    </div>
   );
 }

@@ -224,4 +224,41 @@ describe("SigningSettings", () => {
     expect(await screen.findByText(/Incompatible key type/i)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: /Sign metadata/i })).toBeDisabled();
   });
+
+  it("keeps the stored key and metadata signing when another control is changed", async () => {
+    // Regression: the first edit used to reset every other control to its
+    // empty default, so saving after flipping one switch posted
+    // signing_key_id: null and dropped the repository's key binding.
+    mockGetRepoConfig.mockResolvedValue({
+      repository_id: "repo-1",
+      signing_key_id: "k-global",
+      sign_metadata: true,
+      sign_packages: false,
+      require_signatures: false,
+      key: null,
+    });
+    renderPanel();
+    await screen.findByLabelText(/Signing key/i);
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: /Sign metadata/i })).toBeChecked(),
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: /Verify package signatures/i }));
+
+    expect(screen.getByRole("switch", { name: /Sign metadata/i })).toBeChecked();
+    expect(screen.getByTestId("select-value")).toHaveTextContent("k-global");
+
+    const save = screen.getByRole("button", { name: /Save Signing Configuration/i });
+    await waitFor(() => expect(save).not.toBeDisabled());
+    await userEvent.click(save);
+
+    await waitFor(() =>
+      expect(mockUpdateRepoConfig).toHaveBeenCalledWith("repo-1", {
+        signing_key_id: "k-global",
+        sign_metadata: true,
+        sign_packages: true,
+        require_signatures: false,
+      }),
+    );
+  });
 });

@@ -35,6 +35,13 @@ import { CopyButton } from "@/components/common/copy-button";
 
 const NONE_KEY = "__none__";
 
+interface SigningDraft {
+  keyId: string;
+  signMetadata: boolean;
+  signPackages: boolean;
+  requireSignatures: boolean;
+}
+
 interface SigningSettingsProps {
   repository: Repository;
 }
@@ -62,20 +69,25 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
     [allKeys, repository.id],
   );
 
-  const [selectedKeyId, setSelectedKeyId] = useState<string>(NONE_KEY);
-  const [signMetadata, setSignMetadata] = useState(false);
-  const [signPackages, setSignPackages] = useState(false);
-  const [requireSignatures, setRequireSignatures] = useState(false);
-  const [dirty, setDirty] = useState(false);
+  // Unsaved edits. `null` means "showing the stored config". The first edit
+  // copies all four stored values into the draft, so changing one control
+  // never resets the others (and saving never drops the key binding).
+  const [draft, setDraft] = useState<SigningDraft | null>(null);
+  const stored: SigningDraft = {
+    keyId: config?.signing_key_id ?? NONE_KEY,
+    signMetadata: config?.sign_metadata ?? false,
+    signPackages: config?.sign_packages ?? false,
+    requireSignatures: config?.require_signatures ?? false,
+  };
+  const current = draft ?? stored;
+  const dirty = draft !== null;
+  const edit = (patch: Partial<SigningDraft>) =>
+    setDraft((prev) => ({ ...(prev ?? stored), ...patch }));
 
-  const effectiveKeyId = dirty
-    ? selectedKeyId
-    : config?.signing_key_id ?? NONE_KEY;
-  const effectiveSignMetadata = dirty ? signMetadata : (config?.sign_metadata ?? false);
-  const effectiveSignPackages = dirty ? signPackages : (config?.sign_packages ?? false);
-  const effectiveRequireSignatures = dirty
-    ? requireSignatures
-    : (config?.require_signatures ?? false);
+  const effectiveKeyId = current.keyId;
+  const effectiveSignMetadata = current.signMetadata;
+  const effectiveSignPackages = current.signPackages;
+  const effectiveRequireSignatures = current.requireSignatures;
 
   const selectedKey =
     effectiveKeyId === NONE_KEY
@@ -95,7 +107,7 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["signing-config", repository.id] });
-      setDirty(false);
+      setDraft(null);
       toast.success("Repository signing configuration saved");
     },
     onError: mutationErrorToast("Failed to save repository signing configuration"),
@@ -118,17 +130,13 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
       }),
     onSuccess: async (key) => {
       await queryClient.invalidateQueries({ queryKey: ["signing-keys"] });
-      setSelectedKeyId(key.id);
-      setSignMetadata(true);
-      setDirty(true);
+      edit({ keyId: key.id, signMetadata: true });
       toast.success(`Created signing key "${key.name}"`, {
         description: "Save the configuration below to enable signing for this repository.",
       });
     },
     onError: mutationErrorToast("Failed to create repository signing key"),
   });
-
-  const markDirty = () => setDirty(true);
 
   if (!signable) {
     return (
@@ -181,8 +189,7 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
             <Select
               value={effectiveKeyId}
               onValueChange={(value) => {
-                setSelectedKeyId(value);
-                markDirty();
+                edit({ keyId: value });
               }}
             >
               <SelectTrigger id="repo-signing-key">
@@ -250,8 +257,7 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
                 checked={effectiveSignMetadata}
                 disabled={effectiveKeyId === NONE_KEY || keyTypeMismatch}
                 onCheckedChange={(checked) => {
-                  setSignMetadata(checked);
-                  markDirty();
+                  edit({ signMetadata: checked });
                 }}
               />
             </div>
@@ -268,8 +274,7 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
                 checked={effectiveSignPackages}
                 disabled={effectiveKeyId === NONE_KEY}
                 onCheckedChange={(checked) => {
-                  setSignPackages(checked);
-                  markDirty();
+                  edit({ signPackages: checked });
                 }}
               />
             </div>
@@ -286,8 +291,7 @@ export function SigningSettings({ repository }: SigningSettingsProps) {
                 checked={effectiveRequireSignatures}
                 disabled={effectiveKeyId === NONE_KEY || !effectiveSignPackages}
                 onCheckedChange={(checked) => {
-                  setRequireSignatures(checked);
-                  markDirty();
+                  edit({ requireSignatures: checked });
                 }}
               />
             </div>

@@ -1289,7 +1289,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         )}
       </section>
 
-      <SigningSettings repository={repository} />
+      {/* Signing config writes and key creation are instance-admin only on
+          the backend (require_signing_admin), like the other admin controls
+          on this tab. */}
+      {isRepoAdmin && <SigningSettings repository={repository} />}
 
       <Separator />
 
