@@ -94,6 +94,24 @@ describe("SystemConfigProvider", () => {
     expect(screen.getByTestId("guest")).toHaveTextContent("true");
   });
 
+  it("warns in the console when it falls back to the defaults (#844)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockGetConfig.mockRejectedValue(
+      new Error("System config response did not match the expected shape")
+    );
+
+    renderWithProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error")).toHaveTextContent("true");
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("System config unavailable"),
+      "System config response did not match the expected shape"
+    );
+    warn.mockRestore();
+  });
+
   it("throws if useSystemConfig is used outside the provider", () => {
     function Bare() {
       useSystemConfig();
