@@ -44,6 +44,18 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [typed, setTyped] = useState("");
 
+  // Callers keep this dialog mounted and close it themselves after a
+  // successful confirm (setOpen(false) in onSuccess), which Radix does not
+  // report through onOpenChange. Reset the typed text whenever the dialog
+  // opens, closes, or is pointed at a different target, so a previous name
+  // never pre-fills (or pre-satisfies) the next confirmation (#973).
+  const resetKey = open ? `open:${typeToConfirm ?? ""}` : "closed";
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
+    setTyped("");
+  }
+
   const canConfirm = typeToConfirm ? typed === typeToConfirm : true;
 
   const handleOpenChange = (next: boolean) => {
