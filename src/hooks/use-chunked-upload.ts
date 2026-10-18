@@ -11,6 +11,7 @@ import {
   ChecksumMismatchError,
 } from "@/lib/api/uploads";
 import type { CompleteResult } from "@/lib/api/uploads";
+import { sha256Blob } from "@/lib/sha256-stream";
 
 // --- Types ---
 
@@ -99,11 +100,16 @@ function clearSession(repoKey: string, path: string): void {
   }
 }
 
-async function computeSha256(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+/**
+ * SHA-256 of the whole file, read one slice at a time (#887). Never call
+ * `file.arrayBuffer()` here: a browser cannot read a file of 2 GiB or more
+ * into one buffer and rejects it with `NotReadableError`.
+ */
+function computeSha256(
+  file: File,
+  signal: { aborted: boolean }
+): Promise<string> {
+  return sha256Blob(file, { signal });
 }
 
 const INITIAL_PROGRESS: UploadProgress = {
@@ -300,7 +306,11 @@ export function useChunkedUpload(
         setStatus("hashing");
         updateProgress({ ...INITIAL_PROGRESS, totalBytes: file.size });
 
-        const checksum = await computeSha256(file);
+        const checksum = await computeSha256(file, {
+          get aborted() {
+            return cancelledRef.current;
+          },
+        });
         if (cancelledRef.current) return;
 
         setStatus("uploading");

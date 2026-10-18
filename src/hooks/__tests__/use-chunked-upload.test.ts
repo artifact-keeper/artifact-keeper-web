@@ -75,8 +75,11 @@ const mockLocalStorage = {
 };
 vi.stubGlobal("localStorage", mockLocalStorage);
 
-// Mock crypto.subtle.digest for computeSha256
-const mockDigest = vi.fn();
+// The hook hashes with the streaming hasher in @/lib/sha256-stream (#887),
+// never crypto.subtle.digest; make any call to it fail loudly.
+const mockDigest = vi.fn(() => {
+  throw new Error("crypto.subtle.digest must not be used for chunked uploads");
+});
 vi.stubGlobal("crypto", {
   subtle: { digest: mockDigest },
 });
@@ -99,11 +102,35 @@ function createFile(size: number, name = "test-file.bin"): File {
   return new File([content], name, { type: "application/octet-stream" });
 }
 
-function fakeSha256Buffer(): ArrayBuffer {
-  // 32 bytes for SHA-256
-  const arr = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) arr[i] = i;
-  return arr.buffer;
+/**
+ * A File-like object for a 3 GiB file. Reading the whole thing throws the
+ * error Chrome raises for a read of 2 GiB or more (#887); `slice()` works and
+ * hands back a small stand-in Blob so hashing stays fast. Records every slice.
+ */
+function createHugeFile(size = 3 * 1024 ** 3) {
+  const slices: Array<[number, number]> = [];
+  const notReadable = () =>
+    Promise.reject(
+      new DOMException(
+        "The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.",
+        "NotReadableError"
+      )
+    );
+  const file = {
+    name: "huge.iso",
+    type: "application/octet-stream",
+    size,
+    arrayBuffer: vi.fn(notReadable),
+    text: vi.fn(notReadable),
+    stream: vi.fn(() => {
+      throw new Error("whole-file stream must not be used");
+    }),
+    slice: vi.fn((start = 0, end = size) => {
+      slices.push([start, end]);
+      return new Blob([new Uint8Array([start % 251])]);
+    }),
+  };
+  return { file: file as unknown as File, slices };
 }
 
 async function loadHook(overrides?: Record<string, unknown>) {
@@ -124,7 +151,6 @@ describe("useChunkedUpload", () => {
     vi.clearAllMocks();
     Object.keys(localStorageData).forEach((k) => delete localStorageData[k]);
     perfNowValue = 0;
-    mockDigest.mockResolvedValue(fakeSha256Buffer());
   });
 
   afterEach(() => {
@@ -210,6 +236,53 @@ describe("useChunkedUpload", () => {
     );
     expect(mockUploadChunk).toHaveBeenCalledTimes(2);
     expect(mockCompleteUploadSession).toHaveBeenCalledWith("sess-abc");
+  });
+
+  it("uploads a 3 GiB file without reading it whole (#887)", async () => {
+    const { file, slices } = createHugeFile();
+    const chunkSize = 256 * 1024 * 1024;
+    const chunkCount = Math.ceil(file.size / chunkSize);
+
+    mockCreateUploadSession.mockResolvedValue({
+      session_id: "sess-huge",
+      chunk_count: chunkCount,
+      chunk_size: chunkSize,
+      expires_at: "2026-03-25T00:00:00Z",
+    });
+    mockUploadChunk.mockResolvedValue({});
+    mockCompleteUploadSession.mockResolvedValue({
+      artifact_id: "art-huge",
+      path: "huge.iso",
+      size: file.size,
+      checksum_sha256: "x",
+    });
+
+    const onError = vi.fn();
+    const hook = await loadHook({ chunkSize, onError });
+    await hook.upload(file);
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(file.arrayBuffer).not.toHaveBeenCalled();
+    expect(mockDigest).not.toHaveBeenCalled();
+    // Every read is a bounded slice, never the whole file.
+    for (const [start, end] of slices) {
+      expect(end - start).toBeLessThanOrEqual(chunkSize);
+      expect(end).toBeLessThanOrEqual(file.size);
+    }
+    // The checksum is a real SHA-256 hex digest computed from the slices.
+    expect(mockCreateUploadSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        total_size: file.size,
+        checksum_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      })
+    );
+    // Each chunk is sent as the Blob slice() returned, with exact byte ranges.
+    expect(mockUploadChunk).toHaveBeenCalledTimes(chunkCount);
+    const last = mockUploadChunk.mock.calls[chunkCount - 1];
+    expect(last[1]).toBe((chunkCount - 1) * chunkSize);
+    expect(last[2]).toBe(file.size);
+    expect(last[4]).toBeInstanceOf(Blob);
+    expect(mockCompleteUploadSession).toHaveBeenCalledWith("sess-huge");
   });
 
   it("uses custom artifactPath when provided in options", async () => {
