@@ -53,7 +53,7 @@
   "devDependencies": {
     "@aws-sdk/client-polly": "^3.1149.0",
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
