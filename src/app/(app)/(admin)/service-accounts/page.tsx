@@ -425,6 +425,7 @@ export default function ServiceAccountsPage() {
               accountId={tokenAccount.id}
               tokenId={t.id}
               count={t.unreachable_member_count ?? 0}
+              scopeError={t.scope_error}
             />
           )}
         </div>

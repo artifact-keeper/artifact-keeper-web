@@ -43,9 +43,15 @@ export interface ServiceAccountToken {
   repository_ids: string[];
   /**
    * How many virtual-repository members this token cannot reach
-   * (artifact-keeper#4215). Absent on backends before 1.11.
+   * (artifact-keeper#4215). Absent on backends before 1.12.
    */
   unreachable_member_count?: number;
+  /**
+   * Why this token's repository restriction denies all repositories
+   * (artifact-keeper#4215). Reported separately from `unreachable_member_count`
+   * because a zero count with a `scope_error` is deny-all, not the all-clear.
+   */
+  scope_error?: TokenScopeError;
 }
 
 export interface RepoSelector {
@@ -62,6 +68,15 @@ export interface RepoSelector {
  */
 export type UnreachableReason = 'out_of_token_scope' | 'no_grant';
 
+/**
+ * Why a token's stored repository restriction denies all repositories
+ * (backend artifact-keeper#4215).
+ */
+export type TokenScopeError =
+  | 'invalid_selector'
+  | 'selector_matches_nothing'
+  | 'deleted_pinned_repositories';
+
 export interface UnreachableMember {
   repo_key: string;
   reason: UnreachableReason;
@@ -75,6 +90,7 @@ export interface UnreachableVirtual {
 export interface TokenScopeAnalysis {
   unreachable: UnreachableVirtual[];
   unreachable_member_count: number;
+  scope_error?: TokenScopeError;
 }
 
 export interface MatchedRepository {

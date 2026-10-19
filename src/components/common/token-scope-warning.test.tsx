@@ -18,17 +18,23 @@ import {
   TokenScopeWarning,
   PreviewScopeWarning,
 } from "@/components/common/token-scope-warning";
+import type { TokenScopeError } from "@/lib/api/service-accounts";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-function renderWarning(count: number) {
+function renderWarning(count: number, scopeError?: TokenScopeError) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <TokenScopeWarning accountId="acct-1" tokenId="tok-1" count={count} />
+      <TokenScopeWarning
+        accountId="acct-1"
+        tokenId="tok-1"
+        count={count}
+        scopeError={scopeError}
+      />
     </QueryClientProvider>
   );
 }
@@ -45,7 +51,7 @@ describe("TokenScopeWarning (artifact-keeper#4215)", () => {
     expect(mockGetTokenScopeAnalysis).not.toHaveBeenCalled();
   });
 
-  it("renders nothing when the token reaches everything", () => {
+  it("renders nothing when the token reaches everything and has no scope_error", () => {
     const { container } = render(
       <QueryClientProvider client={new QueryClient()}>
         <TokenScopeWarning accountId="a" tokenId="t" count={0} />
@@ -81,11 +87,69 @@ describe("TokenScopeWarning (artifact-keeper#4215)", () => {
     expect(screen.getByText("nuget-private")).toBeInTheDocument();
 
     const headings = screen
-      .getAllByText(/has no access|Outside this token's repository scope/)
+      .getAllByText(/has no read access|Outside this token's repository scope/)
       .map((el) => el.textContent);
-    expect(headings[0]).toMatch(/has no access/);
-    expect(screen.getByText(/Grant the service account read access/)).toBeInTheDocument();
-    expect(screen.getByText(/Include members of matched virtual repositories/)).toBeInTheDocument();
+    expect(headings[0]).toMatch(/has no read access/);
+    expect(
+      screen.getByText(
+        /Grant the service account read access on the virtual repository or these member repositories/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Scope the token to the virtual repository \(naming the virtual covers reads of its members\)/
+      )
+    ).toBeInTheDocument();
+  });
+
+  it.each<[TokenScopeError, string, RegExp]>([
+    [
+      "invalid_selector",
+      "Invalid selector",
+      /cannot be parsed or contains an unknown field/i,
+    ],
+    [
+      "selector_matches_nothing",
+      "Matches no repos",
+      /currently matches no repositories/i,
+    ],
+    [
+      "deleted_pinned_repositories",
+      "Pinned repos deleted",
+      /pinned to have been deleted/i,
+    ],
+  ])(
+    "renders a badge and explanation for scope_error=%s even when count is 0, never the all-clear",
+    async (scopeError, badgeText, explanationPattern) => {
+      mockGetTokenScopeAnalysis.mockResolvedValue({
+        unreachable_member_count: 0,
+        unreachable: [],
+        scope_error: scopeError,
+      });
+      renderWarning(0, scopeError);
+
+      expect(screen.getByText(badgeText)).toBeInTheDocument();
+      expect(mockGetTokenScopeAnalysis).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole("button", { name: /show details/i }));
+
+      expect(await screen.findByText(explanationPattern)).toBeInTheDocument();
+      expect(screen.queryByText(/reaches every member/)).not.toBeInTheDocument();
+    }
+  );
+
+  it("shows the all-clear only when the analysis succeeds with no scope_error and no members", async () => {
+    mockGetTokenScopeAnalysis.mockResolvedValue({
+      unreachable_member_count: 0,
+      unreachable: [],
+    });
+    renderWarning(1);
+
+    await userEvent.click(screen.getByRole("button", { name: /1 unreachable/i }));
+
+    expect(
+      await screen.findByText(/Nothing — the token reaches every member\./)
+    ).toBeInTheDocument();
   });
 
   /**
@@ -146,9 +210,13 @@ describe("PreviewScopeWarning", () => {
     );
 
     expect(screen.getByText(/nuget-virtual: 2 members unreachable/)).toBeInTheDocument();
-    expect(screen.getByText(/Include members of matched virtual repositories/)).toBeInTheDocument();
-    // The individual keys are deliberately absent here: the fix is one click
-    // away above, and listing them would crowd the form.
+    expect(
+      screen.getByText(
+        /Scope the token to the virtual repository \(naming the virtual covers reads of its members\)/
+      )
+    ).toBeInTheDocument();
+    // The individual keys are deliberately absent here: listing them would
+    // crowd the form.
     expect(screen.queryByText("a")).not.toBeInTheDocument();
   });
 
@@ -168,7 +236,7 @@ describe("PreviewScopeWarning", () => {
     );
 
     expect(
-      screen.getByText(/outside the scope and some are not granted/i)
+      screen.getByText(/outside the token's scope and some lack read access/i)
     ).toBeInTheDocument();
   });
 });

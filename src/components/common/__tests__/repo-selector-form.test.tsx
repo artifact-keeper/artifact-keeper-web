@@ -63,6 +63,7 @@ vi.mock("sonner", () => ({
 // Component under test (imported AFTER all vi.mock calls)
 // ---------------------------------------------------------------------------
 
+import { ApiError } from "@/lib/api/fetch";
 import { RepoSelectorForm, selectorHasFilters } from "../repo-selector-form";
 
 // ---------------------------------------------------------------------------
@@ -577,6 +578,23 @@ describe("RepoSelectorForm", () => {
 
     expect(mockToastError).toHaveBeenCalledTimes(1);
     expect(mockToastError).toHaveBeenCalledWith("backend rejected: invalid selector");
+  });
+
+  it("surfaces the backend 400 validation message from ApiError instead of a raw envelope or generic fallback", () => {
+    mockToastError.mockClear();
+    render(<RepoSelectorForm value={{}} onChange={vi.fn()} />);
+
+    capturedMutationOpts.onError(
+      new ApiError(
+        400,
+        '{"code":"VALIDATION_ERROR","message":"Invalid repo_selector: unknown field `match_paterrn`"}'
+      )
+    );
+
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+    expect(mockToastError).toHaveBeenCalledWith(
+      "Invalid repo_selector: unknown field `match_paterrn`"
+    );
   });
 
   it("falls back to the action label when the error has no message", () => {

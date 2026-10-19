@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import {
   serviceAccountsApi,
+  type TokenScopeError,
   type UnreachableMember,
   type UnreachableReason,
   type UnreachableVirtual,
@@ -25,11 +26,38 @@ import {
 const REASON_COPY: Record<UnreachableReason, { label: string; fix: string }> = {
   out_of_token_scope: {
     label: "Outside this token's repository scope",
-    fix: "Add these repositories to the token, or use a selector with \u201CInclude members of matched virtual repositories\u201D.",
+    fix: "Scope the token to the virtual repository (naming the virtual covers reads of its members).",
   },
   no_grant: {
-    label: "This service account has no access",
-    fix: "Grant the service account read access on these repositories.",
+    label: "This service account has no read access",
+    fix: "Grant the service account read access on the virtual repository or these member repositories; widening the token's scope cannot fix this.",
+  },
+};
+
+const SCOPE_ERROR_COPY: Record<
+  TokenScopeError,
+  { badge: string; ariaLabel: string; label: string; detail: string }
+> = {
+  invalid_selector: {
+    badge: "Invalid selector",
+    ariaLabel: "Invalid repository selector, show details",
+    label: "Invalid repository selector",
+    detail:
+      "This token's stored repository selector cannot be parsed or contains an unknown field, so it denies access to all repositories. Recreate the token with a valid selector.",
+  },
+  selector_matches_nothing: {
+    badge: "Matches no repos",
+    ariaLabel: "Selector matches no repositories, show details",
+    label: "Selector matches no repositories",
+    detail:
+      "This token's repository selector currently matches no repositories, so it denies access to all repositories until a repository matches its criteria.",
+  },
+  deleted_pinned_repositories: {
+    badge: "Pinned repos deleted",
+    ariaLabel: "Pinned repositories deleted, show details",
+    label: "Pinned repositories were deleted",
+    detail:
+      "All repositories this token was pinned to have been deleted, so it denies access to all repositories. Recreate the token with existing repositories.",
   },
 };
 
@@ -54,20 +82,26 @@ interface TokenScopeWarningProps {
   readonly accountId: string;
   readonly tokenId: string;
   readonly count: number;
+  readonly scopeError?: TokenScopeError;
 }
 
 /**
- * The token row's flag for artifact-keeper#4215: a count, and the detail only
- * once asked for.
+ * The token row's flag for artifact-keeper#4215: a count or a scope-error
+ * badge, and the detail only once asked for.
  *
  * A token can be configured so that it reads nothing through a virtual
- * repository — its scope may not cover the members, or the account may have no
- * access to them — and both failures look identical from the outside: an empty
- * listing. The count is what a row can carry without becoming unreadable; the
- * members and the remedy live behind it, fetched when the popover opens so the
- * list view costs nothing.
+ * repository — its scope may not cover the virtual, or the account may lack
+ * read access on the virtual parent or its members — or its stored repository
+ * restriction may deny all repositories outright (`scope_error`). The row
+ * carries a compact badge; the detail and remedy live behind it, fetched when
+ * the popover opens so the list view costs nothing.
  */
-export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarningProps) {
+export function TokenScopeWarning({
+  accountId,
+  tokenId,
+  count,
+  scopeError,
+}: TokenScopeWarningProps) {
   const [open, setOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
@@ -76,16 +110,23 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
     enabled: open,
   });
 
-  if (count <= 0) return null;
+  if (count <= 0 && !scopeError) return null;
 
   const groups = data ? groupByReason(data.unreachable) : [];
+  const effectiveScopeError = data?.scope_error ?? scopeError;
+  const triggerAriaLabel = scopeError
+    ? SCOPE_ERROR_COPY[scopeError].ariaLabel
+    : `${count} unreachable ${count === 1 ? "repository" : "repositories"}, show details`;
+  const triggerText = scopeError
+    ? SCOPE_ERROR_COPY[scopeError].badge
+    : `${count} unreachable`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${count} unreachable ${count === 1 ? "repository" : "repositories"}, show details`}
+          aria-label={triggerAriaLabel}
           className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Badge
@@ -93,7 +134,7 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
             className="gap-1 text-xs border-amber-500/50 text-amber-700 dark:text-amber-400"
           >
             <AlertTriangle className="size-3" />
-            {count} unreachable
+            {triggerText}
           </Badge>
         </button>
       </PopoverTrigger>
@@ -110,7 +151,15 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
         {isError && (
           <p className="text-muted-foreground">Couldn&apos;t check this token. Try again later.</p>
         )}
-        {data && groups.length === 0 && (
+        {!isLoading && !isError && effectiveScopeError && (
+          <div className="mb-3 last:mb-0">
+            <p className="text-xs font-medium">{SCOPE_ERROR_COPY[effectiveScopeError].label}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {SCOPE_ERROR_COPY[effectiveScopeError].detail}
+            </p>
+          </div>
+        )}
+        {data && !effectiveScopeError && groups.length === 0 && (
           <p className="text-muted-foreground">Nothing — the token reaches every member.</p>
         )}
         {groups.map(({ reason, repoKeys }) => (
@@ -133,7 +182,7 @@ export function TokenScopeWarning({ accountId, tokenId, count }: TokenScopeWarni
 
 /**
  * The same finding at create time, under the selector preview — one line per
- * virtual repository, because the fix (the checkbox) is directly above it.
+ * virtual repository naming the count and remedy.
  */
 export function PreviewScopeWarning({ unreachable }: { readonly unreachable?: UnreachableVirtual[] }) {
   if (!unreachable || unreachable.length === 0) return null;
@@ -144,7 +193,7 @@ export function PreviewScopeWarning({ unreachable }: { readonly unreachable?: Un
       const [only] = Array.from(reasons);
       return REASON_COPY[only].fix;
     }
-    return "Some members are outside the scope and some are not granted to this service account.";
+    return "Some members are outside the token's scope and some lack read access on the virtual repository or member.";
   };
 
   return (
