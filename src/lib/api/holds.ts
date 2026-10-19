@@ -1,12 +1,16 @@
 import { apiFetch } from '@/lib/api/fetch';
 import { quarantineApi, type QuarantineActionResult } from '@/lib/api/quarantine';
 
-/** Counts across the three download-hold control planes. */
+/**
+ * Counts the released holds API actually returns. `policyBlocked` is absent
+ * on backend 1.11.x (`HoldsSummaryResponse` has no such field); keep it
+ * optional so a later endpoint can fill it without a type break.
+ */
 export interface HoldsSummary {
   ageGatePending: number;
   quarantineActive: number;
   quarantineRejected: number;
-  policyBlocked: number;
+  policyBlocked?: number;
 }
 
 export type HoldKind = 'active' | 'expired' | 'rejected';
@@ -18,12 +22,15 @@ export const DEFAULT_HOLD_KINDS: readonly HoldKind[] = ['active', 'rejected'];
 
 export const HOLD_SUMMARY_QUERY_KEY = ['holds-summary'] as const;
 export const QUARANTINE_HOLDS_QUERY_KEY = ['quarantine-holds'] as const;
-export const POLICY_BLOCKS_QUERY_KEY = ['policy-blocks'] as const;
 
 export interface QuarantineHold {
-  artifactId: string;
+  /** `hosted` or `proxy-cache`. */
+  source: string;
+  /** Hosted rows only. Proxy-cache holds have no `artifacts` id. */
+  artifactId: string | null;
   name: string;
   version: string | null;
+  path: string;
   repositoryKey: string;
   repositoryFormat: string;
   quarantineStatus: string;
@@ -40,42 +47,19 @@ export interface QuarantineHoldPage {
   total: number;
 }
 
-export interface PolicyBlock {
-  id: string;
-  source: 'hosted' | 'proxy' | string;
-  artifactId: string | null;
-  packageName: string;
-  packageVersion: string | null;
-  path: string;
-  repositoryKey: string;
-  repositoryFormat: string;
-  uploadedAt: string | null;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  findingsCount: number;
-  maxSeverity: string | null;
-  policyName: string | null;
-  blockReason: string;
-}
-
-export interface PolicyBlockPage {
-  items: PolicyBlock[];
-  total: number;
-}
-
 interface HoldsSummaryDto {
   age_gate_pending: number;
   quarantine_active: number;
   quarantine_rejected: number;
-  policy_blocked: number;
+  policy_blocked?: number;
 }
 
 interface QuarantineHoldDto {
-  artifact_id: string;
+  source?: string;
+  artifact_id: string | null;
   name: string;
   version: string | null;
+  path?: string;
   repository_key: string;
   repository_format: string;
   quarantine_status: string;
@@ -85,26 +69,6 @@ interface QuarantineHoldDto {
   quarantine_reason: string | null;
   created_at: string;
   is_blocked: boolean;
-}
-
-interface PolicyBlockDto {
-  id: string;
-  source: string;
-  artifact_id: string | null;
-  package_name: string;
-  package_version: string | null;
-  path: string;
-  repository_key: string;
-  repository_format: string;
-  uploaded_at: string | null;
-  critical_count: number;
-  high_count: number;
-  medium_count: number;
-  low_count: number;
-  findings_count: number;
-  max_severity: string | null;
-  policy_name: string | null;
-  block_reason: string;
 }
 
 interface PaginatedDto<T> {
@@ -117,11 +81,18 @@ function adaptKind(raw: string): HoldKind {
   return 'active';
 }
 
+/** Stable React key. Proxy-cache rows share a null `artifact_id`. */
+export function quarantineHoldKey(hold: Pick<QuarantineHold, 'source' | 'repositoryKey' | 'path' | 'artifactId'>): string {
+  return `${hold.source}:${hold.repositoryKey}:${hold.path || hold.artifactId || ''}`;
+}
+
 function adaptHold(dto: QuarantineHoldDto): QuarantineHold {
   return {
+    source: dto.source ?? 'hosted',
     artifactId: dto.artifact_id,
     name: dto.name,
     version: dto.version,
+    path: dto.path ?? '',
     repositoryKey: dto.repository_key,
     repositoryFormat: dto.repository_format,
     quarantineStatus: dto.quarantine_status,
@@ -131,28 +102,6 @@ function adaptHold(dto: QuarantineHoldDto): QuarantineHold {
     quarantineReason: dto.quarantine_reason,
     createdAt: dto.created_at,
     isBlocked: dto.is_blocked,
-  };
-}
-
-function adaptBlock(dto: PolicyBlockDto): PolicyBlock {
-  return {
-    id: dto.id,
-    source: dto.source,
-    artifactId: dto.artifact_id,
-    packageName: dto.package_name,
-    packageVersion: dto.package_version,
-    path: dto.path,
-    repositoryKey: dto.repository_key,
-    repositoryFormat: dto.repository_format,
-    uploadedAt: dto.uploaded_at,
-    criticalCount: dto.critical_count,
-    highCount: dto.high_count,
-    mediumCount: dto.medium_count,
-    lowCount: dto.low_count,
-    findingsCount: dto.findings_count,
-    maxSeverity: dto.max_severity,
-    policyName: dto.policy_name,
-    blockReason: dto.block_reason,
   };
 }
 
@@ -194,7 +143,7 @@ export const holdsApi = {
       ageGatePending: dto.age_gate_pending,
       quarantineActive: dto.quarantine_active,
       quarantineRejected: dto.quarantine_rejected,
-      policyBlocked: dto.policy_blocked,
+      ...(dto.policy_blocked === undefined ? {} : { policyBlocked: dto.policy_blocked }),
     };
   },
 
@@ -214,22 +163,6 @@ export const holdsApi = {
       `/api/v1/admin/holds/quarantine${qs ? `?${qs}` : ''}`,
     );
     return { items: dto.items.map(adaptHold), total: dto.pagination.total };
-  },
-
-  listPolicyBlocks: async (params: {
-    repositoryKey?: string;
-    page?: number;
-    perPage?: number;
-  } = {}): Promise<PolicyBlockPage> => {
-    const query = new URLSearchParams();
-    if (params.repositoryKey) query.set('repository_key', params.repositoryKey);
-    if (params.page) query.set('page', String(params.page));
-    query.set('per_page', String(params.perPage ?? 100));
-    const qs = query.toString();
-    const dto = await apiFetch<PaginatedDto<PolicyBlockDto>>(
-      `/api/v1/admin/holds/policy-blocks${qs ? `?${qs}` : ''}`,
-    );
-    return { items: dto.items.map(adaptBlock), total: dto.pagination.total };
   },
 
   release: (artifactId: string): Promise<QuarantineActionResult> =>

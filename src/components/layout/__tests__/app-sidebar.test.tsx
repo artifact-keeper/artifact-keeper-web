@@ -385,12 +385,12 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Blast Radius")).toBeDefined();
   });
 
-  it("renders Quarantine and Policy blocks admin entries", () => {
+  it("renders the Quarantine admin entry", () => {
     authState({ isAuthenticated: true, isAdmin: true });
 
     render(<AppSidebar />);
 
     expect(screen.getByText("Quarantine")).toBeDefined();
-    expect(screen.getByText("Policy blocks")).toBeDefined();
+    expect(screen.queryByText("Policy blocks")).toBeNull();
   });
 });

@@ -45,11 +45,10 @@ describe("HoldsNav", () => {
       ageGatePending: 2,
       quarantineActive: 3,
       quarantineRejected: 1,
-      policyBlocked: 5,
     };
     render(<HoldsNav />);
     expect(screen.getByTitle("2 pending")).toHaveTextContent("2");
     expect(screen.getByTitle("4 held")).toHaveTextContent("4");
-    expect(screen.getByTitle("5 blocked")).toHaveTextContent("5");
+    expect(screen.queryByRole("link", { name: /Policy blocks/i })).toBeNull();
   });
 });

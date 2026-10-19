@@ -97,9 +97,11 @@ vi.mock("next/link", () => ({
 import QuarantineHoldsPage from "./page";
 
 const ACTIVE = {
+  source: "hosted",
   artifactId: "a1",
   name: "leftpad",
   version: "1.0.0",
+  path: "leftpad-1.0.0.tgz",
   repositoryKey: "npm-local",
   repositoryFormat: "npm",
   quarantineStatus: "quarantined",
@@ -156,6 +158,29 @@ describe("QuarantineHoldsPage", () => {
     expect(screen.getByText(/upload hold/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Release" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
+  });
+
+  it("lists proxy-cache rows without release or reject", () => {
+    const first = {
+      ...ACTIVE,
+      source: "proxy-cache",
+      artifactId: null,
+      name: "held-a.whl",
+      path: "simple/held/held-a.whl",
+    };
+    const second = {
+      ...first,
+      name: "held-b.whl",
+      path: "simple/held/held-b.whl",
+    };
+    holdData = { data: { items: [first, second], total: 2 }, isLoading: false };
+    render(<QuarantineHoldsPage />);
+    expect(screen.getByText("held-a.whl")).toBeInTheDocument();
+    expect(screen.getByText("held-b.whl")).toBeInTheDocument();
+    expect(screen.getAllByText("proxy-cache")).toHaveLength(2);
+    expect(screen.getAllByText(/Listed only/i)).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Release" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
   });
 
   it("does not offer actions on a rejected row", () => {

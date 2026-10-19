@@ -16,6 +16,7 @@ import {
   QUARANTINE_HOLDS_QUERY_KEY,
   formatHoldRemaining,
   joinHoldKinds,
+  quarantineHoldKey,
   type HoldKind,
   type QuarantineHold,
 } from "@/lib/api/holds";
@@ -106,7 +107,12 @@ export default function QuarantineHoldsPage() {
   };
 
   const releaseMutation = useMutation({
-    mutationFn: (hold: QuarantineHold) => holdsApi.release(hold.artifactId),
+    mutationFn: (hold: QuarantineHold) => {
+      if (!hold.artifactId) {
+        return Promise.reject(new Error("Proxy-cache holds have no artifact to release"));
+      }
+      return holdsApi.release(hold.artifactId);
+    },
     onSuccess: (_result, hold) => {
       invalidate();
       closeDialog();
@@ -116,8 +122,12 @@ export default function QuarantineHoldsPage() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ hold, why }: { hold: QuarantineHold; why: string }) =>
-      holdsApi.reject(hold.artifactId, why),
+    mutationFn: ({ hold, why }: { hold: QuarantineHold; why: string }) => {
+      if (!hold.artifactId) {
+        return Promise.reject(new Error("Proxy-cache holds have no artifact to reject"));
+      }
+      return holdsApi.reject(hold.artifactId, why);
+    },
     onSuccess: (_result, { hold }) => {
       invalidate();
       closeDialog();
@@ -144,7 +154,8 @@ export default function QuarantineHoldsPage() {
         <div>
           <h1 className="text-xl font-semibold">Quarantine</h1>
           <p className="text-sm text-muted-foreground">
-            Packages held after upload: timed windows, permanent blocks, and leftover expired labels.
+            Hosted packages held after upload, plus proxy-cache holds. Release and Reject
+            apply to hosted artifacts only.
           </p>
         </div>
       </div>
@@ -216,6 +227,7 @@ export default function QuarantineHoldsPage() {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
               <tr>
+                <th className="px-3 py-2 font-medium">Source</th>
                 <th className="px-3 py-2 font-medium">Package</th>
                 <th className="px-3 py-2 font-medium">Version</th>
                 <th className="px-3 py-2 font-medium">Repository</th>
@@ -227,8 +239,18 @@ export default function QuarantineHoldsPage() {
             </thead>
             <tbody className="divide-y">
               {rows.map((hold) => (
-                <tr key={hold.artifactId}>
-                  <td className="px-3 py-2 font-medium">{hold.name}</td>
+                <tr key={quarantineHoldKey(hold)}>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline">{hold.source}</Badge>
+                  </td>
+                  <td className="px-3 py-2 font-medium">
+                    {hold.name}
+                    {hold.source === "proxy-cache" && hold.path && (
+                      <div className="mt-0.5 max-w-xs truncate font-mono text-xs text-muted-foreground" title={hold.path}>
+                        {hold.path}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs">{hold.version ?? "—"}</td>
                   <td className="px-3 py-2">
                     <Link
@@ -253,7 +275,11 @@ export default function QuarantineHoldsPage() {
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{formatDate(hold.createdAt)}</td>
                   <td className="px-3 py-2">
-                    {hold.kind === "rejected" ? (
+                    {!hold.artifactId ? (
+                      <span className="text-xs text-muted-foreground">
+                        Listed only. Release and Reject apply to hosted artifacts.
+                      </span>
+                    ) : hold.kind === "rejected" ? (
                       <span className="text-xs text-muted-foreground/60">Terminal</span>
                     ) : (
                       <div className="flex flex-wrap gap-2">

@@ -57,6 +57,10 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: mockInvalidate }),
 }));
 
+vi.mock("@/components/common/holds-nav", () => ({
+  HoldsNav: () => <nav aria-label="Download holds">Holds nav</nav>,
+}));
+
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
 vi.mock("sonner", () => ({

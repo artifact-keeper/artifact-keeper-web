@@ -31,7 +31,6 @@ describe("holdsApi.summary", () => {
       age_gate_pending: 2,
       quarantine_active: 3,
       quarantine_rejected: 1,
-      policy_blocked: 4,
     });
 
     const summary = await holdsApi.summary();
@@ -41,8 +40,8 @@ describe("holdsApi.summary", () => {
       ageGatePending: 2,
       quarantineActive: 3,
       quarantineRejected: 1,
-      policyBlocked: 4,
     });
+    expect(summary.policyBlocked).toBeUndefined();
   });
 });
 
@@ -51,9 +50,11 @@ describe("holdsApi.listQuarantine", () => {
     mockApiFetch.mockResolvedValue({
       items: [
         {
+          source: "hosted",
           artifact_id: "a1",
           name: "leftpad",
           version: "1.0.0",
+          path: "leftpad-1.0.0.tgz",
           repository_key: "npm-local",
           repository_format: "npm",
           quarantine_status: "quarantined",
@@ -78,7 +79,9 @@ describe("holdsApi.listQuarantine", () => {
     );
     expect(page.total).toBe(1);
     expect(page.items[0]).toMatchObject({
+      source: "hosted",
       artifactId: "a1",
+      path: "leftpad-1.0.0.tgz",
       name: "leftpad",
       kind: "active",
       remainingSeconds: 3600,
@@ -90,7 +93,9 @@ describe("holdsApi.listQuarantine", () => {
     mockApiFetch.mockResolvedValue({
       items: [
         {
-          artifact_id: "a2",
+          source: "proxy-cache",
+          artifact_id: null,
+          path: "simple/x/x-1.0.whl",
           name: "x",
           version: null,
           repository_key: "generic",
@@ -109,48 +114,9 @@ describe("holdsApi.listQuarantine", () => {
 
     const page = await holdsApi.listQuarantine();
     expect(page.items[0].kind).toBe("active");
-  });
-});
-
-describe("holdsApi.listPolicyBlocks", () => {
-  it("adapts hosted severity counts", async () => {
-    mockApiFetch.mockResolvedValue({
-      items: [
-        {
-          id: "art-1",
-          source: "hosted",
-          artifact_id: "art-1",
-          package_name: "log4j-core",
-          package_version: "2.14.1",
-          path: "org/apache/logging/log4j/log4j-core/2.14.1/log4j-core-2.14.1.jar",
-          repository_key: "maven-releases",
-          repository_format: "maven",
-          uploaded_at: "2026-01-02T00:00:00Z",
-          critical_count: 2,
-          high_count: 3,
-          medium_count: 1,
-          low_count: 0,
-          findings_count: 6,
-          max_severity: "high",
-          policy_name: "block-high",
-          block_reason: "Policy 'block-high': 5 findings at or above high",
-        },
-      ],
-      pagination: { total: 1 },
-    });
-
-    const page = await holdsApi.listPolicyBlocks({ perPage: 100 });
-    expect(mockApiFetch).toHaveBeenCalledWith(
-      "/api/v1/admin/holds/policy-blocks?per_page=100",
-    );
-    expect(page.items[0]).toMatchObject({
-      packageName: "log4j-core",
-      criticalCount: 2,
-      highCount: 3,
-      mediumCount: 1,
-      policyName: "block-high",
-      source: "hosted",
-    });
+    expect(page.items[0].artifactId).toBeNull();
+    expect(page.items[0].source).toBe("proxy-cache");
+    expect(page.items[0].path).toBe("simple/x/x-1.0.whl");
   });
 });
 

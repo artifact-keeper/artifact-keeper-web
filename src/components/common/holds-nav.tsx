@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Hourglass, ShieldAlert, Ban } from "lucide-react";
+import { Hourglass, ShieldAlert } from "lucide-react";
 import { holdsApi, HOLD_SUMMARY_QUERY_KEY, type HoldsSummary } from "@/lib/api/holds";
 import { cn } from "@/lib/utils";
 
@@ -21,13 +21,6 @@ const TABS = [
     icon: ShieldAlert,
     count: (s: HoldsSummary) => s.quarantineActive + s.quarantineRejected,
     hint: "held",
-  },
-  {
-    href: "/policy-blocks",
-    label: "Policy blocks",
-    icon: Ban,
-    count: (s: HoldsSummary) => s.policyBlocked,
-    hint: "blocked",
   },
 ] as const;
 
