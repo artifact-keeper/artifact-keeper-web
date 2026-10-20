@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Administrators can review the quarantine queue, including proxy-cache holds** (#936, backend artifact-keeper#4273) - Security now has a Quarantine page beside Age Gate. It lists hosted and proxy-cache holds from `GET /api/v1/admin/holds/quarantine` (package, remaining time, reason) and the summary counts from `GET /api/v1/admin/holds/summary`. Release and Reject in the table are offered only for hosted rows, which have an artifact id. Proxy-cache rows are listed with their path and source. Reject is hosted-only. Releasing a proxy-cache hold is `POST /api/v1/quarantine/proxy-cache/{repo}/release` with `{ "path": ... }` (backend 1.11.0, artifact-keeper#3912); wiring that button on this page is a follow-up. The policy-blocks page is #1040.
+
 ## [1.11.1] - 2026-10-18
 
 ### Sponsors
