@@ -139,6 +139,14 @@ describe("NavigationVisibilityCard (#968)", () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith([]));
   });
 
+  it("disables Show all when the stored list only holds entries that cannot be hidden", async () => {
+    mockGet.mockResolvedValue({ hiddenNavItems: ["/settings"], supported: true });
+    renderCard();
+
+    expect(await screen.findByText("Every entry is shown.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show all" })).toBeDisabled();
+  });
+
   it("explains when the server does not support the setting", async () => {
     mockGet.mockResolvedValue({ hiddenNavItems: [], supported: false });
     renderCard();

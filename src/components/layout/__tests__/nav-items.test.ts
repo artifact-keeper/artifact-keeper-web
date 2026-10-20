@@ -19,6 +19,18 @@ describe("nav-items (#968)", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 
+  it("uses hrefs the backend accepts as hidden-list ids", () => {
+    // Mirrors the backend validation of `hidden_nav_items` (artifact-keeper#4575):
+    // 1-128 chars of letters, digits, `/`, `-`, `_`, `.`. A `?` or `#` in an
+    // href would make the whole list fail to save with 400.
+    const backendId = /^[A-Za-z0-9/_.-]{1,128}$/;
+    for (const group of NAV_GROUPS) {
+      for (const item of group.items) {
+        expect(item.href).toMatch(backendId);
+      }
+    }
+  });
+
   it("keeps the admin Settings entry out of reach of the hidden list", () => {
     expect(ALWAYS_VISIBLE_NAV_HREFS.has("/settings")).toBe(true);
     expect(isNavItemHideable("/settings")).toBe(false);

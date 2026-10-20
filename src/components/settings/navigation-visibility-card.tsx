@@ -169,7 +169,7 @@ export function NavigationVisibilityCard() {
                 <Button
                   variant="outline"
                   onClick={showAll}
-                  disabled={saveMutation.isPending || hidden.size === 0}
+                  disabled={saveMutation.isPending || hiddenCount === 0}
                 >
                   Show all
                 </Button>
