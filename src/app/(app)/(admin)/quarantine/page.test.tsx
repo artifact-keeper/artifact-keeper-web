@@ -179,6 +179,7 @@ describe("QuarantineHoldsPage", () => {
     expect(screen.getByText("held-b.whl")).toBeInTheDocument();
     expect(screen.getAllByText("proxy-cache")).toHaveLength(2);
     expect(screen.getAllByText(/Listed only/i)).toHaveLength(2);
+    expect(screen.getAllByText(/proxy-cache\/\{repo\}\/release/)).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Release" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
   });

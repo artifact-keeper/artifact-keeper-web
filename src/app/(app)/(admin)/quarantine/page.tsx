@@ -155,7 +155,7 @@ export default function QuarantineHoldsPage() {
           <h1 className="text-xl font-semibold">Quarantine</h1>
           <p className="text-sm text-muted-foreground">
             Hosted packages held after upload, plus proxy-cache holds. Release and Reject
-            apply to hosted artifacts only.
+            in this table apply to hosted artifacts.
           </p>
         </div>
       </div>
@@ -277,7 +277,7 @@ export default function QuarantineHoldsPage() {
                   <td className="px-3 py-2">
                     {!hold.artifactId ? (
                       <span className="text-xs text-muted-foreground">
-                        Listed only. Release and Reject apply to hosted artifacts.
+                        Listed only. Release it with POST /api/v1/quarantine/proxy-cache/{"{repo}"}/release; Reject is hosted-only.
                       </span>
                     ) : hold.kind === "rejected" ? (
                       <span className="text-xs text-muted-foreground/60">Terminal</span>
