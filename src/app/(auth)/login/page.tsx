@@ -483,6 +483,26 @@ function LoginContent() {
             </Form>
           )}
 
+          {optionsLoaded && !localLoginOffered && ldapProviders.length > 0 && (
+            // With an LDAP provider enabled and local login not advertised,
+            // every form on the page binds to LDAP, so the built-in admin had
+            // no visible way back to its own password (#4857). Point at the
+            // existing ?fallback=local escape hatch instead of advertising the
+            // break-glass path in the backend flag: the login endpoint still
+            // enforces the policy and rejects everyone but a verified admin.
+            <div className="mt-3 text-center">
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs text-muted-foreground"
+                onClick={() => router.push("/login?fallback=local")}
+              >
+                Sign in with a local account
+              </Button>
+            </div>
+          )}
+
           {optionsLoaded && redirectProviders.length > 0 && (
             <>
               {showLocalForm && (
