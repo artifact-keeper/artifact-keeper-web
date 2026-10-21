@@ -1,15 +1,81 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockApiFetch = vi.fn();
-vi.mock("../fetch", () => ({
+vi.mock("../fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fetch")>()),
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
+vi.mock("@/lib/sdk-client", () => ({}));
 
 import { serviceAccountsApi } from "../service-accounts";
 
 describe("serviceAccountsApi", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // ---- enum narrowing (#905 review) ----
+
+  describe("narrows scope_error and reason at the API boundary", () => {
+    beforeEach(() => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    it("maps an unknown scope_error on a token row to 'unknown' and keeps known ones", async () => {
+      mockApiFetch.mockResolvedValue({
+        items: [
+          { id: "a", scope_error: "invalid_selector" },
+          { id: "b", scope_error: "something_new" },
+          { id: "c" },
+        ],
+      });
+
+      const [a, b, c] = await serviceAccountsApi.listTokens("sa-1");
+
+      expect(a.scope_error).toBe("invalid_selector");
+      expect(b.scope_error).toBe("unknown");
+      expect(c.scope_error).toBeUndefined();
+    });
+
+    it("narrows scope-analysis scope_error and member reasons", async () => {
+      mockApiFetch.mockResolvedValue({
+        unreachable_member_count: 2,
+        scope_error: "brand_new_error",
+        unreachable: [
+          {
+            virtual_repo_key: "v",
+            members: [
+              { repo_key: "m1", reason: "no_grant" },
+              { repo_key: "m2", reason: "brand_new_reason" },
+            ],
+          },
+        ],
+      });
+
+      const result = await serviceAccountsApi.getTokenScopeAnalysis("sa-1", "tok-1");
+
+      expect(result.scope_error).toBe("unknown");
+      expect(result.unreachable[0].members.map((m) => m.reason)).toEqual([
+        "no_grant",
+        "unknown",
+      ]);
+    });
+
+    it("narrows preview member reasons and leaves an absent unreachable alone", async () => {
+      mockApiFetch.mockResolvedValueOnce({
+        matched_repositories: [],
+        total: 0,
+        unreachable: [
+          { virtual_repo_key: "v", members: [{ repo_key: "m", reason: "x" }] },
+        ],
+      });
+      const withUnreachable = await serviceAccountsApi.previewRepoSelector({});
+      expect(withUnreachable.unreachable?.[0].members[0].reason).toBe("unknown");
+
+      mockApiFetch.mockResolvedValueOnce({ matched_repositories: [], total: 0 });
+      const without = await serviceAccountsApi.previewRepoSelector({});
+      expect(without.unreachable).toBeUndefined();
+    });
   });
 
   // ---- list ----

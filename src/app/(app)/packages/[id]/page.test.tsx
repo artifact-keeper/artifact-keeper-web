@@ -59,6 +59,16 @@ describe("PackageDetailPage virtual-repo context", () => {
     expect(queryKeys).toContainEqual(["package-detail", "pkg-1", "npm-virtual"]);
   });
 
+  it("passes the repository_key search param to the versions lookup", () => {
+    searchParams = new URLSearchParams("repository_key=npm-virtual");
+    render(<PackageDetailPage />);
+
+    expect(mockGetVersions).toHaveBeenCalledWith("pkg-1", {
+      repository_key: "npm-virtual",
+    });
+    expect(queryKeys).toContainEqual(["package-versions", "pkg-1", "npm-virtual"]);
+  });
+
   it("omits the key when the link carried none", () => {
     searchParams = new URLSearchParams();
     render(<PackageDetailPage />);

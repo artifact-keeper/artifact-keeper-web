@@ -32,6 +32,10 @@ const REASON_COPY: Record<UnreachableReason, { label: string; fix: string }> = {
     label: "This service account has no read access",
     fix: "Grant the service account read access on the virtual repository or these member repositories; widening the token's scope cannot fix this.",
   },
+  unknown: {
+    label: "Unreachable for a reason this console does not recognise",
+    fix: "The server reported a reason this version of the web console does not know. Upgrading the console will show the remedy.",
+  },
 };
 
 const SCOPE_ERROR_COPY: Record<
@@ -59,9 +63,16 @@ const SCOPE_ERROR_COPY: Record<
     detail:
       "All repositories this token was pinned to have been deleted, so it denies access to all repositories. Recreate the token with existing repositories.",
   },
+  unknown: {
+    badge: "Scope error",
+    ariaLabel: "Repository scope error, show details",
+    label: "Repository restriction error",
+    detail:
+      "The server reports that this token's repository restriction denies access, for a reason this version of the web console does not recognise. Upgrading the console will show the details.",
+  },
 };
 
-const REASON_ORDER: UnreachableReason[] = ["no_grant", "out_of_token_scope"];
+const REASON_ORDER: UnreachableReason[] = ["no_grant", "out_of_token_scope", "unknown"];
 
 function groupByReason(unreachable: UnreachableVirtual[]) {
   const groups = new Map<UnreachableReason, string[]>();

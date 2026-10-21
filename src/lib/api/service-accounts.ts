@@ -1,4 +1,4 @@
-import { apiFetch } from './fetch';
+import { apiFetch, narrowEnum } from './fetch';
 import { readTokenExpiryInfo, type TokenExpiryInfo } from './token-policy';
 
 export interface ServiceAccount {
@@ -64,18 +64,57 @@ export interface RepoSelector {
 /**
  * Why one member of a virtual repository is out of reach for a token
  * (backend artifact-keeper#4215). A closed set, so the UI groups on it rather
- * than parsing the message.
+ * than parsing the message. `unknown` stands in for a value this web build
+ * does not model yet, so the badge degrades instead of breaking the table.
  */
-export type UnreachableReason = 'out_of_token_scope' | 'no_grant';
+export type UnreachableReason = 'out_of_token_scope' | 'no_grant' | 'unknown';
 
 /**
  * Why a token's stored repository restriction denies all repositories
- * (backend artifact-keeper#4215).
+ * (backend artifact-keeper#4215). `unknown` as for `UnreachableReason`: no
+ * known value is a safe stand-in, because each one names a different fix.
  */
 export type TokenScopeError =
   | 'invalid_selector'
   | 'selector_matches_nothing'
-  | 'deleted_pinned_repositories';
+  | 'deleted_pinned_repositories'
+  | 'unknown';
+
+const UNREACHABLE_REASONS: ReadonlySet<UnreachableReason> = new Set([
+  'out_of_token_scope',
+  'no_grant',
+]);
+
+const TOKEN_SCOPE_ERRORS: ReadonlySet<TokenScopeError> = new Set([
+  'invalid_selector',
+  'selector_matches_nothing',
+  'deleted_pinned_repositories',
+]);
+
+function narrowScopeError(value: unknown): TokenScopeError | undefined {
+  if (value === undefined || value === null) return undefined;
+  return narrowEnum(
+    String(value),
+    TOKEN_SCOPE_ERRORS,
+    'unknown',
+    `serviceAccountsApi: unknown scope_error "${String(value)}"`,
+  );
+}
+
+function narrowUnreachable(unreachable: UnreachableVirtual[] | undefined) {
+  return unreachable?.map((v) => ({
+    ...v,
+    members: v.members.map((m) => ({
+      ...m,
+      reason: narrowEnum(
+        String(m.reason),
+        UNREACHABLE_REASONS,
+        'unknown',
+        `serviceAccountsApi: unknown unreachable reason "${String(m.reason)}"`,
+      ),
+    })),
+  }));
+}
 
 export interface UnreachableMember {
   repo_key: string;
@@ -104,7 +143,7 @@ export interface PreviewRepoSelectorResponse {
   total: number;
   /**
    * Members of a matched virtual repository this scope would not reach
-   * (backend artifact-keeper#4215). Absent on backends before 1.11, and only
+   * (backend artifact-keeper#4215). Absent on backends before 1.12, and only
    * populated when the preview is asked on behalf of a service account.
    */
   unreachable?: UnreachableVirtual[];
@@ -172,7 +211,9 @@ export const serviceAccountsApi = {
     const data = await apiFetch<{ items: ServiceAccountToken[] }>(
       `/api/v1/service-accounts/${id}/tokens`
     );
-    return data.items;
+    return data.items.map((t) =>
+      t.scope_error === undefined ? t : { ...t, scope_error: narrowScopeError(t.scope_error) }
+    );
   },
 
   createToken: async (
@@ -204,7 +245,7 @@ export const serviceAccountsApi = {
     selector: RepoSelector,
     serviceAccountId?: string
   ): Promise<PreviewRepoSelectorResponse> => {
-    return apiFetch<PreviewRepoSelectorResponse>(
+    const data = await apiFetch<PreviewRepoSelectorResponse>(
       '/api/v1/service-accounts/repo-selector/preview',
       {
         method: 'POST',
@@ -214,6 +255,9 @@ export const serviceAccountsApi = {
         }),
       }
     );
+    return data.unreachable === undefined
+      ? data
+      : { ...data, unreachable: narrowUnreachable(data.unreachable) };
   },
 
   /**
@@ -225,9 +269,14 @@ export const serviceAccountsApi = {
     accountId: string,
     tokenId: string
   ): Promise<TokenScopeAnalysis> => {
-    return apiFetch<TokenScopeAnalysis>(
+    const data = await apiFetch<TokenScopeAnalysis>(
       `/api/v1/service-accounts/${encodeURIComponent(accountId)}/tokens/${encodeURIComponent(tokenId)}/scope-analysis`
     );
+    return {
+      ...data,
+      unreachable: narrowUnreachable(data.unreachable) ?? [],
+      scope_error: narrowScopeError(data.scope_error),
+    };
   },
 };
 

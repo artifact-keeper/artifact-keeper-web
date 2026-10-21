@@ -138,6 +138,40 @@ describe("TokenScopeWarning (artifact-keeper#4215)", () => {
     }
   );
 
+  // #905 review: an enum value the web does not model must degrade to a
+  // generic badge, not throw inside the tokens table cell.
+  it("renders a generic badge and explanation for an unknown scope_error", async () => {
+    mockGetTokenScopeAnalysis.mockResolvedValue({
+      unreachable_member_count: 0,
+      unreachable: [],
+      scope_error: "unknown",
+    });
+    renderWarning(0, "unknown");
+
+    expect(screen.getByText("Scope error")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Repository scope error, show details/i })
+    );
+    expect(await screen.findByText(/does not recognise/)).toBeInTheDocument();
+    expect(screen.queryByText(/reaches every member/)).not.toBeInTheDocument();
+  });
+
+  it("groups an unknown member reason last with a generic remedy", async () => {
+    mockGetTokenScopeAnalysis.mockResolvedValue({
+      unreachable_member_count: 1,
+      unreachable: [
+        { virtual_repo_key: "v", members: [{ repo_key: "m", reason: "unknown" }] },
+      ],
+    });
+    renderWarning(1);
+
+    await userEvent.click(screen.getByRole("button", { name: /1 unreachable/i }));
+    expect(await screen.findByText("m")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Unreachable for a reason this console does not recognise/)
+    ).toBeInTheDocument();
+  });
+
   it("shows the all-clear only when the analysis succeeds with no scope_error and no members", async () => {
     mockGetTokenScopeAnalysis.mockResolvedValue({
       unreachable_member_count: 0,
