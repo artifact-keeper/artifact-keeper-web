@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **With an LDAP provider enabled, the login page offers a way back to the local admin account** (artifact-keeper#4857) - since 1.11.1 (#899) an enabled LDAP provider without `ALLOW_LOCAL_ADMIN_LOGIN` showed only the LDAP form, which binds to the directory, so the built-in admin looked locked out even though the server still accepts its password. The page now shows a muted "Sign in with a local account" link under the LDAP form that opens the existing `/login?fallback=local` form. The backend's `local_login_enabled` flag is unchanged and the login endpoint still rejects local passwords from everyone but a verified admin, so the link gives an ordinary user nothing new. Not covered: an OIDC- or SAML-only page shows no such link; `/login?fallback=local` remains the way in there.
+
 ## [1.11.1] - 2026-10-18
 
 ### Sponsors
