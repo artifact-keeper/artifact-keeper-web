@@ -85,5 +85,13 @@ describe("PackagesTabContent virtual-repo context", () => {
       "pkg-1",
       "npm-virtual",
     ]);
+    expect(mockGetVersions).toHaveBeenCalledWith("pkg-1", {
+      repository_key: "npm-virtual",
+    });
+    expect(queryKeys).toContainEqual([
+      "package-versions",
+      "pkg-1",
+      "npm-virtual",
+    ]);
   });
 });
