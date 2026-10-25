@@ -56,6 +56,18 @@ export interface PermissionsConfig {
   enforcement_enabled: boolean;
 }
 
+/**
+ * Presentation settings an administrator chose for every user (#968, backend
+ * artifact-keeper#4574).
+ */
+export interface UiConfig {
+  /**
+   * Sidebar entries (by route, e.g. "/peers") hidden for everyone. Navigation
+   * only: hidden pages stay reachable and keep their permission checks.
+   */
+  hidden_nav_items: string[];
+}
+
 export interface SystemConfig {
   max_upload_size_bytes: number;
   demo_mode: boolean;
@@ -66,6 +78,7 @@ export interface SystemConfig {
   auth: AuthProvidersConfig;
   oidc_issuer?: string;
   permissions: PermissionsConfig;
+  ui: UiConfig;
 }
 
 const ScannersSchema = z.object({
@@ -91,6 +104,16 @@ const AuthSchema = z.object({
   // anonymous).
   silent_sso_enabled: z.boolean().default(true),
 });
+
+// Public-tier field added in backend artifact-keeper#4574. Older backends omit
+// it, which means nothing is hidden. A malformed value also degrades to
+// "nothing hidden" instead of failing the whole parse: a broken hidden list
+// must never take the login page's auth fields down with it.
+const UiSchema = z
+  .object({
+    hidden_nav_items: z.array(z.string()).catch([]).default([]),
+  })
+  .catch({ hidden_nav_items: [] });
 
 const PermissionsSchema = z.object({
   rules_exist: z.boolean(),
@@ -141,6 +164,7 @@ const SystemConfigSchema = z
     auth: AuthSchema,
     oidc_issuer: z.string().optional(),
     permissions: PermissionsSchema.default(ADMIN_ONLY_FALLBACKS.permissions),
+    ui: UiSchema.default(() => ({ hidden_nav_items: [] })),
   })
   .passthrough();
 
@@ -173,6 +197,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     silent_sso_enabled: true,
   },
   permissions: ADMIN_ONLY_FALLBACKS.permissions(),
+  ui: { hidden_nav_items: [] },
 };
 
 export function parseSystemConfig(data: unknown): SystemConfig {
@@ -193,6 +218,7 @@ export function parseSystemConfig(data: unknown): SystemConfig {
     auth: c.auth,
     oidc_issuer: c.oidc_issuer,
     permissions: c.permissions,
+    ui: { hidden_nav_items: c.ui.hidden_nav_items },
   };
 }
 
