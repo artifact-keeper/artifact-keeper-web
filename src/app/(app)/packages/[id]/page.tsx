@@ -150,8 +150,8 @@ function PackageDetailContent() {
 
   // Fetch versions
   const { data: versions, isLoading: versionsLoading } = useQuery({
-    queryKey: ["package-versions", packageId],
-    queryFn: () => packagesApi.getVersions(packageId),
+    queryKey: ["package-versions", packageId, repositoryKey],
+    queryFn: () => packagesApi.getVersions(packageId, { repository_key: repositoryKey }),
     enabled: !!packageId,
   });
 

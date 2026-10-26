@@ -98,4 +98,12 @@ describe("PackagesPage virtual-repo context", () => {
       repository_key: "npm-virtual",
     });
   });
+
+  it("passes the selected row's repository key to the versions lookup", () => {
+    render(<PackagesPage />);
+
+    expect(mockGetVersions).toHaveBeenCalledWith("pkg-1", {
+      repository_key: "npm-virtual",
+    });
+  });
 });

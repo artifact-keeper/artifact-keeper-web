@@ -87,8 +87,9 @@ export function PackagesTabContent({
 
   // Fetch versions for selected package
   const { data: packageVersions, isLoading: versionsLoading } = useQuery({
-    queryKey: ["package-versions", selectedPackageId],
-    queryFn: () => packagesApi.getVersions(selectedPackageId!),
+    queryKey: ["package-versions", selectedPackageId, repositoryKey],
+    queryFn: () =>
+      packagesApi.getVersions(selectedPackageId!, { repository_key: repositoryKey }),
     enabled: !!selectedPackageId,
   });
 
