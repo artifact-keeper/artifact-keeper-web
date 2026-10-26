@@ -436,6 +436,7 @@ const secondLdapProvider: SsoProvider = {
 
 describe("LoginPage LDAP tabs when local login is disabled (#899)", () => {
   beforeEach(() => {
+    mockPush.mockClear();
     mockLogin.mockReset();
     mockRefreshUser.mockReset();
     mockListProviders.mockReset();
@@ -522,6 +523,28 @@ describe("LoginPage LDAP tabs when local login is disabled (#899)", () => {
       "aria-selected",
       "false",
     );
+  });
+
+  it("offers a 'Sign in with a local account' link to ?fallback=local when only LDAP forms are shown (#4857)", async () => {
+    mockListProviders.mockResolvedValue([ldapProvider]);
+
+    await renderAndWaitForProviders();
+
+    const link = await screen.findByText("Sign in with a local account");
+    fireEvent.click(link);
+    expect(mockPush).toHaveBeenCalledWith("/login?fallback=local");
+  });
+
+  it("does not show the local-account link when local login is already offered (#4857)", async () => {
+    systemConfigState.config.auth.local_login_enabled = true;
+    mockListProviders.mockResolvedValue([ldapProvider]);
+
+    await renderAndWaitForProviders();
+
+    await screen.findByRole("tab", { name: "Local" });
+    expect(
+      screen.queryByText("Sign in with a local account"),
+    ).not.toBeInTheDocument();
   });
 
   it("?fallback=local brings the Local tab back, selected, next to LDAP", async () => {
