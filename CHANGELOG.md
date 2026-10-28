@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Next.js 16.4.3 closes three framework advisories in the web server** (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r) - Next.js 16.0.0 through 16.4.0, which included the pinned 16.3.8, has two critical unauthenticated remote code execution flaws (the image optimization API with SVG files, and `use cache` functions returning typed arrays) and a high-severity App Router denial of service through Server Actions. `next` moves to 16.4.3 and `eslint-config-next` to match; `npm audit --omit=dev` is clean again. This is a minor framework bump, not a patch: the build and the unit, lint and E2E suites pass unchanged.
+
 ### Fixed
 
 - **With an LDAP provider enabled, the login page offers a way back to the local admin account** (artifact-keeper#4857) - since 1.11.1 (#899) an enabled LDAP provider without `ALLOW_LOCAL_ADMIN_LOGIN` showed only the LDAP form, which binds to the directory, so the built-in admin looked locked out even though the server still accepts its password. The page now shows a muted "Sign in with a local account" link under the LDAP form that opens the existing `/login?fallback=local` form. The backend's `local_login_enabled` flag is unchanged and the login endpoint still rejects local passwords from everyone but a verified admin, so the link gives an ordinary user nothing new. Not covered: an OIDC- or SAML-only page shows no such link; `/login?fallback=local` remains the way in there.
