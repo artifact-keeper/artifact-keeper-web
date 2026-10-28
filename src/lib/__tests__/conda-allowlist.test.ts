@@ -295,6 +295,23 @@ describe("describeAllowlistAudit", () => {
     ).toBe("v: unreadable → off, 0 entries");
   });
 
+  it("names a remote_only scope and keeps the default terse (artifact-keeper#5055)", () => {
+    expect(
+      describeAllowlistAudit({
+        repository: "v",
+        previous: { enabled: true, scope: "all_members", entry_count: 2 },
+        current: { enabled: true, scope: "all_members", entry_count: 3 },
+      }),
+    ).toBe("v: on, 2 → on, 3 entries");
+    expect(
+      describeAllowlistAudit({
+        repository: "v",
+        previous: { enabled: true, scope: "all_members", entry_count: 2 },
+        current: { enabled: true, scope: "remote_only", entry_count: 2 },
+      }),
+    ).toBe("v: on, 2 entries → on, 2 entries, remote members only");
+  });
+
   it("returns null for details of another shape", () => {
     expect(describeAllowlistAudit(null)).toBeNull();
     expect(describeAllowlistAudit({ repository: "v" })).toBeNull();

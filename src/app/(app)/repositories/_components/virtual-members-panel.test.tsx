@@ -82,9 +82,10 @@ describe("VirtualMembersPanel", () => {
   it("states the name-ownership rule for conda virtual channels", async () => {
     mockListMembers.mockResolvedValue(MEMBERS);
     renderPanel("conda");
-    expect(await screen.findByTestId("conda-name-ownership-note")).toHaveTextContent(
-      /Hosted members own their package names/,
-    );
+    const note = await screen.findByTestId("conda-name-ownership-note");
+    expect(note).toHaveTextContent(/Hosted members own their package names/);
+    // artifact-keeper#5055: ownership outlives an allowlist that drops the package.
+    expect(note).toHaveTextContent(/even when the channel's allowlist leaves the hosted package out/);
   });
 
   it("does not show the conda note for other formats", async () => {

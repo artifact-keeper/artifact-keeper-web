@@ -186,8 +186,10 @@ export function VirtualMembersPanel({ repository }: VirtualMembersPanelProps) {
             </span>{" "}
             When a hosted member publishes a package name, versions of that
             name from remote members are left out of this channel&apos;s
-            repodata, so a public package cannot shadow an internal one. Other
-            names are merged in priority order. (Backend 1.11.0 and later.)
+            repodata, so a public package cannot shadow an internal one. This
+            holds even when the channel&apos;s allowlist leaves the hosted
+            package out. Other names are merged in priority order. (Backend
+            1.11.0 and later.)
           </p>
         </div>
       )}

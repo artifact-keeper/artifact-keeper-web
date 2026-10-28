@@ -8,7 +8,10 @@ import { toast } from "sonner";
 import {
   allowlistQueryKey,
   condaAllowlistApi,
+  filtersHostedMembers,
   type CondaAllowlist,
+  type CondaAllowlistRequest,
+  type CondaAllowlistScope,
 } from "@/lib/api/conda-allowlist";
 import { apiErrorMessage } from "@/lib/api/fetch";
 import {
@@ -57,7 +60,28 @@ interface Row {
 const PAGE = 100;
 
 export const EMPTY_ENABLED_WARNING =
-  "An enabled empty list admits nothing from remote members; hosted members are never filtered.";
+  "An enabled empty list admits nothing: the channel serves no packages from any member.";
+export const EMPTY_ENABLED_WARNING_REMOTE_ONLY =
+  "An enabled empty list admits nothing from remote members; hosted members still pass through.";
+
+/** The two scopes the backend accepts (artifact-keeper#5055). */
+const SCOPE_OPTIONS: { value: CondaAllowlistScope; label: string; hint: string }[] = [
+  {
+    value: "all_members",
+    label: "All members (default)",
+    hint: "Hosted (local and staging) and remote members are filtered.",
+  },
+  {
+    value: "remote_only",
+    label: "Remote members only",
+    hint: "Hosted members pass through unfiltered, as before backend 1.11.9.",
+  },
+];
+
+/** No scope reported: a backend before 1.11.9, which filters remote members only. */
+export function scopeLabel(scope: CondaAllowlistScope | null): string {
+  return scope === "all_members" ? "all members" : "remote members only";
+}
 
 let nextRowId = 1;
 function toRow(e: AllowlistEntry): Row {
@@ -77,9 +101,16 @@ function toEntry(r: Row): AllowlistEntry {
   });
 }
 
-function sameList(enabled: boolean, rows: Row[], server: CondaAllowlist | undefined): boolean {
+function sameList(
+  enabled: boolean,
+  scope: CondaAllowlistScope | null,
+  rows: Row[],
+  server: CondaAllowlist | undefined,
+): boolean {
   if (!server) return true;
-  if (enabled !== server.enabled || rows.length !== server.entries.length) return false;
+  if (enabled !== server.enabled || scope !== server.scope || rows.length !== server.entries.length) {
+    return false;
+  }
   return JSON.stringify(rows.map(toEntry)) ===
     JSON.stringify(server.entries.map(normalizeAllowlistEntry));
 }
@@ -99,10 +130,13 @@ interface CondaAllowlistSettingsProps {
 
 /**
  * The package allowlist of a virtual conda repository (#971, backend
- * artifact-keeper#4576). It restricts what the virtual's REMOTE members
- * contribute to its repodata, channeldata and downloads; hosted members are
- * never filtered. The backend replaces the whole list on each `PUT`, so edits
- * here are local until "Save allowlist".
+ * artifact-keeper#4576). It restricts what the virtual channel serves in its
+ * index and on downloads through it. Since backend 1.11.9
+ * (artifact-keeper#5055) it applies to every member by default, with a
+ * `remote_only` scope that restores the earlier remote-only filtering; an
+ * older backend reports no scope and filters remote members only. The
+ * backend replaces the whole list on each `PUT`, so edits here are local
+ * until "Save allowlist".
  */
 export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAllowlistSettingsProps) {
   const queryClient = useQueryClient();
@@ -114,14 +148,16 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
   });
 
   const [enabled, setEnabled] = useState(false);
+  const [scope, setScope] = useState<CondaAllowlistScope | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [synced, setSynced] = useState<CondaAllowlist | null>(null);
-  const dirty = synced !== null && !sameList(enabled, rows, synced);
+  const dirty = synced !== null && !sameList(enabled, scope, rows, synced);
   // Adopt fresh server data unless there are unsaved edits (the routing-rules
   // pattern: adjust state during render, never clobber local edits).
   if (data && data !== synced && !dirty) {
     setSynced(data);
     setEnabled(data.enabled);
+    setScope(data.scope);
     setRows(data.entries.map(toRow));
   }
 
@@ -160,13 +196,21 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
     queryClient.setQueryData(queryKey, resp);
     setSynced(resp);
     setEnabled(resp.enabled);
+    setScope(resp.scope);
     setRows(resp.entries.map(toRow));
     setServerError(null);
   };
 
   const save = useMutation({
-    mutationFn: () =>
-      condaAllowlistApi.set(repository.key, { enabled, entries: rows.map(toEntry) }),
+    mutationFn: () => {
+      const body: CondaAllowlistRequest = { enabled, entries: rows.map(toEntry) };
+      // `scope` only goes to a backend that reported one: an older backend
+      // refuses unknown fields with a 400. Sent every time it is known, so
+      // switching back to all members is explicit (an omitted scope keeps
+      // the stored one).
+      if (scope !== null) body.scope = scope;
+      return condaAllowlistApi.set(repository.key, body);
+    },
     onSuccess: (resp) => {
       applyResponse(resp);
       toast.success(`Allowlist saved: ${resp.enabled ? "on" : "off"}, ${resp.entry_count} entries`);
@@ -281,10 +325,14 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
   );
   const intro = (
     <p className="text-xs text-muted-foreground mb-4 max-w-3xl">
-      Restrict what this channel takes from its remote members to an approved
-      set of packages. A remote package the list does not admit is left out of
-      the channel&apos;s repodata and channeldata, and its download answers 404.
-      Hosted members are never filtered. Names are exact or{" "}
+      Restrict what this channel serves to an approved set of packages. A
+      package the list does not admit is left out of the channel&apos;s index
+      (repodata, shards, channeldata) and its download through the channel
+      answers 404. On backend 1.11.9 and later the list applies to every
+      member, hosted and remote, unless it is set to remote members only. A
+      hosted package the list leaves out still owns its name, so upstream
+      packages of that name stay out too. The hosted repositories themselves
+      still serve their packages directly. Names are exact or{" "}
       <code className="font-mono">*</code>/<code className="font-mono">?</code>{" "}
       globs (case-insensitive); versions are conda match specs such as{" "}
       <code className="font-mono">2.2.3</code>, <code className="font-mono">2.2.*</code> or{" "}
@@ -326,8 +374,8 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
       <AlertTriangle />
       <AlertTitle>The stored allowlist cannot be read</AlertTitle>
       <AlertDescription>
-        Nothing from remote members is admitted until a valid list is saved
-        or the list is removed. The server reports:{" "}
+        Nothing from {filtersHostedMembers(data) ? "any member" : "remote members"} is admitted
+        until a valid list is saved or the list is removed. The server reports:{" "}
         <span className="font-mono">{data.error}</span>
       </AlertDescription>
     </Alert>
@@ -458,8 +506,9 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
         </div>
         {storedError}
         <p className="text-sm">
-          The allowlist is <strong>{data.enabled ? "enforced" : "not enforced"}</strong>. Only a
-          repository administrator can change it.
+          The allowlist is <strong>{data.enabled ? "enforced" : "not enforced"}</strong> and
+          applies to <strong data-testid="allowlist-scope-readonly">{scopeLabel(data.scope)}</strong>.
+          Only a repository administrator can change it.
         </p>
         {table}
       </section>
@@ -483,11 +532,42 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
         />
         <Label htmlFor="allowlist-enabled">Enforce the allowlist</Label>
       </div>
+      {scope !== null ? (
+        <fieldset className="space-y-2" data-testid="allowlist-scope" disabled={busy}>
+          <legend className="text-sm font-medium mb-1">Applies to</legend>
+          {SCOPE_OPTIONS.map((o) => (
+            <label key={o.value} className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                name="allowlist-scope"
+                value={o.value}
+                checked={scope === o.value}
+                onChange={() => setScope(o.value)}
+                aria-describedby={`allowlist-scope-${o.value}-hint`}
+                className="mt-1 accent-primary"
+              />
+              <span>
+                {o.label}
+                <span id={`allowlist-scope-${o.value}-hint`} className="block text-xs text-muted-foreground">
+                  {o.hint}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : (
+        <p className="text-xs text-muted-foreground" data-testid="allowlist-scope-unsupported">
+          This server filters remote members only; hosted members pass through. Backend 1.11.9
+          and later filter every member by default and let you choose.
+        </p>
+      )}
       {enabled && rows.length === 0 && (
         <Alert data-testid="allowlist-empty-warning">
           <AlertTriangle />
           <AlertTitle>The list is empty</AlertTitle>
-          <AlertDescription>{EMPTY_ENABLED_WARNING}</AlertDescription>
+          <AlertDescription>
+            {scope === "all_members" ? EMPTY_ENABLED_WARNING : EMPTY_ENABLED_WARNING_REMOTE_ONLY}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -528,6 +608,7 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
           disabled={!dirty || busy}
           onClick={() => {
             setEnabled(data.enabled);
+            setScope(data.scope);
             setRows(data.entries.map(toRow));
             setServerError(null);
             setNotice(null);
@@ -694,7 +775,7 @@ export function CondaAllowlistSettings({ repository, readOnly = false }: CondaAl
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
         title="Remove the allowlist?"
-        description={`${repository.key} will take every package its remote members offer again. The ${data.entry_count} entries are deleted.`}
+        description={`${repository.key} will serve every package its members offer again. The ${data.entry_count} entries are deleted.`}
         confirmText="Remove"
         danger
         loading={remove.isPending}
