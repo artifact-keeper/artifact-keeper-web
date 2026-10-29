@@ -7,9 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.2] - 2026-10-29
+
+### Sponsors
+
+Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
+
+**Backers**
+
+- **Advailo, SIA** ([@advailo](https://github.com/advailo))
+- **stringke** ([@StringKe](https://github.com/StringKe))
+- **Ash A.** ([@dragonpaw](https://github.com/dragonpaw))
+- **Mike** ([@huylv95](https://github.com/huylv95))
+- **Gabriel Rodriguez** ([@injectedfusion](https://github.com/injectedfusion))
+- **Narek Engibaryan** ([@narek01](https://github.com/narek01))
+- and one sponsor who chose to stay private
+
+[Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
+
+### Thank You
+
+- **[@trourance](https://github.com/trourance)** for reporting that the built-in admin could no longer sign in with a local account once an LDAP provider was enabled (artifact-keeper#4857, #1044).
+
 ### Security
 
-- **Next.js 16.4.3 closes three framework advisories in the web server** (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r) - Next.js 16.0.0 through 16.4.0, which included the pinned 16.3.8, has two critical unauthenticated remote code execution flaws (the image optimization API with SVG files, and `use cache` functions returning typed arrays) and a high-severity App Router denial of service through Server Actions. `next` moves to 16.4.3 and `eslint-config-next` to match; `npm audit --omit=dev` is clean again. This is a minor framework bump, not a patch: the build and the unit, lint and E2E suites pass unchanged.
+- **Updates Next.js to 16.4.3** - the web server ran Next.js 16.3.8. `next` moves to 16.4.3 and `eslint-config-next` to match, and `npm audit --omit=dev` is clean again. This is a minor framework bump, not a patch: the build and the unit, lint and E2E suites pass unchanged.
 
 ### Fixed
 
