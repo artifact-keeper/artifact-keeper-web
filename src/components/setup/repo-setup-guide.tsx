@@ -995,28 +995,43 @@ code-server`,
     case "protobuf":
       return [
         {
+          title: "Point a hostname at this repository",
+          // A buf module name is exactly registry/owner/name, and buf only
+          // prepends a scheme to the registry segment before appending the RPC
+          // path -- there is nowhere to put the /proto/<repo> prefix this
+          // server serves BSR under. So the repository needs a host of its own
+          // whose root maps onto that prefix; nothing the CLI accepts can
+          // stand in for it.
+          description: `A buf module name is always registry/owner/name, so it cannot carry this repository's /proto/${repoKey} path. Give the repository a hostname whose root maps onto ${REGISTRY_URL}/proto/${repoKey}/, then use that hostname below.`,
+          code: `# nginx, on the host serving bsr.example.com
+location / {
+    proxy_pass ${REGISTRY_URL}/proto/${repoKey}/;
+}`,
+        },
+        {
           title: "Configure buf.yaml",
-          description: "Set the registry in your module's buf.yaml:",
+          description: "Name the module after that hostname:",
           code: `# buf.yaml
 version: v2
 modules:
   - path: proto
-    name: ${REGISTRY_HOST}/proto/${repoKey}/myorg/mymodule`,
+    name: bsr.example.com/myorg/mymodule`,
         },
         {
           title: "Authenticate with buf CLI",
-          code: `buf registry login ${REGISTRY_HOST} --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
+          code: `buf registry login bsr.example.com --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
         },
         {
           title: "Push a module",
-          code: `buf push --registry ${REGISTRY_URL}/proto/${repoKey}`,
+          description: "buf push reads its destination from buf.yaml:",
+          code: `buf push --create`,
         },
         {
           title: "Add a dependency",
           description: "In buf.yaml, add deps and run update:",
           code: `# buf.yaml
 deps:
-  - ${REGISTRY_HOST}/proto/${repoKey}/owner/module
+  - bsr.example.com/owner/module
 
 # Then resolve:
 buf dep update`,
