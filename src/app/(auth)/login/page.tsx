@@ -328,7 +328,7 @@ function LoginContent() {
         <CardHeader className="text-center pb-2">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center">
             <Image
-              src="/logo-48.png"
+              src="/logo-96.png"
               alt="Artifact Keeper"
               width={48}
               height={48}

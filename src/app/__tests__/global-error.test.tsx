@@ -32,6 +32,10 @@ describe("GlobalError", () => {
     const img = screen.getByAltText("Artifact Keeper");
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute("src", "/logo-48.png");
+    expect(img).toHaveAttribute(
+      "srcset",
+      "/logo-48.png 1x, /logo-96.png 2x",
+    );
     expect(img).toHaveAttribute("width", "48");
     expect(img).toHaveAttribute("height", "48");
   });
