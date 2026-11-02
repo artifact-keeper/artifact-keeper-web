@@ -207,11 +207,10 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
                 <Image
-                  src="/logo-48.png"
+                  src="/logo-96.png"
                   alt="Artifact Keeper"
                   width={32}
                   height={32}
-                  className="rounded-md"
                 />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
