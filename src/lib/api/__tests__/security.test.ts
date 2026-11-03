@@ -296,6 +296,109 @@ describe("securityApi", () => {
     });
   });
 
+  it("acknowledgeFinding sends the repository, expiry and scope in the body", async () => {
+    mockAcknowledgeFinding.mockResolvedValue({
+      data: { ...SDK_FINDING, is_acknowledged: true },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.acknowledgeFinding("f1", "risk_accepted", {
+      repository_id: "r2",
+      expires_at: "2027-01-01T00:00:00.000Z",
+      scope: "repository",
+    });
+    expect(mockAcknowledgeFinding).toHaveBeenCalledWith({
+      path: { id: "f1" },
+      body: {
+        reason: "risk_accepted",
+        repository_id: "r2",
+        expires_at: "2027-01-01T00:00:00.000Z",
+        scope: "repository",
+      },
+    });
+  });
+
+  it("revokeAcknowledgment names the repository in the query string", async () => {
+    mockRevokeAcknowledgment.mockResolvedValue({
+      data: { ...SDK_FINDING, acknowledgements_left_effective: 2 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const out = await mod.securityApi.revokeAcknowledgment("f1", {
+      repository_id: "r2",
+    });
+    expect(mockRevokeAcknowledgment).toHaveBeenCalledWith({
+      path: { id: "f1" },
+      query: { repository_id: "r2" },
+    });
+    expect(out.acknowledgements_left_effective).toBe(2);
+  });
+
+  it("listFindings forwards artifact_id so a copy lists its own rows", async () => {
+    mockListFindings.mockResolvedValue({
+      data: { items: [], total: 0 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    await mod.securityApi.listFindings("s1", { artifact_id: "copy-artifact" });
+    expect(mockListFindings).toHaveBeenCalledWith({
+      path: { id: "s1" },
+      query: { artifact_id: "copy-artifact" },
+    });
+  });
+
+  it("carries the decision fields of a finding", async () => {
+    mockListFindings.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ...SDK_FINDING,
+            acknowledgement_id: "d1",
+            acknowledgement_expires_at: "2027-01-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+      },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const out = await mod.securityApi.listFindings("s1");
+    expect(out.items[0].acknowledgement_id).toBe("d1");
+    expect(out.items[0].acknowledgement_expires_at).toBe("2027-01-01T00:00:00Z");
+  });
+
+  it("carries which copy a reused scan row belongs to", async () => {
+    mockListScans.mockResolvedValue({
+      data: {
+        items: [{ ...SDK_SCAN, is_reused: true, source_scan_id: "s0" }],
+        total: 1,
+      },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const out = await mod.securityApi.listScans();
+    expect(out.items[0].is_reused).toBe(true);
+    expect(out.items[0].source_scan_id).toBe("s0");
+  });
+
+  it("carries the proxy tiles of the dashboard, and leaves them unset on an older backend", async () => {
+    mockGetDashboard.mockResolvedValueOnce({
+      data: { ...SDK_DASHBOARD, proxy_blocked: 1, proxy_would_block: 3 },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const out = await mod.securityApi.getDashboard();
+    expect(out.proxy_blocked).toBe(1);
+    expect(out.proxy_would_block).toBe(3);
+
+    mockGetDashboard.mockResolvedValueOnce({
+      data: SDK_DASHBOARD,
+      error: undefined,
+    });
+    const older = await mod.securityApi.getDashboard();
+    expect(older.proxy_would_block).toBeUndefined();
+  });
+
   it("acknowledgeFinding throws on error", async () => {
     mockAcknowledgeFinding.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../security");

@@ -21,7 +21,9 @@ import {
   Key,
   PackageCheck,
   FileSignature,
+  BadgeCheck,
   Shield,
+  ShieldBan,
   ShieldCheck,
   ListChecks,
   Search,
@@ -98,6 +100,8 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "Acknowledgements", href: "/security/acknowledgements", icon: BadgeCheck },
+  { title: "Proxy Blocked", href: "/security/proxy-blocked", icon: ShieldBan },
   { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },

@@ -2,9 +2,9 @@
 
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -20,14 +20,21 @@ import {
 import { toast } from "sonner";
 
 import { securityApi } from "@/lib/api/security";
+import { acknowledgementsApi } from "@/lib/api/acknowledgements";
 import { blastRadiusHref } from "@/lib/api/blast-radius";
+import { describeRevoke, reportRevokeOutcome } from "@/lib/acknowledgements";
+import { useRepositories } from "@/hooks/use-repositories";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import {
   isScanIncomplete,
   isScanNotCataloged,
   NOT_CATALOGED_EXPLANATION,
 } from "@/lib/scan-utils";
-import type { ScanFinding } from "@/types/security";
+import type {
+  AcknowledgeOptions,
+  AcknowledgementScope,
+  ScanFinding,
+} from "@/types/security";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,11 +114,26 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+// useSearchParams() requires a Suspense boundary for static prerendering.
 export default function SecurityScanDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <ScanDetailContent />
+    </Suspense>
+  );
+}
+
+function ScanDetailContent() {
   useDocumentTitle("Scan Details");
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  // A reused scan row reports its source's id, so the id alone means the source.
+  // The link from a row carries which copy was clicked (see `scanDetailHref`).
+  const searchParams = useSearchParams();
+  const copyArtifactId = searchParams.get("artifact_id") ?? undefined;
+  const copyRepositoryId = searchParams.get("repository_id") ?? undefined;
 
   // -- pagination & filters --
   // Severity / source / CVE are applied by the backend (artifact-keeper#3410)
@@ -131,6 +153,9 @@ export default function SecurityScanDetailPage() {
   const [ackFindingId, setAckFindingId] = useState<string | null>(null);
   const [ackReason, setAckReason] = useState("risk_accepted");
   const [ackNotes, setAckNotes] = useState("");
+  const [ackExpiresAt, setAckExpiresAt] = useState("");
+  const [ackExpiryError, setAckExpiryError] = useState<string | null>(null);
+  const [ackScope, setAckScope] = useState<AcknowledgementScope>("repository");
 
   // -- revoke dialog --
   const [revokeOpen, setRevokeOpen] = useState(false);
@@ -141,6 +166,30 @@ export default function SecurityScanDetailPage() {
     queryKey: ["security", "scan", id],
     queryFn: () => securityApi.getScan(id!),
     enabled: !!id,
+  });
+
+  // The repository a decision made from this page applies in. On a copy with no
+  // repository in the link it stays unset: the scan's own repository would be the
+  // source's, so naming it could open or close the wrong gate. The backend then
+  // uses the row's repository, or asks with a 409 when that is ambiguous.
+  const viewingRepositoryId =
+    copyRepositoryId ?? (copyArtifactId ? undefined : scan?.repository_id);
+
+  const { data: repositories } = useRepositories({ per_page: 1000 });
+  const viewingRepositoryLabel = viewingRepositoryId
+    ? (repositories?.items?.find((r) => r.id === viewingRepositoryId)?.key ??
+      viewingRepositoryId.slice(0, 8))
+    : null;
+
+  // The list answers only a caller who may act in every repository, the same
+  // check `all_repositories` needs, so a 200 is what earns the option. Asked only
+  // once the dialog is open. An older backend answers 404 and offers nothing.
+  const { isSuccess: canActEverywhere } = useQuery({
+    queryKey: ["security", "acknowledgements", "can-act-everywhere"],
+    queryFn: () => acknowledgementsApi.list({ per_page: 1 }),
+    enabled: ackOpen,
+    retry: false,
+    staleTime: 60_000,
   });
 
   // `__all__` is the Select's stand-in for "no filter"; it must never reach
@@ -162,9 +211,11 @@ export default function SecurityScanDetailPage() {
       severity,
       sourceFilter || undefined,
       cveFilter || undefined,
+      copyArtifactId,
     ],
     queryFn: () =>
       securityApi.listFindings(id!, {
+        artifact_id: copyArtifactId,
         page,
         per_page: pageSize,
         severity,
@@ -176,38 +227,57 @@ export default function SecurityScanDetailPage() {
   });
 
   // -- mutations --
+  function resetAckForm() {
+    setAckFindingId(null);
+    setAckReason("risk_accepted");
+    setAckNotes("");
+    setAckExpiresAt("");
+    setAckExpiryError(null);
+    setAckScope("repository");
+  }
+
   const acknowledgeMutation = useMutation({
     mutationFn: ({
       findingId,
       reason,
+      options,
     }: {
       findingId: string;
       reason: string;
-    }) => securityApi.acknowledgeFinding(findingId, reason),
+      options: AcknowledgeOptions;
+    }) => securityApi.acknowledgeFinding(findingId, reason, options),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["security", "findings", id],
       });
       queryClient.invalidateQueries({ queryKey: ["security", "scan", id] });
+      queryClient.invalidateQueries({ queryKey: ["security", "acknowledgements"] });
       setAckOpen(false);
-      setAckReason("risk_accepted");
-      setAckNotes("");
-      setAckFindingId(null);
+      resetAckForm();
       toast.success("Finding acknowledged.");
     },
     onError: mutationErrorToast("Failed to acknowledge finding"),
   });
 
   const revokeMutation = useMutation({
-    mutationFn: securityApi.revokeAcknowledgment,
-    onSuccess: () => {
+    mutationFn: (findingId: string) =>
+      securityApi.revokeAcknowledgment(findingId, {
+        repository_id: viewingRepositoryId,
+      }),
+    onSuccess: (finding) => {
       queryClient.invalidateQueries({
         queryKey: ["security", "findings", id],
       });
       queryClient.invalidateQueries({ queryKey: ["security", "scan", id] });
+      queryClient.invalidateQueries({ queryKey: ["security", "acknowledgements"] });
       setRevokeOpen(false);
       setRevokeFindingId(null);
-      toast.success("Acknowledgment revoked.");
+      reportRevokeOutcome(
+        describeRevoke({
+          leftEffective: finding.acknowledgements_left_effective,
+          stillAcknowledged: finding.is_acknowledged,
+        }),
+      );
     },
     onError: mutationErrorToast("Failed to revoke acknowledgment"),
   });
@@ -215,6 +285,32 @@ export default function SecurityScanDetailPage() {
   const findings = findingsError ? [] : (findingsData?.items ?? []);
   const hasFilters =
     severityFilter !== "__all__" || sourceFilter !== "" || cveFilter !== "";
+
+  function submitAcknowledge() {
+    if (!ackFindingId) return;
+    const options: AcknowledgeOptions = {};
+    if (ackExpiresAt) {
+      const expires = new Date(ackExpiresAt);
+      if (Number.isNaN(expires.getTime()) || expires.getTime() <= Date.now()) {
+        setAckExpiryError("Choose a time in the future, or leave it empty.");
+        return;
+      }
+      options.expires_at = expires.toISOString();
+    }
+    setAckExpiryError(null);
+    // A decision for every repository names no repository; the backend ignores
+    // one there, and sending it would read as if it narrowed the decision.
+    if (ackScope === "all_repositories") {
+      options.scope = "all_repositories";
+    } else if (viewingRepositoryId) {
+      options.repository_id = viewingRepositoryId;
+    }
+    acknowledgeMutation.mutate({
+      findingId: ackFindingId,
+      reason: ackNotes.trim() ? `${ackReason}: ${ackNotes.trim()}` : ackReason,
+      options,
+    });
+  }
 
   function applyTextFilters() {
     setSourceFilter(sourceInput.trim());
@@ -338,13 +434,20 @@ export default function SecurityScanDetailPage() {
       header: "Status",
       cell: (r) =>
         r.is_acknowledged ? (
-          <Badge
-            variant="outline"
-            className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 text-xs font-medium"
-          >
-            <CheckCircle className="size-3 mr-1" />
-            Acknowledged
-          </Badge>
+          <div className="space-y-1">
+            <Badge
+              variant="outline"
+              className="bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 text-xs font-medium"
+            >
+              <CheckCircle className="size-3 mr-1" />
+              Acknowledged
+            </Badge>
+            {r.acknowledgement_expires_at && (
+              <p className="text-xs text-muted-foreground" data-testid="ack-expires">
+                Until {new Date(r.acknowledgement_expires_at).toLocaleString()}
+              </p>
+            )}
+          </div>
         ) : (
           <Badge
             variant="outline"
@@ -489,6 +592,27 @@ export default function SecurityScanDetailPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* A copy's findings and decisions are its repository's, not the source's. */}
+      {copyArtifactId && (
+        <Alert data-testid="scan-copy-notice">
+          <Info className="size-4" />
+          <AlertTitle>Viewing a copy of this scan</AlertTitle>
+          <AlertDescription>
+            These results were copied from another scan of the same bytes. The
+            scan details above are the original&apos;s. The findings below are the
+            copy&apos;s
+            {viewingRepositoryLabel ? (
+              <>
+                {" "}
+                in <span className="font-medium">{viewingRepositoryLabel}</span>,
+                and a decision made here applies there
+              </>
+            ) : null}
+            .
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Failed/error scan warning banner */}
@@ -664,22 +788,26 @@ export default function SecurityScanDetailPage() {
         open={ackOpen}
         onOpenChange={(o) => {
           setAckOpen(o);
-          if (!o) {
-            setAckFindingId(null);
-            setAckReason("risk_accepted");
-            setAckNotes("");
-          }
+          if (!o) resetAckForm();
         }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Acknowledge Finding</DialogTitle>
             <DialogDescription>
-              Acknowledging a finding marks it as an accepted risk. It will no
-              longer count against the repository security score.
+              Acknowledging a finding records a decision to accept the risk for
+              these exact bytes: this advisory, on this component and version. A
+              rescan keeps it. A new build under the same version is not covered.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {ackScope === "repository" && viewingRepositoryLabel && (
+              <p className="text-sm" data-testid="ack-repository">
+                Applies in{" "}
+                <span className="font-medium">{viewingRepositoryLabel}</span>.
+                Other repositories holding these bytes are not covered.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Reason</Label>
               <Select value={ackReason} onValueChange={setAckReason}>
@@ -705,32 +833,70 @@ export default function SecurityScanDetailPage() {
                 onChange={(e) => setAckNotes(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="ack-expires-at">Expires (optional)</Label>
+              <Input
+                id="ack-expires-at"
+                type="datetime-local"
+                value={ackExpiresAt}
+                aria-invalid={ackExpiryError ? true : undefined}
+                onChange={(e) => {
+                  setAckExpiresAt(e.target.value);
+                  setAckExpiryError(null);
+                }}
+              />
+              {ackExpiryError ? (
+                <p className="text-xs text-destructive" data-testid="ack-expiry-error">
+                  {ackExpiryError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  The finding reopens at this time. Leave it empty to keep the
+                  decision until it is revoked.
+                </p>
+              )}
+            </div>
+            {canActEverywhere && (
+              <div className="space-y-2">
+                <Label>Applies in</Label>
+                <Select
+                  value={ackScope}
+                  onValueChange={(v) => setAckScope(v as AcknowledgementScope)}
+                >
+                  <SelectTrigger className="w-full" aria-label="Applies in">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="repository">This repository</SelectItem>
+                    <SelectItem value="all_repositories">Every repository</SelectItem>
+                  </SelectContent>
+                </Select>
+                {ackScope === "all_repositories" && (
+                  <p
+                    className="text-xs text-amber-700 dark:text-amber-400"
+                    data-testid="ack-scope-warning"
+                  >
+                    Accepts this finding for these bytes in every repository that
+                    holds them or later receives them, with no further decision
+                    there.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setAckOpen(false);
-                setAckFindingId(null);
-                setAckReason("risk_accepted");
-                setAckNotes("");
+                resetAckForm();
               }}
             >
               Cancel
             </Button>
             <Button
               disabled={acknowledgeMutation.isPending}
-              onClick={() => {
-                if (ackFindingId) {
-                  const reason = ackNotes.trim()
-                    ? `${ackReason}: ${ackNotes.trim()}`
-                    : ackReason;
-                  acknowledgeMutation.mutate({
-                    findingId: ackFindingId,
-                    reason,
-                  });
-                }
-              }}
+              onClick={submitAcknowledge}
             >
               {acknowledgeMutation.isPending
                 ? "Acknowledging..."
@@ -748,7 +914,7 @@ export default function SecurityScanDetailPage() {
           if (!o) setRevokeFindingId(null);
         }}
         title="Revoke Acknowledgment"
-        description="This finding will count against the repository security score again. Are you sure?"
+        description="The finding opens again, counts against the repository security score, and the scan policy can refuse the artifact. Copies a promotion made of this decision are revoked too, where you have authority over them. Are you sure?"
         confirmText="Revoke"
         danger
         loading={revokeMutation.isPending}

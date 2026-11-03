@@ -68,6 +68,12 @@ export interface CveHistoryEntry {
   acknowledged_by: string | null;
   acknowledged_at: string | null;
   acknowledged_reason: string | null;
+  /**
+   * Only on the answer to a revoke (status `open`, backend 1.12.0): copies of the
+   * decision that stay in force, in repositories this credential has no
+   * authority over.
+   */
+  acknowledgements_left_effective?: number | null;
   created_at: string;
   updated_at: string;
 }

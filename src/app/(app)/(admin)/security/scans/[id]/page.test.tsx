@@ -20,6 +20,7 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "scan-1" }),
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("next/link", () => ({
@@ -221,6 +222,7 @@ describe("SecurityScanDetailPage findings filters (#858)", () => {
       1,
       50,
       "critical",
+      undefined,
       undefined,
       undefined,
     ]);

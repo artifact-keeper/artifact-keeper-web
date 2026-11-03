@@ -35,6 +35,7 @@ import type {
   RejectArtifactResponse,
   PromotionHistoryStatus,
   PromotionGateResult,
+  PromotionScanState,
 } from '@/types/promotion';
 import type {
   Repository,
@@ -160,6 +161,31 @@ export function adaptGateResults(raw: unknown): PromotionGateResult[] | undefine
   return out;
 }
 
+/**
+ * `scan_state` is not in the generated SDK yet (backend 1.12.0). Read it off the
+ * runtime object; a missing or malformed one leaves it undefined, so the UI says
+ * nothing rather than guessing whether a verdict travelled.
+ */
+export function adaptScanState(raw: unknown): PromotionScanState | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const {
+    verdict_carried,
+    verdict_not_carried_reason,
+    acknowledgements_carried,
+    acknowledgements_left_behind,
+  } = raw as Record<string, unknown>;
+  if (typeof verdict_carried !== 'boolean') return undefined;
+  return {
+    verdict_carried,
+    verdict_not_carried_reason:
+      typeof verdict_not_carried_reason === 'string' ? verdict_not_carried_reason : null,
+    acknowledgements_carried:
+      typeof acknowledgements_carried === 'number' ? acknowledgements_carried : 0,
+    acknowledgements_left_behind:
+      typeof acknowledgements_left_behind === 'number' ? acknowledgements_left_behind : 0,
+  };
+}
+
 function adaptPromotionResponse(sdk: SdkPromotionResponse): PromotionResponse {
   return {
     promoted: sdk.promoted,
@@ -170,6 +196,9 @@ function adaptPromotionResponse(sdk: SdkPromotionResponse): PromotionResponse {
     message: sdk.message ?? undefined,
     gate_results: adaptGateResults(
       (sdk as SdkPromotionResponse & { gate_results?: unknown }).gate_results,
+    ),
+    scan_state: adaptScanState(
+      (sdk as SdkPromotionResponse & { scan_state?: unknown }).scan_state,
     ),
   };
 }
