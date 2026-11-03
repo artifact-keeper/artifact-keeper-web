@@ -337,6 +337,11 @@ describe("RepoSetupGuide", () => {
       expect(claudeMarketplaceName("team-plugins_v1.0")).toBe("team-plugins_v1.0");
       expect(claudeMarketplaceName("a b/c")).toBe("a-b-c");
       expect(claudeMarketplaceName("a..b")).toBe("a-b");
+      expect(claudeMarketplaceName("plugins")).toBe("plugins");
+      expect(claudeMarketplaceName("my.plugins_v2")).toBe("my.plugins_v2");
+      expect(claudeMarketplaceName("_private")).toBe("ak-_private");
+      expect(claudeMarketplaceName("npm")).toBe("npm-ak");
+      expect(claudeMarketplaceName("claudeai-x")).toBe("claudeai-x-ak");
     });
   });
 });

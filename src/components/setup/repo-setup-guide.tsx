@@ -592,13 +592,42 @@ micromamba install -c ${channelUrl} <package-name>`,
   return variants;
 }
 
-/** The `name` the backend gives a repository's Claude Code marketplace: the
- *  repository key under Claude Code's marketplace-name rule (letters, digits,
- *  `.`, `_`, `-`; no `..`), other characters replaced by `-`
- *  (artifact-keeper#5251). `claude plugin install` addresses a plugin as
- *  `<plugin>@<marketplace name>`. */
+/** Marketplace names Claude Code reserves for itself; the backend appends
+ *  `-ak` to a repository key that collides with one (artifact-keeper#5251). */
+const CLAUDE_RESERVED_MARKETPLACE_NAMES = new Set([
+  "claude-plugins-official",
+  "claude-code-plugins",
+  "anthropic-marketplace",
+  "knowledge-work-plugins",
+  "first-party-plugins",
+  "claude-community",
+  "inline",
+  "builtin",
+  "skills-dir",
+  "synced",
+  "claude-plugin-test",
+  "npm",
+  "pip",
+  "uv",
+  "cargo",
+  "github",
+  "gh",
+]);
+
+/** The `name` the backend gives a repository's Claude Code marketplace
+ *  (artifact-keeper#5251); `claude plugin install` addresses a plugin as
+ *  `<plugin>@<marketplace name>`. Validated repository keys pass through
+ *  unchanged, except that a key not starting with a letter or digit gets an
+ *  `ak-` prefix and a key Claude Code reserves (or one starting `claudeai-`)
+ *  gets an `-ak` suffix. Characters outside `[A-Za-z0-9._-]` and `..` become
+ *  `-`, for keys that predate key validation. */
 export function claudeMarketplaceName(repoKey: string): string {
-  return repoKey.replace(/[^A-Za-z0-9._-]/g, "-").replace(/\.{2,}/g, "-");
+  let name = repoKey.replace(/[^A-Za-z0-9._-]/g, "-").replace(/\.{2,}/g, "-");
+  if (!/^[A-Za-z0-9]/.test(name)) name = `ak-${name}`;
+  if (CLAUDE_RESERVED_MARKETPLACE_NAMES.has(name) || name.startsWith("claudeai-")) {
+    name = `${name}-ak`;
+  }
+  return name;
 }
 
 /** Agent Plugins client variants (artifact-keeper#5251): Claude Code reads the
