@@ -273,11 +273,30 @@ describe("RepoSetupGuide", () => {
       expect(text).toContain("HTTPS only");
     });
 
-    it("puts a read token in the path for a private repo and warns where it ends up", () => {
+    it("recommends the settings headers route for a private repo, then the token URL with its warning", () => {
       render(
         <RepoSetupGuide repo={makeRepo({ format: "agentplugins", key: "plugins", is_public: false })} />,
       );
-      const text = screen.getByRole("tabpanel", { name: "Claude Code" }).textContent ?? "";
+      const panel = screen.getByRole("tabpanel", { name: "Claude Code" });
+      const text = panel.textContent ?? "";
+      const settings = Array.from(panel.querySelectorAll("code"))
+        .map((c) => c.textContent ?? "")
+        .find((c) => c.includes("extraKnownMarketplaces"));
+      expect(JSON.parse(settings!)).toEqual({
+        extraKnownMarketplaces: {
+          plugins: {
+            source: {
+              source: "url",
+              url: `${origin}/agentplugins/plugins/claude-marketplace.json`,
+              headers: { Authorization: "Bearer YOUR_READ_TOKEN" },
+            },
+          },
+        },
+      });
+      expect(text).toContain("Option 1 (recommended)");
+      expect(text.indexOf("Option 1")).toBeLessThan(text.indexOf("Option 2"));
+      expect(text).toContain("/plugin install");
+      expect(text).toContain("with an expiry");
       expect(text).toContain(
         `claude plugin marketplace add ${origin}/agentplugins/t/YOUR_READ_TOKEN/plugins/claude-marketplace.json`,
       );

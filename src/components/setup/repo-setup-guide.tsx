@@ -624,11 +624,27 @@ function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
         {
           title: "Create a read token for this repository",
           description:
-            "Claude Code cannot send credentials for a marketplace URL, so a private repository takes a token in the URL path. On the Access Tokens page, create a token with only the read:artifacts scope, restricted to this repository.",
+            "On the Access Tokens page, create a token with only the read:artifacts scope, restricted to this repository, with an expiry.",
         },
         {
-          title: "Add the marketplace with the token in the URL",
-          description: `Replace YOUR_READ_TOKEN with that token. The token is stored in Claude Code's marketplace record (known_marketplaces.json) and appears in server access logs, which is why it should be read-only and scoped to this repository. To keep it out of the URL, install with the ak CLI instead (ak agent plugins install <plugin> --repo ${repoKey} --harness claude). ${httpsNote}`,
+          title: "Option 1 (recommended): register the marketplace in Claude Code settings",
+          description: `Add this to ~/.claude/settings.json, replacing YOUR_READ_TOKEN. Claude Code sends these headers when it fetches the marketplace and when it downloads each plugin zip from the same origin, so the token stays out of the URL. ${httpsNote}`,
+          code: `{
+  "extraKnownMarketplaces": {
+    "${marketplace}": {
+      "source": {
+        "source": "url",
+        "url": "${base}/${repoKey}/claude-marketplace.json",
+        "headers": { "Authorization": "Bearer YOUR_READ_TOKEN" }
+      }
+    }
+  }
+}`,
+        },
+        {
+          title: "Option 2: add the marketplace with the token in the URL",
+          description:
+            "No settings edit, but the token is stored in Claude Code's marketplace record (known_marketplaces.json) and appears in server access logs, so use a read-only token scoped to this repository with an expiry.",
           code: `claude plugin marketplace add ${base}/t/YOUR_READ_TOKEN/${repoKey}/claude-marketplace.json`,
         },
       ];
@@ -646,7 +662,7 @@ function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
         ...claudeAddSteps,
         {
           title: "Install a plugin",
-          description: `The marketplace is named ${marketplace}. Run claude plugin marketplace update ${marketplace} to pick up newly published versions.`,
+          description: `The marketplace is named ${marketplace}. Run claude plugin marketplace update ${marketplace} to pick up newly published versions. Inside a Claude Code session, the same commands are /plugin marketplace add, /plugin install and /plugin marketplace update.`,
           code: `claude plugin install <plugin>@${marketplace}`,
         },
       ],
