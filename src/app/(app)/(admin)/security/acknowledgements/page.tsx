@@ -242,7 +242,7 @@ export default function AcknowledgementsPage() {
           <AlertTitle>Could not load decisions</AlertTitle>
           <AlertDescription>
             {isForbiddenError(error)
-              ? "This list covers every repository, so it needs an administrator with an unrestricted credential and no repository-only grants. A decision can still be revoked from its finding."
+              ? "This list covers every repository, so it needs an administrator with an unrestricted credential and an instance-wide role. Repository roles alone are not enough, and creating a repository grants those. A decision can still be revoked from its finding."
               : toUserMessage(error, "The decisions could not be loaded.")}
           </AlertDescription>
         </Alert>

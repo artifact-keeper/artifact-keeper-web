@@ -600,17 +600,20 @@ function ScanDetailContent() {
           <Info className="size-4" />
           <AlertTitle>Viewing a copy of this scan</AlertTitle>
           <AlertDescription>
-            These results were copied from another scan of the same bytes. The
-            scan details above are the original&apos;s. The findings below are the
-            copy&apos;s
-            {viewingRepositoryLabel ? (
-              <>
-                {" "}
-                in <span className="font-medium">{viewingRepositoryLabel}</span>,
-                and a decision made here applies there
-              </>
-            ) : null}
-            .
+            {/* One paragraph: the description lays out its children as a grid. */}
+            <p>
+              These results were copied from another scan of the same bytes. The
+              scan details above are the original&apos;s. The findings below are
+              the copy&apos;s
+              {viewingRepositoryLabel ? (
+                <>
+                  {" "}
+                  in <span className="font-medium">{viewingRepositoryLabel}</span>,
+                  and a decision made here applies there
+                </>
+              ) : null}
+              .
+            </p>
           </AlertDescription>
         </Alert>
       )}
