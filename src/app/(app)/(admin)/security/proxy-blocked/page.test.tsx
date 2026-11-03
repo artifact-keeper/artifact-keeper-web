@@ -149,6 +149,22 @@ describe("ProxyBlockedPage", () => {
       expect(summary).toHaveTextContent(/not a count of refusals/i);
     });
 
+    it("does not call a zero an upper bound", async () => {
+      api.list.mockResolvedValue(
+        preview({
+          would_block_summary: {
+            would_block_digests: 0,
+            no_verdict: 0,
+            stale_verdict: 0,
+            clean_graded_nothing: 0,
+          },
+        }),
+      );
+      renderPage();
+      const noVerdict = await screen.findByTestId("would-block-no-verdict");
+      expect(noVerdict).not.toHaveTextContent(/up to/i);
+    });
+
     it("says those files are scanned on the next pull under fail_closed", async () => {
       renderPage();
       const summary = await screen.findByTestId("would-block-summary");

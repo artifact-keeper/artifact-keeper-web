@@ -55,6 +55,11 @@ function ActionBadge({ action }: { action: string | null }) {
   return <span className="text-sm text-muted-foreground">{action ?? "-"}</span>;
 }
 
+/** An upper bound reads as one, except a zero, which is exact. */
+function upTo(count: number): string {
+  return count === 0 ? "0" : `Up to ${count}`;
+}
+
 function SummaryCount({
   testId,
   value,
@@ -104,21 +109,21 @@ function WouldBlockSummary({
         </SummaryCount>
         <SummaryCount
           testId="would-block-no-verdict"
-          value={`Up to ${summary.no_verdict}`}
+          value={upTo(summary.no_verdict)}
           title="No verdict"
         >
           Not pulled since scanning was enabled, or the scan did not finish.
         </SummaryCount>
         <SummaryCount
           testId="would-block-stale"
-          value={`Up to ${summary.stale_verdict}`}
+          value={upTo(summary.stale_verdict)}
           title="Stale verdict"
         >
           The verdict is older than the scan window.
         </SummaryCount>
         <SummaryCount
           testId="would-block-clean-nothing"
-          value={`Up to ${summary.clean_graded_nothing}`}
+          value={upTo(summary.clean_graded_nothing)}
           title="Clean, but graded nothing"
         >
           A clean verdict that cataloged no component.

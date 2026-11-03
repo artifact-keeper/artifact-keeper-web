@@ -422,7 +422,7 @@ export default function SecurityDashboardPage() {
               icon={ShieldBan}
               label="Proxy Blocked"
               value={dashboard.proxy_blocked}
-              tooltip="Distinct proxied files a repository's scan gate refuses now, from their stored verdicts. Counted apart from Policy Blocks."
+              tooltip="Distinct proxied files a repository's scan gate refuses now, from their stored verdicts. These are part of Policy Blocks."
               href="/security/proxy-blocked"
               color={dashboard.proxy_blocked > 0 ? "red" : "green"}
             />
@@ -432,7 +432,7 @@ export default function SecurityDashboardPage() {
               icon={ShieldQuestion}
               label="Proxy Would Block"
               value={dashboard.proxy_would_block}
-              tooltip="Distinct proxied files with a stored verdict the gate would refuse if their repository enforced, including those refused now. Files with no usable verdict are not counted: open the preview for those."
+              tooltip="Distinct proxied files with a stored verdict the gate would refuse if their repository enforced, including those refused now. Not part of Policy Blocks. Files with no usable verdict are not counted: open the preview for those."
               href="/security/proxy-blocked?would_block=true"
               color={dashboard.proxy_would_block > 0 ? "yellow" : "default"}
             />

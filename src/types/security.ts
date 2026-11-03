@@ -7,14 +7,14 @@ export interface DashboardSummary {
   high_findings: number;
   policy_violations_blocked: number;
   /**
-   * Distinct proxied digests a repository's scan gate refuses now. Counted
-   * apart from `policy_violations_blocked`. Absent on older backends.
+   * Distinct proxied digests a repository's scan gate refuses now. Part of
+   * `policy_violations_blocked`. Absent on older backends.
    */
   proxy_blocked?: number;
   /**
    * Distinct proxied digests with a stored verdict the gate would refuse if the
-   * repository enforced (artifact-keeper#5232). Includes `proxy_blocked`.
-   * Absent on older backends.
+   * repository enforced (artifact-keeper#5232). Includes `proxy_blocked`, and is
+   * not part of `policy_violations_blocked`. Absent on older backends.
    */
   proxy_would_block?: number;
   repos_grade_a: number;
