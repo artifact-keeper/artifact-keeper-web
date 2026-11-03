@@ -69,6 +69,8 @@ const FORMAT_EXPECTATIONS: [string, string, "exact" | "contains"][] = [
   // IDE extensions
   ["vscode", "code --install-extension my-package@1.2.3", "exact"],
   ["jetbrains", "Download my-package v1.2.3", "exact"],
+  // AI agent plugins (artifact-keeper#5251)
+  ["agentplugins", "ak agent plugins install my-package --repo <repo> --harness claude --version 1.2.3", "exact"],
   // Windows
   ["chocolatey", "choco install my-package --version 1.2.3", "exact"],
   ["powershell", "Install-Module my-package -RequiredVersion 1.2.3", "exact"],
@@ -149,6 +151,15 @@ describe("getInstallCommand", () => {
     it("keeps the bare name when the host is unknown", () => {
       expect(getInstallCommand(pkg, ver, "docker", { repoKey: "images" })).toBe(
         "docker pull my-package:1.2.3"
+      );
+    });
+
+    it("agentplugins installs from the repository through the ak CLI", () => {
+      expect(getInstallCommand(pkg, ver, "agentplugins", location)).toBe(
+        "ak agent plugins install my-package --repo images --harness claude --version 1.2.3"
+      );
+      expect(getInstallCommand(pkg, undefined, "agentplugins", location)).toBe(
+        "ak agent plugins install my-package --repo images --harness claude"
       );
     });
 

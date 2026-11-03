@@ -53,6 +53,9 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   // IDE extensions
   { value: "vscode", label: "VS Code Extensions", group: "Extensions" },
   { value: "jetbrains", label: "JetBrains Plugins", group: "Extensions" },
+  // AI coding-agent plugin bundles (Claude Code, Cursor, Codex, VS Code /
+  // Copilot), served on /agentplugins/* (artifact-keeper#5251). Hosted only.
+  { value: "agentplugins", label: "Agent Plugins", group: "Extensions" },
   // Alias of the PyPI handler (artifact-keeper#3784): prebuilt JupyterLab
   // extensions are pip wheels, so a `jupyter` repo gets the PyPI tabs,
   // package rendering and routes.

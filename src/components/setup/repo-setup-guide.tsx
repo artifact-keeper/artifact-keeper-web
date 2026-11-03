@@ -592,6 +592,96 @@ micromamba install -c ${channelUrl} <package-name>`,
   return variants;
 }
 
+/** The `name` the backend gives a repository's Claude Code marketplace: the
+ *  repository key under Claude Code's marketplace-name rule (letters, digits,
+ *  `.`, `_`, `-`; no `..`), other characters replaced by `-`
+ *  (artifact-keeper#5251). `claude plugin install` addresses a plugin as
+ *  `<plugin>@<marketplace name>`. */
+export function claudeMarketplaceName(repoKey: string): string {
+  return repoKey.replace(/[^A-Za-z0-9._-]/g, "-").replace(/\.{2,}/g, "-");
+}
+
+/** Agent Plugins client variants (artifact-keeper#5251): Claude Code reads the
+ *  repository's marketplace document directly; Cursor, Codex and VS Code /
+ *  Copilot accept no hosted marketplace URL, so they install through the
+ *  `ak` CLI; the Publish tab covers `ak` and a plain `curl -T`. */
+function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
+  const repoKey = repo.key;
+  const base = `${REGISTRY_URL}/agentplugins`;
+  const marketplace = claudeMarketplaceName(repoKey);
+  const httpsNote =
+    "Claude Code downloads plugin archives over HTTPS only; behind a TLS-terminating proxy the backend needs AK_EXTERNAL_URL set so the marketplace lists https:// URLs.";
+
+  const claudeAddSteps: SetupStep[] = repo.is_public
+    ? [
+        {
+          title: "Add the marketplace",
+          description: `This repository is public, so Claude Code reads the marketplace without credentials. ${httpsNote}`,
+          code: `claude plugin marketplace add ${base}/${repoKey}/claude-marketplace.json`,
+        },
+      ]
+    : [
+        {
+          title: "Create a read token for this repository",
+          description:
+            "Claude Code cannot send credentials for a marketplace URL, so a private repository takes a token in the URL path. On the Access Tokens page, create a token with only the read:artifacts scope, restricted to this repository.",
+        },
+        {
+          title: "Add the marketplace with the token in the URL",
+          description: `Replace YOUR_READ_TOKEN with that token. The token is stored in Claude Code's marketplace record (known_marketplaces.json) and appears in server access logs, which is why it should be read-only and scoped to this repository. To keep it out of the URL, install with the ak CLI instead (ak agent plugins install <plugin> --repo ${repoKey} --harness claude). ${httpsNote}`,
+          code: `claude plugin marketplace add ${base}/t/YOUR_READ_TOKEN/${repoKey}/claude-marketplace.json`,
+        },
+      ];
+
+  const akInstall = (harness: string) =>
+    `ak agent plugins install <plugin> --repo ${repoKey} --harness ${harness}`;
+  const akNote =
+    "These agents cannot add a hosted marketplace URL, so the ak CLI downloads the plugin, verifies its SHA-256 and installs it where the agent loads plugins from, using the credential ak has stored for this instance.";
+
+  return [
+    {
+      key: "claude",
+      label: "Claude Code",
+      steps: [
+        ...claudeAddSteps,
+        {
+          title: "Install a plugin",
+          description: `The marketplace is named ${marketplace}. Run claude plugin marketplace update ${marketplace} to pick up newly published versions.`,
+          code: `claude plugin install <plugin>@${marketplace}`,
+        },
+      ],
+    },
+    {
+      key: "other-agents",
+      label: "Cursor / Codex / VS Code",
+      steps: [
+        { title: "Cursor", description: akNote, code: akInstall("cursor") },
+        { title: "Codex", code: akInstall("codex") },
+        { title: "VS Code / GitHub Copilot", code: akInstall("vscode") },
+      ],
+    },
+    {
+      key: "publish",
+      label: "Publish",
+      steps: [
+        {
+          title: "Publish with the ak CLI",
+          description:
+            "Checks the plugin's manifests, zips the directory and uploads it. The credential needs the write:artifacts scope.",
+          code: `ak agent plugins publish ./my-plugin --repo ${repoKey}`,
+        },
+        {
+          title: "Or upload a zip with curl",
+          description:
+            "The path is <name>/<version>/<name>-<version>.zip, and the version must match the one in the plugin's manifest. A published version cannot be overwritten.",
+          code: `curl -T my-plugin-1.0.0.zip -H "Authorization: Bearer YOUR_TOKEN" \\
+  ${base}/${repoKey}/my-plugin/1.0.0/my-plugin-1.0.0.zip`,
+        },
+      ],
+    },
+  ];
+}
+
 /** Generate repo-specific setup content based on format. JVM, npm, PyPI, and
  *  conda formats return a set of client variants (rendered as tabs); all other
  *  formats return a flat list of steps. */
@@ -622,6 +712,13 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
       kind: "variants",
       variants: getCondaClientVariants(repo.key, repo.repo_type),
       defaultKey: "conda",
+    };
+  }
+  if (repo.format === "agentplugins") {
+    return {
+      kind: "variants",
+      variants: getAgentPluginsClientVariants(repo),
+      defaultKey: "claude",
     };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };

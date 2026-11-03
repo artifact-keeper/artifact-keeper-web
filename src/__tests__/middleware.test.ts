@@ -203,7 +203,7 @@ describe("middleware proxying", () => {
       "/conan", "/alpine", "/pacman", "/conda", "/t", "/swift", "/terraform",
       "/cocoapods", "/hex", "/huggingface", "/jetbrains", "/chef", "/puppet",
       "/ansible", "/cran", "/bazel", "/ivy", "/vscode", "/proto", "/incus",
-      "/lxc", "/ext",
+      "/lxc", "/ext", "/agentplugins",
     ];
     // Mounted outside format_routes: the management API, health, and OCI.
     const NON_FORMAT_PREFIXES = ["/api", "/health", "/v2"];

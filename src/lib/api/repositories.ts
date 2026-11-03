@@ -317,6 +317,7 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
   'gitlfs',
   'vscode',
   'jetbrains',
+  'agentplugins',
   'huggingface',
   'mlmodel',
   'cran',

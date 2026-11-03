@@ -4,7 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { Repository } from "@/types";
-import { RepoSetupGuide } from "./repo-setup-guide";
+import { RepoSetupGuide, claudeMarketplaceName } from "./repo-setup-guide";
 
 function makeRepo(overrides: Partial<Repository> = {}): Repository {
   return {
@@ -249,5 +249,75 @@ describe("RepoSetupGuide", () => {
     );
     const hostedPanel = screen.getByRole("tabpanel", { name: "Npm" });
     expect(hostedPanel.textContent).toContain("npm config set @pkgs:registry");
+  });
+
+  // Agent Plugins (artifact-keeper#5251): Claude Code reads the marketplace
+  // document directly; other agents install through the ak CLI.
+  describe("agentplugins", () => {
+    const origin = window.location.origin;
+
+    it("gives a public repo a plain Claude Code marketplace URL and the install command", () => {
+      render(
+        <RepoSetupGuide repo={makeRepo({ format: "agentplugins", key: "plugins", is_public: true })} />,
+      );
+      expect(screen.getByRole("tab", { name: "Claude Code", selected: true })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "Cursor / Codex / VS Code" })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "Publish" })).toBeTruthy();
+      const panel = screen.getByRole("tabpanel", { name: "Claude Code" });
+      const text = panel.textContent ?? "";
+      expect(text).toContain(
+        `claude plugin marketplace add ${origin}/agentplugins/plugins/claude-marketplace.json`,
+      );
+      expect(text).toContain("claude plugin install <plugin>@plugins");
+      expect(text).not.toContain("/agentplugins/t/");
+      expect(text).toContain("HTTPS only");
+    });
+
+    it("puts a read token in the path for a private repo and warns where it ends up", () => {
+      render(
+        <RepoSetupGuide repo={makeRepo({ format: "agentplugins", key: "plugins", is_public: false })} />,
+      );
+      const text = screen.getByRole("tabpanel", { name: "Claude Code" }).textContent ?? "";
+      expect(text).toContain(
+        `claude plugin marketplace add ${origin}/agentplugins/t/YOUR_READ_TOKEN/plugins/claude-marketplace.json`,
+      );
+      expect(text).toContain("read:artifacts");
+      expect(text).toContain("known_marketplaces.json");
+      expect(text).toContain("server access logs");
+      expect(text).toContain("claude plugin install <plugin>@plugins");
+    });
+
+    it("installs for Cursor, Codex and VS Code through the ak CLI", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={makeRepo({ format: "agentplugins", key: "plugins" })} />);
+      await user.click(screen.getByRole("tab", { name: "Cursor / Codex / VS Code" }));
+      const text =
+        screen.getByRole("tabpanel", { name: "Cursor / Codex / VS Code" }).textContent ?? "";
+      for (const harness of ["cursor", "codex", "vscode"]) {
+        expect(text).toContain(
+          `ak agent plugins install <plugin> --repo plugins --harness ${harness}`,
+        );
+      }
+    });
+
+    it("publishes with ak or an authenticated curl -T to the versioned zip path", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={makeRepo({ format: "agentplugins", key: "plugins" })} />);
+      await user.click(screen.getByRole("tab", { name: "Publish" }));
+      const text = screen.getByRole("tabpanel", { name: "Publish" }).textContent ?? "";
+      expect(text).toContain("ak agent plugins publish ./my-plugin --repo plugins");
+      expect(text).toContain("curl -T my-plugin-1.0.0.zip");
+      expect(text).toContain("Authorization: Bearer YOUR_TOKEN");
+      expect(text).toContain(
+        `${origin}/agentplugins/plugins/my-plugin/1.0.0/my-plugin-1.0.0.zip`,
+      );
+      expect(text).not.toContain("/api/v1/repositories/");
+    });
+
+    it("sanitises the repository key into Claude Code's marketplace name", () => {
+      expect(claudeMarketplaceName("team-plugins_v1.0")).toBe("team-plugins_v1.0");
+      expect(claudeMarketplaceName("a b/c")).toBe("a-b-c");
+      expect(claudeMarketplaceName("a..b")).toBe("a-b");
+    });
   });
 });

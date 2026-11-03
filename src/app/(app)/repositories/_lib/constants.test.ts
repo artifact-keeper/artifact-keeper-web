@@ -48,13 +48,14 @@ describe('FORMAT_OPTIONS', () => {
   // JupyterLab Extensions is a PyPI alias (artifact-keeper#3784) filed with the
   // other IDE extension formats (#833). The group drives the list-page filter;
   // the create dialog itself sorts formats alphabetically.
-  it('lists JupyterLab Extensions in the Extensions group with VS Code and JetBrains', () => {
+  it('lists JupyterLab Extensions and Agent Plugins in the Extensions group with VS Code and JetBrains', () => {
     const extensions = FORMAT_OPTIONS.filter((o) => o.group === 'Extensions').map(
       (o) => [o.value, o.label],
     );
     expect(extensions).toEqual([
       ['vscode', 'VS Code Extensions'],
       ['jetbrains', 'JetBrains Plugins'],
+      ['agentplugins', 'Agent Plugins'],
       ['jupyter', 'JupyterLab Extensions'],
     ]);
   });
