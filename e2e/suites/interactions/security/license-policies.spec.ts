@@ -89,7 +89,12 @@ test.describe('License Policies Page', () => {
 
   test('table renders or shows empty state', async ({ page }) => {
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
+    // Inside the page's main content: over the whole page this also matches the
+    // sidebar's text, which runs "Acknowledgements ... Policies" as one string.
+    const emptyState = page
+      .locator('#main-content')
+      .getByText(/no.*polic|no.*data|no.*result|empty/i)
+      .first();
 
     await expect(table.or(emptyState)).toBeVisible();
   });
