@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert, AlertTriangle, Clock } from "lucide-react";
 
 import { securityApi } from "@/lib/api/security";
+import { scanDetailHref } from "@/lib/acknowledgements";
 import { PROXY_SCAN_AVAILABILITY_NOTE } from "@/lib/artifact-analyzable";
 import type { ScanResult } from "@/types/security";
 import { isScanNotCataloged, NOT_CATALOGED_EXPLANATION } from "@/lib/scan-utils";
@@ -136,7 +137,7 @@ export function ArtifactScansSection({
       header: "",
       cell: (s) => (
         <Link
-          href={`/security/scans/${s.id}`}
+          href={scanDetailHref(s)}
           className="text-xs text-blue-600 hover:underline dark:text-blue-400"
         >
           View findings

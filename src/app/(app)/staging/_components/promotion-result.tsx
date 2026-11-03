@@ -2,7 +2,11 @@
 
 import { CheckCircle, XCircle } from "lucide-react";
 
-import type { BulkPromotionResponse, PromotionResponse } from "@/types/promotion";
+import type {
+  BulkPromotionResponse,
+  PromotionResponse,
+  PromotionScanState,
+} from "@/types/promotion";
 import { SEVERITY_COLORS } from "@/types/promotion";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,8 +33,47 @@ export function promotionNeedsReview(result: BulkPromotionResponse): boolean {
   return (
     result.failed > 0 ||
     (result.results ?? []).some(
-      (r) => (r.gate_results?.length ?? 0) > 0 || r.policy_violations.length > 0,
+      (r) =>
+        (r.gate_results?.length ?? 0) > 0 ||
+        r.policy_violations.length > 0 ||
+        // The artifact is promoted either way, so a verdict that did not travel
+        // or a decision left behind would otherwise vanish with the dialog.
+        (r.scan_state != null &&
+          (!r.scan_state.verdict_carried || r.scan_state.acknowledgements_left_behind > 0)),
     )
+  );
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** Whether the source's scan verdict and decisions followed the bytes (#1072). */
+function ScanStateOutcome({ state }: { state: PromotionScanState }) {
+  return (
+    <div className="space-y-1 text-xs" data-testid="promotion-scan-state">
+      {state.verdict_carried ? (
+        <p className="text-muted-foreground">Scan verdict carried to the target.</p>
+      ) : (
+        <p className="text-amber-700 dark:text-amber-400">
+          Scan verdict not carried
+          {state.verdict_not_carried_reason ? `: ${state.verdict_not_carried_reason}` : ""}. The
+          target sees this artifact as unscanned, so a target policy with block_unscanned refuses
+          it until it is scanned there.
+        </p>
+      )}
+      {state.acknowledgements_carried > 0 && (
+        <p className="text-muted-foreground">
+          {plural(state.acknowledgements_carried, "acknowledgement")} carried.
+        </p>
+      )}
+      {state.acknowledgements_left_behind > 0 && (
+        <p className="text-amber-700 dark:text-amber-400">
+          {plural(state.acknowledgements_left_behind, "acknowledgement")} left behind: those
+          findings are open in the target, and its policy decides.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -117,6 +160,7 @@ function ArtifactOutcome({ result }: { result: PromotionResponse }) {
       {!gates?.length && result.policy_violations.length === 0 && result.message && (
         <p className="text-xs text-muted-foreground">{result.message}</p>
       )}
+      {result.promoted && result.scan_state && <ScanStateOutcome state={result.scan_state} />}
       <p className="text-[11px] text-muted-foreground">
         Target: <code>{result.target}</code>
       </p>

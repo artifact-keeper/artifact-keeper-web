@@ -12,6 +12,7 @@ import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
+import { scanDetailHref } from "@/lib/acknowledgements";
 import {
   isScanIncomplete,
   isScanFailed,
@@ -314,7 +315,7 @@ export default function SecurityScansPage() {
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
-            router.push(`/security/scans/${r.id}`);
+            router.push(scanDetailHref(r));
           }}
         >
           View
@@ -434,7 +435,7 @@ export default function SecurityScansPage() {
         loading={isLoading}
         emptyMessage="No scan results found."
         rowKey={(r) => r.id}
-        onRowClick={(r) => router.push(`/security/scans/${r.id}`)}
+        onRowClick={(r) => router.push(scanDetailHref(r))}
       />
 
       {/* Trigger Scan Dialog */}
