@@ -165,7 +165,8 @@ export const MCP_AK_CAPABILITIES_META_KEY = 'com.artifactkeeper/capabilities';
  * `hold` member of a reason-gated refusal, as `decide_mcp_serve` writes it:
  * the server.json's own hold (`quarantine`, `scan_policy`, `resolving`), a
  * pinned package (`backing`, `age_gate`, `unresolvable`), Phase 2 curation
- * (`curation`).
+ * (`curation`), a Remote server version whose upstream document changed after
+ * approval (`content_drift`, gate `curation`).
  */
 export type McpHoldClass =
   | 'quarantine'

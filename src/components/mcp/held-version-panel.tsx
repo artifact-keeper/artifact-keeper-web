@@ -23,15 +23,30 @@ type HoldKind =
   | "backing_held"
   | "backing_refused"
   | "age_gate"
+  | "server_age_gate"
   | "unresolvable"
   | "resolving"
   | "curation"
+  | "curation_rejected"
+  | "content_drift"
   | "unknown";
 
+/**
+ * The hold a problem body describes, as `decide_mcp_serve` writes it. Curation
+ * and content drift share `gate: curation`, so `hold` tells them apart; the
+ * curation outcome (pending or rejected) is in `error`. An age gate names a
+ * `package` when a pinned package is too new and none when the server version
+ * itself is (a Remote's server-version age gate).
+ */
 export function classifyHold(p: McpHoldProblem): HoldKind {
   const { hold, gate, error } = p;
-  if (error === "mcp_age_gate_blocked" || gate === "age_gate" || hold === "age_gate") return "age_gate";
-  if (hold === "curation" || hold === "pending_review" || gate === "curation") return "curation";
+  if (hold === "content_drift") return "content_drift";
+  if (error === "mcp_age_gate_blocked" || gate === "age_gate" || hold === "age_gate") {
+    return p.package ? "age_gate" : "server_age_gate";
+  }
+  if (hold === "curation" || hold === "pending_review" || gate === "curation") {
+    return error === "mcp_rejected" ? "curation_rejected" : "curation";
+  }
   if (hold === "unresolvable" || error === "mcp_unresolvable") return "unresolvable";
   if (hold === "resolving" || error === "mcp_resolving") return "resolving";
   if (hold === "backing" || error === "mcp_backing_artifact_blocked") {
@@ -52,6 +67,26 @@ function ageText(p: McpHoldProblem): string {
   return ` (at least ${p.min_age_days} days${age})`;
 }
 
+const linkClass = "text-primary underline-offset-4 hover:underline";
+
+function ageGateNext(p: McpHoldProblem): ReactNode {
+  return p.review_id ? (
+    <Link href={`/age-gate?review=${encodeURIComponent(p.review_id)}`} className={linkClass}>
+      Review it in Age Gate
+    </Link>
+  ) : (
+    "It is served once it is old enough or an administrator approves it."
+  );
+}
+
+function curationLink(repoKey: string): ReactNode {
+  return (
+    <Link href={`/curation?repo=${encodeURIComponent(repoKey)}`} className={linkClass}>
+      Open the curation queue
+    </Link>
+  );
+}
+
 function reasonOf(p: McpHoldProblem, repoKey: string): { title: string; body: ReactNode } {
   const pkg = pkgText(p);
   switch (classifyHold(p)) {
@@ -68,14 +103,17 @@ function reasonOf(p: McpHoldProblem, repoKey: string): { title: string; body: Re
         title: "A package it runs is too new",
         body: (
           <>
-            {pkg} is newer than the age policy allows{ageText(p)}.{" "}
-            {p.review_id ? (
-              <Link href={`/age-gate?review=${encodeURIComponent(p.review_id)}`} className="text-primary underline-offset-4 hover:underline">
-                Review it in Age Gate
-              </Link>
-            ) : (
-              "It is served once it is old enough or an administrator approves it."
-            )}
+            {pkg} is newer than the age policy allows{ageText(p)}. {ageGateNext(p)}
+          </>
+        ),
+      };
+    case "server_age_gate":
+      return {
+        title: "This server version is too new",
+        body: (
+          <>
+            This version was published upstream more recently than the age policy allows{ageText(p)}.{" "}
+            {ageGateNext(p)}
           </>
         ),
       };
@@ -96,12 +134,27 @@ function reasonOf(p: McpHoldProblem, repoKey: string): { title: string; body: Re
         title: "Awaiting approval",
         body: (
           <>
-            This server version is waiting for an administrator to approve it.{" "}
-            {p.review_id && (
-              <Link href={`/curation?repo=${encodeURIComponent(repoKey)}`} className="text-primary underline-offset-4 hover:underline">
-                Open the curation queue
-              </Link>
-            )}
+            This server is waiting for an administrator to approve it in this registry. {curationLink(repoKey)}
+          </>
+        ),
+      };
+    case "curation_rejected":
+      return {
+        title: "Not approved",
+        body: (
+          <>
+            An administrator rejected this server in this registry, so none of its versions are served until it is
+            approved. {curationLink(repoKey)}
+          </>
+        ),
+      };
+    case "content_drift":
+      return {
+        title: "Changed upstream after approval",
+        body: (
+          <>
+            The upstream registry changed this version&apos;s server.json after it was approved. The approval was
+            revoked and the version is back in review. {curationLink(repoKey)}
           </>
         ),
       };
