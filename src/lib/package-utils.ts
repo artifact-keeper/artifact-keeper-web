@@ -121,6 +121,13 @@ export function getInstallCommand(
       return `code --install-extension ${packageName}@${v}`;
     case "jetbrains":
       return `Download ${packageName} v${v}`;
+    case "agentplugins": {
+      // `ak agent plugins install` resolves the version itself; pin it only
+      // when one is known (artifact-keeper#5251).
+      const repoFlag = repoKey ? ` --repo ${repoKey}` : " --repo <repo>";
+      const versionFlag = version ? ` --version ${version}` : "";
+      return `ak agent plugins install ${packageName}${repoFlag} --harness claude${versionFlag}`;
+    }
     case "chocolatey":
       return `choco install ${packageName} --version ${v}`;
     case "powershell":
@@ -200,6 +207,7 @@ export const FORMAT_OPTIONS: string[] = [
   "gitlfs",
   "vscode",
   "jetbrains",
+  "agentplugins",
   "huggingface",
   "mlmodel",
   "cran",

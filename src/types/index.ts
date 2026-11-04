@@ -222,6 +222,7 @@ export type RepositoryFormat =
   | 'gitlfs'
   | 'vscode'
   | 'jetbrains'
+  | 'agentplugins'
   | 'huggingface'
   | 'mlmodel'
   | 'cran'

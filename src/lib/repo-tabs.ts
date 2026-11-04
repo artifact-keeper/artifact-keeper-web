@@ -64,6 +64,9 @@ const PACKAGE_ORIENTED_FORMATS = new Set<RepositoryFormat>([
   "puppet",
   "chef",
   "ansible",
+  // AI coding-agent plugins: one catalog row per plugin, versions under it
+  // (artifact-keeper#5251).
+  "agentplugins",
 ]);
 
 export function isPackageOrientedFormat(format: RepositoryFormat): boolean {

@@ -73,6 +73,9 @@ export const PROXY_PATH_PREFIXES: readonly string[] = [
   "/hex",
   "/huggingface",
   "/jetbrains",
+  // Agent plugin zips and marketplace indexes, including the token-in-path
+  // form /agentplugins/t/<token>/<repo>/... (artifact-keeper#5251).
+  "/agentplugins",
   "/chef",
   "/puppet",
   "/ansible",
