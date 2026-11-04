@@ -39,7 +39,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const policy: LifecyclePolicy = {
   id: "p1", name: "Cleanup", description: null, enabled: true, policy_type: "max_age_days",
-  config: { days: 90 }, priority: 100, repository_id: null,
+  config: { days: 90 }, priority: 100, cron_schedule: null, repository_id: null,
   applies_to_all: false, repository_ids: [], scope_source: "explicit",
   created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z",
   last_run_at: null, last_run_items_removed: null,
@@ -297,5 +297,153 @@ describe("LifecyclePage preview figure (#855)", () => {
       await screen.findByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/free 0 B/)).not.toBeInTheDocument();
+  });
+});
+
+describe("LifecyclePage edit", () => {
+  const editable: LifecyclePolicy = {
+    ...policy,
+    description: "Old snapshots",
+    config: { days: 90, exclude: { versions: ["latest"] } },
+    repository_ids: ["r1", "r2"],
+  };
+
+  async function openEdit(p: LifecyclePolicy = editable) {
+    api.list.mockResolvedValue([p]);
+    api.update.mockResolvedValue(p);
+    renderPage();
+    const user = userEvent.setup();
+    // Wait for the capability check so the scope control is in its settled state.
+    await waitFor(() => expect(api.assignmentSupport).toHaveBeenCalled());
+    await user.click(await screen.findByRole("button", { name: `Edit policy ${p.name}` }));
+    await screen.findByRole("heading", { name: "Edit Lifecycle Policy" });
+    return user;
+  }
+
+  it("prefills the form and locks the policy type", async () => {
+    await openEdit();
+    expect(screen.getByRole("heading", { name: "Edit Lifecycle Policy" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("Cleanup");
+    expect(screen.getByLabelText("Description")).toHaveValue("Old snapshots");
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.getByText(/policy type cannot be changed/i)).toBeInTheDocument();
+    // `exclude` moves to the editor instead of staying in the raw JSON.
+    expect(JSON.parse((screen.getByLabelText("Config (JSON)") as HTMLTextAreaElement).value))
+      .toEqual({ days: 90 });
+    expect(screen.getByRole("button", { name: "Remove version latest" })).toBeInTheDocument();
+    expect(screen.getByText(/assigned to 2 selected repositories/i)).toBeInTheDocument();
+  });
+
+  it("sends only the changed fields and closes on success", async () => {
+    const user = await openEdit();
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Renamed");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("p1", { name: "Renamed" }));
+    expect(api.create).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("Policy updated");
+  });
+
+  it("removing the last exclusion removes config.exclude", async () => {
+    const user = await openEdit();
+    await user.click(screen.getByRole("button", { name: "Remove version latest" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("p1", { config: { days: 90 } }));
+  });
+
+  it("sends an edited config whole, with the exclusions merged back in", async () => {
+    const user = await openEdit();
+    const config = screen.getByLabelText("Config (JSON)");
+    await user.clear(config);
+    await user.click(config);
+    await user.paste('{ "days": 30, "min_keep": 3 }');
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("p1", {
+      config: { days: 30, min_keep: 3, exclude: { versions: ["latest"] } },
+    }));
+  });
+
+  it("does not send a request when nothing changed", async () => {
+    const user = await openEdit();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("switching to global warns about and clears the explicit assignments", async () => {
+    const user = await openEdit();
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeEnabled());
+    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByText(/removes its 2 explicit repository assignments/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("p1", {
+      applies_to_all: true, repository_ids: [],
+    }));
+  });
+
+  it("locks scope but still saves other fields when assignment support is unconfirmed", async () => {
+    api.assignmentSupport.mockRejectedValue(new Error("Older backend"));
+    api.list.mockResolvedValue([editable]);
+    api.update.mockResolvedValue(editable);
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit policy Cleanup" }));
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByText(/scope changes are blocked/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Description"), " v2");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("p1", { description: "Old snapshots v2" }));
+  });
+
+  it("keeps a legacy scope read-only", async () => {
+    await openEdit({ ...editable, scope_source: "legacy" });
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByText(/legacy scope, which cannot be changed here/i)).toBeInTheDocument();
+  });
+
+  it("refuses to clear an existing cron schedule", async () => {
+    const user = await openEdit({ ...editable, cron_schedule: "0 3 * * *" });
+    expect(screen.getByLabelText("Schedule (cron, optional)")).toHaveValue("0 3 * * *");
+    await user.clear(screen.getByLabelText("Schedule (cron, optional)"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/cannot be cleared/));
+    expect(api.update).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("maps a rejected config key to its field without closing the dialog", async () => {
+    const user = await openEdit();
+    api.update.mockRejectedValue({
+      code: "VALIDATION_ERROR",
+      message: "Invalid regex in exclude.version_patterns: unclosed group",
+    });
+    await user.type(screen.getByLabelText("Keep versions matching"), "^rc-");
+    await user.click(screen.getByRole("button", { name: "Add pattern" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
+      "Invalid regex in exclude.version_patterns: unclosed group",
+    ));
+    expect(screen.getByLabelText("Keep versions matching")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("returns to an empty create form after editing", async () => {
+    const user = await openEdit();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "New Policy" }));
+    expect(screen.getByRole("heading", { name: "Create Lifecycle Policy" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+    expect(screen.getByRole("combobox")).toBeEnabled();
+  });
+
+  it("creates with a cron schedule only when one is entered", async () => {
+    renderPage();
+    const user = await openCreate();
+    await user.type(screen.getByLabelText("Schedule (cron, optional)"), "0 3 * * *");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith(
+      expect.objectContaining({ cron_schedule: "0 3 * * *" }),
+    ));
   });
 });

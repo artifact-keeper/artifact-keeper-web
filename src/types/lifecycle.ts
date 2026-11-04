@@ -11,6 +11,8 @@ export interface LifecyclePolicy {
   policy_type: string;
   config: Record<string, unknown>;
   priority: number;
+  /** Cron expression the scheduler runs this policy on; `null` = default cadence. */
+  cron_schedule: string | null;
   last_run_at: string | null;
   last_run_items_removed: number | null;
   created_at: string;
@@ -25,8 +27,15 @@ export interface CreateLifecyclePolicyRequest {
   policy_type: string;
   config: Record<string, unknown>;
   priority?: number;
+  cron_schedule?: string;
 }
 
+/**
+ * PATCH body. Every field is optional and an omitted field keeps its stored
+ * value. `policy_type` is immutable, `config` replaces the stored config
+ * whole, and `repository_ids` replaces the assignments atomically. `null`
+ * means "keep" on the backend, so a cron schedule cannot be cleared.
+ */
 export interface UpdateLifecyclePolicyRequest {
   applies_to_all?: boolean;
   repository_ids?: string[];
@@ -35,6 +44,7 @@ export interface UpdateLifecyclePolicyRequest {
   enabled?: boolean;
   config?: Record<string, unknown>;
   priority?: number;
+  cron_schedule?: string;
 }
 
 export interface PolicyExecutionResult {
