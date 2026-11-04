@@ -173,8 +173,8 @@ describe("MCP config helpers", () => {
   });
 
   it("seeds the Remote wizard once, never over an operator's list", () => {
-    expect(seedMcpRemoteConfig(EMPTY_MCP_CONFIG).auto_approve_namespaces).toEqual([MCP_OFFICIAL_NAMESPACE_GLOB]);
-    const chosen = { ...EMPTY_MCP_CONFIG, auto_approve_namespaces: ["com.acme/*"] };
+    expect(seedMcpRemoteConfig(EMPTY_MCP_CONFIG).mcp_auto_approve_namespaces).toEqual([MCP_OFFICIAL_NAMESPACE_GLOB]);
+    const chosen = { ...EMPTY_MCP_CONFIG, mcp_auto_approve_namespaces: ["com.acme/*"] };
     expect(seedMcpRemoteConfig(chosen)).toBe(chosen);
   });
 
@@ -325,8 +325,8 @@ describe("McpConfigFields - remote", () => {
     expect(screen.getByText("Broad")).toBeTruthy();
 
     await user.click(preset);
-    expect(seen.value.auto_approve_namespaces).toEqual(["io.github.*/x"]);
+    expect(seen.value.mcp_auto_approve_namespaces).toEqual(["io.github.*/x"]);
     await user.click(preset);
-    expect(seen.value.auto_approve_namespaces).toEqual(["io.github.*/x", MCP_OFFICIAL_NAMESPACE_GLOB]);
+    expect(seen.value.mcp_auto_approve_namespaces).toEqual(["io.github.*/x", MCP_OFFICIAL_NAMESPACE_GLOB]);
   });
 });

@@ -2621,7 +2621,7 @@ describe('RepoDialogs - MCP registry (create)', () => {
       format: 'mcp',
       repo_type: 'remote',
       upstream_url: MCP_OFFICIAL_REGISTRY_URL,
-      auto_approve_namespaces: [MCP_OFFICIAL_NAMESPACE_GLOB],
+      mcp_auto_approve_namespaces: [MCP_OFFICIAL_NAMESPACE_GLOB],
     });
     expect(body).not.toHaveProperty('mcp_package_policy');
     expect(body).not.toHaveProperty('mcp_remote_posture');
@@ -2637,7 +2637,7 @@ describe('RepoDialogs - MCP registry (create)', () => {
     fireEvent.change(selects()[1], { target: { value: 'remote' } });
     await user.click(screen.getByRole('checkbox', { name: /official reference servers/ }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
-    expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('auto_approve_namespaces');
+    expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('mcp_auto_approve_namespaces');
   });
 
   it('describes a Virtual MCP repository without settings of its own', () => {

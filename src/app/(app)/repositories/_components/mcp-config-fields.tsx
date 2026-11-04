@@ -635,7 +635,7 @@ export function McpConfigFields({
     );
   }
 
-  const presetTicked = value.auto_approve_namespaces.includes(MCP_OFFICIAL_NAMESPACE_GLOB);
+  const presetTicked = value.mcp_auto_approve_namespaces.includes(MCP_OFFICIAL_NAMESPACE_GLOB);
 
   return (
     <div className="space-y-5">
@@ -759,7 +759,7 @@ export function McpConfigFields({
         />
       )}
 
-      {shows("auto_approve_namespaces") && (
+      {shows("mcp_auto_approve_namespaces") && (
         <div className="space-y-2">
           {offerOfficialPreset && !readOnly && (
             <label className="flex items-start gap-2 text-sm">
@@ -768,9 +768,9 @@ export function McpConfigFields({
                 checked={presetTicked}
                 onChange={(e) =>
                   set({
-                    auto_approve_namespaces: e.target.checked
-                      ? [...value.auto_approve_namespaces, MCP_OFFICIAL_NAMESPACE_GLOB]
-                      : value.auto_approve_namespaces.filter((g) => g !== MCP_OFFICIAL_NAMESPACE_GLOB),
+                    mcp_auto_approve_namespaces: e.target.checked
+                      ? [...value.mcp_auto_approve_namespaces, MCP_OFFICIAL_NAMESPACE_GLOB]
+                      : value.mcp_auto_approve_namespaces.filter((g) => g !== MCP_OFFICIAL_NAMESPACE_GLOB),
                   })
                 }
                 className="mt-1 accent-primary"
@@ -781,8 +781,8 @@ export function McpConfigFields({
           <ChipListEditor
             id={fid("auto-approve")}
             label="Auto-approve namespaces"
-            values={value.auto_approve_namespaces}
-            onChange={(v) => set({ auto_approve_namespaces: v })}
+            values={value.mcp_auto_approve_namespaces}
+            onChange={(v) => set({ mcp_auto_approve_namespaces: v })}
             validate={validateMcpGlob}
             placeholder="io.github.acme/*"
             readOnly={readOnly}
