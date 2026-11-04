@@ -95,8 +95,8 @@ test.describe('Create MCP registry (#5253)', () => {
     await page.getByRole('option', { name: 'Local', exact: true }).click();
 
     await expect(dialog.getByText('MCP Options')).toBeVisible();
-    await dialog.getByLabel('Namespace allowlist').fill('com.acme');
-    await dialog.getByLabel('Namespace allowlist').press('Enter');
+    await dialog.getByRole('textbox', { name: 'Namespace allowlist' }).fill('com.acme');
+    await dialog.getByRole('textbox', { name: 'Namespace allowlist' }).press('Enter');
     await expect(dialog.getByRole('button', { name: 'Remove com.acme' })).toBeVisible();
     await expect(dialog.getByLabel(/Own repositories/)).toBeChecked();
 
