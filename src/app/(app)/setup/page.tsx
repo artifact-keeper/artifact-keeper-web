@@ -193,7 +193,7 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
   {
     key: "ai-agents",
     label: "AI agents",
-    formats: ["agentplugins"],
+    formats: ["agentplugins", "mcp"],
   },
   {
     key: "other",

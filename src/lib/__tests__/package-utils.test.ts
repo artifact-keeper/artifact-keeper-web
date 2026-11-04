@@ -163,6 +163,15 @@ describe("getInstallCommand", () => {
       );
     });
 
+    it("mcp reads the exact version from the repository's registry API", () => {
+      expect(getInstallCommand("com.acme/weather", ver, "mcp", location)).toBe(
+        "curl https://registry.example.com/mcp/images/v0.1/servers/com.acme%2Fweather/versions/1.2.3"
+      );
+      expect(getInstallCommand("com.acme/weather", undefined, "mcp", { repoKey: "images" })).toBe(
+        "curl <registry>/mcp/images/v0.1/servers/com.acme%2Fweather/versions/latest"
+      );
+    });
+
     it("leaves formats that resolve through client config unchanged", () => {
       expect(getInstallCommand(pkg, ver, "npm", location)).toBe(
         "npm install my-package@1.2.3"

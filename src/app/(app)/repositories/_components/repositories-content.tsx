@@ -40,7 +40,8 @@ import {
 } from "@/components/ui/resizable";
 
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import { FORMAT_GROUPS, TYPE_OPTIONS } from "../_lib/constants";
+import { formatGroupsFor, TYPE_OPTIONS } from "../_lib/constants";
+import { backendSupportsMcp } from "@/lib/mcp/format";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
@@ -98,6 +99,7 @@ export function RepositoriesContent() {
   // plugin layouts (#591) and the plugin layout labels in the list (#592).
   const { data: formatHandlers } = useFormatHandlers();
   const pluginFormats = useMemo(() => wasmPluginFormats(formatHandlers), [formatHandlers]);
+  const formatGroups = formatGroupsFor(backendSupportsMcp(formatHandlers));
 
   // --- mutations ---
 
@@ -294,7 +296,7 @@ export function RepositoriesContent() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All formats</SelectItem>
-              {FORMAT_GROUPS.map(([group, options]) => (
+              {formatGroups.map(([group, options]) => (
                 <SelectGroup key={group}>
                   <span className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                     {group}
