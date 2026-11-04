@@ -43,7 +43,13 @@ function served(version: string, isLatest: boolean) {
         publishedAt: '2026-10-01T00:00:00Z',
         updatedAt: '2026-10-01T00:00:00Z',
       },
-      'com.artifactkeeper.registry/source': { repository: REPO, artifactId: `art-${version}`, packagePolicy: 'own-repos' },
+      'com.artifactkeeper.registry/source': {
+        repository: REPO,
+        artifactId: `art-${version}`,
+        packagePolicy: 'own-repos',
+        origin: 'hosted',
+        upstreamVerified: false,
+      },
     },
   };
 }
@@ -65,7 +71,7 @@ const HELD_BODY = {
 const json = (route: Route, body: unknown, status = 200, contentType = 'application/json') =>
   route.fulfill({ status, contentType, body: JSON.stringify(body) });
 
-async function stubMcp(page: Page, opts: { capabilities?: unknown } = {}) {
+async function stubMcp(page: Page, opts: { capabilities?: unknown; health?: unknown } = {}) {
   await page.route(`**/api/v1/packages/${PKG_ID}`, (route) =>
     json(route, {
       id: PKG_ID,
@@ -77,7 +83,7 @@ async function stubMcp(page: Page, opts: { capabilities?: unknown } = {}) {
       download_count: 0,
       created_at: '2026-10-01T00:00:00Z',
       updated_at: '2026-10-01T00:00:00Z',
-      metadata: { format: 'mcp' },
+      metadata: { format: 'mcp', source: 'hosted', origin: 'hosted', name: NAME, version: '1.4.2', status: 'active' },
     }),
   );
   await page.route(`**/api/v1/packages/${PKG_ID}/versions`, (route) =>
@@ -93,6 +99,7 @@ async function stubMcp(page: Page, opts: { capabilities?: unknown } = {}) {
   );
   await page.route(`**/mcp/${REPO}/v0.1/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/capabilities') && opts.capabilities) return json(route, opts.capabilities);
     if (path.endsWith('/versions')) return json(route, { servers: [served('1.4.2', true)], metadata: { count: 1 } });
     if (path.endsWith('/versions/2.0.0')) return json(route, HELD_BODY, 404, 'application/problem+json');
     if (path.endsWith('/versions/3.0.0')) return json(route, PLAIN_404, 404, 'application/problem+json');
@@ -119,7 +126,7 @@ async function stubMcp(page: Page, opts: { capabilities?: unknown } = {}) {
   );
   await page.route(`**/api/v1/repositories/${REPO}/mcp/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/capabilities') && opts.capabilities) return json(route, opts.capabilities);
+    if (path.endsWith('/health') && opts.health) return json(route, opts.health);
     return json(route, { code: 'NOT_FOUND', message: 'not found' }, 404);
   });
   await page.route(`**/api/v1/repositories/${REPO}`, (route) =>
@@ -133,6 +140,7 @@ test.describe('MCP server detail', () => {
     await page.goto(`/packages/${PKG_ID}`);
     await expect(page.getByRole('heading', { level: 1 })).toContainText('weather');
     await expect(page.getByText('v1.4.2 (latest)')).toBeVisible();
+    await expect(page.getByText('hosted', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Install / Connect' })).toBeVisible();
 
     await page.getByRole('tab', { name: /Packages & Remotes/ }).click();
@@ -164,21 +172,88 @@ test.describe('MCP server detail', () => {
   });
 
   test('labels the provenance of tool snapshots', async ({ page }) => {
+    const current = {
+      id: 'snap-1',
+      source: 'publisher_declared',
+      provenance: 'declared by the publisher',
+      observed: false,
+      authState: 'auth_required',
+      outcome: 'ok',
+      counts: { tools: 1, resources: 0, prompts: 0 },
+      tools: [{ name: 'get_forecast', description: 'Forecast', annotations: { readOnlyHint: true } }],
+      resources: [],
+      prompts: [],
+      instructions: null,
+    };
     await stubMcp(page, {
       capabilities: {
-        probe_available: false,
-        snapshots: [
-          {
-            source: 'publisher_declared',
-            auth_state: 'auth_required',
-            tools: [{ name: 'get_forecast', description: 'Forecast', annotations: { readOnlyHint: true } }],
-          },
-        ],
+        repository: REPO,
+        server: NAME,
+        version: '1.4.2',
+        artifactId: 'art-1.4.2',
+        current,
+        snapshots: [{ ...current, tools: undefined, resources: undefined, prompts: undefined }],
+        introspection: { remoteProbe: 'off', probeEnabled: false, sandbox: 'off', sandboxEnabled: false },
+        notice: 'Capability lists are untrusted.',
       },
     });
     await page.goto(`/packages/${PKG_ID}?tab=tools`);
     await expect(page.getByText('declared', { exact: true })).toBeVisible();
     await expect(page.getByText('get_forecast')).toBeVisible();
     await expect(page.getByText(/Unauthenticated view/)).toBeVisible();
+    await expect(page.getByText('Capability lists are untrusted.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Re-probe' })).toHaveCount(0);
+  });
+
+  test('shows the health roll-up and lint findings to a repository holder', async ({ page }) => {
+    await stubMcp(page, {
+      health: {
+        name: NAME,
+        version: '1.4.2',
+        artifactId: 'art-1.4.2',
+        status: 'warning',
+        packagePolicy: 'own-repos',
+        packages: [
+          {
+            index: 0,
+            package: 'npm:@acme/weather-mcp@1.4.2',
+            registryType: 'npm',
+            repository: 'npm-local',
+            scanned: true,
+            score: 97,
+            grade: 'A',
+            critical: 0,
+            high: 0,
+            medium: 1,
+            low: 0,
+            info: 0,
+            gate: 'allowed',
+            status: 'warning',
+          },
+        ],
+        lint: {
+          ran: true,
+          block: 0,
+          review: 1,
+          warn: 0,
+          findings: [
+            {
+              id: 'f1',
+              rule: 'secret_unmarked',
+              action: 'review',
+              severity: 'high',
+              source: 'server_json',
+              path: 'packages[0].environmentVariables[0].isSecret',
+              message: '"API_TOKEN" looks like a credential',
+              acknowledged: false,
+            },
+          ],
+        },
+      },
+    });
+    await page.goto(`/packages/${PKG_ID}?tab=security`);
+    await expect(page.getByText('Scan: grade A (97)')).toBeVisible();
+    await expect(page.getByText('review: secret_unmarked')).toBeVisible();
+    await expect(page.getByText('packages[0].environmentVariables[0].isSecret')).toBeVisible();
   });
 });

@@ -34,7 +34,9 @@
     "com.artifactkeeper.registry/source": {
       "repository": "e2e-mcp-local",
       "artifactId": "00000000-0000-4000-8000-00000000a002",
-      "packagePolicy": "own-repos"
+      "packagePolicy": "own-repos",
+      "origin": "hosted",
+      "upstreamVerified": false
     }
   }
 }

@@ -4,7 +4,7 @@ import type { Page, Route } from '@playwright/test';
 /**
  * Creating an MCP registry (artifact-keeper#5253). The e2e backend image does
  * not ship the `mcp` format yet, so GET /api/v1/formats is stubbed to list it
- * (or to leave it out, or to advertise a narrower `capabilities.repo_types`)
+ * (or to leave it out, or to advertise narrower `repository_types`)
  * and the create call is answered at the network layer:
  * the assertions are on what the browser offers and sends.
  */
@@ -87,7 +87,7 @@ test.describe('Create MCP registry (#5253)', () => {
     await dialog.getByRole('combobox').nth(0).click();
     await page.getByRole('option', { name: 'MCP Registry', exact: true }).click();
 
-    // The handler advertises no repo_types: every type is offered.
+    // The handler advertises no repository_types: every type is offered.
     await dialog.getByRole('combobox').nth(1).click();
     for (const type of ['Local', 'Staging', 'Remote', 'Virtual']) {
       await expect(page.getByRole('option', { name: type, exact: true })).toBeVisible();
@@ -112,7 +112,7 @@ test.describe('Create MCP registry (#5253)', () => {
 
   test('offers only the hosted types when the handler advertises them alone', async ({ page }) => {
     await page.route(FORMATS, (route) =>
-      json(route, [{ ...MCP_HANDLER, capabilities: { repo_types: ['local', 'staging'] } }]),
+      json(route, [{ ...MCP_HANDLER, repository_types: ['local', 'staging'] }]),
     );
     const dialog = await openCreateDialog(page);
     await dialog.getByRole('combobox').nth(0).click();

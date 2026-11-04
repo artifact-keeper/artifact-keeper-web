@@ -32,6 +32,7 @@ const MCP_HANDLER = {
   priority: 0,
   plugin_id: null,
   capabilities: null,
+  repository_types: ['local', 'staging', 'remote', 'virtual'],
 };
 
 const REPOSITORY = {
@@ -55,6 +56,14 @@ const REPOSITORY = {
   mcp_package_policy: 'own-repos',
   mcp_package_repos: { npm: 'e2e-npm-local', oci: 'e2e-docker-local' },
   mcp_namespace_allow: [],
+  mcp_server_deny: [],
+  mcp_require_oci_label: false,
+  mcp_require_namespace_grant: false,
+  mcp_probe_remotes: 'off',
+  mcp_probe_remotes_locked: false,
+  mcp_sandbox_introspection: 'off',
+  mcp_require_bundle_signature: false,
+  mcp_caller_can_lock: true,
 };
 
 const EMPTY_PAGE = { items: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 } };
