@@ -2851,4 +2851,17 @@ describe("RepoSettingsTab - MCP registry", () => {
       expect(mockUpdate).toHaveBeenCalledWith("mcp-remote", { mcp_remote_posture_locked: false }),
     );
   });
+
+  it("believes mcp_caller_can_lock over is_admin: a caller who cannot lock sees the lock", () => {
+    show({ ...lockedRemote, mcp_caller_can_lock: false });
+    expect(screen.getByTestId("mcp-lock-indicator")).toBeTruthy();
+    expect(screen.queryByLabelText("Lock for repository administrators")).toBeNull();
+    expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(true);
+  });
+
+  it("offers the lock switch when the backend says the caller can lock", () => {
+    show({ ...lockedRemote, mcp_caller_can_lock: true });
+    expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
+    expect(screen.getByLabelText("Lock for repository administrators").getAttribute("aria-checked")).toBe("true");
+  });
 });

@@ -329,9 +329,11 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const { user } = useAuth();
   const isRepoAdmin = !!user?.is_admin;
 
-  // MCP registry settings (artifact-keeper#5253): only changed keys are sent;
-  // the instance locks only by an instance administrator.
-  const mcpForm = useMcpSettingsForm(repository, isRepoAdmin);
+  // MCP registry settings (artifact-keeper#5253): only changed keys are sent.
+  // Only an instance administrator may set or clear the `*_locked` settings;
+  // the repository response says so (`mcp_caller_can_lock`), older backends
+  // do not, and then `is_admin` stands in.
+  const mcpForm = useMcpSettingsForm(repository, repository.mcp_caller_can_lock ?? isRepoAdmin);
   const mcpChanged = mcpForm.changed;
   const mcpChangedFields = mcpForm.changedFields;
   const resetMcp = mcpForm.reset;
@@ -1159,7 +1161,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
             repository={repository}
             form={mcpForm}
             readOnly={!isRepoAdmin}
-            canLock={isRepoAdmin}
+            canLock={repository.mcp_caller_can_lock ?? isRepoAdmin}
           />
           <Separator />
         </>

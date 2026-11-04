@@ -16,6 +16,7 @@ import { McpInputsTable } from "@/components/mcp/env-vars-table";
 import { McpBundlePanel } from "@/components/mcp/bundle-panel";
 import { packageLinks, repoHref, shortDigest, upstreamOf, type McpPackageLink } from "@/components/mcp/backing";
 import type {
+  McpBundle,
   McpInput,
   McpOfficialMeta,
   McpPackagePin,
@@ -179,7 +180,17 @@ function ServedFrom({ link, open }: { link: McpPackageLink; open: boolean }) {
   );
 }
 
-function PackageCard({ link, repoKey, server, open }: { link: McpPackageLink; repoKey: string; server: McpServerJson; open: boolean }) {
+function PackageCard({
+  link,
+  open,
+  bundle,
+  bundleUrl,
+}: {
+  link: McpPackageLink;
+  open: boolean;
+  bundle?: McpBundle;
+  bundleUrl?: string;
+}) {
   const p = link.pkg;
   const ident = p.registryType === "npm" || p.registryType === "pypi" ? `${p.identifier}${p.version ? `@${p.version}` : ""}` : p.identifier;
   const argv = [p.runtimeHint ?? "", ...argTokens(p.runtimeArguments), ident, ...argTokens(p.packageArguments)].filter(Boolean);
@@ -196,7 +207,7 @@ function PackageCard({ link, repoKey, server, open }: { link: McpPackageLink; re
         <McpInputsTable inputs={p.environmentVariables ?? []} caption={`Environment of ${p.identifier}`} />
       )}
       <ServedFrom link={link} open={open} />
-      {p.registryType === "mcpb" && <McpBundlePanel repoKey={repoKey} name={server.name} version={server.version} />}
+      {p.registryType === "mcpb" && <McpBundlePanel bundle={bundle} downloadUrl={bundleUrl ?? p.identifier} />}
     </article>
   );
 }
@@ -218,12 +229,19 @@ export function PackagesSection({
   server,
   pins,
   policy,
-  repoKey,
+  bundles,
+  bundleUrls,
 }: {
   server: McpServerJson;
   pins?: McpPackagePin[];
   policy?: McpPackagePolicy;
-  repoKey: string;
+  /** `metadata.bundles[]` of the stored version, matched by `index`. */
+  bundles?: McpBundle[];
+  /**
+   * Bundle URLs by package index from the exact read (ticketed for a
+   * signed-in caller); without one the listed identifier is used.
+   */
+  bundleUrls?: Record<number, string>;
 }) {
   const links = packageLinks(server, pins, policy);
   const remotes = server.remotes ?? [];
@@ -236,7 +254,13 @@ export function PackagesSection({
         <section aria-label="Packages" className="space-y-3">
           <h3 className="text-sm font-medium">Packages</h3>
           {links.map((l) => (
-            <PackageCard key={l.index} link={l} repoKey={repoKey} server={server} open={policy === "open"} />
+            <PackageCard
+              key={l.index}
+              link={l}
+              open={policy === "open"}
+              bundle={bundles?.find((b) => b.index === l.index)}
+              bundleUrl={bundleUrls?.[l.index]}
+            />
           ))}
         </section>
       )}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { McpCapabilitySnapshot, McpHealth, McpPackage, McpPackagePin, McpServerJson } from "@/types/mcp";
+import type { McpHealthPackage, McpPackage, McpPackagePin, McpServerJson } from "@/types/mcp";
+import { capsOf, healthOf, snapshot } from "@/components/mcp/test-utils";
 import {
   MCP_RISK_LEVEL_LABEL,
   MCP_RISK_WEIGHTS,
@@ -31,32 +32,28 @@ function pin(drift?: Record<string, unknown> | null): McpPackagePin {
   return { index: 0, registryType: "npm", submitted: { identifier: "@acme/x" }, resolved: { repository: "r" }, drift };
 }
 
-function health(p: Partial<McpHealth["packages"][number]>[]): McpHealth {
-  return { state: "warning", packages: p.map((x) => ({ package: "npm:@acme/x", ...x })) };
-}
-
-function caps(snapshots: McpCapabilitySnapshot[]) {
-  return { snapshots };
-}
+const health = (p: Partial<McpHealthPackage>[]) => healthOf(p, { status: "warning" });
 
 const TRIGGERS: Record<McpRiskSignalId, McpRiskInput> = {
   runs_locally: quiet({ server: server({ packages: [pkg()] }) }),
   open_policy: quiet({ server: server({ packages: [remotePkg] }), policy: "open" }),
   not_mirrored: quiet({ server: server({ packages: [remotePkg, remotePkg] }), pins: [pin()] }),
   cve_critical: quiet({ health: health([{ critical: 1 }]) }),
-  cve_high: quiet({ health: health([{ max_severity: "HIGH" }]) }),
+  cve_high: quiet({ health: health([{ high: 1 }]) }),
   cve_medium: quiet({ health: health([{ medium: 2 }]) }),
   unpinned: quiet({ server: server({ packages: [pkg({ version: "latest", transport: { type: "sse" } })] }) }),
   deprecated: quiet({ status: "deprecated" }),
   deleted: quiet({ status: "deleted" }),
   tag_moved: quiet({ pins: [pin({ from: "sha256:a", to: "sha256:b" })] }),
-  unverified_source: quiet({ source: "unverified" }),
+  unverified_source: quiet({ source: "remote" }),
   destructive_tools: quiet({
-    capabilities: caps([{ source: "remote_probe", tools: [{ name: "rm", annotations: { destructiveHint: true } }] }]),
+    capabilities: capsOf(snapshot({ tools: [{ name: "rm", annotations: { destructiveHint: true } }] })),
   }),
   tool_drift: quiet({ toolDrift: true }),
-  not_observable: quiet({ capabilities: caps([{ source: "remote_probe", auth_state: "auth_required" }]) }),
-  declared_only: quiet({ capabilities: caps([{ source: "publisher_declared" }]) }),
+  not_observable: quiet({ capabilities: capsOf(snapshot({ authState: "auth_required" })) }),
+  declared_only: quiet({
+    capabilities: capsOf(snapshot({ source: "publisher_declared", observed: false, authState: null })),
+  }),
   secrets: quiet({
     server: server({ remotes: [{ type: "sse", headers: [{ name: "Authorization", isSecret: true }] }] }),
   }),
@@ -118,14 +115,37 @@ describe("individual signal rules", () => {
     expect(ids(quiet({ pins: [pin(null), pin()] }))).toEqual([]);
   });
 
-  it("needs every snapshot to be auth gated or declared", () => {
-    const mixed = caps([
-      { source: "publisher_declared", auth_state: "caller_specific" },
-      { source: "remote_probe", auth_state: "none" },
+  it("reads destructive_tools and not_observable from capabilities.current only", () => {
+    const old = snapshot({ id: "old", authState: "auth_required", tools: [{ name: "rm", annotations: { destructiveHint: true } }] });
+    const current = snapshot({ id: "new", tools: [{ name: "ls", annotations: { readOnlyHint: true } }] });
+    expect(ids(quiet({ capabilities: capsOf(current, [current, old]) }))).toEqual([]);
+    expect(ids(quiet({ capabilities: capsOf(snapshot({ authState: "caller_specific" })) }))).toEqual([
+      "not_observable",
     ]);
-    expect(ids(quiet({ capabilities: mixed }))).toEqual([]);
-    expect(ids(quiet({ capabilities: caps([]) }))).toEqual([]);
+  });
+
+  it("does not raise declared_only when a successful snapshot was observed", () => {
+    const declared = snapshot({ id: "d", source: "publisher_declared", observed: false, authState: null });
+    const probed = snapshot({ id: "p", observed: true, outcome: "ok" });
+    const failed = snapshot({ id: "f", observed: true, outcome: "timeout" });
+    expect(ids(quiet({ capabilities: capsOf(declared, [declared, probed]) }))).toEqual([]);
+    expect(ids(quiet({ capabilities: capsOf(declared, [declared, failed]) }))).toEqual(["declared_only"]);
+  });
+
+  it("raises nothing without a current snapshot", () => {
+    expect(ids(quiet({ capabilities: capsOf(null, [snapshot({ outcome: "timeout" })]) }))).toEqual([]);
     expect(ids(quiet({ capabilities: null }))).toEqual([]);
+  });
+
+  it.each(["hosted", "remote-verified", "mirror-verified", "unknown"] as const)(
+    "does not flag a %s source as unverified",
+    (source) => {
+      expect(ids(quiet({ source }))).toEqual([]);
+    },
+  );
+
+  it("flags a mirror source as unverified", () => {
+    expect(ids(quiet({ source: "mirror" }))).toEqual(["unverified_source"]);
   });
 
   it("labels the secrets count", () => {
@@ -141,18 +161,17 @@ describe("individual signal rules", () => {
 });
 
 describe("worstSeverity paths", () => {
-  const cve = (packages: Partial<McpHealth["packages"][number]>[]) =>
+  const cve = (packages: Partial<McpHealthPackage>[]) =>
     ids(quiet({ health: health(packages) })).filter((i) => i.startsWith("cve_"));
 
   it.each([
     ["critical by count", [{ critical: 2 }], ["cve_critical"]],
-    ["critical by max_severity", [{ max_severity: "Critical" }], ["cve_critical"]],
     ["critical after a high", [{ high: 1 }, { critical: 1 }], ["cve_critical"]],
     ["high by count", [{ high: 1 }], ["cve_high"]],
     ["high beats medium in any order", [{ medium: 1 }, { high: 1 }], ["cve_high"]],
     ["high kept after a later medium", [{ high: 1 }, { medium: 1 }], ["cve_high"]],
-    ["medium by max_severity", [{ max_severity: "medium" }], ["cve_medium"]],
-    ["low only", [{ low: 5, max_severity: "low" }], []],
+    ["medium by count", [{ medium: 3 }], ["cve_medium"]],
+    ["low and info only", [{ low: 5, info: 2 }], []],
     ["no packages", [], []],
   ])("%s", (_label, packages, expected) => {
     expect(cve(packages)).toEqual(expected);
@@ -165,7 +184,7 @@ describe("worstSeverity paths", () => {
 
 describe("riskScore / riskLevel / assessRisk", () => {
   it("sums weights", () => {
-    const signals = riskSignals(quiet({ status: "deprecated", toolDrift: true, source: "unverified" }));
+    const signals = riskSignals(quiet({ status: "deprecated", toolDrift: true, source: "remote" }));
     expect(riskScore(signals)).toBe(3 + 3 + 2);
     expect(riskScore([])).toBe(0);
   });

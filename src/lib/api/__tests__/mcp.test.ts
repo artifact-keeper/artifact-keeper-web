@@ -18,7 +18,14 @@ vi.mock("@/lib/api/artifacts", () => ({
 }));
 
 import { ApiError } from "../fetch";
-import { MCP_SEARCH_MIN_CHARS, encodeServerName, isNotSupported, mcpApi, mcpProblemMessage } from "../mcp";
+import {
+  MCP_SEARCH_MIN_CHARS,
+  encodeServerName,
+  isNotSupported,
+  mcpApi,
+  mcpProblemMessage,
+  toNamespaceGrant,
+} from "../mcp";
 
 const NAME = "com.acme/weather";
 const SERVER = { name: NAME, description: "Weather", version: "1.0.0" };
@@ -237,111 +244,145 @@ describe("getStoredMetadata", () => {
 // Phase 2/3 readers: 404/405/501 -> null, anything else rethrown
 // ---------------------------------------------------------------------------
 
+const MGMT = "/api/v1/repositories/r/mcp";
+const CAT_ITEM = { id: "c1", name: NAME, namespace: "com.acme", status: "pending", pins: [], ingested: [] };
+const SNAP = { id: "s1", source: "remote_probe", observed: true, authState: "none", outcome: "ok" };
+
 const READERS: { name: string; call: () => Promise<unknown>; url: string; ok: unknown; expected: unknown }[] = [
   {
-    name: "listReviews (array)",
-    call: () => mcpApi.listReviews("r", { status: "pending", search: "acme" }),
-    url: "/api/v1/repositories/r/mcp/reviews?status=pending&search=acme",
-    ok: [{ id: "1" }],
-    expected: [{ id: "1" }],
+    name: "listCatalog",
+    call: () =>
+      mcpApi.listCatalog("r", {
+        search: "  acme ",
+        status: "review",
+        namespace: "com.acme",
+        requested: true,
+        queue: true,
+        cursor: "c",
+        limit: 5,
+      }),
+    url: `${MGMT}/catalog?search=acme&status=review&namespace=com.acme&requested=true&queue=true&cursor=c&limit=5`,
+    ok: { items: [CAT_ITEM], nextCursor: "n", counts: { pending: 1 } },
+    expected: { items: [CAT_ITEM], nextCursor: "n", counts: { pending: 1 } },
   },
   {
-    name: "listReviews ({items})",
-    call: () => mcpApi.listReviews("r"),
-    url: "/api/v1/repositories/r/mcp/reviews",
-    ok: { items: [{ id: "2" }] },
-    expected: [{ id: "2" }],
-  },
-  {
-    name: "listReviews (empty object)",
-    call: () => mcpApi.listReviews("r"),
-    url: "/api/v1/repositories/r/mcp/reviews",
+    name: "listCatalog (defaults)",
+    call: () => mcpApi.listCatalog("r", { search: "   " }),
+    url: `${MGMT}/catalog`,
     ok: {},
-    expected: [],
+    expected: { items: [], nextCursor: null, counts: {} },
   },
   {
-    name: "upstreamCatalog",
-    call: () => mcpApi.upstreamCatalog("r", { search: "x", cursor: "c", limit: 5 }),
-    url: "/api/v1/repositories/r/mcp/upstream?search=x&cursor=c&limit=5",
-    ok: { servers: [] },
-    expected: { servers: [] },
+    name: "catalogItem",
+    call: () => mcpApi.catalogItem("r", NAME),
+    url: `${MGMT}/catalog/servers/com.acme/weather`,
+    ok: CAT_ITEM,
+    expected: CAT_ITEM,
+  },
+  {
+    name: "syncState",
+    call: () => mcpApi.syncState("r"),
+    url: `${MGMT}/sync`,
+    ok: { lastError: null, lastSummary: null },
+    expected: { lastError: null, lastSummary: null },
   },
   {
     name: "listHolds",
-    call: () => mcpApi.listHolds("r", { name: NAME, version: "1.0.0" }),
-    url: "/mcp/r/v0.1/x/com.artifactkeeper/holds?name=com.acme%2Fweather&version=1.0.0",
-    ok: { holds: [{ status: 404 }] },
-    expected: [{ status: 404 }],
+    call: () => mcpApi.listHolds("r", { cursor: "c", limit: 10, search: " acme " }),
+    url: "/mcp/r/v0.1/x/com.artifactkeeper/holds?cursor=c&limit=10&search=acme",
+    ok: { holds: [{ status: 404 }], metadata: { count: 4, nextCursor: "n" } },
+    expected: { holds: [{ status: 404 }], count: 4, nextCursor: "n" },
+  },
+  {
+    name: "listHolds (short search, no metadata)",
+    call: () => mcpApi.listHolds("r", { search: "ab" }),
+    url: "/mcp/r/v0.1/x/com.artifactkeeper/holds",
+    ok: { holds: [{ status: 404 }, { status: 503 }] },
+    expected: { holds: [{ status: 404 }, { status: 503 }], count: 2, nextCursor: undefined },
   },
   {
     name: "listHolds (no holds field)",
     call: () => mcpApi.listHolds("r"),
     url: "/mcp/r/v0.1/x/com.artifactkeeper/holds",
-    ok: {},
-    expected: [],
-  },
-  {
-    name: "pendingReviewCount",
-    call: () => mcpApi.pendingReviewCount(),
-    url: "/api/v1/admin/holds/summary",
-    ok: { mcp_pending_reviews: 7 },
-    expected: 7,
-  },
-  {
-    name: "pendingReviewCount (no number)",
-    call: () => mcpApi.pendingReviewCount(),
-    url: "/api/v1/admin/holds/summary",
-    ok: { mcp_pending_reviews: "7" },
-    expected: null,
+    ok: { metadata: { nextCursor: "" } },
+    expected: { holds: [], count: 0, nextCursor: undefined },
   },
   {
     name: "capabilities",
-    call: () => mcpApi.capabilities("r", NAME, "1.0.0"),
-    url: `${ADMIN}/capabilities`,
-    ok: { probe_available: true, snapshots: [{ source: "remote_probe" }] },
-    expected: { probe_available: true, snapshots: [{ source: "remote_probe" }] },
+    call: () => mcpApi.capabilities("r", NAME, "1.0.0", { snapshot: "s1", source: "remote_probe", limit: 3 }),
+    url: `${REG}/versions/1.0.0/capabilities?snapshot=s1&source=remote_probe&limit=3`,
+    ok: {
+      repository: "r",
+      server: NAME,
+      version: "1.0.0",
+      artifactId: "a1",
+      current: SNAP,
+      snapshots: [SNAP],
+      introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "on", sandboxEnabled: true, jobs: [] },
+      notice: "n",
+    },
+    expected: {
+      repository: "r",
+      server: NAME,
+      version: "1.0.0",
+      artifactId: "a1",
+      current: SNAP,
+      snapshots: [SNAP],
+      introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "on", sandboxEnabled: true, jobs: [] },
+      notice: "n",
+    },
   },
   {
-    name: "capabilities (snapshots default)",
+    name: "capabilities (defaults)",
     call: () => mcpApi.capabilities("r", NAME, "1.0.0"),
-    url: `${ADMIN}/capabilities`,
-    ok: { probe_available: false },
-    expected: { probe_available: false, snapshots: [] },
+    url: `${REG}/versions/1.0.0/capabilities`,
+    ok: { snapshots: "nope", introspection: { probeEnabled: "yes" } },
+    expected: {
+      current: null,
+      snapshots: [],
+      introspection: { remoteProbe: "off", sandbox: "off", probeEnabled: false, sandboxEnabled: false },
+    },
+  },
+  {
+    name: "capabilitiesDiff",
+    call: () => mcpApi.capabilitiesDiff("r", NAME, "1.0.0", { from: "s0", to: "s1", source: "ci_reported" }),
+    url: `${REG}/versions/1.0.0/capabilities/diff?from=s0&to=s1&source=ci_reported`,
+    ok: { summary: { text: "Tools: +1 added" } },
+    expected: { summary: { text: "Tools: +1 added" } },
   },
   {
     name: "health",
     call: () => mcpApi.health("r", NAME, "1.0.0"),
     url: `${ADMIN}/health`,
-    ok: { state: "healthy", packages: [] },
-    expected: { state: "healthy", packages: [] },
+    ok: {
+      name: NAME,
+      version: "1.0.0",
+      artifactId: "a1",
+      status: "warning",
+      packagePolicy: "own-repos",
+      packages: [{ index: 0, package: "npm:x@1", high: 1 }],
+      lint: { ran: true, block: 0, review: 1, warn: 2, findings: [{ id: "f1", rule: "r", action: "review" }] },
+    },
+    expected: {
+      name: NAME,
+      version: "1.0.0",
+      artifactId: "a1",
+      status: "warning",
+      packagePolicy: "own-repos",
+      packages: [{ index: 0, package: "npm:x@1", high: 1 }],
+      lint: { ran: true, block: 0, review: 1, warn: 2, findings: [{ id: "f1", rule: "r", action: "review" }] },
+    },
   },
   {
-    name: "bundle",
-    call: () => mcpApi.bundle("r", NAME, "1.0.0"),
-    url: `${ADMIN}/bundle`,
-    ok: { name: NAME, version: "1.0.0", sha256: "a" },
-    expected: { name: NAME, version: "1.0.0", sha256: "a" },
-  },
-  {
-    name: "listNamespaceGrants (array)",
-    call: () => mcpApi.listNamespaceGrants("r"),
-    url: "/api/v1/repositories/r/mcp/namespace-grants",
-    ok: [{ id: "g1" }],
-    expected: [{ id: "g1" }],
-  },
-  {
-    name: "listNamespaceGrants ({items})",
-    call: () => mcpApi.listNamespaceGrants("r"),
-    url: "/api/v1/repositories/r/mcp/namespace-grants",
-    ok: { items: [{ id: "g2" }] },
-    expected: [{ id: "g2" }],
-  },
-  {
-    name: "listNamespaceGrants (null)",
-    call: () => mcpApi.listNamespaceGrants("r"),
-    url: "/api/v1/repositories/r/mcp/namespace-grants",
-    ok: null,
-    expected: [],
+    name: "health (defaults)",
+    call: () => mcpApi.health("r", NAME, "1.0.0"),
+    url: `${ADMIN}/health`,
+    ok: { status: "unknown", packages: null },
+    expected: {
+      status: "unknown",
+      packages: [],
+      lint: { ran: false, block: 0, review: 0, warn: 0, findings: [] },
+    },
   },
 ];
 
@@ -350,6 +391,7 @@ describe("Phase 2/3 readers", () => {
     mockApiFetch.mockResolvedValueOnce(ok);
     expect(await call()).toEqual(expected);
     expect(lastUrl()).toBe(url);
+    expect(lastCall()[1]?.method).toBeUndefined();
   });
 
   const unsupported = READERS.flatMap((r) => [404, 405, 501].map((status) => ({ ...r, status })));
@@ -364,71 +406,107 @@ describe("Phase 2/3 readers", () => {
   });
 });
 
+describe("pendingReviewCount", () => {
+  it("sums pending and review over every Remote that serves the catalog", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ items: [], counts: { pending: 2, review: 1, approved: 9 } })
+      .mockRejectedValueOnce(new ApiError(404, ""))
+      .mockRejectedValueOnce(new ApiError(500, ""))
+      .mockResolvedValueOnce({ items: [], counts: { review: 4 } });
+    expect(await mcpApi.pendingReviewCount(["a", "b", "c", "d e"])).toBe(7);
+    expect(mockApiFetch.mock.calls.map((c) => c[0])).toEqual([
+      "/api/v1/repositories/a/mcp/catalog?queue=true&limit=1",
+      "/api/v1/repositories/b/mcp/catalog?queue=true&limit=1",
+      "/api/v1/repositories/c/mcp/catalog?queue=true&limit=1",
+      "/api/v1/repositories/d%20e/mcp/catalog?queue=true&limit=1",
+    ]);
+  });
+
+  it("is null without keys or when no Remote serves the catalog", async () => {
+    expect(await mcpApi.pendingReviewCount([])).toBeNull();
+    expect(mockApiFetch).not.toHaveBeenCalled();
+    reject(404);
+    expect(await mcpApi.pendingReviewCount(["a"])).toBeNull();
+  });
+
+  it("counts a catalog without counts as zero", async () => {
+    mockApiFetch.mockResolvedValueOnce({ items: [] });
+    expect(await mcpApi.pendingReviewCount(["a"])).toBe(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Writers
 // ---------------------------------------------------------------------------
 
 const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method: string; body?: unknown }[] = [
   {
-    name: "approveReview",
-    call: () => mcpApi.approveReview("id 1", { reason: "ok", version: "1.0.0" }),
-    url: "/api/v1/curation/packages/id%201/approve",
+    name: "decide approve",
+    call: () => mcpApi.decide("r", "id 1", "approve", "ok"),
+    url: `${MGMT}/catalog/id%201/approve`,
     method: "POST",
-    body: { reason: "ok", version: "1.0.0" },
+    body: { reason: "ok" },
   },
   {
-    name: "approveReview (default body)",
-    call: () => mcpApi.approveReview("i1"),
-    url: "/api/v1/curation/packages/i1/approve",
+    name: "decide block (no reason)",
+    call: () => mcpApi.decide("r", "i1", "block"),
+    url: `${MGMT}/catalog/i1/block`,
     method: "POST",
     body: {},
   },
   {
-    name: "blockReview",
-    call: () => mcpApi.blockReview("i1", { reason: "bad" }),
-    url: "/api/v1/curation/packages/i1/block",
+    name: "decide reopen of a name@version row",
+    call: () => mcpApi.decide("r", "i1@1.0.0", "reopen", "again"),
+    url: `${MGMT}/catalog/i1%401.0.0/reopen`,
     method: "POST",
-    body: { reason: "bad" },
+    body: { reason: "again" },
   },
   {
-    name: "blockReview (default body)",
-    call: () => mcpApi.blockReview("i1"),
-    url: "/api/v1/curation/packages/i1/block",
+    name: "pinVersion",
+    call: () => mcpApi.pinVersion("r", NAME, "1.2.0", "only this one"),
+    url: `${MGMT}/catalog/pins`,
     method: "POST",
-    body: {},
+    body: { name: NAME, version: "1.2.0", reason: "only this one" },
   },
   {
-    name: "bulkApprove",
-    call: () => mcpApi.bulkApprove(["a", "b"], "batch"),
-    url: "/api/v1/curation/packages/bulk-approve",
+    name: "pinVersion (no reason)",
+    call: () => mcpApi.pinVersion("r", NAME, "1.2.0"),
+    url: `${MGMT}/catalog/pins`,
     method: "POST",
-    body: { ids: ["a", "b"], reason: "batch" },
+    body: { name: NAME, version: "1.2.0" },
   },
   {
-    name: "bulkBlock",
-    call: () => mcpApi.bulkBlock(["a"], "nope"),
-    url: "/api/v1/curation/packages/bulk-block",
+    name: "bulkApprovePattern",
+    call: () => mcpApi.bulkApprovePattern("r", { pattern: "com.acme/*", includeReview: true, reason: "trusted" }),
+    url: `${MGMT}/catalog/bulk-approve`,
     method: "POST",
-    body: { ids: ["a"], reason: "nope" },
+    body: { pattern: "com.acme/*", includeReview: true, reason: "trusted" },
   },
   {
-    name: "bulkApproveNamespace",
-    call: () => mcpApi.bulkApproveNamespace("r", "com.acme/*", "trusted"),
-    url: "/api/v1/repositories/r/mcp/reviews/bulk-approve-namespace",
+    name: "bulkApprovePattern (defaults)",
+    call: () => mcpApi.bulkApprovePattern("r", { pattern: "com.acme/*" }),
+    url: `${MGMT}/catalog/bulk-approve`,
     method: "POST",
-    body: { namespace_glob: "com.acme/*", reason: "trusted" },
+    body: { pattern: "com.acme/*", includeReview: false },
   },
   {
     name: "requestApproval",
-    call: () => mcpApi.requestApproval("r", NAME),
-    url: "/api/v1/repositories/r/mcp/upstream/request-approval",
+    call: () => mcpApi.requestApproval("r", "c1", "we need it"),
+    url: `${MGMT}/catalog/c1/request-approval`,
     method: "POST",
-    body: { name: NAME },
+    body: { note: "we need it" },
   },
   {
-    name: "probe",
-    call: () => mcpApi.probe("r", NAME, "1.0.0"),
-    url: `${ADMIN}/capabilities/probe`,
+    name: "requestApproval (no note)",
+    call: () => mcpApi.requestApproval("r", "c1"),
+    url: `${MGMT}/catalog/c1/request-approval`,
+    method: "POST",
+    body: {},
+  },
+  {
+    name: "triggerSync",
+    call: () => mcpApi.triggerSync("r"),
+    url: `${MGMT}/sync`,
     method: "POST",
   },
   {
@@ -445,22 +523,16 @@ const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method
     method: "DELETE",
   },
   {
-    name: "createNamespaceGrant",
-    call: () =>
-      mcpApi.createNamespaceGrant("r", {
-        principal_type: "group",
-        principal_id: "g1",
-        actions: ["write"],
-        namespaces: ["com.acme"],
-      }),
-    url: "/api/v1/repositories/r/mcp/namespace-grants",
-    method: "POST",
-    body: { principal_type: "group", principal_id: "g1", actions: ["write"], namespaces: ["com.acme"] },
+    name: "deleteVersion (with statusMessage)",
+    call: () => mcpApi.deleteVersion("r", NAME, "1.0.0", "superseded"),
+    url: `${REG}/versions/1.0.0`,
+    method: "DELETE",
+    body: { statusMessage: "superseded" },
   },
   {
     name: "deleteNamespaceGrant",
-    call: () => mcpApi.deleteNamespaceGrant("r", "g/1"),
-    url: "/api/v1/repositories/r/mcp/namespace-grants/g%2F1",
+    call: () => mcpApi.deleteNamespaceGrant("g/1"),
+    url: "/api/v1/permissions/g%2F1",
     method: "DELETE",
   },
 ];
@@ -479,6 +551,161 @@ describe("writers", () => {
     await expect(call()).rejects.toBeInstanceOf(ApiError);
   });
 });
+
+describe("probe", () => {
+  it("POSTs to the registry capabilities/probe route and answers the queued ids", async () => {
+    mockApiFetch.mockResolvedValueOnce({ queued: ["j1", "j2"], jobs: [] });
+    expect(await mcpApi.probe("r", NAME, "1.0.0")).toEqual({ queued: ["j1", "j2"] });
+    expect(lastUrl()).toBe(`${REG}/versions/1.0.0/capabilities/probe`);
+    expect(lastCall()[1]?.method).toBe("POST");
+    expect(lastBody()).toBeUndefined();
+  });
+
+  it("defaults queued to [] and rethrows a refusal", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    expect(await mcpApi.probe("r", NAME, "1.0.0")).toEqual({ queued: [] });
+    reject(409, JSON.stringify({ code: "mcp_introspection_disabled" }));
+    await expect(mcpApi.probe("r", NAME, "1.0.0")).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Namespace grants over /api/v1/permissions
+// ---------------------------------------------------------------------------
+
+const RULE = {
+  id: "p1",
+  principal_type: "service_account",
+  principal_id: "sa1",
+  principal_name: "ci-bot",
+  target_type: "repository",
+  target_id: "repo-uuid",
+  actions: ["read", "write"],
+  conditions: { mcp_namespaces: ["io.github.{repository_owner}/*", "com.acme"] },
+  created_at: "2026-11-01T00:00:00Z",
+};
+const GRANT = {
+  id: "p1",
+  repository_id: "repo-uuid",
+  principal_type: "service_account",
+  principal_id: "sa1",
+  principal_name: "ci-bot",
+  actions: ["read", "write"],
+  namespaces: ["io.github.{repository_owner}/*", "com.acme"],
+  created_at: "2026-11-01T00:00:00Z",
+};
+
+describe("toNamespaceGrant", () => {
+  it("maps a rule carrying conditions.mcp_namespaces", () => {
+    expect(toNamespaceGrant(RULE)).toEqual(GRANT);
+  });
+
+  it("drops non-string patterns and defaults optional fields", () => {
+    const g = toNamespaceGrant({
+      ...RULE,
+      principal_name: null,
+      created_at: undefined,
+      conditions: { mcp_namespaces: ["com.acme", 3, null] },
+    });
+    expect(g).toMatchObject({ namespaces: ["com.acme"], principal_name: undefined, created_at: undefined });
+  });
+
+  it.each([
+    ["no conditions", { ...RULE, conditions: undefined }],
+    ["null conditions", { ...RULE, conditions: null }],
+    ["an empty list", { ...RULE, conditions: { mcp_namespaces: [] } }],
+    ["a non-list", { ...RULE, conditions: { mcp_namespaces: "com.acme" } }],
+  ])("is null for %s", (_label, rule) => {
+    expect(toNamespaceGrant(rule)).toBeNull();
+  });
+});
+
+describe("listNamespaceGrants", () => {
+  it("reads the repository's permission rules and keeps the namespace ones", async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      items: [RULE, { ...RULE, id: "p2", conditions: null }],
+      pagination: { total_pages: 1 },
+    });
+    expect(await mcpApi.listNamespaceGrants("repo-uuid")).toEqual([GRANT]);
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(lastUrl()).toBe("/api/v1/permissions?target_type=repository&target_id=repo-uuid&page=1&per_page=100");
+  });
+
+  it("follows the pages", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ items: [RULE], pagination: { total_pages: 2 } })
+      .mockResolvedValueOnce({ items: [{ ...RULE, id: "p3" }], pagination: { total_pages: 2 } });
+    const grants = await mcpApi.listNamespaceGrants("repo-uuid");
+    expect(grants.map((g) => g.id)).toEqual(["p1", "p3"]);
+    expect(lastUrl()).toContain("page=2");
+  });
+
+  it("stops after the page limit", async () => {
+    mockApiFetch.mockResolvedValue({ items: [], pagination: { total_pages: 999 } });
+    await mcpApi.listNamespaceGrants("repo-uuid");
+    expect(mockApiFetch).toHaveBeenCalledTimes(20);
+  });
+
+  it("treats an empty answer as no grants and rethrows errors", async () => {
+    mockApiFetch.mockResolvedValueOnce(null);
+    expect(await mcpApi.listNamespaceGrants("repo-uuid")).toEqual([]);
+    reject(403);
+    await expect(mcpApi.listNamespaceGrants("repo-uuid")).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("createNamespaceGrant", () => {
+  const BODY = {
+    principal_type: "service_account" as const,
+    principal_id: "sa1",
+    actions: ["read", "write"],
+    namespaces: ["io.github.{repository_owner}/*", "com.acme"],
+  };
+
+  it("POSTs a repository permission rule with conditions.mcp_namespaces", async () => {
+    mockApiFetch.mockResolvedValueOnce(RULE);
+    expect(await mcpApi.createNamespaceGrant("repo-uuid", BODY)).toEqual(GRANT);
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(lastUrl()).toBe("/api/v1/permissions");
+    expect(lastCall()[1]?.method).toBe("POST");
+    expect(lastBody()).toEqual({
+      principal_type: "service_account",
+      principal_id: "sa1",
+      target_type: "repository",
+      target_id: "repo-uuid",
+      actions: ["read", "write"],
+      conditions: { mcp_namespaces: ["io.github.{repository_owner}/*", "com.acme"] },
+    });
+  });
+
+  it("deletes a rule stored without the condition and throws", async () => {
+    mockApiFetch.mockResolvedValueOnce({ ...RULE, id: "p 9", conditions: null }).mockResolvedValueOnce(undefined);
+    await expect(mcpApi.createNamespaceGrant("repo-uuid", BODY)).rejects.toThrow(
+      "This server does not support MCP namespace grants; nothing was granted",
+    );
+    expect(mockApiFetch).toHaveBeenCalledTimes(2);
+    expect(lastUrl()).toBe("/api/v1/permissions/p%209");
+    expect(lastCall()[1]?.method).toBe("DELETE");
+  });
+
+  it("still throws the unsupported error when the clean-up delete fails", async () => {
+    mockApiFetch.mockResolvedValueOnce({ ...RULE, conditions: {} }).mockRejectedValueOnce(new ApiError(500, ""));
+    await expect(mcpApi.createNamespaceGrant("repo-uuid", BODY)).rejects.toThrow("does not support MCP namespace");
+  });
+
+  it("throws without a delete when the answer has no id", async () => {
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    await expect(mcpApi.createNamespaceGrant("repo-uuid", BODY)).rejects.toThrow("does not support MCP namespace");
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows a refusal of the create", async () => {
+    reject(400, JSON.stringify({ code: "bad_pattern" }));
+    await expect(mcpApi.createNamespaceGrant("repo-uuid", BODY)).rejects.toMatchObject({ status: 400 });
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 
 describe("isNotSupported", () => {
   it.each([

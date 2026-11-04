@@ -21,15 +21,19 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { MCP_PRINCIPAL_LABELS, McpNamespaceGrantDialog } from "./mcp-namespace-grant-dialog";
 
 /**
- * Namespace-conditioned grants on hosted MCP repositories
- * (`PermissionConditions.mcp_namespaces`, artifact-keeper#5253 Phase 3).
- * Shown on the permissions page when the instance has an MCP repository
- * and the backend serves the grants API; `?mcp=<repoKey>` preselects one.
+ * Namespace-conditioned grants on hosted MCP repositories: ordinary
+ * permission rules (`/api/v1/permissions`) whose `conditions.mcp_namespaces`
+ * limits an MCP write to matching server names (artifact-keeper#5253).
+ * Shown on the permissions page when the instance has a hosted MCP
+ * repository on a backend that knows the condition (it echoes
+ * `mcp_require_namespace_grant`); `?mcp=<repoKey>` preselects one.
  * Admin-only, like the page that hosts it.
  */
 export function McpNamespaceGrants({ repositories }: { repositories: Repository[] }) {
   const deepLinkKey = useSearchParams()?.get("mcp") ?? "";
-  const mcpRepos = repositories.filter(isHostedMcpRepo);
+  // A backend without namespace conditions would store the rule unconditioned,
+  // so the section needs the setting the same backend echoes.
+  const mcpRepos = repositories.filter((r) => isHostedMcpRepo(r) && r.mcp_require_namespace_grant !== undefined);
   const [picked, setPicked] = useState("");
   const repoKey =
     picked || mcpRepos.find((r) => r.key === deepLinkKey)?.key || mcpRepos[0]?.key || "";
@@ -37,12 +41,11 @@ export function McpNamespaceGrants({ repositories }: { repositories: Repository[
 
   const grants = useQuery({
     queryKey: mcpKeys.grants(repoKey),
-    queryFn: () => mcpApi.listNamespaceGrants(repoKey),
-    enabled: repoKey !== "",
+    queryFn: () => mcpApi.listNamespaceGrants(repo!.id),
+    enabled: !!repo,
   });
 
-  if (!repo) return null;
-  if (grants.data === null) {
+  if (!repo) {
     // Only say so when someone came here for it; otherwise stay out of the way.
     return deepLinkKey ? (
       <p className="text-sm text-muted-foreground">MCP namespace grants are not available on this server.</p>
@@ -102,7 +105,7 @@ function GrantsHeader({
         the repository requires namespace grants (mcp_require_namespace_grant);
         otherwise repository write access is enough to publish any allowed name.
       </p>
-      <McpNamespaceGrantDialog repoKey={repo.key} open={createOpen} onOpenChange={setCreateOpen} />
+      <McpNamespaceGrantDialog repoKey={repo.key} repositoryId={repo.id} open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
@@ -111,7 +114,7 @@ function GrantsTable({ repoKey, grants }: { repoKey: string; grants: McpNamespac
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<McpNamespaceGrant | null>(null);
   const remove = useMutation({
-    mutationFn: (id: string) => mcpApi.deleteNamespaceGrant(repoKey, id),
+    mutationFn: (id: string) => mcpApi.deleteNamespaceGrant(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mcpKeys.all });
       toast.success("Namespace grant deleted");

@@ -10,14 +10,15 @@ export const mcpKeys = {
   versions: (repoKey: string, name: string) => ["mcp", "versions", repoKey, name] as const,
   version: (repoKey: string, name: string, version: string) => ["mcp", "version", repoKey, name, version] as const,
   stored: (repoKey: string, name: string, version: string) => ["mcp", "stored", repoKey, name, version] as const,
-  reviews: (repoKey: string, status?: string) => ["mcp", "reviews", repoKey, status ?? "all"] as const,
+  /** One approval-queue tab of a Remote (`queue`, `approved`, `blocked`). */
+  reviews: (repoKey: string, tab?: string) => ["mcp", "reviews", repoKey, tab ?? "all"] as const,
+  /** Catalog browse (`GET /catalog` with a search). */
   upstream: (repoKey: string, params?: unknown) => ["mcp", "upstream", repoKey, params ?? {}] as const,
   holds: (repoKey: string, params?: unknown) => ["mcp", "holds", repoKey, params ?? {}] as const,
   pendingCount: ["mcp", "pending-count"] as const,
   capabilities: (repoKey: string, name: string, version: string) =>
     ["mcp", "capabilities", repoKey, name, version] as const,
   health: (repoKey: string, name: string, version: string) => ["mcp", "health", repoKey, name, version] as const,
-  bundle: (repoKey: string, name: string, version: string) => ["mcp", "bundle", repoKey, name, version] as const,
   grants: (repoKey: string) => ["mcp", "grants", repoKey] as const,
   catalog: (params?: unknown) => ["mcp", "catalog", params ?? {}] as const,
 };

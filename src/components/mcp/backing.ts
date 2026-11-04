@@ -1,6 +1,7 @@
 import { resolvedMeta } from "@/lib/mcp/server-json";
 import type {
   McpHealth,
+  McpHealthPackage,
   McpPackage,
   McpPackagePin,
   McpPackagePolicy,
@@ -35,7 +36,7 @@ export interface McpPackageLink {
   drift: boolean;
 }
 
-export type McpHealthPackage = McpHealth["packages"][number];
+export type { McpHealthPackage };
 
 const BASE_URL_REPO = /\/(?:npm|pypi|nuget|cargo)\/([^/?#]+)/;
 
@@ -83,14 +84,15 @@ export function packageLinks(
   });
 }
 
-/** The health row of a package: by coordinate, artifact id, then identifier. */
+/** The health row of a package: by `packages[]` index, then by coordinate. */
 export function healthFor(link: McpPackageLink, health: McpHealth | null | undefined): McpHealthPackage | undefined {
   const rows = health?.packages ?? [];
-  return (
-    rows.find((r) => r.package === link.coordinate) ??
-    rows.find((r) => !!r.artifact_id && link.artifactIds.includes(r.artifact_id)) ??
-    rows.find((r) => r.package === link.pkg.identifier || r.package.startsWith(`${link.pkg.registryType}:${link.pkg.identifier}`))
-  );
+  return rows.find((r) => r.index === link.index) ?? rows.find((r) => r.package === link.coordinate);
+}
+
+/** Whether a health gate holds the version (`allowed` is the only one that does not). */
+export function isHoldingGate(gate: string | null | undefined): boolean {
+  return !!gate && gate !== "allowed";
 }
 
 /** Repository detail link, optionally on a tab. */

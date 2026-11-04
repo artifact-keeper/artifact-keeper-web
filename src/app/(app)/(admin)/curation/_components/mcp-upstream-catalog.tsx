@@ -2,26 +2,29 @@
 
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Loader2, Search, Send } from "lucide-react";
+import { Loader2, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 
-import { mcpApi, MCP_SEARCH_MIN_CHARS } from "@/lib/api/mcp";
+import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import type { McpUpstreamEntry } from "@/types/mcp";
+import type { McpCatalogItem } from "@/types/mcp";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { McpNotAvailable, McpReviewStatusBadge, McpTransportChips } from "./mcp-queue-parts";
+import { McpCatalogNotes, McpNotAvailable, McpReviewStatusBadge } from "./mcp-queue-parts";
 
 /**
- * The Remote's upstream catalog, browsable only here (never on `/v0.1`):
- * deny by default means an upstream entry is invisible to clients until an
- * administrator approves its name, so every row is greyed and says so.
+ * The Remote's upstream catalog (`GET /catalog`), browsable only here, never
+ * on `/v0.1`. The sync records every upstream name with a cached summary, so
+ * browsing never calls upstream. Deny by default means a name is invisible to
+ * clients until an administrator approves it, so unapproved rows are greyed
+ * and say so; any reader may ask for one.
  */
+
+/** Backend cap on `search` (characters). */
+const SEARCH_MAX_CHARS = 200;
 export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
@@ -30,27 +33,26 @@ export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
   const query = useInfiniteQuery({
     queryKey: mcpKeys.upstream(repoKey, { search }),
     queryFn: ({ pageParam }) =>
-      mcpApi.upstreamCatalog(repoKey, { search: search || undefined, cursor: pageParam || undefined }),
+      mcpApi.listCatalog(repoKey, { search: search || undefined, cursor: pageParam || undefined }),
     initialPageParam: "",
-    getNextPageParam: (last) => last?.next_cursor || undefined,
+    getNextPageParam: (last) => last?.nextCursor || undefined,
   });
 
   const request = useMutation({
-    mutationFn: (name: string) => mcpApi.requestApproval(repoKey, name),
-    onSuccess: (_r, name) => {
+    mutationFn: (item: McpCatalogItem) => mcpApi.requestApproval(repoKey, item.id),
+    onSuccess: (_r, item) => {
       queryClient.invalidateQueries({ queryKey: mcpKeys.all });
-      toast.success(`Approval requested for ${name}`);
+      toast.success(`Approval requested for ${item.name}`);
     },
     onError: mutationErrorToast("Failed to request approval"),
   });
 
   const pages = query.data?.pages ?? [];
-  const tooShort = draft.trim().length > 0 && draft.trim().length < MCP_SEARCH_MIN_CHARS;
+  const tooLong = draft.trim().length > SEARCH_MAX_CHARS;
 
   if (pages[0] === null) return <McpNotAvailable what="Upstream catalog browsing" />;
 
-  const entries = pages.flatMap((p) => p?.servers ?? []);
-  const upstreamError = pages.some((p) => !!p?.upstream_error);
+  const entries = pages.flatMap((p) => p?.items ?? []);
 
   return (
     <div className="space-y-4">
@@ -58,37 +60,26 @@ export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!tooShort) setSearch(draft.trim());
+          if (!tooLong) setSearch(draft.trim());
         }}
       >
         <Input
           className="w-72"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Search the upstream registry"
+          placeholder="Search upstream server names"
           aria-label="Search upstream catalog"
           aria-describedby="mcp-catalog-search-help"
         />
-        <Button type="submit" variant="outline" size="sm" disabled={tooShort}>
+        <Button type="submit" variant="outline" size="sm" disabled={tooLong}>
           <Search className="size-4" /> Search
         </Button>
         <p id="mcp-catalog-search-help" className="text-xs text-muted-foreground">
-          {tooShort
-            ? `Enter at least ${MCP_SEARCH_MIN_CHARS} characters.`
+          {tooLong
+            ? `At most ${SEARCH_MAX_CHARS} characters.`
             : "Not visible to clients until approved."}
         </p>
       </form>
-
-      {upstreamError && (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" />
-          <AlertTitle>Upstream unavailable</AlertTitle>
-          <AlertDescription>
-            The upstream registry could not be reached; nothing is served until
-            it can be evaluated (fail closed).
-          </AlertDescription>
-        </Alert>
-      )}
 
       {query.isLoading && (
         <div className="space-y-2" role="status" aria-busy="true">
@@ -103,9 +94,9 @@ export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
         </p>
       )}
 
-      {!query.isLoading && !query.isError && entries.length === 0 && !upstreamError && (
+      {!query.isLoading && !query.isError && entries.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          {search ? "No upstream servers match." : "The upstream catalog is empty."}
+          {search ? "No upstream servers match." : "The upstream catalog is empty (has the Remote synced yet?)."}
         </div>
       )}
 
@@ -113,10 +104,10 @@ export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
         <ul className="divide-y rounded-md border" aria-label="Upstream servers">
           {entries.map((e) => (
             <CatalogRow
-              key={`${e.server.name}@${e.server.version}`}
-              entry={e}
-              requesting={request.isPending && request.variables === e.server.name}
-              onRequest={() => request.mutate(e.server.name)}
+              key={e.id}
+              item={e}
+              requesting={request.isPending && request.variables?.id === e.id}
+              onRequest={() => request.mutate(e)}
             />
           ))}
         </ul>
@@ -135,36 +126,31 @@ export function McpUpstreamCatalog({ repoKey }: { repoKey: string }) {
 }
 
 function CatalogRow({
-  entry,
+  item,
   requesting,
   onRequest,
 }: {
-  entry: McpUpstreamEntry;
+  item: McpCatalogItem;
   requesting: boolean;
   onRequest: () => void;
 }) {
-  const { server, review_status } = entry;
+  const served = item.status === "approved" && !item.denied;
+  const requestable = !item.denied && (item.status === "pending" || item.status === "review");
   return (
     <li className="flex flex-wrap items-start gap-3 px-3 py-2">
-      {/* Greyed: an upstream entry is not served until its name is approved. */}
-      <div className="min-w-0 flex-1 opacity-70">
+      {/* Greyed: an upstream name is not served until it is approved. */}
+      <div className={`min-w-0 flex-1 ${served ? "" : "opacity-70"}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium break-all">{server.name}</span>
-          <span className="font-mono text-xs text-muted-foreground">{server.version}</span>
-          {review_status ? (
-            <McpReviewStatusBadge status={review_status} />
-          ) : (
-            <Badge variant="outline">Not requested</Badge>
-          )}
+          <span className="font-medium break-all">{item.name}</span>
+          {item.latestVersion && <span className="font-mono text-xs text-muted-foreground">{item.latestVersion}</span>}
+          <McpReviewStatusBadge status={item.status} />
         </div>
-        {server.description && <p className="mt-0.5 text-xs text-muted-foreground">{server.description}</p>}
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          <McpTransportChips server={server} />
-          <span className="text-xs text-muted-foreground">Not visible to clients until approved</span>
-        </div>
+        {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+        <McpCatalogNotes item={item} />
+        {!served && <p className="mt-1 text-xs text-muted-foreground">Not visible to clients until approved</p>}
       </div>
-      {!review_status && (
-        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${server.name}`}>
+      {requestable && (
+        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${item.name}`}>
           {requesting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Request approval
         </Button>

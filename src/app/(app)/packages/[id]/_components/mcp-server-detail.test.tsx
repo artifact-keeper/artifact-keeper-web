@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@/lib/api/fetch";
-import { PINS, SERVER, entryOf, renderWithClient } from "@/components/mcp/test-utils";
+import { PINS, SERVER, capsOf, entryOf, renderWithClient } from "@/components/mcp/test-utils";
 import type { Package } from "@/types";
 
 beforeAll(() => {
@@ -30,7 +30,6 @@ const api = vi.hoisted(() => ({
   getStoredMetadata: vi.fn(),
   health: vi.fn(),
   capabilities: vi.fn(),
-  bundle: vi.fn(),
   setVersionStatus: vi.fn(),
   probe: vi.fn(),
 }));
@@ -87,7 +86,6 @@ beforeEach(() => {
   api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: SERVER, registry: { status: "active" }, packages: PINS } });
   api.health.mockResolvedValue(null);
   api.capabilities.mockResolvedValue(null);
-  api.bundle.mockResolvedValue(null);
   pkgApi.getVersions.mockResolvedValue([
     { version: "1.4.2", created_at: "2026-10-01T00:00:00Z" },
     { version: "2.0.0", created_at: "2026-11-01T00:00:00Z" },
@@ -168,10 +166,43 @@ describe("McpServerDetail", () => {
     renderDetail();
     expect(await screen.findByTestId("mcp-held-reason")).toHaveTextContent("Pending review");
     expect(screen.getByText("status:held")).toBeInTheDocument();
+    // No served entry and no origin on the package row: no source badge.
+    expect(screen.queryByText(/^source:/)).toBeNull();
     expect(screen.getByText("held")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Install / Connect" })).toBeNull();
     expect(api.getVersion).toHaveBeenCalledWith("mcp-local", SERVER.name, "2.0.0");
     expect(api.getStoredMetadata).toHaveBeenCalledWith("mcp-local", SERVER.name, "2.0.0", undefined);
+  });
+
+  it("labels a held version's source from the package row's origin, never as verified", async () => {
+    setUrl("version=2.0.0&tab=versions");
+    api.getVersion.mockResolvedValue({ kind: "held", problem: { status: 404, hold: "curation", error: "mcp_pending_review" } });
+    renderWithClient(<McpServerDetail pkg={{ ...PKG, metadata: { origin: "mirror" } }} />);
+    expect(await screen.findByText("source:mirror")).toBeInTheDocument();
+  });
+
+  it("shows the stored bundle of an MCPB package", async () => {
+    setUrl("tab=packages");
+    const url = "https://ak.example/mcp/mcp-local/bundles/weather-1.4.2.mcpb";
+    const mcpb = {
+      ...SERVER,
+      packages: [{ registryType: "mcpb", identifier: url, fileSha256: "abc123", transport: { type: "stdio" } }],
+      remotes: [],
+    };
+    api.listVersions.mockResolvedValue([entryOf(mcpb)]);
+    api.getStoredMetadata.mockResolvedValue({
+      artifactId: "a",
+      metadata: {
+        server: mcpb,
+        registry: { status: "active" },
+        packages: [],
+        bundles: [{ index: 0, file: "weather-1.4.2.mcpb", fileSha256: "abc123", signature: { state: "valid", signer: "Acme" } }],
+      },
+    });
+    renderDetail();
+    expect(await screen.findByText("signature valid")).toBeInTheDocument();
+    expect(screen.getByText("weather-1.4.2.mcpb")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Download bundle/ })).toHaveAttribute("href", url);
   });
 
   it("stays neutral when the version is hidden and nothing is readable", async () => {
@@ -227,8 +258,10 @@ describe("McpServerDetail", () => {
 
   it("offers the curation queue on a Remote and re-probe when available", async () => {
     repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "remote" });
-    api.capabilities.mockResolvedValue({ probe_available: true, snapshots: [] });
-    api.probe.mockResolvedValue(undefined);
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [], { introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false } }),
+    );
+    api.probe.mockResolvedValue({ queued: ["job-1"] });
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => expect(repoApi.get).toHaveBeenCalled());
@@ -236,6 +269,17 @@ describe("McpServerDetail", () => {
     expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toHaveAttribute("href", "/curation?repo=mcp-local");
     await user.click(screen.getByRole("menuitem", { name: "Re-probe tools" }));
     await waitFor(() => expect(api.probe).toHaveBeenCalledWith("mcp-local", SERVER.name, "1.4.2"));
+  });
+
+  it("offers no re-probe when the repository allows no introspection", async () => {
+    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "remote" });
+    api.capabilities.mockResolvedValue(capsOf(null, []));
+    const user = userEvent.setup();
+    renderDetail();
+    await waitFor(() => expect(api.capabilities).toHaveBeenCalled());
+    await user.click(await screen.findByRole("button", { name: "Admin actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Re-probe tools" })).toBeNull();
   });
 
   it("orders merged version rows newest first", () => {

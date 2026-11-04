@@ -8,10 +8,10 @@
  *    `/mcp/<repo>/v0.1/...`. These are the shapes the official registry and
  *    its clients (VS Code, Copilot, `mcp-publisher`) use, so field names are
  *    camelCase.
- * 2. Artifact Keeper's own admin/curation shapes for the later phases
- *    (curation reviews, upstream catalog, capability snapshots, health,
- *    namespace grants). Their endpoints live in `src/lib/api/mcp.ts`; every
- *    field a backend may not send yet is optional.
+ * 2. Artifact Keeper's own shapes (Remote catalog and approval queue,
+ *    capability snapshots, health, bundles, namespace grants), as
+ *    docs/mcp-registry.md in artifact-keeper documents them. Their endpoints
+ *    live in `src/lib/api/mcp.ts`.
  *
  * Everything rendered from a server.json is publisher-controlled text: render
  * it as plain text, and only link URLs that pass `isSafeHttpUrl`.
@@ -119,14 +119,28 @@ export interface McpAkSourceMeta {
   sha256?: string;
   packagePolicy?: McpPackagePolicy;
   /**
-   * Phase 2 (Remote): where the entry came from. `hosted` for a publish to
-   * this instance, `upstream` for an entry proxied from the Remote's
-   * upstream registry. Server-side enum, never a publisher field.
+   * Where the version comes from. `hosted` for a publish to this instance,
+   * `remote` for one a Remote ingested in `mcp_remote_mode: allowlist`,
+   * `mirror` for one ingested in `mirror` mode. Server-side enum, never a
+   * publisher field.
    */
-  origin?: 'hosted' | 'upstream';
-  /** Phase 2: whether the upstream registry reported the entry as official. */
+  origin?: McpOrigin;
+  /**
+   * `true` only for an ingested version whose upstream is the official
+   * registry or another Artifact Keeper, whose content matched at ingest and
+   * has not drifted since. Always `false` for a hosted version.
+   */
   upstreamVerified?: boolean;
+  /** `upstream` on ingested versions only. */
+  kind?: 'upstream';
+  /** The Remote's `upstream_url`, on ingested versions only. */
+  upstreamUrl?: string;
+  /** Set when a Virtual served the entry; `repository` is then the member. */
+  virtualRepository?: string;
 }
+
+/** `_meta["com.artifactkeeper.registry/source"].origin`. */
+export type McpOrigin = 'hosted' | 'remote' | 'mirror';
 
 /** `packages[]._meta["com.artifactkeeper/resolved"]` (OCI pins). */
 export interface McpResolvedMeta {
@@ -247,6 +261,48 @@ export interface McpStoredMetadata {
     packageTypes?: string[];
     remoteTypes?: string[];
   };
+  /** One entry per pinned MCPB bundle. */
+  bundles?: McpBundle[];
+  /** Present while (or after) packages are filled into a Remote backing repository. */
+  resolution?: McpResolution;
+}
+
+/** `metadata.bundles[]`: an MCPB bundle a version pins. */
+export interface McpBundle {
+  /** Index of the `packages[]` entry it backs. */
+  index: number;
+  artifactId?: string;
+  file?: string;
+  fileSha256: string;
+  size?: number;
+  signature?: {
+    state: 'valid' | 'unsigned' | 'invalid' | string;
+    signer?: string;
+    issuer?: string;
+    fingerprint?: string;
+    selfSigned?: boolean;
+    signedAt?: string;
+  };
+  /** `null` for a bundle from a Generic repository (no upload facts). */
+  manifest?: Record<string, unknown> | null;
+}
+
+/** `metadata.resolution`: the fill of packages missing from a Remote backing repository. */
+export interface McpResolution {
+  state: 'resolving' | 'resolved' | 'failed' | string;
+  pending?: {
+    index: number;
+    registryType: string;
+    identifier: string;
+    version?: string;
+    fillRepository?: string;
+  }[];
+  attempts?: number;
+  lastError?: string | null;
+  requestedAt?: string;
+  resolvedAt?: string;
+  failedAt?: string;
+  error?: { error: string; detail?: string; index?: number } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,68 +358,156 @@ export interface McpRepositorySettings {
   mcp_sandbox_introspection?: McpSandboxIntrospection;
   /** Local, Staging, Remote. Refuse unsigned MCPB bundles. */
   mcp_require_bundle_signature?: boolean;
+  /**
+   * Response only (`POST`, `GET`, `PATCH` of one MCP repository; not on the
+   * list): `true` when the caller is an instance administrator, the only
+   * role that may set or clear a `*_locked` setting or change a locked one.
+   */
+  mcp_caller_can_lock?: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: curation (Remote approval queue) and upstream catalog
+// Remote management API (`/api/v1/repositories/{key}/mcp/...`): catalog,
+// approval queue, pins, bulk approval, sync. JSON is camelCase.
 // ---------------------------------------------------------------------------
 
-export type McpReviewStatus = 'pending' | 'approved' | 'blocked' | 'review';
+export type McpCatalogStatus = 'pending' | 'approved' | 'blocked' | 'review';
 
-/** A row of the MCP approval queue (curation_packages keyed by server name). */
-export interface McpReview {
+/** `{storedSha256, upstreamSha256, detectedAt}`: upstream bytes changed under an ingested version. */
+export interface McpContentDrift {
+  storedSha256?: string;
+  upstreamSha256?: string;
+  detectedAt?: string;
+}
+
+/** A `name@version` row of a catalog item (a pin, or a re-queued drifted version). */
+export interface McpCatalogPin {
   id: string;
-  repository_id?: string;
-  /** Full server name. */
+  version: string;
+  status: McpCatalogStatus | string;
+  contentDrift: McpContentDrift | null;
+  evaluationReason: string | null;
+}
+
+/** One ingested version (an artifact of the Remote). */
+export interface McpCatalogVersion {
+  version: string;
+  /** The server.json artifact (capabilities diff, health). */
+  artifactId: string;
+  upstreamStatus: McpServerStatus | string;
+  /** Packages the sync could not pin; the version is hidden until it can. */
+  unresolved: { index: number; error: string; detail?: string }[];
+}
+
+/** One upstream server name of a Remote's catalog. */
+export interface McpCatalogItem {
+  /** `curation_packages` id of the name row. */
+  id: string;
   name: string;
-  /** `name@version` pin, or null for a name-level approval. */
-  version?: string | null;
-  status: McpReviewStatus | string;
-  reason?: string | null;
-  first_seen_at?: string;
-  decided_at?: string | null;
-  decided_by?: string | null;
-  /** Latest upstream document, when the backend includes it. */
-  server?: McpServerJson | null;
-  /** Lint findings attached to the review (Phase 2 `mcp_lint`). */
-  findings?: McpLintFinding[];
-  /** Tool diff against the previously approved snapshot (Phase 3). */
-  tool_diff?: McpToolDiff | null;
+  namespace: string;
+  status: McpCatalogStatus | string;
+  /** Matches `mcp_server_deny`: never served, whatever `status`. */
+  denied: boolean;
+  title: string | null;
+  description: string | null;
+  latestVersion: string | null;
+  /** Newest first, at most 200. */
+  versions: string[];
+  upstreamStatus: McpServerStatus | string | null;
+  upstreamUpdatedAt: string | null;
+  flags: { typosquat?: { similarTo: string } } & Record<string, unknown>;
+  approvalRequests: {
+    count?: number;
+    lastRequestedAt?: string;
+    lastRequestedBy?: string;
+    lastNote?: string;
+  };
+  evaluationReason: string | null;
+  evaluatedAt: string | null;
+  evaluatedBy: string | null;
+  firstSeenAt: string;
+  pins: McpCatalogPin[];
+  ingested: McpCatalogVersion[];
 }
 
-export interface McpLintFinding {
-  rule: string;
-  severity?: string;
-  action?: 'block' | 'review' | string;
-  message?: string;
-  pointer?: string;
+export interface McpCatalogPage {
+  items: McpCatalogItem[];
+  nextCursor: string | null;
+  /** Name rows per status in the whole repository. */
+  counts: Partial<Record<McpCatalogStatus, number>>;
 }
 
-/** An entry of the upstream catalog browse (UI only, never on /v0.1). */
-export interface McpUpstreamEntry {
-  server: McpServerJson;
-  _meta?: Record<string, unknown>;
-  /** Curation state of the name in this Remote, `null` when never requested. */
-  review_status?: McpReviewStatus | string | null;
-  review_id?: string | null;
+export interface McpCatalogQuery {
+  /** Case-insensitive substring of the name. */
+  search?: string;
+  status?: McpCatalogStatus;
+  /** Exact namespace (the part before `/`). */
+  namespace?: string;
+  /** Only names someone requested approval for. */
+  requested?: boolean;
+  /** The approval queue: names, or one of their versions, awaiting a decision. */
+  queue?: boolean;
+  cursor?: string;
+  /** Default 50, max 200. */
+  limit?: number;
 }
 
-export interface McpUpstreamPage {
-  servers: McpUpstreamEntry[];
-  next_cursor?: string | null;
-  /** Echoed by the backend when the upstream fetch failed (fail closed). */
-  upstream_error?: string | null;
+export type McpCatalogDecision = 'approve' | 'block' | 'reopen';
+
+export interface McpDecisionResult {
+  item: McpCatalogItem;
+  /** Set when the approval stands but upstream could not be reached; the next sync ingests it. */
+  ingestError: string | null;
 }
 
-export interface McpBulkNamespaceResult {
+export interface McpBulkApproveResult {
   approved: number;
-  /** Names the glob matched but deny globs refused. */
-  denied?: number;
-  warnings?: string[];
+  /** The first 100 approved names. */
+  names: string[];
+  /** Matching names left alone because they match `mcp_server_deny`. */
+  skippedDenied: number;
+  /** Matching flagged (`review`) names left alone without `includeReview`. */
+  skippedReview: number;
+}
+
+export interface McpSyncSummary {
+  pages: number;
+  entries: number;
+  namesNew: number;
+  autoApproved: number;
+  flagged: number;
+  ingested: number;
+  unchanged: number;
+  statusChanged: number;
+  drifted: number;
+  invalid: number;
+  unresolved: number;
+  reResolved: number;
+  backfilledNames: number;
+  complete: boolean;
+  errors: string[];
+}
+
+export interface McpSyncState {
+  updatedSince: string | null;
+  resumeCursor: string | null;
+  resumeSince: string | null;
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  lastSucceededAt: string | null;
+  lastError: string | null;
+  lastSummary: McpSyncSummary | null;
+}
+
+/** `GET /v0.1/x/com.artifactkeeper/holds`, one page. */
+export interface McpHoldsPage {
+  holds: McpHoldProblem[];
+  nextCursor?: string;
+  count: number;
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2/3: capability snapshots (decision 10)
+// Capability snapshots (`/mcp/<repo>/v0.1/servers/{name}/versions/{v}/capabilities`)
 // ---------------------------------------------------------------------------
 
 export type McpCapabilitySource =
@@ -373,9 +517,18 @@ export type McpCapabilitySource =
   | 'remote_probe'
   | 'sandbox_run';
 
-export type McpAuthState = 'none' | 'auth_required' | 'caller_specific';
+export type McpAuthState = 'none' | 'auth_required' | 'caller_specific' | 'unknown';
 
-export type McpSnapshotOutcome = 'ok' | 'timeout' | 'start_failed' | 'needs_config' | 'refused';
+export type McpSnapshotOutcome =
+  | 'ok'
+  | 'auth_required'
+  | 'rate_limited'
+  | 'timeout'
+  | 'start_failed'
+  | 'needs_config'
+  | 'refused'
+  | 'unsupported'
+  | 'error';
 
 export interface McpToolAnnotations {
   title?: string;
@@ -410,69 +563,144 @@ export interface McpPrompt {
   arguments?: { name: string; description?: string; required?: boolean }[];
 }
 
+/**
+ * A snapshot. `snapshots[]` entries are summaries (no lists); `current` and
+ * an answer for `?snapshot=<id>` carry `tools`, `resources`, `prompts` and
+ * `instructions`.
+ */
 export interface McpCapabilitySnapshot {
-  id?: string;
+  id: string;
   source: McpCapabilitySource | string;
-  signature_state?: 'none' | 'verified' | 'invalid';
-  protocol_version?: string | null;
-  observed_at?: string | null;
-  auth_state?: McpAuthState | string | null;
-  cache_scope?: string | null;
+  /** Display label set by AK, e.g. "observed by remote probe". */
+  provenance?: string;
+  /** `remote:0`, `package:1`, `mcpb:<sha256>`, ... */
+  origin?: string | null;
+  observed?: boolean;
+  authState?: McpAuthState | string | null;
   outcome?: McpSnapshotOutcome | string | null;
+  protocolVersion?: string | null;
+  observedAt?: string | null;
+  ttlMs?: number | null;
+  cacheScope?: 'public' | 'private' | string | null;
+  counts?: { tools: number; resources: number; prompts: number };
+  toolsHash?: string | null;
+  contentHash?: string | null;
+  workerVersion?: string | null;
+  reportedBy?: string | null;
+  details?: Record<string, unknown> | null;
+  createdAt?: string;
   tools?: McpTool[];
   resources?: McpResource[];
   prompts?: McpPrompt[];
   instructions?: string | null;
-  content_hash?: string | null;
-  /** Lint findings over the tool objects. */
-  findings?: McpLintFinding[];
+}
+
+export interface McpIntrospectionJob {
+  id: string;
+  kind: 'remote_probe' | 'sandbox_run' | string;
+  target: string;
+  status: 'pending' | 'claimed' | 'completed' | 'failed' | 'cancelled' | string;
+  attempts?: number;
+  maxAttempts?: number;
+  lastError?: string | null;
+  snapshotId?: string | null;
+  completedAt?: string | null;
+  createdAt?: string;
 }
 
 export interface McpCapabilities {
-  /** Whether the instance runs the introspection worker at all. */
-  probe_available?: boolean;
-  /** Current snapshot per source, newest first. */
+  repository: string;
+  server: string;
+  version: string;
+  artifactId: string;
+  /** Newest successful snapshot of the best source; `null` when none. */
+  current: McpCapabilitySnapshot | null;
+  /** Summaries, newest first (failed attempts included). */
   snapshots: McpCapabilitySnapshot[];
-}
-
-export interface McpToolDiff {
-  added: string[];
-  removed: string[];
-  changed: { name: string; fields: string[] }[];
+  introspection: {
+    remoteProbe: McpProbeRemotes | string;
+    probeEnabled: boolean;
+    sandbox: McpSandboxIntrospection | string;
+    sandboxEnabled: boolean;
+    /** Repository holders only. */
+    jobs?: McpIntrospectionJob[];
+  };
+  notice: string;
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: health roll-up, namespace grants, MCPB bundles
+// Server health (`/api/v1/repositories/{key}/mcp/servers/{name}/versions/{v}/health`)
 // ---------------------------------------------------------------------------
 
-export type McpHealthState = 'healthy' | 'warning' | 'held' | 'unknown';
+export type McpHealthStatus = 'ok' | 'warning' | 'critical' | 'unknown';
 
-/** Per-version health rolled up from the pinned packages' scan results. */
-export interface McpHealth {
-  state: McpHealthState | string;
-  packages: {
-    package: string;
-    registry_type?: string;
-    repository?: string | null;
-    artifact_id?: string | null;
-    scan_state?: string | null;
-    max_severity?: string | null;
-    critical?: number;
-    high?: number;
-    medium?: number;
-    low?: number;
-    gate?: string | null;
-  }[];
-  computed_at?: string;
+/** `allowed` is the only gate that does not hold the version. */
+export type McpHealthGate = 'allowed' | 'quarantine' | 'scan_policy' | 'age_gate' | 'unresolvable' | 'unavailable';
+
+export interface McpHealthPackage {
+  index: number;
+  /** `npm:@acme/x@1.0.0`, as refusals name it. */
+  package: string;
+  registryType: string;
+  repository: string;
+  scanned: boolean;
+  score: number | null;
+  grade: string | null;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+  gate: McpHealthGate | string;
+  status: McpHealthStatus | string;
 }
 
-/** A namespace-conditioned grant (`PermissionConditions.mcp_namespaces`). */
-export interface McpNamespaceGrant {
-  /** Underlying permission id. */
+export interface McpLintFinding {
+  /** The finding id the acknowledgement API takes. */
   id: string;
+  rule: string;
+  action: 'block' | 'review' | 'warn' | string;
+  severity?: string;
+  /** `server_json`, `status_message` or `capabilities:<source>`. */
+  source?: string;
+  path?: string;
+  message?: string;
+  acknowledged?: boolean;
+}
+
+export interface McpLintSummary {
+  ran: boolean;
+  scanId?: string | null;
+  lintedAt?: string | null;
+  block: number;
+  review: number;
+  warn: number;
+  findings: McpLintFinding[];
+}
+
+export interface McpHealth {
+  name: string;
+  version: string;
+  artifactId: string;
+  status: McpHealthStatus | string;
+  packagePolicy: McpPackagePolicy | string;
+  packages: McpHealthPackage[];
+  lint: McpLintSummary;
+}
+
+// ---------------------------------------------------------------------------
+// Namespace grants: permission rules with `conditions.mcp_namespaces`
+// ---------------------------------------------------------------------------
+
+export type McpGrantPrincipalType = 'user' | 'group' | 'service_account';
+
+/** A `/api/v1/permissions` rule on an MCP repository that carries `conditions.mcp_namespaces`. */
+export interface McpNamespaceGrant {
+  /** The permission rule id. */
+  id: string;
+  /** The repository id (`target_id`). */
   repository_id: string;
-  repository_key?: string;
-  principal_type: 'user' | 'group' | 'service_account';
+  principal_type: McpGrantPrincipalType;
   principal_id: string;
   principal_name?: string;
   actions: string[];
@@ -480,13 +708,41 @@ export interface McpNamespaceGrant {
   created_at?: string;
 }
 
-export interface McpBundle {
-  name: string;
-  version: string;
-  file_name?: string;
-  size_bytes?: number;
-  sha256: string;
-  signature_state?: 'none' | 'verified' | 'invalid' | string;
-  /** Ticketed, short-lived download URL. */
-  download_url?: string | null;
+/** One side of a diff list: `key` is the tool/prompt name or the resource uri. */
+export interface McpDiffList<T> {
+  added: { key: string; item: T }[];
+  removed: { key: string; item: T }[];
+  changed: { key: string; fields: string[]; before: T; after: T }[];
+  unchanged: number;
+}
+
+interface McpDiffCounts {
+  added: number;
+  removed: number;
+  changed: number;
+  unchanged: number;
+}
+
+/** `GET .../capabilities/diff`. */
+export interface McpCapabilityDiff {
+  /** `null` (and everything `added`) when there is no baseline. */
+  from: McpCapabilitySnapshot | null;
+  to: McpCapabilitySnapshot;
+  fromVersion: string | null;
+  toVersion: string;
+  summary: {
+    /** e.g. "Tools: +1 added, 1 changed (`delete_repo` now destructiveHint: true)". */
+    text: string;
+    tools: McpDiffCounts;
+    resources: McpDiffCounts;
+    prompts: McpDiffCounts;
+    instructionsChanged: boolean;
+    destructiveAdded: string[];
+    identical: boolean;
+  };
+  tools: McpDiffList<McpTool>;
+  resources: McpDiffList<McpResource>;
+  prompts: McpDiffList<McpPrompt>;
+  instructionsChanged: boolean;
+  notice: string;
 }

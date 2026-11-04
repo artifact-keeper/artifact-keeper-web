@@ -25,6 +25,7 @@ describe("readMcpSettings", () => {
       mcp_require_namespace_grant: true,
       mcp_sandbox_introspection: "on",
       mcp_require_bundle_signature: false,
+      mcp_caller_can_lock: true,
     };
     expect(readMcpSettings(raw)).toEqual(raw);
   });
@@ -74,8 +75,10 @@ describe("readMcpSettings", () => {
         mcp_require_oci_label: "yes",
         mcp_require_bundle_signature: null,
         mcp_require_namespace_grant: false,
+        mcp_caller_can_lock: "true",
       }),
     ).toEqual({ mcp_require_namespace_grant: false });
+    expect(readMcpSettings({ mcp_caller_can_lock: false })).toEqual({ mcp_caller_can_lock: false });
   });
 });
 
@@ -93,6 +96,12 @@ describe("mcpSettingsBody", () => {
     expect(mcpSettingsBody({ mcp_remote_posture_locked: true, mcp_probe_remotes_locked: false })).toEqual({
       mcp_remote_posture_locked: true,
       mcp_probe_remotes_locked: false,
+    });
+  });
+
+  it("never sends the response-only mcp_caller_can_lock", () => {
+    expect(mcpSettingsBody({ mcp_caller_can_lock: true, mcp_remote_mode: "mirror" })).toEqual({
+      mcp_remote_mode: "mirror",
     });
   });
 

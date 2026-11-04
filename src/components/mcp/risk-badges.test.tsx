@@ -12,7 +12,7 @@ import { EMPTY, WEATHER } from "./__tests__/mcp-fixtures";
 afterEach(cleanup);
 
 describe("McpRiskBadges", () => {
-  const { signals } = assessRisk({ server: WEATHER.server, status: "deprecated", source: "unverified" });
+  const { signals } = assessRisk({ server: WEATHER.server, status: "deprecated", source: "mirror" });
 
   it("renders each signal as text with its reason in the accessible name", () => {
     render(<McpRiskBadges signals={signals} />);

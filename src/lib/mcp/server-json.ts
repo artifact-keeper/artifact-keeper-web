@@ -175,6 +175,9 @@ export function parseStoredMetadata(raw: unknown): McpStoredMetadata | null {
     policy: (r.policy as McpStoredMetadata["policy"]) ?? undefined,
     packages: Array.isArray(r.packages) ? (r.packages as McpStoredMetadata["packages"]) : [],
     index: (r.index as McpStoredMetadata["index"]) ?? undefined,
+    bundles: Array.isArray(r.bundles) ? (r.bundles as McpStoredMetadata["bundles"]) : [],
+    resolution:
+      r.resolution && typeof r.resolution === "object" ? (r.resolution as McpStoredMetadata["resolution"]) : undefined,
   };
 }
 
@@ -209,17 +212,33 @@ export function resolvedMeta(pkg: McpPackage): McpResolvedMeta | undefined {
 }
 
 /**
- * Source badge kind. Derived from server-side `_meta` only, never from
- * publisher fields (issue section 6): `hosted` for a publish to this
- * instance, `upstream-verified` / `unverified` for Phase 2 proxied entries.
+ * Source badge kind, from the server-side `origin` and `upstreamVerified` of
+ * `_meta["com.artifactkeeper.registry/source"]` only, never from publisher
+ * fields (issue section 6): `hosted` for a publish to this instance,
+ * `remote` / `mirror` for a version a Remote ingested (allowlist or mirror
+ * mode), `-verified` when the backend vouches that the bytes are the official
+ * registry's (or another Artifact Keeper's) and have not drifted.
+ * A source block without `origin` comes from a backend that predates
+ * Remotes, where every version is hosted; `unknown` when there is no source
+ * block at all.
  */
-export type McpSourceKind = "hosted" | "upstream-verified" | "unverified";
+export type McpSourceKind = "hosted" | "remote" | "remote-verified" | "mirror" | "mirror-verified" | "unknown";
+
+export function sourceKindOf(origin: unknown, upstreamVerified: unknown): McpSourceKind {
+  if (origin === "hosted") return "hosted";
+  if (origin === "remote" || origin === "mirror") return upstreamVerified === true ? `${origin}-verified` : origin;
+  return "unknown";
+}
 
 export function sourceKind(entry: McpServedEntry): McpSourceKind {
   const src = akSourceMeta(entry);
-  if (!src) return "unverified";
-  if (src.origin === "upstream") return src.upstreamVerified ? "upstream-verified" : "unverified";
-  return "hosted";
+  if (!src) return "unknown";
+  return sourceKindOf(src.origin ?? "hosted", src.upstreamVerified);
+}
+
+/** Whether a source kind is an ingested upstream version the backend does not vouch for. */
+export function isUnverifiedSource(kind: McpSourceKind | undefined): boolean {
+  return kind === "remote" || kind === "mirror";
 }
 
 export interface McpTransportChip {

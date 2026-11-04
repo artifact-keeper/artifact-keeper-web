@@ -85,11 +85,46 @@ describe("McpServerCard", () => {
 
   it("labels an upstream entry from server-side meta only", () => {
     const upstream = served(REMOTE_ONLY.server, {
-      [MCP_AK_SOURCE_META_KEY]: { repository: "mcp-remote", origin: "upstream", upstreamVerified: true },
+      [MCP_AK_SOURCE_META_KEY]: {
+        repository: "mcp-remote",
+        origin: "remote",
+        kind: "upstream",
+        upstreamVerified: true,
+        upstreamUrl: "https://registry.modelcontextprotocol.io",
+      },
     });
     render(<McpServerCard repoKey="mcp-remote" entry={upstream} />);
-    expect(screen.getByText("proxied, upstream verified")).toBeInTheDocument();
+    const badge = screen.getByText("proxied, upstream verified");
+    expect(badge.closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("Upstream: https://registry.modelcontextprotocol.io"),
+    );
     expect(screen.getByText("sse")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^unverified source/)).toBeNull();
+  });
+
+  it("flags an unverified mirrored entry and names the Virtual that served it", () => {
+    const mirrored = served(REMOTE_ONLY.server, {
+      [MCP_AK_SOURCE_META_KEY]: {
+        repository: "mcp-mirror",
+        origin: "mirror",
+        kind: "upstream",
+        upstreamVerified: false,
+        upstreamUrl: "https://other.example/registry",
+        virtualRepository: "mcp-all",
+      },
+    });
+    render(<McpServerCard repoKey="mcp-all" entry={mirrored} />);
+    expect(screen.getByText("mirrored").closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("Served by mcp-all from member mcp-mirror"),
+    );
+    expect(screen.getByLabelText(/^unverified source: /)).toBeInTheDocument();
+  });
+
+  it("says source unknown without a source block", () => {
+    render(<McpServerCard repoKey="mcp-local" entry={{ server: REMOTE_ONLY.server }} />);
+    expect(screen.getByText("source unknown")).toBeInTheDocument();
   });
 });
 
@@ -99,15 +134,32 @@ describe("small badges", () => {
     expect(screen.getByTestId("mcp-server-avatar")).toHaveTextContent("?");
   });
 
-  it("source badge covers every kind", () => {
-    render(
-      <>
-        <McpSourceBadge kind="hosted" />
-        <McpSourceBadge kind="unverified" />
-      </>,
+  it.each([
+    ["hosted", "hosted", /emerald/],
+    ["remote", "proxied", /amber/],
+    ["remote-verified", "proxied, upstream verified", /blue/],
+    ["mirror", "mirrored", /amber/],
+    ["mirror-verified", "mirrored, upstream verified", /blue/],
+    ["unknown", "source unknown", /./],
+  ] as const)("source badge %s reads %s", (kind, label, color) => {
+    render(<McpSourceBadge kind={kind} upstreamUrl="https://up.example" />);
+    const badge = screen.getByText(label);
+    expect(badge.className).toMatch(color);
+    const title = badge.closest("[title]")?.getAttribute("title") ?? "";
+    expect(title.length).toBeGreaterThan(0);
+    expect(title.includes("Upstream: https://up.example")).toBe(kind !== "hosted");
+  });
+
+  it("source badge falls back to unknown for an unexpected kind", () => {
+    render(<McpSourceBadge kind={"upstream" as never} />);
+    expect(screen.getByText("source unknown")).toBeInTheDocument();
+  });
+
+  it("source badge names the Virtual only with both repositories", () => {
+    render(<McpSourceBadge kind="hosted" virtualRepository="mcp-all" />);
+    expect(screen.getByText("hosted").closest("[title]")?.getAttribute("title")).toBe(
+      "Published to this Artifact Keeper instance",
     );
-    expect(screen.getByText("hosted")).toBeInTheDocument();
-    expect(screen.getByText("unverified")).toBeInTheDocument();
   });
 
   it("status badge renders held and deleted", () => {

@@ -288,11 +288,15 @@ export function DashboardContent() {
     enabled: !!user?.is_admin,
   });
 
-  // Phase 2 backends report MCP versions awaiting approval on Remote MCP
-  // repositories; older ones answer null and the tile stays hidden.
+  // Upstream MCP server names awaiting a decision on the Remote MCP
+  // repositories (their catalogs' pending + review counts). Without a Remote
+  // MCP repository, or on a backend without the catalog, the tile is hidden.
   const { data: mcpPending } = useQuery({
     queryKey: mcpKeys.pendingCount,
-    queryFn: () => mcpApi.pendingReviewCount(),
+    queryFn: async () => {
+      const remotes = await repositoriesApi.list({ format: "mcp", repo_type: "remote", per_page: 100 });
+      return mcpApi.pendingReviewCount(remotes.items.map((r) => r.key));
+    },
     enabled: !!user?.is_admin,
   });
 
@@ -433,7 +437,7 @@ export function DashboardContent() {
                 value={mcpPending}
                 color={mcpPending > 0 ? "yellow" : "default"}
                 href="/curation"
-                tooltip="Upstream MCP servers requested on a Remote MCP repository and not yet approved. Nothing is served to clients until it is."
+                tooltip="Upstream MCP server names on a Remote MCP repository that await an approval decision (pending or flagged for review). Nothing is served to clients until it is approved."
               />
             </div>
           )}

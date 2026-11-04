@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { McpCapabilitySnapshot, McpLintFinding, McpTool } from "@/types/mcp";
+import type { McpCapabilities, McpCapabilitySnapshot, McpTool } from "@/types/mcp";
 
 /**
  * Tools tab (decision 10 / decision 4 section 8). Everything here is a
@@ -39,7 +39,7 @@ export function provenanceOf(source: string) {
   return PROVENANCE[source] ?? { label: source, color: "default" as const };
 }
 
-/** `3h ago` style text for `observed_at`. */
+/** `3h ago` style text for `observedAt`. */
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return iso;
@@ -77,14 +77,7 @@ function AnnotationChips({ tool }: { tool: McpTool }) {
   );
 }
 
-function findingsFor(findings: McpLintFinding[], tool: McpTool, index: number): McpLintFinding[] {
-  return findings.filter((f) => {
-    const p = f.pointer ?? "";
-    return p === `/tools/${index}` || p.startsWith(`/tools/${index}/`) || p.includes(`tools/${tool.name}`);
-  });
-}
-
-function ToolRow({ tool, findings }: { tool: McpTool; findings: McpLintFinding[] }) {
+function ToolRow({ tool }: { tool: McpTool }) {
   const [open, setOpen] = useState(false);
   const schema = tool.inputSchema === undefined ? null : JSON.stringify(tool.inputSchema, null, 2);
   return (
@@ -94,12 +87,6 @@ function ToolRow({ tool, findings }: { tool: McpTool; findings: McpLintFinding[]
         <AnnotationChips tool={tool} />
       </div>
       {tool.description && <p className="text-sm text-muted-foreground whitespace-pre-line">{tool.description}</p>}
-      {findings.map((f, i) => (
-        <p key={`${f.rule}-${i}`} className="text-xs text-amber-700 dark:text-amber-400">
-          {f.rule}
-          {f.message ? `: ${f.message}` : ""}
-        </p>
-      ))}
       {schema && (
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger asChild>
@@ -140,14 +127,13 @@ function SnapshotHeader({ snap }: { snap: McpCapabilitySnapshot }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <StatusBadge status={prov.label} color={prov.color} className="normal-case" />
-      {snap.signature_state === "verified" && <StatusBadge status="signature verified" color="green" className="normal-case" />}
-      {snap.signature_state === "invalid" && <StatusBadge status="signature invalid" color="red" className="normal-case" />}
-      {snap.observed_at && (
-        <time dateTime={snap.observed_at} title={snap.observed_at}>
-          {relativeTime(snap.observed_at)}
+      {snap.provenance && <span>{snap.provenance}</span>}
+      {snap.observedAt && (
+        <time dateTime={snap.observedAt} title={snap.observedAt}>
+          {relativeTime(snap.observedAt)}
         </time>
       )}
-      {snap.protocol_version && <span>protocol {snap.protocol_version}</span>}
+      {snap.protocolVersion && <span>protocol {snap.protocolVersion}</span>}
     </div>
   );
 }
@@ -156,32 +142,19 @@ function SnapshotView({ snap }: { snap: McpCapabilitySnapshot }) {
   const tools = snap.tools ?? [];
   const resources = snap.resources ?? [];
   const prompts = snap.prompts ?? [];
-  const findings = snap.findings ?? [];
-  const unmatched = findings.filter((f) => !tools.some((t, i) => findingsFor([f], t, i).length > 0));
-  if (snap.outcome === "needs_config") {
-    return (
-      <EmptyState
-        icon={Wrench}
-        title="Server could not be started without configuration"
-        description="The sandbox needs values for required inputs before it can list the tools."
-      />
-    );
-  }
   return (
     <div className="space-y-3">
       <SnapshotHeader snap={snap} />
-      {(snap.auth_state === "auth_required" || snap.auth_state === "caller_specific") && (
+      {(snap.authState === "auth_required" || snap.authState === "caller_specific") && (
         <Alert>
           <Info aria-hidden="true" />
-          <AlertDescription>Unauthenticated view: signed-in users may see different tools.</AlertDescription>
+          <AlertDescription>
+            {snap.authState === "caller_specific"
+              ? "This list may differ per user: the server marked it private."
+              : "Unauthenticated view: signed-in users may see different tools."}
+          </AlertDescription>
         </Alert>
       )}
-      {unmatched.map((f, i) => (
-        <p key={`${f.rule}-${i}`} className="text-xs text-amber-700 dark:text-amber-400">
-          {f.rule}
-          {f.message ? `: ${f.message}` : ""}
-        </p>
-      ))}
       <Tabs defaultValue="tools">
         <TabsList>
           <TabsTrigger value="tools">Tools ({tools.length})</TabsTrigger>
@@ -194,7 +167,7 @@ function SnapshotView({ snap }: { snap: McpCapabilitySnapshot }) {
           ) : (
             <ul role="list" className="space-y-2">
               {tools.map((t, i) => (
-                <ToolRow key={`${t.name}-${i}`} tool={t} findings={findingsFor(findings, t, i)} />
+                <ToolRow key={`${t.name}-${i}`} tool={t} />
               ))}
             </ul>
           )}
@@ -210,18 +183,40 @@ function SnapshotView({ snap }: { snap: McpCapabilitySnapshot }) {
   );
 }
 
+/** The newest successful snapshot summary of each source, best source first. */
+export function sourcePicks(caps: McpCapabilities): McpCapabilitySnapshot[] {
+  const picks = new Map<string, McpCapabilitySnapshot>();
+  for (const s of caps.snapshots) {
+    if (s.outcome === "ok" && !picks.has(s.source)) picks.set(s.source, s);
+  }
+  const rank = (src: string) => {
+    const i = SOURCE_ORDER.indexOf(src);
+    return i === -1 ? SOURCE_ORDER.length : i;
+  };
+  return [...picks.values()].sort((a, b) => rank(a.source) - rank(b.source));
+}
+
+/** The backend's "current" order: observed first, the declaration last. */
+const SOURCE_ORDER = ["sandbox_run", "remote_probe", "gateway_reported", "ci_reported", "publisher_declared"];
+
 export function McpToolsTab({ repoKey, name, version }: { repoKey: string; name: string; version: string }) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [picked, setPicked] = useState(0);
+  const [picked, setPicked] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: mcpKeys.capabilities(repoKey, name, version),
     queryFn: () => mcpApi.capabilities(repoKey, name, version),
   });
+  const currentId = data?.current?.id ?? null;
+  const other = useQuery({
+    queryKey: [...mcpKeys.capabilities(repoKey, name, version), "snapshot", picked],
+    queryFn: () => mcpApi.capabilities(repoKey, name, version, { snapshot: picked ?? undefined }),
+    enabled: !!picked && picked !== currentId,
+  });
   const probe = useMutation({
     mutationFn: () => mcpApi.probe(repoKey, name, version),
-    onSuccess: () => {
-      toast.success("Probe queued");
+    onSuccess: (r) => {
+      toast.success(r.queued.length > 0 ? "Probe queued" : "A probe is already queued");
       qc.invalidateQueries({ queryKey: mcpKeys.capabilities(repoKey, name, version) });
     },
     onError: (err) => toast.error(mcpProblemMessage(err) ?? "Probe failed"),
@@ -238,37 +233,56 @@ export function McpToolsTab({ repoKey, name, version }: { repoKey: string; name:
     return <EmptyState icon={Wrench} title="Capabilities are not available on this server" />;
   }
 
-  const probeButton = user?.is_admin && data.probe_available && (
+  const canProbe = data.introspection.probeEnabled || data.introspection.sandboxEnabled;
+  const probeButton = user?.is_admin && canProbe && (
     <Button variant="outline" size="sm" onClick={() => probe.mutate()} disabled={probe.isPending} className="gap-1.5">
       <RefreshCw className="size-3.5" aria-hidden="true" />
       Re-probe
     </Button>
   );
+  const openJobs = (data.introspection.jobs ?? []).filter((j) => j.status === "pending" || j.status === "claimed");
 
-  if (data.snapshots.length === 0) {
+  if (!data.current) {
+    const newest = data.snapshots[0];
+    if (newest?.outcome === "needs_config") {
+      return (
+        <EmptyState
+          icon={Wrench}
+          title="Server could not be started without configuration"
+          description="The sandbox needs values for required inputs before it can list the tools."
+          action={probeButton || undefined}
+        />
+      );
+    }
     return (
       <EmptyState
         icon={Wrench}
         title="Capabilities not declared or observed"
-        description="Declare tools in the server.json under _meta com.artifactkeeper/capabilities, or report them from CI through the capabilities ingest API."
+        description={
+          openJobs.length > 0
+            ? `${openJobs.length} introspection job${openJobs.length === 1 ? " is" : "s are"} queued for this version.`
+            : "Declare tools in the server.json under _meta com.artifactkeeper/capabilities, or report them from CI through the capabilities ingest API."
+        }
         action={probeButton || undefined}
       />
     );
   }
 
-  const snap = data.snapshots[Math.min(picked, data.snapshots.length - 1)];
+  const picks = sourcePicks(data);
+  const selectedId = picked ?? currentId;
+  const snap = selectedId === currentId ? data.current : (other.data?.current ?? null);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {data.snapshots.length > 1 ? (
+        {picks.length > 1 ? (
           <div role="group" aria-label="Snapshot source" className="flex flex-wrap gap-1">
-            {data.snapshots.map((s, i) => (
+            {picks.map((s) => (
               <Button
-                key={s.id ?? `${s.source}-${i}`}
+                key={s.id}
                 size="sm"
-                variant={i === picked ? "secondary" : "ghost"}
-                aria-pressed={i === picked}
-                onClick={() => setPicked(i)}
+                variant={s.id === selectedId ? "secondary" : "ghost"}
+                aria-pressed={s.id === selectedId}
+                onClick={() => setPicked(s.id)}
               >
                 {provenanceOf(s.source).label}
               </Button>
@@ -279,11 +293,21 @@ export function McpToolsTab({ repoKey, name, version }: { repoKey: string; name:
         )}
         {probeButton}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Tools can differ per user. Annotations such as read-only or destructive are asserted by the server and are
-        untrusted unless the server is trusted.
-      </p>
-      <SnapshotView snap={snap} />
+      <p className="text-xs text-muted-foreground">{data.notice}</p>
+      {openJobs.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {openJobs.length} introspection job{openJobs.length === 1 ? "" : "s"} queued.
+        </p>
+      )}
+      {snap ? (
+        <SnapshotView snap={snap} />
+      ) : other.isError || (other.isSuccess && !other.data?.current) ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">This snapshot is no longer available.</p>
+      ) : (
+        <div className="flex justify-center py-8">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label="Loading snapshot" />
+        </div>
+      )}
     </div>
   );
 }

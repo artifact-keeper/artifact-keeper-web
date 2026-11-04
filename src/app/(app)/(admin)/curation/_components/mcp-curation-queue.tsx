@@ -9,7 +9,7 @@ import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { formatRelativeTimestamp } from "@/lib/cache-time";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import type { McpReview } from "@/types/mcp";
+import type { McpCatalogItem, McpCatalogPage, McpCatalogPin, McpCatalogQuery } from "@/types/mcp";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,38 +20,60 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReasonDialog } from "./reason-dialog";
 import { McpNamespaceApproveDialog } from "./mcp-namespace-approve-dialog";
 import { McpUpstreamCatalog } from "./mcp-upstream-catalog";
-import { McpNotAvailable, McpReviewStatusBadge, McpRiskText, McpTransportChips } from "./mcp-queue-parts";
-import { lintSummary, plural, reviewRisk, reviewVersion, toolDiffSummary } from "./mcp-review-format";
+import { McpCatalogNotes, McpCatalogToolDiff, McpNotAvailable, McpReviewStatusBadge } from "./mcp-queue-parts";
+import { driftedPins, needsNameDecision, plural, reviewVersion } from "./mcp-review-format";
 
-const REVIEW_TABS = ["pending", "approved", "blocked"] as const;
+const REVIEW_TABS = ["queue", "approved", "blocked"] as const;
 type ReviewTab = (typeof REVIEW_TABS)[number];
 type Tab = ReviewTab | "catalog";
 type Action = "approve" | "block";
 
-const TAB_LABEL: Record<ReviewTab, string> = { pending: "Pending", approved: "Approved", blocked: "Blocked" };
+const TAB_LABEL: Record<ReviewTab, string> = { queue: "Awaiting decision", approved: "Approved", blocked: "Blocked" };
+
+/** `GET /catalog` query of each tab; the queue is `queue=true` (names, or a drifted version, awaiting a decision). */
+const TAB_QUERY: Record<ReviewTab, McpCatalogQuery> = {
+  queue: { queue: true },
+  approved: { status: "approved" },
+  blocked: { status: "blocked" },
+};
+
+/** The backend's page cap; a larger queue shows its first page and says so. */
+const PAGE_LIMIT = 200;
+
+/** Name rows per tab, from the repository-wide `counts`. */
+function tabCount(tab: ReviewTab, page: McpCatalogPage | null | undefined): number | null {
+  if (!page) return null;
+  if (tab === "queue") return (page.counts.pending ?? 0) + (page.counts.review ?? 0);
+  return page.counts[tab] ?? 0;
+}
+
+/** A decision target: the name row, or one `name@version` row (a drifted version). */
+type Target = { item: McpCatalogItem; pin?: McpCatalogPin };
 
 /**
  * Approval queue of a Remote MCP repository (artifact-keeper#5253, lens-ui
- * 4.2, decision 7). A Remote is deny-by-default: upstream names are served
- * only once approved here. Approval is per name (later versions flow while
- * the gates pass) unless "pin this version only" is ticked.
+ * 4.2, decision 7), over `/api/v1/repositories/{key}/mcp/catalog`. A Remote
+ * is deny-by-default: upstream names are served only once approved here.
+ * Approval is per name (later versions flow while the gates pass) unless
+ * "pin this version only" is ticked. A version whose upstream bytes changed
+ * after approval comes back as its own row and is decided on its own.
  */
 export function McpCurationQueue({ repoKey }: { repoKey: string }) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("pending");
+  const [tab, setTab] = useState<Tab>("queue");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<Action | null>(null);
-  const [rowAction, setRowAction] = useState<{ action: Action; review: McpReview } | null>(null);
+  const [rowAction, setRowAction] = useState<{ action: Action; target: Target } | null>(null);
   const [pinVersion, setPinVersion] = useState(false);
   const [namespaceOpen, setNamespaceOpen] = useState(false);
 
   const results = useQueries({
-    queries: REVIEW_TABS.map((status) => ({
-      queryKey: mcpKeys.reviews(repoKey, status),
-      queryFn: () => mcpApi.listReviews(repoKey, { status }),
+    queries: REVIEW_TABS.map((t) => ({
+      queryKey: mcpKeys.reviews(repoKey, t),
+      queryFn: () => mcpApi.listCatalog(repoKey, { ...TAB_QUERY[t], limit: PAGE_LIMIT }),
     })),
   });
-  const byStatus = Object.fromEntries(REVIEW_TABS.map((s, i) => [s, results[i]])) as Record<
+  const byTab = Object.fromEntries(REVIEW_TABS.map((s, i) => [s, results[i]])) as Record<
     ReviewTab,
     (typeof results)[number]
   >;
@@ -63,41 +85,43 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
     setRowAction(null);
   };
 
-  const approveMutation = useMutation({
-    mutationFn: ({ id, reason, version }: { id: string; reason: string; version?: string }) =>
-      mcpApi.approveReview(id, { reason: reason || undefined, version }),
-    onSuccess: (_r, { version }) => {
-      done();
-      toast.success(version ? `Approved version ${version} only` : "Server approved");
+  const decideMutation = useMutation({
+    mutationFn: async ({ action, target, reason, pin }: { action: Action; target: Target; reason: string; pin?: string }) => {
+      const why = reason || undefined;
+      if (pin) return mcpApi.pinVersion(repoKey, target.item.name, pin, why);
+      return mcpApi.decide(repoKey, target.pin?.id ?? target.item.id, action, why);
     },
-    onError: mutationErrorToast("Failed to approve server"),
+    onSuccess: (result, { action, target, pin }) => {
+      done();
+      const what = pin ? `version ${pin} only` : target.pin ? `version ${target.pin.version}` : "server";
+      toast.success(`${action === "approve" ? "Approved" : "Blocked"} ${what}`);
+      if (result.ingestError) toast.warning(`Approved, but not ingested yet: ${result.ingestError}`);
+    },
+    onError: mutationErrorToast("Decision failed"),
   });
 
-  const blockMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      mcpApi.blockReview(id, { reason: reason || undefined }),
-    onSuccess: () => {
-      done();
-      toast.success("Server blocked");
-    },
-    onError: mutationErrorToast("Failed to block server"),
-  });
-
+  // The management API decides one row at a time (repository admins included);
+  // the bulk action fans out and reports what went through.
   const bulkMutation = useMutation({
-    mutationFn: ({ action, ids, why }: { action: Action; ids: string[]; why: string }) =>
-      action === "approve" ? mcpApi.bulkApprove(ids, why) : mcpApi.bulkBlock(ids, why),
-    onSuccess: (count, { action }) => {
+    mutationFn: async ({ action, ids, why }: { action: Action; ids: string[]; why: string }) => {
+      const settled = await Promise.allSettled(ids.map((id) => mcpApi.decide(repoKey, id, action, why)));
+      return { ok: settled.filter((s) => s.status === "fulfilled").length, failed: settled.filter((s) => s.status === "rejected").length };
+    },
+    onSuccess: ({ ok, failed }, { action }) => {
       done();
-      toast.success(`${plural(count, "server")} ${action === "approve" ? "approved" : "blocked"}`);
+      toast.success(`${plural(ok, "server")} ${action === "approve" ? "approved" : "blocked"}`);
+      if (failed > 0) toast.error(`${plural(failed, "server")} could not be changed`);
     },
     onError: mutationErrorToast("Bulk action failed"),
   });
 
-  if (byStatus.pending.data === null) return <McpNotAvailable what="The MCP approval queue" />;
+  if (byTab.queue.data === null) return <McpNotAvailable what="The MCP approval queue" />;
 
-  const pendingNames = (byStatus.pending.data ?? []).map((r) => r.name);
+  const pendingNames = (byTab.queue.data?.items ?? []).filter((r) => r.status === "pending").map((r) => r.name);
+  const reviewNames = (byTab.queue.data?.items ?? []).filter((r) => r.status === "review").map((r) => r.name);
   const reviewTab = tab === "catalog" ? null : tab;
-  const rowPinVersion = rowAction ? reviewVersion(rowAction.review) : null;
+  const rowPinVersion = rowAction && !rowAction.target.pin ? reviewVersion(rowAction.target.item) : null;
+  const rowLabel = rowAction ? `${rowAction.target.item.name}${rowAction.target.pin ? ` ${rowAction.target.pin.version}` : ""}` : "";
 
   return (
     <div className="space-y-4">
@@ -111,12 +135,15 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
       >
         <div className="flex flex-wrap items-center gap-3">
           <TabsList>
-            {REVIEW_TABS.map((s) => (
-              <TabsTrigger key={s} value={s}>
-                {TAB_LABEL[s]}
-                {byStatus[s].data ? <span className="ml-1 text-muted-foreground">{byStatus[s].data.length}</span> : null}
-              </TabsTrigger>
-            ))}
+            {REVIEW_TABS.map((s) => {
+              const n = tabCount(s, byTab.queue.data);
+              return (
+                <TabsTrigger key={s} value={s}>
+                  {TAB_LABEL[s]}
+                  {n !== null ? <span className="ml-1 text-muted-foreground">{n}</span> : null}
+                </TabsTrigger>
+              );
+            })}
             <TabsTrigger value="catalog">Catalog</TabsTrigger>
           </TabsList>
 
@@ -147,13 +174,14 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
         {REVIEW_TABS.map((s) => (
           <TabsContent key={s} value={s}>
             <ReviewList
-              status={s}
-              result={byStatus[s]}
+              repoKey={repoKey}
+              tab={s}
+              result={byTab[s]}
               selected={selected}
               onSelect={setSelected}
-              onAction={(action, review) => {
+              onAction={(action, target) => {
                 setPinVersion(false);
-                setRowAction({ action, review });
+                setRowAction({ action, target });
               }}
             />
           </TabsContent>
@@ -175,21 +203,28 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
 
       <ReasonDialog
         open={rowAction !== null}
-        title={`${rowAction?.action === "block" ? "Block" : "Approve"} ${rowAction?.review.name ?? ""}`}
+        title={`${rowAction?.action === "block" ? "Block" : "Approve"} ${rowLabel}`}
         description={
-          rowAction?.action === "block"
-            ? "Blocked names are never served, whatever their version."
-            : "Approving the name lets later versions flow while the gates pass."
+          rowAction?.target.pin
+            ? rowAction.action === "block"
+              ? "This version is never served; the rest of the server is unaffected."
+              : "Serves the stored document of this version again (not the changed upstream bytes)."
+            : rowAction?.action === "block"
+              ? "Blocked names are never served, whatever their version."
+              : "Approving the name lets later versions flow while the gates pass."
         }
         destructive={rowAction?.action === "block"}
         requireReason={rowAction?.action === "block"}
-        pending={approveMutation.isPending || blockMutation.isPending}
+        pending={decideMutation.isPending}
         onCancel={() => setRowAction(null)}
         onConfirm={(reason) => {
           if (!rowAction) return;
-          const { id } = rowAction.review;
-          if (rowAction.action === "block") blockMutation.mutate({ id, reason });
-          else approveMutation.mutate({ id, reason, version: pinVersion && rowPinVersion ? rowPinVersion : undefined });
+          decideMutation.mutate({
+            action: rowAction.action,
+            target: rowAction.target,
+            reason,
+            pin: rowAction.action === "approve" && pinVersion && rowPinVersion ? rowPinVersion : undefined,
+          });
         }}
       >
         {rowAction?.action === "approve" && rowPinVersion && (
@@ -207,20 +242,29 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
         open={namespaceOpen}
         onOpenChange={setNamespaceOpen}
         pendingNames={pendingNames}
+        reviewNames={reviewNames}
       />
     </div>
   );
 }
 
 interface ReviewListProps {
-  status: ReviewTab;
-  result: { data?: McpReview[] | null; isLoading: boolean; isError: boolean; error: unknown; refetch: () => unknown; isFetching: boolean };
+  repoKey: string;
+  tab: ReviewTab;
+  result: {
+    data?: McpCatalogPage | null;
+    isLoading: boolean;
+    isError: boolean;
+    error: unknown;
+    refetch: () => unknown;
+    isFetching: boolean;
+  };
   selected: Set<string>;
   onSelect: (s: Set<string>) => void;
-  onAction: (action: Action, review: McpReview) => void;
+  onAction: (action: Action, target: Target) => void;
 }
 
-function ReviewList({ status, result, selected, onSelect, onAction }: ReviewListProps) {
+function ReviewList({ repoKey, tab, result, selected, onSelect, onAction }: ReviewListProps) {
   if (result.isLoading) {
     return (
       <div className="space-y-2" role="status" aria-busy="true">
@@ -241,15 +285,17 @@ function ReviewList({ status, result, selected, onSelect, onAction }: ReviewList
       </div>
     );
   }
-  const rows = result.data ?? [];
+  const rows = result.data?.items ?? [];
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-        No {status} MCP servers.
+        {tab === "queue" ? "No MCP servers await a decision." : `No ${tab} MCP servers.`}
       </div>
     );
   }
-  const allSelected = rows.every((r) => selected.has(r.id));
+  // Bulk decisions act on name rows; a drifted version is decided on its own.
+  const selectable = rows.filter((r) => tab !== "queue" || needsNameDecision(r));
+  const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.id));
   const toggle = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
@@ -258,110 +304,158 @@ function ReviewList({ status, result, selected, onSelect, onAction }: ReviewList
   };
 
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="border-b bg-muted/50 text-left">
-          <tr>
-            <th className="w-10 px-3 py-2">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={() => onSelect(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
-                aria-label="Select all"
+    <div className="space-y-2">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="border-b bg-muted/50 text-left">
+            <tr>
+              <th className="w-10 px-3 py-2">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={() => onSelect(allSelected ? new Set() : new Set(selectable.map((r) => r.id)))}
+                  aria-label="Select all"
+                />
+              </th>
+              <th className="px-3 py-2 font-medium">Server</th>
+              <th className="px-3 py-2 font-medium">Signals</th>
+              <th className="px-3 py-2 font-medium">First seen</th>
+              <th className="px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((r) => (
+              <ReviewRow
+                key={r.id}
+                repoKey={repoKey}
+                item={r}
+                tab={tab}
+                checked={selected.has(r.id)}
+                selectable={tab !== "queue" || needsNameDecision(r)}
+                onToggle={() => toggle(r.id)}
+                onAction={onAction}
               />
-            </th>
-            <th className="px-3 py-2 font-medium">Server</th>
-            <th className="px-3 py-2 font-medium">Risk</th>
-            <th className="px-3 py-2 font-medium">Findings</th>
-            <th className="px-3 py-2 font-medium">First seen</th>
-            <th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((r) => (
-            <ReviewRow
-              key={r.id}
-              review={r}
-              status={status}
-              checked={selected.has(r.id)}
-              onToggle={() => toggle(r.id)}
-              onAction={onAction}
-            />
-          ))}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {result.data?.nextCursor && (
+        <p className="text-xs text-muted-foreground">
+          Showing the first {rows.length}. Narrow the list with the Catalog tab&apos;s search.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ActionButtons({
+  label,
+  showApprove,
+  showBlock,
+  onApprove,
+  onBlock,
+}: {
+  label: string;
+  showApprove: boolean;
+  showBlock: boolean;
+  onApprove: () => void;
+  onBlock: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-1">
+      {showApprove && (
+        <Button variant="ghost" size="icon-sm" aria-label={`Approve ${label}`} onClick={onApprove}>
+          <Check className="size-4 text-emerald-600" />
+        </Button>
+      )}
+      {showBlock && (
+        <Button variant="ghost" size="icon-sm" aria-label={`Block ${label}`} onClick={onBlock}>
+          <Ban className="size-4 text-destructive" />
+        </Button>
+      )}
     </div>
   );
 }
 
 function ReviewRow({
-  review,
-  status,
+  repoKey,
+  item,
+  tab,
   checked,
+  selectable,
   onToggle,
   onAction,
 }: {
-  review: McpReview;
-  status: ReviewTab;
+  repoKey: string;
+  item: McpCatalogItem;
+  tab: ReviewTab;
   checked: boolean;
+  selectable: boolean;
   onToggle: () => void;
-  onAction: (action: Action, review: McpReview) => void;
+  onAction: (action: Action, target: Target) => void;
 }) {
-  const risk = reviewRisk(review);
-  const lint = lintSummary(review.findings);
-  const tools = toolDiffSummary(review.tool_diff);
+  const drifted = tab === "queue" ? driftedPins(item) : [];
+  const nameRow = tab !== "queue" || needsNameDecision(item);
   return (
-    <tr>
-      <td className="px-3 py-2 align-top">
-        <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={`Select ${review.name}`} />
-      </td>
-      <td className="px-3 py-2 align-top">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium break-all">{review.name}</span>
-          {review.version ? (
-            <Badge variant="secondary" className="font-mono text-[11px]">pinned {review.version}</Badge>
-          ) : review.server?.version ? (
-            <span className="font-mono text-xs text-muted-foreground">latest {review.server.version}</span>
-          ) : null}
-          {review.status !== status && <McpReviewStatusBadge status={review.status} />}
-        </div>
-        {review.server && (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            <McpTransportChips server={review.server} />
+    <>
+      <tr>
+        <td className="px-3 py-2 align-top">
+          {selectable && <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={`Select ${item.name}`} />}
+        </td>
+        <td className="px-3 py-2 align-top">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium break-all">{item.name}</span>
+            {item.latestVersion && <span className="font-mono text-xs text-muted-foreground">latest {item.latestVersion}</span>}
+            {(tab === "queue" || item.status !== tab) && <McpReviewStatusBadge status={item.status} />}
+            {item.upstreamStatus && item.upstreamStatus !== "active" && (
+              <Badge variant="outline" className="text-[11px]">upstream {item.upstreamStatus}</Badge>
+            )}
           </div>
-        )}
-        {review.reason && <p className="mt-1 text-xs text-muted-foreground">Reason: {review.reason}</p>}
-      </td>
-      <td className="px-3 py-2 align-top">
-        {risk ? <McpRiskText level={risk.level} score={risk.score} /> : <span className="text-xs text-muted-foreground">unknown</span>}
-      </td>
-      <td className="px-3 py-2 align-top text-xs">
-        {lint && <p className={review.findings?.some((f) => f.action === "block") ? "text-destructive" : "text-amber-700 dark:text-amber-400"}>Lint: {lint}</p>}
-        {tools && <p className="text-amber-700 dark:text-amber-400">{tools}</p>}
-        {!lint && !tools && <span className="text-muted-foreground">None</span>}
-      </td>
-      <td className="px-3 py-2 align-top text-xs text-muted-foreground">
-        {review.first_seen_at ? (
-          <time dateTime={review.first_seen_at} title={review.first_seen_at}>
-            {formatRelativeTimestamp(review.first_seen_at)}
+          {item.title && <p className="mt-0.5 text-xs font-medium">{item.title}</p>}
+          {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+        </td>
+        <td className="px-3 py-2 align-top text-xs">
+          <McpCatalogNotes item={item} />
+          <McpCatalogToolDiff repoKey={repoKey} item={item} />
+        </td>
+        <td className="px-3 py-2 align-top text-xs text-muted-foreground">
+          <time dateTime={item.firstSeenAt} title={item.firstSeenAt}>
+            {formatRelativeTimestamp(item.firstSeenAt)}
           </time>
-        ) : (
-          "-"
-        )}
-      </td>
-      <td className="px-3 py-2 align-top">
-        <div className="flex justify-end gap-1">
-          {status !== "approved" && (
-            <Button variant="ghost" size="icon-sm" aria-label={`Approve ${review.name}`} onClick={() => onAction("approve", review)}>
-              <Check className="size-4 text-emerald-600" />
-            </Button>
+        </td>
+        <td className="px-3 py-2 align-top">
+          {nameRow && (
+            <ActionButtons
+              label={item.name}
+              showApprove={tab !== "approved"}
+              showBlock={tab !== "blocked"}
+              onApprove={() => onAction("approve", { item })}
+              onBlock={() => onAction("block", { item })}
+            />
           )}
-          {status !== "blocked" && (
-            <Button variant="ghost" size="icon-sm" aria-label={`Block ${review.name}`} onClick={() => onAction("block", review)}>
-              <Ban className="size-4 text-destructive" />
-            </Button>
-          )}
-        </div>
-      </td>
-    </tr>
+        </td>
+      </tr>
+      {drifted.map((pin) => (
+        <tr key={pin.id} className="bg-amber-50/40 dark:bg-amber-950/10">
+          <td />
+          <td className="px-3 py-2 align-top text-xs" colSpan={3}>
+            <span className="font-mono">
+              {item.name} {pin.version}
+            </span>
+            <span className="ml-2 text-amber-700 dark:text-amber-400">
+              Upstream content changed after approval; held until decided again.
+            </span>
+          </td>
+          <td className="px-3 py-2 align-top">
+            <ActionButtons
+              label={`${item.name} ${pin.version}`}
+              showApprove
+              showBlock
+              onApprove={() => onAction("approve", { item, pin })}
+              onBlock={() => onAction("block", { item, pin })}
+            />
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }

@@ -3,18 +3,25 @@ import { artifactsApi } from '@/lib/api/artifacts';
 import { MCP_API_VERSION, MCP_ROUTE_PREFIX, mcpArtifactPath } from '@/lib/mcp/format';
 import { parseServedEntry, parseServerList, parseStoredMetadata } from '@/lib/mcp/server-json';
 import type {
-  McpBulkNamespaceResult,
-  McpBundle,
+  McpBulkApproveResult,
   McpCapabilities,
+  McpCapabilityDiff,
+  McpCatalogDecision,
+  McpCatalogItem,
+  McpCatalogPage,
+  McpCatalogQuery,
+  McpDecisionResult,
+  McpGrantPrincipalType,
   McpHealth,
   McpHoldProblem,
+  McpHoldsPage,
   McpNamespaceGrant,
-  McpReview,
   McpServedEntry,
   McpServerJson,
   McpServerStatus,
   McpStoredMetadata,
-  McpUpstreamPage,
+  McpSyncState,
+  McpSyncSummary,
   McpVersionRead,
 } from '@/types/mcp';
 
@@ -22,13 +29,15 @@ import type {
  * Every MCP Registry call the UI makes (artifact-keeper#5253), in one module
  * so a contract change is a change here.
  *
- * Phase 1 endpoints are the backend's registry API v0.1 (mounted at
- * `/mcp/<repo>/v0.1`, proxied by `src/middleware.ts`) plus the generic
- * artifact metadata route. Phase 2/3 endpoints follow the tracking issue's
- * contract (sections 3.3, 3.4, 4.2, 8 and decision 10) and are marked
- * `PHASE 2` / `PHASE 3`; a backend that does not serve one answers 404/405/
- * 501, which every reader below maps to `null` ("not available on this
- * server") so the surface hides instead of erroring.
+ * Every path, body and field follows artifact-keeper's docs/mcp-registry.md:
+ * the registry API v0.1 (`/mcp/<repo>/v0.1`, proxied by `src/middleware.ts`)
+ * for reads, writes, holds, capabilities and bundles; the Remote management
+ * API (`/api/v1/repositories/{key}/mcp/catalog|sync`) for the approval
+ * queue; `/api/v1/repositories/{key}/mcp/servers/.../health` for the health
+ * roll-up; and ordinary permission rules (`/api/v1/permissions` with
+ * `conditions.mcp_namespaces`) for namespace grants. A backend that predates
+ * one of them answers 404/405/501, which every reader below maps to `null`
+ * ("not available on this server") so the surface hides instead of erroring.
  *
  * Server names have exactly one `/` (`com.acme/weather`). The registry
  * accepts it literally or as `%2F`; the literal spelling is used because
@@ -48,9 +57,13 @@ function serverPath(repoKey: string, name: string): string {
   return `${registryBase(repoKey)}/servers/${encodeServerName(name)}`;
 }
 
-function adminServerPath(repoKey: string, name: string, version?: string): string {
-  const base = `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/servers/${encodeServerName(name)}`;
-  return version === undefined ? base : `${base}/versions/${encodeURIComponent(version)}`;
+function versionPath(repoKey: string, name: string, version: string): string {
+  return `${serverPath(repoKey, name)}/versions/${encodeURIComponent(version)}`;
+}
+
+/** The Remote management API of one repository. */
+function remoteBase(repoKey: string): string {
+  return `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp`;
 }
 
 function query(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -246,136 +259,282 @@ export const mcpApi = {
   },
 
   // -------------------------------------------------------------------------
-  // PHASE 2: Remote approval queue (curation_packages keyed by server name)
+  // Remote management API: /api/v1/repositories/{key}/mcp/... (Remote MCP
+  // repositories only; any other key answers 404). Reads need read on the
+  // repository, decisions the repository `admin` action.
   // -------------------------------------------------------------------------
 
-  /** `GET /api/v1/repositories/{key}/mcp/reviews?status=` (null: not served). */
-  listReviews: (repoKey: string, params: { status?: string; search?: string } = {}): Promise<McpReview[] | null> =>
+  /** `GET /catalog`: one page of the Remote's catalog (`null`: not served). */
+  listCatalog: (repoKey: string, params: McpCatalogQuery = {}): Promise<McpCatalogPage | null> =>
     orNull(
-      apiFetch<{ items?: McpReview[] } | McpReview[]>(
-        `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/reviews${query(params)}`,
-      ).then((r) => (Array.isArray(r) ? r : (r?.items ?? []))),
+      apiFetch<McpCatalogPage>(
+        `${remoteBase(repoKey)}/catalog${query({ ...params, search: params.search?.trim() || undefined })}`,
+      ).then((r) => ({ items: r?.items ?? [], nextCursor: r?.nextCursor ?? null, counts: r?.counts ?? {} })),
     ),
 
-  /** Approve a name (or `name@version` when `version` is set). */
-  approveReview: (id: string, body: { reason?: string; version?: string } = {}): Promise<McpReview> =>
-    apiFetch<McpReview>(`/api/v1/curation/packages/${encodeURIComponent(id)}/approve`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+  /** `GET /catalog/servers/{name}`: one name of the catalog. */
+  catalogItem: (repoKey: string, name: string): Promise<McpCatalogItem | null> =>
+    orNull(apiFetch<McpCatalogItem>(`${remoteBase(repoKey)}/catalog/servers/${encodeServerName(name)}`)),
 
-  blockReview: (id: string, body: { reason?: string } = {}): Promise<McpReview> =>
-    apiFetch<McpReview>(`/api/v1/curation/packages/${encodeURIComponent(id)}/block`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  bulkApprove: (ids: string[], reason: string): Promise<number> =>
-    apiFetch<number>('/api/v1/curation/packages/bulk-approve', {
-      method: 'POST',
-      body: JSON.stringify({ ids, reason }),
-    }),
-
-  bulkBlock: (ids: string[], reason: string): Promise<number> =>
-    apiFetch<number>('/api/v1/curation/packages/bulk-block', {
-      method: 'POST',
-      body: JSON.stringify({ ids, reason }),
-    }),
-
-  /** Approve every pending name a namespace glob matches; deny globs still win. */
-  bulkApproveNamespace: (repoKey: string, namespaceGlob: string, reason: string): Promise<McpBulkNamespaceResult> =>
-    apiFetch<McpBulkNamespaceResult>(
-      `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/reviews/bulk-approve-namespace`,
-      { method: 'POST', body: JSON.stringify({ namespace_glob: namespaceGlob, reason }) },
-    ),
-
-  /** Browse the Remote's upstream catalog (UI only, never on /v0.1). */
-  upstreamCatalog: (
+  /** `POST /catalog/{id}/approve|block|reopen`: a name row, or a `name@version` row. */
+  decide: (
     repoKey: string,
-    params: { search?: string; cursor?: string; limit?: number } = {},
-  ): Promise<McpUpstreamPage | null> =>
-    orNull(
-      apiFetch<McpUpstreamPage>(`/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/upstream${query(params)}`),
-    ),
-
-  /** "Request approval" for an upstream name: queues it as `pending`. */
-  requestApproval: (repoKey: string, name: string): Promise<McpReview> =>
-    apiFetch<McpReview>(`/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/upstream/request-approval`, {
+    id: string,
+    decision: McpCatalogDecision,
+    reason?: string,
+  ): Promise<McpDecisionResult> =>
+    apiFetch<McpDecisionResult>(`${remoteBase(repoKey)}/catalog/${encodeURIComponent(id)}/${decision}`, {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(reason ? { reason } : {}),
     }),
 
-  /** Reason-gated holds of a repository (`GET /v0.1/x/com.artifactkeeper/holds`). */
-  listHolds: (repoKey: string, params: { name?: string; version?: string } = {}): Promise<McpHoldProblem[] | null> =>
-    orNull(
-      apiFetch<{ holds?: McpHoldProblem[] }>(`${registryBase(repoKey)}/x/com.artifactkeeper/holds${query(params)}`).then(
-        (r) => r?.holds ?? [],
-      ),
-    ),
+  /** `POST /catalog/pins`: approve one `name@version` only. */
+  pinVersion: (repoKey: string, name: string, version: string, reason?: string): Promise<McpDecisionResult> =>
+    apiFetch<McpDecisionResult>(`${remoteBase(repoKey)}/catalog/pins`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { name, version, reason } : { name, version }),
+    }),
 
-  /** Instance-wide count of MCP versions awaiting approval (dashboard tile). */
-  pendingReviewCount: async (): Promise<number | null> => {
-    const r = await orNull(apiFetch<Record<string, unknown>>('/api/v1/admin/holds/summary'));
-    const v = r?.mcp_pending_reviews;
-    return typeof v === 'number' ? v : null;
+  /**
+   * `POST /catalog/bulk-approve`: every `pending` name whose full name
+   * matches the glob (`io.github.acme/*`); deny globs still win, flagged
+   * names only with `includeReview`.
+   */
+  bulkApprovePattern: (
+    repoKey: string,
+    body: { pattern: string; includeReview?: boolean; reason?: string },
+  ): Promise<McpBulkApproveResult> =>
+    apiFetch<McpBulkApproveResult>(`${remoteBase(repoKey)}/catalog/bulk-approve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        pattern: body.pattern,
+        includeReview: body.includeReview ?? false,
+        ...(body.reason ? { reason: body.reason } : {}),
+      }),
+    }),
+
+  /** `POST /catalog/{id}/request-approval` (any reader): flags a name as wanted. */
+  requestApproval: (repoKey: string, id: string, note?: string): Promise<McpCatalogItem> =>
+    apiFetch<McpCatalogItem>(`${remoteBase(repoKey)}/catalog/${encodeURIComponent(id)}/request-approval`, {
+      method: 'POST',
+      body: JSON.stringify(note ? { note } : {}),
+    }),
+
+  /** `GET /sync`: the Remote's sync state (`null`: not served). */
+  syncState: (repoKey: string): Promise<McpSyncState | null> =>
+    orNull(apiFetch<McpSyncState>(`${remoteBase(repoKey)}/sync`)),
+
+  /** `POST /sync`: run a sync now (409 while one runs, 502 when upstream is unreadable). */
+  triggerSync: (repoKey: string): Promise<{ repository: string; summary: McpSyncSummary }> =>
+    apiFetch<{ repository: string; summary: McpSyncSummary }>(`${remoteBase(repoKey)}/sync`, { method: 'POST' }),
+
+  /**
+   * Names awaiting a decision (`pending` + `review`) across the given Remote
+   * MCP repositories, for the dashboard tile. `null` when none of them
+   * serves the catalog (or no key is given), so the tile stays hidden.
+   */
+  pendingReviewCount: async (remoteRepoKeys: string[]): Promise<number | null> => {
+    const pages = await Promise.all(
+      remoteRepoKeys.map((k) => mcpApi.listCatalog(k, { queue: true, limit: 1 }).catch(() => null)),
+    );
+    const seen = pages.filter((p): p is McpCatalogPage => p !== null);
+    if (seen.length === 0) return null;
+    return seen.reduce((n, p) => n + (p.counts.pending ?? 0) + (p.counts.review ?? 0), 0);
+  },
+
+  /**
+   * Reason-gated holds of a hosted or Remote repository
+   * (`GET /v0.1/x/com.artifactkeeper/holds`). Only a repository holder gets
+   * the list; everyone else, and a Virtual, gets the plain 404 (`null`).
+   */
+  listHolds: async (
+    repoKey: string,
+    params: { cursor?: string; limit?: number; search?: string } = {},
+  ): Promise<McpHoldsPage | null> => {
+    const search =
+      params.search && params.search.trim().length >= MCP_SEARCH_MIN_CHARS ? params.search.trim() : undefined;
+    const r = await orNull(
+      apiFetch<{ holds?: McpHoldProblem[]; metadata?: { count?: number; nextCursor?: string } }>(
+        `${registryBase(repoKey)}/x/com.artifactkeeper/holds${query({ cursor: params.cursor, limit: params.limit, search })}`,
+      ),
+    );
+    if (!r) return null;
+    const holds = r.holds ?? [];
+    return { holds, count: r.metadata?.count ?? holds.length, nextCursor: r.metadata?.nextCursor || undefined };
   },
 
   // -------------------------------------------------------------------------
-  // PHASE 2/3: capabilities (Tools tab) and probe
+  // Capabilities (Tools tab) on the registry surface
   // -------------------------------------------------------------------------
 
-  capabilities: (repoKey: string, name: string, version: string): Promise<McpCapabilities | null> =>
+  /**
+   * `GET .../versions/{version}/capabilities`. `snapshot` answers that
+   * snapshot as `current`; `source` restricts `current` and the list.
+   */
+  capabilities: (
+    repoKey: string,
+    name: string,
+    version: string,
+    params: { snapshot?: string; source?: string; limit?: number } = {},
+  ): Promise<McpCapabilities | null> =>
     orNull(
-      apiFetch<McpCapabilities>(`${adminServerPath(repoKey, name, version)}/capabilities`).then((r) => ({
+      apiFetch<McpCapabilities>(`${versionPath(repoKey, name, version)}/capabilities${query(params)}`).then((r) => ({
         ...r,
+        current: r?.current ?? null,
         snapshots: Array.isArray(r?.snapshots) ? r.snapshots : [],
+        introspection: {
+          ...r?.introspection,
+          remoteProbe: r?.introspection?.remoteProbe ?? 'off',
+          sandbox: r?.introspection?.sandbox ?? 'off',
+          probeEnabled: r?.introspection?.probeEnabled === true,
+          sandboxEnabled: r?.introspection?.sandboxEnabled === true,
+        },
       })),
     ),
 
-  /** Admin: queue a remote probe (only when `probe_available`). */
-  probe: (repoKey: string, name: string, version: string): Promise<void> =>
-    apiFetch<void>(`${adminServerPath(repoKey, name, version)}/capabilities/probe`, { method: 'POST' }),
+  /**
+   * `GET .../capabilities/diff`: tool, resource and prompt diff. Defaults:
+   * `to` = this version's current snapshot, `from` = the previous one of the
+   * same source (else the previous version's). `null` when there is no `to`.
+   */
+  capabilitiesDiff: (
+    repoKey: string,
+    name: string,
+    version: string,
+    params: { from?: string; to?: string; source?: string } = {},
+  ): Promise<McpCapabilityDiff | null> =>
+    orNull(apiFetch<McpCapabilityDiff>(`${versionPath(repoKey, name, version)}/capabilities/diff${query(params)}`)),
+
+  /**
+   * `POST .../capabilities/probe` (repository admin): queue the jobs the
+   * repository's settings allow; `409 mcp_introspection_disabled` when none.
+   */
+  probe: (repoKey: string, name: string, version: string): Promise<{ queued: string[] }> =>
+    apiFetch<{ queued?: string[] }>(`${versionPath(repoKey, name, version)}/capabilities/probe`, {
+      method: 'POST',
+    }).then((r) => ({ queued: r?.queued ?? [] })),
 
   // -------------------------------------------------------------------------
-  // PHASE 3: health roll-up, admin edit/delete, bundles, namespace grants
+  // Health roll-up, admin edit/delete
   // -------------------------------------------------------------------------
 
+  /** `GET /api/v1/repositories/{key}/mcp/servers/{name}/versions/{v}/health` (holders; 404 -> null). */
   health: (repoKey: string, name: string, version: string): Promise<McpHealth | null> =>
-    orNull(apiFetch<McpHealth>(`${adminServerPath(repoKey, name, version)}/health`)),
+    orNull(
+      apiFetch<McpHealth>(
+        `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/servers/${encodeServerName(name)}/versions/${encodeURIComponent(version)}/health`,
+      ).then((r) => ({
+        ...r,
+        packages: Array.isArray(r?.packages) ? r.packages : [],
+        lint: {
+          ...r?.lint,
+          ran: r?.lint?.ran === true,
+          block: r?.lint?.block ?? 0,
+          review: r?.lint?.review ?? 0,
+          warn: r?.lint?.warn ?? 0,
+          findings: r?.lint?.findings ?? [],
+        },
+      })),
+    ),
 
-  /** `PUT .../versions/{version}` (admin edit). */
+  /** `PUT .../versions/{version}` (repository admin): replace the document. */
   editVersion: (repoKey: string, name: string, version: string, server: McpServerJson): Promise<McpServedEntry> =>
-    apiFetch<McpServedEntry>(`${serverPath(repoKey, name)}/versions/${encodeURIComponent(version)}`, {
+    apiFetch<McpServedEntry>(versionPath(repoKey, name, version), {
       method: 'PUT',
       body: JSON.stringify(server),
     }),
 
-  /** `DELETE .../versions/{version}` (soft delete). */
-  deleteVersion: (repoKey: string, name: string, version: string): Promise<void> =>
-    apiFetch<void>(`${serverPath(repoKey, name)}/versions/${encodeURIComponent(version)}`, { method: 'DELETE' }),
-
-  bundle: (repoKey: string, name: string, version: string): Promise<McpBundle | null> =>
-    orNull(apiFetch<McpBundle>(`${adminServerPath(repoKey, name, version)}/bundle`)),
-
-  listNamespaceGrants: (repoKey: string): Promise<McpNamespaceGrant[] | null> =>
-    orNull(
-      apiFetch<{ items?: McpNamespaceGrant[] } | McpNamespaceGrant[]>(
-        `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/namespace-grants`,
-      ).then((r) => (Array.isArray(r) ? r : (r?.items ?? []))),
-    ),
-
-  createNamespaceGrant: (
-    repoKey: string,
-    body: { principal_type: McpNamespaceGrant['principal_type']; principal_id: string; actions: string[]; namespaces: string[] },
-  ): Promise<McpNamespaceGrant> =>
-    apiFetch<McpNamespaceGrant>(`/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/namespace-grants`, {
-      method: 'POST',
-      body: JSON.stringify(body),
+  /** `DELETE .../versions/{version}` (write): soft delete, answers the served entry. */
+  deleteVersion: (repoKey: string, name: string, version: string, statusMessage?: string): Promise<void> =>
+    apiFetch<void>(versionPath(repoKey, name, version), {
+      method: 'DELETE',
+      ...(statusMessage ? { body: JSON.stringify({ statusMessage }) } : {}),
     }),
 
-  deleteNamespaceGrant: (repoKey: string, id: string): Promise<void> =>
-    apiFetch<void>(
-      `/api/v1/repositories/${encodeURIComponent(repoKey)}/mcp/namespace-grants/${encodeURIComponent(id)}`,
-      { method: 'DELETE' },
-    ),
+  // -------------------------------------------------------------------------
+  // Namespace grants: ordinary permission rules (`/api/v1/permissions`,
+  // instance administrators) carrying `conditions.mcp_namespaces`.
+  // -------------------------------------------------------------------------
+
+  /** Every rule on the repository that carries `conditions.mcp_namespaces`. */
+  listNamespaceGrants: async (repositoryId: string): Promise<McpNamespaceGrant[]> => {
+    const out: McpNamespaceGrant[] = [];
+    for (let page = 1; page <= GRANT_PAGE_LIMIT; page += 1) {
+      const r = await apiFetch<{ items?: PermissionRule[]; pagination?: { total_pages?: number } }>(
+        `/api/v1/permissions${query({ target_type: 'repository', target_id: repositoryId, page, per_page: 100 })}`,
+      );
+      for (const rule of r?.items ?? []) {
+        const grant = toNamespaceGrant(rule);
+        if (grant) out.push(grant);
+      }
+      if (page >= (r?.pagination?.total_pages ?? 1)) break;
+    }
+    return out;
+  },
+
+  /**
+   * Create the rule. A backend that predates namespace conditions would drop
+   * `conditions.mcp_namespaces` and store an unconditional grant, so the
+   * answer is checked and such a rule is deleted again before failing.
+   */
+  createNamespaceGrant: async (
+    repositoryId: string,
+    body: { principal_type: McpGrantPrincipalType; principal_id: string; actions: string[]; namespaces: string[] },
+  ): Promise<McpNamespaceGrant> => {
+    const created = await apiFetch<PermissionRule>('/api/v1/permissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        principal_type: body.principal_type,
+        principal_id: body.principal_id,
+        target_type: 'repository',
+        target_id: repositoryId,
+        actions: body.actions,
+        conditions: { mcp_namespaces: body.namespaces },
+      }),
+    });
+    const grant = created ? toNamespaceGrant(created) : null;
+    if (!grant) {
+      if (created?.id) {
+        await apiFetch<void>(`/api/v1/permissions/${encodeURIComponent(created.id)}`, { method: 'DELETE' }).catch(
+          () => undefined,
+        );
+      }
+      throw new Error('This server does not support MCP namespace grants; nothing was granted');
+    }
+    return grant;
+  },
+
+  deleteNamespaceGrant: (id: string): Promise<void> =>
+    apiFetch<void>(`/api/v1/permissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
+
+/** Pages of permission rules read per repository (100 each). */
+const GRANT_PAGE_LIMIT = 20;
+
+interface PermissionRule {
+  id: string;
+  principal_type: string;
+  principal_id: string;
+  principal_name?: string | null;
+  target_type: string;
+  target_id: string;
+  actions: string[];
+  conditions?: { mcp_namespaces?: unknown } | null;
+  created_at?: string;
+}
+
+/** A permission rule as a namespace grant, `null` when it carries no namespace condition. */
+export function toNamespaceGrant(rule: PermissionRule): McpNamespaceGrant | null {
+  const ns = rule.conditions?.mcp_namespaces;
+  if (!Array.isArray(ns) || ns.length === 0) return null;
+  return {
+    id: rule.id,
+    repository_id: rule.target_id,
+    principal_type: rule.principal_type as McpGrantPrincipalType,
+    principal_id: rule.principal_id,
+    principal_name: rule.principal_name ?? undefined,
+    actions: rule.actions ?? [],
+    namespaces: ns.filter((n): n is string => typeof n === 'string'),
+    created_at: rule.created_at,
+  };
+}

@@ -18,7 +18,13 @@ export function served(server: McpServerJson, meta: Record<string, unknown> = {}
     server,
     _meta: {
       [MCP_OFFICIAL_META_KEY]: { status: "active", isLatest: true, publishedAt: "2026-10-01T00:00:00Z" },
-      [MCP_AK_SOURCE_META_KEY]: { repository: "mcp-local", artifactId: "a1", packagePolicy: "own-repos" },
+      [MCP_AK_SOURCE_META_KEY]: {
+        repository: "mcp-local",
+        artifactId: "a1",
+        packagePolicy: "own-repos",
+        origin: "hosted",
+        upstreamVerified: false,
+      },
       ...meta,
     },
   };

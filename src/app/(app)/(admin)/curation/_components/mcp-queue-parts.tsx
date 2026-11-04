@@ -1,14 +1,14 @@
 "use client";
 
-import { KeyRound } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
-import { secretsOf, transportsOf } from "@/lib/mcp/server-json";
-import { MCP_RISK_LEVEL_LABEL, type McpRiskLevel } from "@/lib/mcp/risk";
-import type { McpServerJson } from "@/types/mcp";
-import { plural } from "./mcp-review-format";
+import { mcpApi } from "@/lib/api/mcp";
+import { mcpKeys } from "@/lib/mcp/query-keys";
+import type { McpCatalogItem } from "@/types/mcp";
+import { diffVersion, requestNote, typosquatNote, unresolvedNote } from "./mcp-review-format";
 
-/** Muted note for a Phase 2/3 surface the backend does not serve. */
+/** Muted note for a surface the backend does not serve. */
 export function McpNotAvailable({ what }: { what: string }) {
   return (
     <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
@@ -31,44 +31,46 @@ export function McpReviewStatusBadge({ status }: { status: string }) {
 }
 
 /**
- * Transport chips plus the secret count. Text chips rather than the gallery
- * badges keep the queue row dense; the labels come from `transportsOf`, so
- * they read the same everywhere.
+ * The server-side signals of a catalog row: deny-list match, lookalike flag,
+ * approval requests and unresolved packages. Everything comes from the
+ * catalog item, never from the upstream document's own text.
  */
-export function McpTransportChips({ server }: { server: McpServerJson }) {
-  const secrets = secretsOf(server).length;
+export function McpCatalogNotes({ item }: { item: McpCatalogItem }) {
+  const typo = typosquatNote(item);
+  const requested = requestNote(item);
+  const unresolved = unresolvedNote(item);
   return (
     <>
-      {transportsOf(server).map((t) => (
-        <Badge key={t.key} variant="outline" className="font-mono text-[11px]">
-          {t.label}
-        </Badge>
-      ))}
-      {secrets > 0 && (
-        <span
-          className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"
-          aria-label={plural(secrets, "secret")}
-          title={plural(secrets, "secret")}
-        >
-          <KeyRound className="size-3" aria-hidden="true" />
-          {secrets}
-        </span>
+      {item.denied && (
+        <p className="mt-1 text-xs text-destructive">Matches a deny glob: never served, whatever its status.</p>
       )}
+      {typo && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{typo}</p>}
+      {requested && <p className="mt-1 text-xs text-muted-foreground">{requested}</p>}
+      {unresolved && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{unresolved}</p>}
+      {item.evaluationReason && <p className="mt-1 text-xs text-muted-foreground">Reason: {item.evaluationReason}</p>}
     </>
   );
 }
 
-const RISK_CLASS: Record<McpRiskLevel, string> = {
-  low: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
-  medium: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400",
-  high: "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400",
-  critical: "border-red-500 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300",
-};
-
-export function McpRiskText({ level, score }: { level: McpRiskLevel; score: number }) {
+/**
+ * The tool diff of the row's ingested version (`GET .../capabilities/diff`,
+ * the approval queue's use of it): `summary.text` against the previous
+ * snapshot or version. Nothing while loading, when nothing was ingested, or
+ * when there is no snapshot.
+ */
+export function McpCatalogToolDiff({ repoKey, item }: { repoKey: string; item: McpCatalogItem }) {
+  const v = diffVersion(item);
+  const { data } = useQuery({
+    queryKey: [...mcpKeys.capabilities(repoKey, item.name, v?.version ?? ""), "diff"],
+    queryFn: () => mcpApi.capabilitiesDiff(repoKey, item.name, v!.version),
+    enabled: !!v,
+    retry: false,
+  });
+  if (!data || data.summary.identical) return null;
+  const destructive = data.summary.destructiveAdded.length > 0;
   return (
-    <Badge variant="outline" className={RISK_CLASS[level]} title={`Risk score ${score}`}>
-      Risk {MCP_RISK_LEVEL_LABEL[level]}
-    </Badge>
+    <p className={`text-xs ${destructive ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
+      {data.summary.text}
+    </p>
   );
 }

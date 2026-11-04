@@ -1,57 +1,60 @@
-import type { McpLintFinding, McpReview, McpToolDiff } from "@/types/mcp";
-import { assessRisk, type McpRiskLevel } from "@/lib/mcp/risk";
+import type { McpCatalogItem, McpCatalogPin, McpCatalogVersion } from "@/types/mcp";
 
 /**
  * Pure formatting for MCP approval-queue rows (artifact-keeper#5253, lens-ui
- * 4.2). Kept out of the component so the summaries are unit-tested on their
- * own and the row stays a flat render.
+ * 4.2), over the Remote management API's `CatalogItem`. Kept out of the
+ * component so the summaries are unit-tested on their own and the row stays
+ * a flat render.
  */
 
 export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** `{ block: 1, review: 2 }` from a review's lint findings. */
-export function lintCounts(findings: McpLintFinding[] | undefined): { block: number; review: number } {
-  let block = 0;
-  let review = 0;
-  for (const f of findings ?? []) {
-    if (f.action === "block") block += 1;
-    else review += 1;
-  }
-  return { block, review };
+/** `name@version` rows re-queued because the upstream bytes changed, not yet re-approved. */
+export function driftedPins(item: McpCatalogItem): McpCatalogPin[] {
+  return item.pins.filter((p) => !!p.contentDrift && p.status !== "approved" && p.status !== "blocked");
 }
 
-/** "1 blocking, 2 to review", or null when the lint pass found nothing. */
-export function lintSummary(findings: McpLintFinding[] | undefined): string | null {
-  const { block, review } = lintCounts(findings);
-  const parts: string[] = [];
-  if (block > 0) parts.push(`${block} blocking`);
-  if (review > 0) parts.push(`${review} to review`);
-  return parts.length > 0 ? parts.join(", ") : null;
-}
-
-/** "Tools: +3 added, 1 changed" (decision 4, section 8), or null when unchanged. */
-export function toolDiffSummary(diff: McpToolDiff | null | undefined): string | null {
-  if (!diff) return null;
-  const parts: string[] = [];
-  if (diff.added.length > 0) parts.push(`+${diff.added.length} added`);
-  if (diff.removed.length > 0) parts.push(`-${diff.removed.length} removed`);
-  if (diff.changed.length > 0) parts.push(`${diff.changed.length} changed`);
-  return parts.length > 0 ? `Tools: ${parts.join(", ")}` : null;
-}
-
-/** The version the row would pin: the existing pin, else the upstream latest. */
-export function reviewVersion(review: McpReview): string | null {
-  return review.version ?? review.server?.version ?? null;
+/** Whether the row needs a decision on the name itself (not only on a drifted version). */
+export function needsNameDecision(item: McpCatalogItem): boolean {
+  return item.status === "pending" || item.status === "review";
 }
 
 /**
- * Risk level of a queued upstream entry. Only the document is known before
- * approval (no pins, no health, no source tag on the queued document), so
- * this is the publisher-side reading; a tool diff counts as drift.
+ * The version the "pin this version only" option pins: the upstream's latest
+ * version, else the newest known one.
  */
-export function reviewRisk(review: McpReview): { level: McpRiskLevel; score: number } | null {
-  if (!review.server) return null;
-  const changed = !!review.tool_diff && toolDiffSummary(review.tool_diff) !== null;
-  const { level, score } = assessRisk({ server: review.server, toolDrift: changed });
-  return { level, score };
+export function reviewVersion(item: McpCatalogItem): string | null {
+  return item.latestVersion ?? item.versions[0] ?? null;
+}
+
+/**
+ * The ingested version whose capabilities diff the row shows: the latest
+ * version when it was ingested, else the first ingested one. `null` for a
+ * name nothing was ingested for yet (a pending name under
+ * `approval_required`).
+ */
+export function diffVersion(item: McpCatalogItem): McpCatalogVersion | null {
+  return item.ingested.find((v) => v.version === item.latestVersion) ?? item.ingested[0] ?? null;
+}
+
+/** "Looks like io.github.acme/widget", from the ingest flags, or null. */
+export function typosquatNote(item: McpCatalogItem): string | null {
+  const similar = item.flags?.typosquat?.similarTo;
+  return similar ? `Looks like ${similar}` : null;
+}
+
+/** "Requested 3 times: needed for the release bot", or null when nobody asked. */
+export function requestNote(item: McpCatalogItem): string | null {
+  const count = item.approvalRequests?.count ?? 0;
+  if (count <= 0) return null;
+  const base = `Requested ${count === 1 ? "once" : `${count} times`}`;
+  const note = item.approvalRequests.lastNote?.trim();
+  return note ? `${base}: ${note}` : base;
+}
+
+/** Ingested versions the sync could not pin (hidden until it can), as one line. */
+export function unresolvedNote(item: McpCatalogItem): string | null {
+  const stuck = item.ingested.filter((v) => v.unresolved.length > 0);
+  if (stuck.length === 0) return null;
+  return `${plural(stuck.length, "version")} with unresolved packages (${stuck.map((v) => v.version).join(", ")})`;
 }

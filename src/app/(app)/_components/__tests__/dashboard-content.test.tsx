@@ -30,15 +30,16 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/api/admin", () => ({
   adminApi: { getHealth: vi.fn(), getStats: vi.fn() },
 }));
+const mockRepositoriesList = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
-  repositoriesApi: { list: vi.fn() },
+  repositoriesApi: { list: (...a: unknown[]) => mockRepositoriesList(...a) },
 }));
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
 const mockPendingReviewCount = vi.fn();
 vi.mock("@/lib/api/mcp", () => ({
-  mcpApi: { pendingReviewCount: () => mockPendingReviewCount() },
+  mcpApi: { pendingReviewCount: (...a: unknown[]) => mockPendingReviewCount(...a) },
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -153,6 +154,8 @@ describe("DashboardContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRepositoriesList.mockResolvedValue({ items: [] });
+    mockPendingReviewCount.mockResolvedValue(null);
     setupUseQuery({
       "recent-repositories": {
         data: { items: [] },
@@ -481,7 +484,20 @@ describe("DashboardContent", () => {
       const tile = screen.getByTestId(TILE);
       expect(tile).toHaveTextContent("MCP servers awaiting approval: 4");
       expect(tile).toHaveAttribute("data-href", "/curation");
-      expect(mockPendingReviewCount).toHaveBeenCalled();
+    });
+
+    it("counts over the Remote MCP repositories only", async () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      mockRepositoriesList.mockResolvedValue({ items: [{ key: "mcp-proxy" }, { key: "mcp-mirror" }] });
+      mockPendingReviewCount.mockResolvedValue(3);
+      setupUseQuery({ "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const opts = mockUseQuery.mock.calls.map((c) => c[0]).find((o) => o.queryKey[1] === "pending-count");
+      expect(opts.queryKey).toEqual(["mcp", "pending-count"]);
+      expect(opts.enabled).toBe(true);
+      await expect(opts.queryFn()).resolves.toBe(3);
+      expect(mockRepositoriesList).toHaveBeenCalledWith({ format: "mcp", repo_type: "remote", per_page: 100 });
+      expect(mockPendingReviewCount).toHaveBeenCalledWith(["mcp-proxy", "mcp-mirror"]);
     });
 
     it("shows a zero count", () => {

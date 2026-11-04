@@ -6,7 +6,7 @@ import type {
   McpServerJson,
   McpServerStatus,
 } from "@/types/mcp";
-import { isPinnedVersion, secretsOf, type McpSourceKind } from "@/lib/mcp/server-json";
+import { isPinnedVersion, isUnverifiedSource, secretsOf, type McpSourceKind } from "@/lib/mcp/server-json";
 
 /**
  * Deterministic, explainable risk signals for an MCP server version
@@ -76,9 +76,9 @@ export interface McpRiskInput {
   policy?: McpPackagePolicy;
   /** Stored pins (`artifact_metadata.packages`), when loaded. */
   pins?: McpPackagePin[];
-  /** Phase 3 health roll-up, when loaded. */
+  /** Health roll-up, when loaded. */
   health?: McpHealth | null;
-  /** Phase 2 capability snapshots, when loaded. */
+  /** Capability snapshots, when loaded. */
   capabilities?: McpCapabilities | null;
   /** Phase 2: the version's tool set changed under the same version. */
   toolDrift?: boolean;
@@ -91,10 +91,9 @@ function signal(id: McpRiskSignalId, label: string, reason: string): McpRiskSign
 function worstSeverity(health: McpHealth | null | undefined): "critical" | "high" | "medium" | null {
   let worst: "critical" | "high" | "medium" | null = null;
   for (const p of health?.packages ?? []) {
-    const sev = (p.max_severity ?? "").toLowerCase();
-    if (sev === "critical" || (p.critical ?? 0) > 0) return "critical";
-    if (sev === "high" || (p.high ?? 0) > 0) worst = "high";
-    else if ((sev === "medium" || (p.medium ?? 0) > 0) && worst === null) worst = "medium";
+    if ((p.critical ?? 0) > 0) return "critical";
+    if ((p.high ?? 0) > 0) worst = "high";
+    else if ((p.medium ?? 0) > 0 && worst === null) worst = "medium";
   }
   return worst;
 }
@@ -147,11 +146,17 @@ export function riskSignals(input: McpRiskInput): McpRiskSignal[] {
       ),
     );
   }
-  if (input.source === "unverified") {
-    out.push(signal("unverified_source", "unverified source", "The entry came from an upstream registry that did not mark it official."));
+  if (isUnverifiedSource(input.source)) {
+    out.push(
+      signal(
+        "unverified_source",
+        "unverified source",
+        "The entry was ingested from an upstream registry whose bytes Artifact Keeper cannot vouch for (not the official registry or another Artifact Keeper, or the content changed upstream).",
+      ),
+    );
   }
-  const snapshots = input.capabilities?.snapshots ?? [];
-  if (snapshots.some((s) => (s.tools ?? []).some((t) => t.annotations?.destructiveHint === true))) {
+  const current = input.capabilities?.current ?? null;
+  if ((current?.tools ?? []).some((t) => t.annotations?.destructiveHint === true)) {
     out.push(
       signal(
         "destructive_tools",
@@ -163,10 +168,11 @@ export function riskSignals(input: McpRiskInput): McpRiskSignal[] {
   if (input.toolDrift) {
     out.push(signal("tool_drift", "tool drift", "The tool list changed under the same server version."));
   }
-  if (snapshots.length > 0 && snapshots.every((s) => s.auth_state === "auth_required" || s.auth_state === "caller_specific")) {
+  if (current && (current.authState === "auth_required" || current.authState === "caller_specific")) {
     out.push(signal("not_observable", "not observable", "The tools were listed without credentials; signed-in users may see different tools."));
   }
-  if (snapshots.length > 0 && snapshots.every((s) => s.source === "publisher_declared")) {
+  const successful = (input.capabilities?.snapshots ?? []).filter((s) => s.outcome === "ok");
+  if (current && current.source === "publisher_declared" && !successful.some((s) => s.observed)) {
     out.push(signal("declared_only", "declared only", "The tool list is what the publisher declared, not what was observed."));
   }
   const secrets = secretsOf(server);

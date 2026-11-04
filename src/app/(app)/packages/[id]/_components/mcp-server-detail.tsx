@@ -10,7 +10,7 @@ import { packagesApi } from "@/lib/api/packages";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { isRemoteMcpRepo, splitServerName } from "@/lib/mcp/format";
-import { akSourceMeta, isSafeHttpUrl, officialMeta, secretsOf, sourceKind } from "@/lib/mcp/server-json";
+import { akSourceMeta, isSafeHttpUrl, officialMeta, secretsOf, sourceKind, sourceKindOf } from "@/lib/mcp/server-json";
 import { assessRisk } from "@/lib/mcp/risk";
 import { useAuth } from "@/providers/auth-provider";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +91,12 @@ export function mergeVersionRows(
   return [...rows.values()].sort((a, b) => (b.published ?? "").localeCompare(a.published ?? ""));
 }
 
+/** `origin` of the generic package row's MCP metadata (`hosted` | `remote` | `mirror`). */
+function pkgOrigin(pkg: Package): string | undefined {
+  const o = pkg.metadata?.origin;
+  return typeof o === "string" ? o : undefined;
+}
+
 export function McpServerDetail({ pkg }: { pkg: Package }) {
   const repoKey = pkg.repository_key;
   const name = pkg.name;
@@ -132,6 +138,23 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
     enabled: versionsQ.isSuccess && !servedEntry && !!version,
   });
   const entry = servedEntry ?? (readQ.data?.kind === "served" ? readQ.data.entry : undefined);
+  // Listings serve a bundle's plain URL; only the exact read of a signed-in
+  // caller carries the single-use download ticket a private registry needs.
+  const hasBundle = !!servedEntry?.server.packages?.some((p) => p.registryType === "mcpb");
+  const exactQ = useQuery({
+    queryKey: [...mcpKeys.version(repoKey, name, version), "exact"],
+    queryFn: () => mcpApi.getVersion(repoKey, name, version),
+    enabled: hasBundle,
+    staleTime: 0,
+  });
+  const bundleUrls = useMemo(() => {
+    const exact = exactQ.data?.kind === "served" ? exactQ.data.entry : readQ.data?.kind === "served" ? readQ.data.entry : undefined;
+    const out: Record<number, string> = {};
+    (exact?.server.packages ?? []).forEach((p, i) => {
+      if (p.registryType === "mcpb") out[i] = p.identifier;
+    });
+    return out;
+  }, [exactQ.data, readQ.data]);
   const artifactId = entry ? akSourceMeta(entry)?.artifactId : undefined;
 
   const storedQ = useQuery({
@@ -159,7 +182,11 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
   const server = entry?.server ?? stored?.server;
   const official = entry ? officialMeta(entry) : stored?.registry;
   const status = official?.status;
-  const source = entry ? sourceKind(entry) : undefined;
+  // A held version has no served entry: the package row's MCP metadata
+  // (`origin`) still says where it comes from, though not whether it is
+  // verified.
+  const sourceMeta = entry ? akSourceMeta(entry) : undefined;
+  const source = entry ? sourceKind(entry) : pkgOrigin(pkg) ? sourceKindOf(pkgOrigin(pkg), false) : undefined;
   const policy = (entry ? akSourceMeta(entry)?.packagePolicy : undefined) ?? stored?.policy?.package;
   const pins = stored?.packages;
   const notServed = versionsQ.isSuccess && !servedEntry && readQ.data !== undefined && readQ.data.kind !== "served";
@@ -214,7 +241,14 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
           {server?.description && <p className="text-sm text-muted-foreground">{server.description}</p>}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <McpStatusBadge status={notServed ? "held" : (status ?? "active")} />
-            {source && <McpSourceBadge kind={source} />}
+            {source && (
+              <McpSourceBadge
+                kind={source}
+                upstreamUrl={sourceMeta?.upstreamUrl}
+                virtualRepository={sourceMeta?.virtualRepository}
+                memberRepository={sourceMeta?.repository}
+              />
+            )}
             <span className="font-mono text-xs">
               v{version}
               {isLatest ? " (latest)" : ""}
@@ -247,7 +281,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
               version={version}
               status={status}
               isRemote={!!repoQ.data && isRemoteMcpRepo(repoQ.data)}
-              probeAvailable={!!capsQ.data?.probe_available}
+              probeAvailable={!!capsQ.data && (capsQ.data.introspection.probeEnabled || capsQ.data.introspection.sandboxEnabled)}
             />
           )}
         </div>
@@ -302,7 +336,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
               )}
             </TabsContent>
             <TabsContent value="packages" className="pt-4">
-              <PackagesSection server={server} pins={pins} policy={policy} repoKey={repoKey} />
+              <PackagesSection server={server} pins={pins} policy={policy} bundles={stored?.bundles} bundleUrls={bundleUrls} />
             </TabsContent>
             <TabsContent value="config" className="pt-4">
               <ConfigurationSection server={server} />

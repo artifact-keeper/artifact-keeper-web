@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
-import { PINS, SERVER } from "./test-utils";
+import { PINS, SERVER, healthOf } from "./test-utils";
 import { McpLineageGraph } from "./lineage-graph";
 
 afterEach(() => {
@@ -21,7 +21,7 @@ describe("McpLineageGraph", () => {
         server={SERVER}
         pins={PINS}
         repoKey="mcp-local"
-        health={{ state: "warning", packages: [{ package: "npm:@acme/weather-mcp@1.4.2", high: 2, scan_state: "completed" }] }}
+        health={healthOf([{ package: "npm:@acme/weather-mcp@1.4.2", high: 2 }], { status: "warning" })}
       />,
     );
     const l = list();
@@ -53,24 +53,35 @@ describe("McpLineageGraph", () => {
   });
 
   it("summarises verdict states", () => {
-    const health = {
-      state: "held",
-      packages: [
-        { package: "npm:@acme/weather-mcp@1.4.2", gate: "quarantine" },
-        { package: "oci:acme/weather:1.4.2", max_severity: "medium" },
+    const health = healthOf(
+      [
+        { package: "npm:@acme/weather-mcp@1.4.2", gate: "quarantine", status: "critical" },
+        { package: "oci:acme/weather:1.4.2", registryType: "oci", medium: 1, status: "warning" },
       ],
-    };
+      { status: "critical" },
+    );
     render(<McpLineageGraph server={SERVER} pins={PINS} repoKey="k" health={health} />);
     expect(within(list()).getByText(/held: quarantine/)).toBeInTheDocument();
     expect(within(list()).getByText(/1 medium/)).toBeInTheDocument();
   });
 
   it.each([
-    [{ critical: 3 }, "3 critical"],
-    [{ scan_state: "completed" }, "clean (completed)"],
-    [{}, "clean"],
+    [{ critical: 3, high: 1 }, "3 critical"],
+    [{ high: 2, medium: 4 }, "2 high"],
+    [{ gate: "age_gate" }, "held: age_gate"],
+    [{ gate: "unavailable" }, "verdict unavailable"],
+    [{ scanned: false, score: null, grade: null }, "not scanned yet"],
+    [{ grade: "A" }, "clean (grade A)"],
+    [{ grade: null, low: 3, info: 1 }, "clean"],
   ])("verdict %o", (row, text) => {
-    render(<McpLineageGraph server={{ ...SERVER, packages: [SERVER.packages![0]], remotes: [] }} pins={PINS} repoKey="k" health={{ state: "x", packages: [{ package: "npm:@acme/weather-mcp@1.4.2", ...row }] }} />);
+    render(
+      <McpLineageGraph
+        server={{ ...SERVER, packages: [SERVER.packages![0]], remotes: [] }}
+        pins={PINS}
+        repoKey="k"
+        health={healthOf([{ package: "npm:@acme/weather-mcp@1.4.2", ...row }])}
+      />,
+    );
     expect(within(list()).getByRole("link", { name: text })).toBeInTheDocument();
   });
 

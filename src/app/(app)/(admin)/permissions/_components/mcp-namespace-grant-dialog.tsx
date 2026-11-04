@@ -9,7 +9,7 @@ import { mcpApi } from "@/lib/api/mcp";
 import { adminApi } from "@/lib/api/admin";
 import { groupsApi } from "@/lib/api/groups";
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
-import { validateNamespacePrefix } from "@/lib/mcp/format";
+import { validateNamespacePattern } from "@/lib/mcp/format";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { McpNamespaceGrant } from "@/types/mcp";
@@ -72,21 +72,23 @@ function usePrincipalOptions(type: PrincipalType) {
 
 interface Props {
   repoKey: string;
+  /** The repository id the rule targets. */
+  repositoryId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function McpNamespaceGrantDialog({ repoKey, open, onOpenChange }: Props) {
+export function McpNamespaceGrantDialog({ repoKey, repositoryId, open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        <GrantForm repoKey={repoKey} onDone={() => onOpenChange(false)} />
+        <GrantForm repoKey={repoKey} repositoryId={repositoryId} onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function GrantForm({ repoKey, onDone }: { repoKey: string; onDone: () => void }) {
+function GrantForm({ repoKey, repositoryId, onDone }: { repoKey: string; repositoryId: string; onDone: () => void }) {
   const queryClient = useQueryClient();
   const [principalType, setPrincipalType] = useState<PrincipalType>("user");
   const [principalId, setPrincipalId] = useState("");
@@ -98,7 +100,7 @@ function GrantForm({ repoKey, onDone }: { repoKey: string; onDone: () => void })
 
   const create = useMutation({
     mutationFn: () =>
-      mcpApi.createNamespaceGrant(repoKey, {
+      mcpApi.createNamespaceGrant(repositoryId, {
         principal_type: principalType,
         principal_id: principalId,
         actions,
@@ -114,7 +116,7 @@ function GrantForm({ repoKey, onDone }: { repoKey: string; onDone: () => void })
 
   function addNamespace() {
     const ns = draft.trim();
-    const error = validateNamespacePrefix(ns);
+    const error = validateNamespacePattern(ns);
     if (error) {
       setDraftError(error);
       return;
@@ -210,7 +212,7 @@ function GrantForm({ repoKey, onDone }: { repoKey: string; onDone: () => void })
                 addNamespace();
               }
             }}
-            placeholder="com.acme"
+            placeholder="io.github.{repository_owner}/*"
             autoComplete="off"
             aria-invalid={!!draftError}
             aria-describedby="mcp-grant-ns-help"
@@ -218,7 +220,8 @@ function GrantForm({ repoKey, onDone }: { repoKey: string; onDone: () => void })
           <Button type="button" variant="outline" onClick={addNamespace}>Add</Button>
         </div>
         <p id="mcp-grant-ns-help" className={`text-xs ${draftError ? "text-destructive" : "text-muted-foreground"}`}>
-          {draftError ?? "A prefix: com.acme also covers com.acme.team, not com.acmecorp."}
+          {draftError ??
+            "com.acme means com.acme/* (not com.acme.team or com.acmecorp). * matches anything, / included; {repository_owner} and other CI OIDC claims are filled in from the publishing token."}
         </p>
         {namespaces.length > 0 && (
           <ul className="flex flex-wrap gap-1" aria-label="Namespaces to grant">

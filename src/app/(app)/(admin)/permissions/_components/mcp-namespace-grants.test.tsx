@@ -80,9 +80,11 @@ import { McpNamespaceGrants } from "./mcp-namespace-grants";
 
 const REPOS = [
   { id: "1", key: "mcp-local", format: "mcp", repo_type: "local", mcp_require_namespace_grant: true },
-  { id: "2", key: "mcp-team", format: "mcp", repo_type: "local" },
+  { id: "2", key: "mcp-team", format: "mcp", repo_type: "staging", mcp_require_namespace_grant: false },
   { id: "3", key: "mcp-proxy", format: "mcp", repo_type: "remote" },
   { id: "4", key: "npm-local", format: "npm", repo_type: "local" },
+  // A backend that predates namespace conditions does not echo the setting.
+  { id: "5", key: "mcp-old", format: "mcp", repo_type: "local" },
 ] as unknown as Repository[];
 
 const GRANT: McpNamespaceGrant = {
@@ -124,24 +126,29 @@ describe("McpNamespaceGrants", () => {
     expect(api.listNamespaceGrants).not.toHaveBeenCalled();
   });
 
-  it("hides when the backend does not serve grants", async () => {
-    api.listNamespaceGrants.mockResolvedValue(null);
-    setup();
-    await waitFor(() => expect(api.listNamespaceGrants).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByText("MCP namespace grants")).not.toBeInTheDocument());
+  it("hides when no hosted repository echoes mcp_require_namespace_grant", () => {
+    const old = REPOS.filter((r) => r.key === "mcp-old" || r.key === "mcp-proxy");
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <McpNamespaceGrants repositories={old} />
+      </QueryClientProvider>,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(api.listNamespaceGrants).not.toHaveBeenCalled();
   });
 
   it("says grants are not available when deep-linked to a backend without them", async () => {
-    api.listNamespaceGrants.mockResolvedValue(null);
-    searchParams = new URLSearchParams("mcp=mcp-team");
-    setup();
+    searchParams = new URLSearchParams("mcp=mcp-old");
+    setup(REPOS.filter((r) => r.key === "mcp-old"));
     expect(await screen.findByText(/namespace grants are not available on this server/)).toBeInTheDocument();
+    expect(api.listNamespaceGrants).not.toHaveBeenCalled();
   });
 
   it("lists grants of the first hosted repository and explains when they apply", async () => {
     setup();
     expect(await screen.findByText("publishers")).toBeInTheDocument();
-    expect(api.listNamespaceGrants).toHaveBeenCalledWith("mcp-local");
+    // Read by repository id: the rules target the repository, not its key.
+    expect(api.listNamespaceGrants).toHaveBeenCalledWith("1");
     expect(screen.getByText("com.acme.team")).toBeInTheDocument();
     expect(screen.getByText("Required on this repository")).toBeInTheDocument();
     expect(screen.getByText(/mcp_require_namespace_grant/)).toBeInTheDocument();
@@ -154,9 +161,11 @@ describe("McpNamespaceGrants", () => {
     searchParams = new URLSearchParams("mcp=mcp-team");
     const { user } = setup();
     expect(await screen.findByText("No namespace grants on mcp-team.")).toBeInTheDocument();
+    expect(api.listNamespaceGrants).toHaveBeenCalledWith("2");
     expect(screen.getByText("Not required on this repository")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("MCP repository"), "mcp-local");
     expect(await screen.findByText("No namespace grants on mcp-local.")).toBeInTheDocument();
+    expect(api.listNamespaceGrants).toHaveBeenCalledWith("1");
   });
 
   it("shows a load error", async () => {
@@ -171,7 +180,7 @@ describe("McpNamespaceGrants", () => {
     await user.click(await screen.findByRole("button", { name: "Delete grant for publishers" }));
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Delete grant" }));
-    await waitFor(() => expect(api.deleteNamespaceGrant).toHaveBeenCalledWith("mcp-local", "gr1"));
+    await waitFor(() => expect(api.deleteNamespaceGrant).toHaveBeenCalledWith("gr1"));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Namespace grant deleted"));
     expect(spy).toHaveBeenCalledWith({ queryKey: ["mcp"] });
   });
@@ -198,26 +207,31 @@ describe("McpNamespaceGrants", () => {
     await user.selectOptions(d.getByLabelText("Principal"), "g1");
 
     const ns = d.getByLabelText("Namespaces");
-    await user.type(ns, "com.acme/x{Enter}");
-    expect(d.getByText(/has no slash/)).toBeInTheDocument();
+    await user.type(ns, "a/b/c{Enter}");
+    expect(d.getByText("At most one slash")).toBeInTheDocument();
     expect(ns).toHaveAttribute("aria-invalid", "true");
     await user.clear(ns);
+    expect(ns).toHaveAttribute("aria-invalid", "false");
+    await user.type(ns, "io.github.{{Owner}/*{Enter}");
+    expect(d.getByText(/A \{claim\} is lowercase/)).toBeInTheDocument();
+    await user.clear(ns);
     await user.type(ns, "com.acme{Enter}");
+    await user.type(ns, "io.github.{{repository_owner}/*{Enter}");
     await user.type(ns, "org.example");
     await user.click(d.getByRole("button", { name: "Add" }));
     // Duplicates collapse.
-    await user.type(ns, "com.acme{Enter}");
-    expect(d.getAllByRole("listitem")).toHaveLength(2);
+    await user.type(ns, " com.acme {Enter}");
+    expect(d.getAllByRole("listitem")).toHaveLength(3);
     await user.click(d.getByRole("button", { name: "Remove org.example" }));
     await user.click(d.getByRole("checkbox", { name: "delete (edit status)" }));
 
     await user.click(submit);
     await waitFor(() =>
-      expect(api.createNamespaceGrant).toHaveBeenCalledWith("mcp-local", {
+      expect(api.createNamespaceGrant).toHaveBeenCalledWith("1", {
         principal_type: "group",
         principal_id: "g1",
         actions: ["write", "delete"],
-        namespaces: ["com.acme"],
+        namespaces: ["com.acme", "io.github.{repository_owner}/*"],
       }),
     );
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Namespace grant created"));

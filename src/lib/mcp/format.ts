@@ -49,15 +49,15 @@ export function backendSupportsMcp(handlers: FormatHandler[] | undefined | null)
 }
 
 /**
- * Whether the backend accepts Remote/Virtual MCP repositories. The backend
- * accepts all four types and does not advertise them, so every type is
- * offered by default. A handler that does list `capabilities.repo_types` is
- * believed: without `remote` or `virtual` there, only the hosted types are
- * offered.
+ * Whether the backend accepts Remote/Virtual MCP repositories. The handler's
+ * `repository_types` (`GET /api/v1/formats`) says which types it can be
+ * created as; a handler that predates the field is believed through
+ * `capabilities.repo_types` when present, else every type is offered (the
+ * backend accepts all four).
  */
 export function mcpRepoTypeSupport(handlers: FormatHandler[] | undefined | null): McpRepoTypeSupport {
   const handler = (handlers ?? []).find((h) => h.format_key === MCP_FORMAT);
-  const types = handler?.capabilities?.["repo_types"];
+  const types = handler?.repository_types ?? handler?.capabilities?.["repo_types"];
   if (!Array.isArray(types)) return { hosted: true, proxy: true };
   return { hosted: true, proxy: types.includes("remote") || types.includes("virtual") };
 }
@@ -169,5 +169,25 @@ export function validateNamespacePrefix(prefix: string): string | null {
   if (MCP_RESERVED_NAMESPACE_PREFIXES.some((r) => p === r || p.startsWith(`${r}.`))) {
     return "The io.modelcontextprotocol namespace is reserved";
   }
+  return null;
+}
+
+/**
+ * Client-side check of a namespace-grant pattern
+ * (`conditions.mcp_namespaces`), with the backend's rules: 1 to 200
+ * characters of letters, digits, `.`, `_`, `-`, `*`, at most one `/`, and
+ * `{claim}` placeholders naming a CI OIDC claim (lowercase letters, digits,
+ * `_`). A pattern without `/` means the namespace's servers (`com.acme` =
+ * `com.acme/*`). The backend re-validates.
+ */
+export function validateNamespacePattern(pattern: string): string | null {
+  const p = pattern.trim();
+  if (!p) return "Enter a namespace or pattern";
+  if (p.length > 200) return "At most 200 characters";
+  if ((p.match(/\//g) ?? []).length > 1) return "At most one slash";
+  const rest = p.replace(/\{([^{}]*)\}/g, (_m, claim: string) => (/^[a-z0-9_]+$/.test(claim) ? "" : "\u0000"));
+  if (rest.includes("\u0000")) return "A {claim} is lowercase letters, digits and underscores";
+  if (/[{}]/.test(rest)) return "Unbalanced { }";
+  if (!/^[A-Za-z0-9._\-*/]*$/.test(rest)) return "Use letters, digits, dots, hyphens, underscores, *, / and {claim} only";
   return null;
 }

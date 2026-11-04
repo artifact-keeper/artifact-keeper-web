@@ -51,8 +51,9 @@ export function McpServerCard({
   const official = officialMeta(entry);
   const status = official?.status ?? "active";
   const source = sourceKind(entry);
+  const sourceMeta = akSourceMeta(entry);
   const secrets = secretsOf(server);
-  const risk = assessRisk({ server, status, source, policy: akSourceMeta(entry)?.packagePolicy });
+  const risk = assessRisk({ server, status, source, policy: sourceMeta?.packagePolicy });
   const signals = risk.signals.filter((s) => !CARD_HIDDEN_SIGNALS.has(s.id));
 
   return (
@@ -75,7 +76,12 @@ export function McpServerCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <McpSourceBadge kind={source} />
+        <McpSourceBadge
+          kind={source}
+          upstreamUrl={sourceMeta?.upstreamUrl}
+          virtualRepository={sourceMeta?.virtualRepository}
+          memberRepository={sourceMeta?.repository}
+        />
         <Badge variant="outline" className="font-mono font-normal">
           v{server.version}
         </Badge>

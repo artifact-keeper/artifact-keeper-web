@@ -11,6 +11,7 @@ import {
   akSourceMeta,
   inputsOf,
   isPinnedVersion,
+  isUnverifiedSource,
   isSafeHttpUrl,
   monogramOf,
   officialMeta,
@@ -24,6 +25,7 @@ import {
   secretsOf,
   serverAlias,
   sourceKind,
+  sourceKindOf,
   transportsOf,
 } from "../server-json";
 
@@ -135,10 +137,20 @@ describe("parseStoredMetadata", () => {
     expect(m?.schema).toBeUndefined();
     expect(m?.policy).toBeUndefined();
     expect(m?.index).toBeUndefined();
+    expect(m?.bundles).toEqual([]);
+    expect(m?.resolution).toBeUndefined();
+  });
+
+  it("drops a bundles or resolution of the wrong type", () => {
+    const m = parseStoredMetadata({ server: server(), bundles: { index: 0 }, resolution: "resolving" });
+    expect(m?.bundles).toEqual([]);
+    expect(m?.resolution).toBeUndefined();
   });
 
   it("keeps the stored fields", () => {
     const pins = [{ index: 0, registryType: "npm", submitted: { identifier: "x" }, resolved: { repository: "r" } }];
+    const bundles = [{ index: 1, fileSha256: "ab", signature: { state: "valid", signer: "acme" }, manifest: null }];
+    const resolution = { state: "resolving", attempts: 1, pending: [{ index: 0, registryType: "npm", identifier: "x" }] };
     const m = parseStoredMetadata({
       schema: "v1",
       server: server(),
@@ -146,8 +158,12 @@ describe("parseStoredMetadata", () => {
       policy: { package: "open" },
       packages: pins,
       index: { namespace: "com.acme" },
+      bundles,
+      resolution,
     });
     expect(m).toMatchObject({
+      bundles,
+      resolution,
       schema: "v1",
       registry: { status: "deprecated", statusMessage: "old" },
       policy: { package: "open" },
@@ -192,14 +208,41 @@ describe("akSourceMeta / resolvedMeta / sourceKind", () => {
   });
 
   it.each([
-    ["no meta", undefined, "unverified"],
-    ["hosted (no origin)", { repository: "r" }, "hosted"],
-    ["hosted origin", { repository: "r", origin: "hosted" }, "hosted"],
-    ["upstream verified", { repository: "r", origin: "upstream", upstreamVerified: true }, "upstream-verified"],
-    ["upstream unverified", { repository: "r", origin: "upstream" }, "unverified"],
+    ["no meta", undefined, "unknown"],
+    ["hosted (no origin: a backend before Remotes)", { repository: "r" }, "hosted"],
+    ["hosted origin", { repository: "r", origin: "hosted", upstreamVerified: false }, "hosted"],
+    ["hosted ignores upstreamVerified", { repository: "r", origin: "hosted", upstreamVerified: true }, "hosted"],
+    ["remote verified", { repository: "r", origin: "remote", kind: "upstream", upstreamVerified: true }, "remote-verified"],
+    ["remote unverified", { repository: "r", origin: "remote", upstreamVerified: false }, "remote"],
+    ["mirror verified", { repository: "r", origin: "mirror", upstreamVerified: true }, "mirror-verified"],
+    ["mirror without upstreamVerified", { repository: "r", origin: "mirror" }, "mirror"],
+    ["remote with a truthy non-boolean", { repository: "r", origin: "remote", upstreamVerified: "true" }, "remote"],
+    ["an unknown origin", { repository: "r", origin: "upstream" }, "unknown"],
   ])("%s -> %s", (_label, src, expected) => {
     const e = entryWithMeta(src ? { [MCP_AK_SOURCE_META_KEY]: src } : undefined);
     expect(sourceKind(e)).toBe(expected);
+  });
+});
+
+describe("sourceKindOf / isUnverifiedSource", () => {
+  it("maps origin and upstreamVerified", () => {
+    expect(sourceKindOf("hosted", false)).toBe("hosted");
+    expect(sourceKindOf("remote", true)).toBe("remote-verified");
+    expect(sourceKindOf("mirror", false)).toBe("mirror");
+    expect(sourceKindOf(undefined, true)).toBe("unknown");
+    expect(sourceKindOf(3, undefined)).toBe("unknown");
+  });
+
+  it.each([
+    ["remote", true],
+    ["mirror", true],
+    ["remote-verified", false],
+    ["mirror-verified", false],
+    ["hosted", false],
+    ["unknown", false],
+    [undefined, false],
+  ] as const)("%s -> %s", (kind, expected) => {
+    expect(isUnverifiedSource(kind)).toBe(expected);
   });
 });
 

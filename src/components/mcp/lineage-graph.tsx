@@ -7,6 +7,7 @@ import { runnerLabel, runnersOf, type McpRunner } from "@/lib/mcp/server-json";
 import type { McpHealth, McpPackagePin, McpPackagePolicy, McpServerJson } from "@/types/mcp";
 import {
   healthFor,
+  isHoldingGate,
   packageLinks,
   repoHref,
   shortDigest,
@@ -43,12 +44,13 @@ function verdictOf(link: McpPackageLink, health: McpHealth | null | undefined): 
   const h: McpHealthPackage | undefined = healthFor(link, health);
   if (!h) return { text: "no verdict yet", tone: "default" };
   const href = link.repository ? repoHref(link.repository, "security") : undefined;
-  const sev = (h.max_severity ?? "").toLowerCase();
-  if (h.gate) return { text: `held: ${h.gate}`, href, tone: "red" };
-  if ((h.critical ?? 0) > 0 || sev === "critical") return { text: `${h.critical ?? 1} critical`, href, tone: "red" };
-  if ((h.high ?? 0) > 0 || sev === "high") return { text: `${h.high ?? 1} high`, href, tone: "red" };
-  if ((h.medium ?? 0) > 0 || sev === "medium") return { text: `${h.medium ?? 1} medium`, href, tone: "amber" };
-  return { text: h.scan_state ? `clean (${h.scan_state})` : "clean", href, tone: "green" };
+  if (h.gate === "unavailable") return { text: "verdict unavailable", href, tone: "default" };
+  if (isHoldingGate(h.gate)) return { text: `held: ${h.gate}`, href, tone: "red" };
+  if (h.critical > 0) return { text: `${h.critical} critical`, href, tone: "red" };
+  if (h.high > 0) return { text: `${h.high} high`, href, tone: "red" };
+  if (h.medium > 0) return { text: `${h.medium} medium`, href, tone: "amber" };
+  if (!h.scanned) return { text: "not scanned yet", href, tone: "default" };
+  return { text: h.grade ? `clean (grade ${h.grade})` : "clean", href, tone: "green" };
 }
 
 function buildRows(

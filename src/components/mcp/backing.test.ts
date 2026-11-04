@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { PINS, SERVER } from "./test-utils";
-import { backingRepoFromBaseUrl, healthFor, packageCoordinate, packageLinks, repoHref, shortDigest, upstreamOf } from "./backing";
+import { PINS, SERVER, healthOf } from "./test-utils";
+import {
+  backingRepoFromBaseUrl,
+  healthFor,
+  isHoldingGate,
+  packageCoordinate,
+  packageLinks,
+  repoHref,
+  shortDigest,
+  upstreamOf,
+} from "./backing";
 
 describe("backing", () => {
   it("joins packages with pins by index", () => {
@@ -30,18 +39,32 @@ describe("backing", () => {
     expect(backingRepoFromBaseUrl(undefined)).toBeNull();
   });
 
-  it("matches health rows", () => {
+  it("matches health rows by packages[] index", () => {
     const [npm, oci] = packageLinks(SERVER, PINS, "own-repos");
-    const health = {
-      state: "warning",
-      packages: [
-        { package: "npm:@acme/weather-mcp@1.4.2", high: 1 },
-        { package: "other", artifact_id: "art-oci", critical: 1 },
-      ],
-    };
+    const health = healthOf([
+      { index: 0, package: "npm:@acme/weather-mcp@1.4.2", high: 1 },
+      { index: 1, package: "oci:acme/weather:1.4.2", critical: 1 },
+    ]);
     expect(healthFor(npm, health)?.high).toBe(1);
     expect(healthFor(oci, health)?.critical).toBe(1);
     expect(healthFor(npm, null)).toBeUndefined();
+  });
+
+  it("falls back to the coordinate when no row has the index", () => {
+    const [npm, oci] = packageLinks(SERVER, PINS, "own-repos");
+    const health = healthOf([], {
+      packages: [healthOf([{ index: 7, package: "npm:@acme/weather-mcp@1.4.2", medium: 2 }]).packages[0]],
+    });
+    expect(healthFor(npm, health)?.medium).toBe(2);
+    expect(healthFor(oci, health)).toBeUndefined();
+  });
+
+  it("treats allowed as the only non-holding gate", () => {
+    expect(isHoldingGate("allowed")).toBe(false);
+    expect(isHoldingGate(undefined)).toBe(false);
+    expect(isHoldingGate(null)).toBe(false);
+    expect(isHoldingGate("quarantine")).toBe(true);
+    expect(isHoldingGate("unavailable")).toBe(true);
   });
 
   it("formats helpers", () => {

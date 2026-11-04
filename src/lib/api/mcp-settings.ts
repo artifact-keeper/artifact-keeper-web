@@ -69,6 +69,7 @@ export function readMcpSettings(raw: unknown): McpRepositorySettings {
     mcp_require_namespace_grant: bool(r.mcp_require_namespace_grant),
     mcp_sandbox_introspection: oneOf(r.mcp_sandbox_introspection, SANDBOX),
     mcp_require_bundle_signature: bool(r.mcp_require_bundle_signature),
+    mcp_caller_can_lock: bool(r.mcp_caller_can_lock),
   };
   // Drop absent keys so a non-MCP repository object stays unchanged in shape.
   for (const k of Object.keys(out) as (keyof McpRepositorySettings)[]) {

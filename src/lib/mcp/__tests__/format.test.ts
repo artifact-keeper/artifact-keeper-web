@@ -17,6 +17,7 @@ import {
   mcpRepoTypeSupport,
   namespaceAdmits,
   splitServerName,
+  validateNamespacePattern,
   validateNamespacePrefix,
 } from "../format";
 import { mcpKeys } from "../query-keys";
@@ -82,6 +83,26 @@ describe("mcpRepoTypeSupport / mcpCreatableRepoTypes", () => {
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: ["virtual"] } })]).proxy).toBe(true);
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: ["local"] } })]).proxy).toBe(false);
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: [] } })]).proxy).toBe(false);
+  });
+
+  it("believes repository_types first, over capabilities.repo_types", () => {
+    expect(mcpRepoTypeSupport([handler({ repository_types: ["local", "staging", "remote", "virtual"] })]).proxy).toBe(
+      true,
+    );
+    expect(mcpRepoTypeSupport([handler({ repository_types: ["virtual"] })]).proxy).toBe(true);
+    expect(mcpRepoTypeSupport([handler({ repository_types: ["local", "staging"] })]).proxy).toBe(false);
+    expect(
+      mcpRepoTypeSupport([
+        handler({ repository_types: ["local"], capabilities: { repo_types: ["local", "remote"] } }),
+      ]).proxy,
+    ).toBe(false);
+    expect(
+      mcpRepoTypeSupport([handler({ repository_types: ["remote"], capabilities: { repo_types: ["local"] } })]).proxy,
+    ).toBe(true);
+  });
+
+  it("ignores repository_types of another format", () => {
+    expect(mcpRepoTypeSupport([handler({ format_key: "npm", repository_types: ["local"] })]).proxy).toBe(true);
   });
 
   it("offers proxy types only when supported", () => {
@@ -226,6 +247,29 @@ describe("validateNamespacePrefix", () => {
   });
 });
 
+describe("validateNamespacePattern", () => {
+  it.each([
+    ["", "Enter a namespace or pattern"],
+    ["  ", "Enter a namespace or pattern"],
+    ["a".repeat(201), "At most 200 characters"],
+    ["a/b/c", "At most one slash"],
+    ["io.github.{Owner}/*", "A {claim} is lowercase letters, digits and underscores"],
+    ["io.github.{}/*", "A {claim} is lowercase letters, digits and underscores"],
+    ["io.github.{repository_owner/*", "Unbalanced { }"],
+    ["io.github.repository_owner}/*", "Unbalanced { }"],
+    ["com acme", "Use letters, digits, dots, hyphens, underscores, *, / and {claim} only"],
+    ["com.acme/x?", "Use letters, digits, dots, hyphens, underscores, *, / and {claim} only"],
+    ["com.acme", null],
+    [" com.acme/* ", null],
+    ["*", null],
+    ["io.github.{repository_owner}/*", null],
+    ["io.github.{repository_owner}-{ref_1}/mcp_x", null],
+    ["a".repeat(200), null],
+  ])("%j -> %j", (pattern, expected) => {
+    expect(validateNamespacePattern(pattern)).toBe(expected);
+  });
+});
+
 describe("mcpKeys", () => {
   it("prefixes every key with mcp and defaults optional parts", () => {
     expect(mcpKeys.all).toEqual(["mcp"]);
@@ -235,14 +279,13 @@ describe("mcpKeys", () => {
     expect(mcpKeys.version("r", "n", "1")).toEqual(["mcp", "version", "r", "n", "1"]);
     expect(mcpKeys.stored("r", "n", "1")).toEqual(["mcp", "stored", "r", "n", "1"]);
     expect(mcpKeys.reviews("r")).toEqual(["mcp", "reviews", "r", "all"]);
-    expect(mcpKeys.reviews("r", "pending")).toEqual(["mcp", "reviews", "r", "pending"]);
+    expect(mcpKeys.reviews("r", "queue")).toEqual(["mcp", "reviews", "r", "queue"]);
     expect(mcpKeys.upstream("r")).toEqual(["mcp", "upstream", "r", {}]);
     expect(mcpKeys.holds("r", { a: 1 })).toEqual(["mcp", "holds", "r", { a: 1 }]);
     expect(mcpKeys.holds("r")).toEqual(["mcp", "holds", "r", {}]);
     expect(mcpKeys.pendingCount).toEqual(["mcp", "pending-count"]);
     expect(mcpKeys.capabilities("r", "n", "1")).toEqual(["mcp", "capabilities", "r", "n", "1"]);
     expect(mcpKeys.health("r", "n", "1")).toEqual(["mcp", "health", "r", "n", "1"]);
-    expect(mcpKeys.bundle("r", "n", "1")).toEqual(["mcp", "bundle", "r", "n", "1"]);
     expect(mcpKeys.grants("r")).toEqual(["mcp", "grants", "r"]);
     expect(mcpKeys.catalog()).toEqual(["mcp", "catalog", {}]);
     expect(mcpKeys.catalog({ s: "x" })).toEqual(["mcp", "catalog", { s: "x" }]);

@@ -10,14 +10,15 @@ import type { McpSourceKind } from "@/lib/mcp/server-json";
 import { SeverityBadge } from "@/components/common/severity-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { McpRiskLevelBadge } from "@/components/mcp/risk-badges";
-import { healthFor, packageLinks, repoHref, type McpPackageLink } from "@/components/mcp/backing";
-import type { McpHealth, McpPackagePin, McpPackagePolicy, McpServerJson, McpServerStatus } from "@/types/mcp";
+import { healthFor, isHoldingGate, packageLinks, repoHref, type McpPackageLink } from "@/components/mcp/backing";
+import type { McpHealth, McpLintSummary, McpPackagePin, McpPackagePolicy, McpServerJson, McpServerStatus } from "@/types/mcp";
 
 /**
  * Security tab of an MCP server version: the risk signals as a checklist
- * (every signal with its reason), and one section per pinned package with
- * its scan state from the Phase 3 health roll-up. A backend without the
- * roll-up gets a link to the backing repository's own Security tab instead.
+ * (every signal with its reason), one section per pinned package with its
+ * scan state and gate from the health roll-up, and the version's lint
+ * findings. The roll-up answers only repository holders; anyone else (and a
+ * backend without it) gets a link to the backing repository's Security tab.
  */
 
 export interface McpSecurityTabProps {
@@ -63,14 +64,19 @@ function PackageSection({ link, health }: { link: McpPackageLink; health: McpHea
         )
       ) : row ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Scan: {row.scan_state ?? "unknown"}</span>
-          {row.max_severity && <SeverityBadge severity={row.max_severity} />}
-          {COUNT_KEYS.filter((k) => (row[k] ?? 0) > 0).map((k) => (
-            <span key={k} className="text-xs">
-              {row[k]} {k}
+          <span className="text-muted-foreground">
+            Scan: {row.scanned ? (row.grade ? `grade ${row.grade} (${row.score ?? "-"})` : "scanned") : "not scanned yet"}
+          </span>
+          {COUNT_KEYS.filter((k) => row[k] > 0).map((k) => (
+            <span key={k} className="inline-flex items-center gap-1 text-xs">
+              <SeverityBadge severity={k} /> {row[k]}
             </span>
           ))}
-          {row.gate && <span className="text-xs text-red-600 dark:text-red-400">held: {row.gate}</span>}
+          {isHoldingGate(row.gate) && (
+            <span className="text-xs text-red-600 dark:text-red-400">
+              {row.gate === "unavailable" ? "gate unavailable" : `held: ${row.gate}`}
+            </span>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">Loading scan state…</p>
@@ -143,6 +149,47 @@ export function McpSecurityTab({ repoKey, name, version, server, pins, policy, s
           pinned.map((l) => <PackageSection key={l.index} link={l} health={health} />)
         )}
       </section>
+
+      {health && <LintSection lint={health.lint} />}
     </div>
+  );
+}
+
+const ACTION_CLASS: Record<string, string> = {
+  block: "text-red-600 dark:text-red-400",
+  review: "text-amber-700 dark:text-amber-400",
+  warn: "text-muted-foreground",
+};
+
+/** The version's lint findings (offline `McpLintScanner`), unacknowledged ones first. */
+function LintSection({ lint }: { lint: McpLintSummary }) {
+  const open = lint.findings.filter((f) => !f.acknowledged);
+  const acked = lint.findings.length - open.length;
+  return (
+    <section aria-labelledby="mcp-lint-heading" className="space-y-2">
+      <h3 id="mcp-lint-heading" className="text-sm font-medium">
+        Lint
+      </h3>
+      {!lint.ran ? (
+        <p className="text-sm text-muted-foreground">This version has not been linted.</p>
+      ) : open.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="size-4" aria-hidden="true" /> No open lint findings
+          {acked > 0 ? ` (${acked} acknowledged)` : ""}.
+        </p>
+      ) : (
+        <ul role="list" className="space-y-1.5">
+          {open.map((f) => (
+            <li key={f.id} className="text-sm" data-rule={f.rule}>
+              <span className={`font-medium ${ACTION_CLASS[f.action] ?? ""}`}>
+                {f.action}: {f.rule}
+              </span>
+              {f.path && <code className="ml-2 font-mono text-xs text-muted-foreground">{f.path}</code>}
+              {f.message && <p className="text-xs text-muted-foreground">{f.message}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
