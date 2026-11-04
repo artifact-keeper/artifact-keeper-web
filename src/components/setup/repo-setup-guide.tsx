@@ -718,7 +718,7 @@ function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
         {
           title: "Or upload a zip with curl",
           description:
-            "The path is <name>/<version>/<name>-<version>.zip, and the version must match the one in the plugin's manifest. A published version cannot be overwritten.",
+            "The path is <name>/<version>/<name>-<version>.zip, and the version must match the one in the plugin's manifest. Versions are plain SemVer without build metadata (1.0.0+build is refused). A published version cannot be overwritten; after deleting a version it can be re-published only with identical content, otherwise publish a new version number.",
           code: `curl -T my-plugin-1.0.0.zip -H "Authorization: Bearer YOUR_TOKEN" \\
   ${base}/${repoKey}/my-plugin/1.0.0/my-plugin-1.0.0.zip`,
         },

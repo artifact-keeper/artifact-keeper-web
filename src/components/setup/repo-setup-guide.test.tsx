@@ -331,6 +331,9 @@ describe("RepoSetupGuide", () => {
         `${origin}/agentplugins/plugins/my-plugin/1.0.0/my-plugin-1.0.0.zip`,
       );
       expect(text).not.toContain("/api/v1/repositories/");
+      expect(text).toContain("A published version cannot be overwritten");
+      expect(text).toContain("re-published only with identical content");
+      expect(text).toContain("1.0.0+build is refused");
     });
 
     it("sanitises the repository key into Claude Code's marketplace name", () => {
