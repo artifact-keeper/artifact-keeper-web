@@ -33,7 +33,7 @@ const base: LifecyclePolicy = {
   id: "dormant", name: "Dormant", repository_id: null,
   applies_to_all: false, repository_ids: [], scope_source: "explicit",
   description: null, enabled: true, policy_type: "max_age_days",
-  config: { days: 30 }, priority: 1,
+  config: { days: 30 }, priority: 1, cron_schedule: null,
   created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z",
   last_run_at: null, last_run_items_removed: null,
 };

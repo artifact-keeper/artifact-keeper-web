@@ -121,10 +121,6 @@ async function changeAssignment(
 // undefined → null so callers see a stable shape (#206 / #359).
 
 function adaptLifecyclePolicy(sdk: SdkLifecyclePolicy): LifecyclePolicy {
-  // INTENTIONAL DROP: SDK exposes `cron_schedule?: string | null` but no
-  // current consumer reads it and the local LifecyclePolicy type omits the
-  // field. If a future "next run" UI surfaces this, add it to the local
-  // type AND to the body of this adapter — don't just forward through.
   return {
     id: sdk.id,
     repository_id: sdk.repository_id ?? null,
@@ -135,6 +131,7 @@ function adaptLifecyclePolicy(sdk: SdkLifecyclePolicy): LifecyclePolicy {
     policy_type: sdk.policy_type,
     config: sdk.config,
     priority: sdk.priority,
+    cron_schedule: sdk.cron_schedule ?? null,
     last_run_at: sdk.last_run_at ?? null,
     last_run_items_removed: sdk.last_run_items_removed ?? null,
     created_at: sdk.created_at,
@@ -193,6 +190,7 @@ function adaptCreateRequest(
     repository_ids: req.repository_ids,
     description: req.description,
     priority: req.priority,
+    cron_schedule: req.cron_schedule,
   };
 }
 function adaptUpdateRequest(
@@ -204,6 +202,7 @@ function adaptUpdateRequest(
     enabled: req.enabled,
     config: req.config,
     priority: req.priority,
+    cron_schedule: req.cron_schedule,
     applies_to_all: req.applies_to_all,
     repository_ids: req.repository_ids,
   };
