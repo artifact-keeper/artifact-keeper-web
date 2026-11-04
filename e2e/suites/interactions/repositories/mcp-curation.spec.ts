@@ -31,6 +31,8 @@ test.describe('MCP approval queue', () => {
     await expect(page.getByText(first.name, { exact: true })).toBeVisible();
     await expect(page.getByText('Tools: +3 added, 1 changed')).toBeVisible();
     await expect(page.getByText('Requested 2 times: needed for the release bot')).toBeVisible();
+    await expect(page.getByText('stdio·npm').first()).toBeVisible();
+    await expect(page.getByText('Lint (1.4.2): 1 to review')).toBeVisible();
     await expect(page.getByText(`Looks like ${first.name}`)).toBeVisible();
     await expect(page.getByRole('tab', { name: /Awaiting decision/ })).toContainText('2');
 
@@ -60,11 +62,19 @@ test.describe('MCP approval queue', () => {
     expect(hit).toBe(true);
   });
 
-  test('an admin approves a namespace glob after previewing its matches', async ({ page }) => {
-    let body: Record<string, unknown> | null = null;
+  test('an admin approves a namespace glob after the backend previews its matches', async ({ page }) => {
+    const bodies: Record<string, unknown>[] = [];
     await page.route(`${CATALOG}/bulk-approve`, async (route) => {
-      body = route.request().postDataJSON();
-      await ok(route, { approved: 1, names: [MCP_PENDING[0].name], skippedDenied: 0, skippedReview: 1 });
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      bodies.push(body);
+      await ok(route, {
+        approved: 1,
+        blocked: 0,
+        names: [MCP_PENDING[0].name],
+        skippedDenied: 0,
+        skippedReview: 1,
+        dryRun: body.dryRun === true,
+      });
     });
 
     await page.goto(`/curation?repo=${MCP_REMOTE_KEY}`);
@@ -75,12 +85,35 @@ test.describe('MCP approval queue', () => {
     await dialog.getByLabel('Namespace glob').fill('io.github.*');
     await expect(dialog.getByRole('alert')).toContainText('broad');
     await dialog.getByLabel('Namespace glob').fill('io.github.acme/*');
-    await expect(dialog.getByText('Matches 1 pending server of 1.')).toBeVisible();
-    await expect(dialog.getByText(/Deny globs always win/)).toBeVisible();
     await dialog.getByLabel('Reason').fill('trusted publisher');
+    await expect(dialog.getByRole('button', { name: 'Approve namespace' })).toBeDisabled();
+    await dialog.getByRole('button', { name: 'Preview' }).click();
+    await expect(dialog.getByText('Would approve 1 server; 1 flagged left for review.')).toBeVisible();
+    await expect(dialog.getByText(MCP_PENDING[0].name)).toBeVisible();
+    await expect(dialog.getByText(/Deny globs always win/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Approve namespace' }).click();
     await expect(page.getByText('Approved 1 server; 1 flagged left for review')).toBeVisible();
-    expect(body).toEqual({ pattern: 'io.github.acme/*', includeReview: false, reason: 'trusted publisher' });
+    expect(bodies).toEqual([
+      { pattern: 'io.github.acme/*', includeReview: false, reason: 'trusted publisher', dryRun: true },
+      { pattern: 'io.github.acme/*', includeReview: false, reason: 'trusted publisher' },
+    ]);
+  });
+
+  test('an admin bulk-approves the selection in one bulk-decide call', async ({ page }) => {
+    let body: Record<string, unknown> | null = null;
+    await page.route(`${CATALOG}/bulk-decide`, async (route) => {
+      body = route.request().postDataJSON();
+      await ok(route, { action: 'approve', decided: [MCP_PENDING[0].id], unchanged: [], skippedDenied: [], notFound: [] });
+    });
+
+    await page.goto(`/curation?repo=${MCP_REMOTE_KEY}`);
+    await page.getByRole('checkbox', { name: `Select ${MCP_PENDING[0].name}` }).click();
+    await page.getByRole('button', { name: /Approve selected/ }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Reason').fill('reviewed');
+    await dialog.getByRole('button', { name: 'Confirm' }).click();
+    await expect(page.getByText('1 server approved')).toBeVisible();
+    expect(body).toEqual({ ids: [MCP_PENDING[0].id], action: 'approve', reason: 'reviewed' });
   });
 
   test('an admin requests approval for an upstream name from the catalog', async ({ page }) => {

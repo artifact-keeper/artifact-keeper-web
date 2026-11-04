@@ -45,6 +45,7 @@ function item(n: number, name: string, over: Record<string, unknown> = {}) {
     versions: ['1.4.2', '1.4.1'],
     upstreamStatus: 'active',
     upstreamUpdatedAt: '2026-11-01T00:00:00Z',
+    summary: null,
     flags: {},
     approvalRequests: {},
     evaluationReason: null,
@@ -60,6 +61,14 @@ function item(n: number, name: string, over: Record<string, unknown> = {}) {
 export const MCP_PENDING = [
   item(1, 'io.github.acme/weather', {
     approvalRequests: { count: 2, lastNote: 'needed for the release bot' },
+    summary: {
+      transports: ['stdio'],
+      registryTypes: ['npm'],
+      secretsCount: 1,
+      packagesCount: 1,
+      remotesCount: 0,
+      lint: { version: '1.4.2', block: 0, review: 1, warn: 0 },
+    },
     // Ingested under allow_with_gates, so the queue shows its tool diff.
     ingested: [{ version: '1.4.2', artifactId: ID(9), upstreamStatus: 'active', unresolved: [] }],
   }),
