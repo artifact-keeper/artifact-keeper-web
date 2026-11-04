@@ -88,6 +88,7 @@ import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ArtifactOriginSection } from "./artifact-origin-section";
 import { artifactDetailKey } from "@/lib/query-keys";
 import { PackagesTabContent } from "./packages-tab-content";
+import { isMcpFormat } from "@/lib/mcp/format";
 import {
   ArtifactBrowserToggle,
   DOCKER_FAMILY_FORMATS,
@@ -1190,7 +1191,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </TabsTrigger>
           <TabsTrigger value="packages">
             <PackageIcon className="size-3.5 mr-1" />
-            Packages
+            {isMcpFormat(repository.format) ? "Servers" : "Packages"}
           </TabsTrigger>
           <TabsTrigger value="setup">
             <Rocket className="size-3.5 mr-1" />
@@ -1417,6 +1418,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <PackagesTabContent
             repositoryKey={repoKey}
             repositoryFormat={repository.format}
+            repositoryType={repository.repo_type}
           />
         </TabsContent>
 

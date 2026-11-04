@@ -45,6 +45,13 @@ vi.mock("@/components/package/file-tree", () => ({
   PackageFileTree: () => <div />,
 }));
 vi.mock("@/components/package/file-viewer", () => ({ FileViewer: () => <div /> }));
+vi.mock("./mcp-server-gallery", () => ({
+  McpServerGallery: (p: { repositoryKey: string; repositoryType?: string }) => (
+    <div data-testid="mcp-gallery">
+      {p.repositoryKey}:{p.repositoryType}
+    </div>
+  ),
+}));
 
 const queryKeys: unknown[][] = [];
 vi.mock("@tanstack/react-query", () => ({
@@ -85,5 +92,20 @@ describe("PackagesTabContent virtual-repo context", () => {
       "pkg-1",
       "npm-virtual",
     ]);
+  });
+});
+
+describe("PackagesTabContent for MCP repositories", () => {
+  beforeEach(() => {
+    cleanup();
+    queryKeys.length = 0;
+  });
+
+  it("renders the Servers gallery instead of the package table", () => {
+    render(
+      <PackagesTabContent repositoryKey="mcp-local" repositoryFormat="mcp" repositoryType="local" />,
+    );
+    expect(screen.getByTestId("mcp-gallery")).toHaveTextContent("mcp-local:local");
+    expect(queryKeys).toEqual([]);
   });
 });

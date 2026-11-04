@@ -293,16 +293,32 @@ export function packageCommand(
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
-/** Quote a shell word unless it is plainly safe or a `${VAR}` placeholder. */
+const SHELL_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
+const PLACEHOLDER = /\$\{[A-Za-z0-9_]+\}/;
+
+function singleQuote(word: string): string {
+  return `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Quote a shell word unless it is plainly safe or a `${VAR}` placeholder.
+ * Only the placeholders may expand: the rest of the word is publisher text
+ * (a header's fixed `value`), so a `$(...)` or `$x` in it must stay literal.
+ */
 export function shellQuote(word: string): string {
   if (word === "") return "''";
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word)) return word;
-  if (/^\$\{[A-Za-z0-9_]+\}$/.test(word)) return `"${word}"`;
-  // A word with an embedded placeholder keeps expansion inside double quotes.
-  if (/\$\{[A-Za-z0-9_]+\}/.test(word) && !/["\\`]/.test(word.replace(/\$\{[A-Za-z0-9_]+\}/g, ""))) {
-    return `"${word}"`;
-  }
-  return `'${word.replace(/'/g, `'\\''`)}'`;
+  if (SHELL_SAFE.test(word)) return word;
+  if (!PLACEHOLDER.test(word)) return singleQuote(word);
+  const literal = word.replace(new RegExp(PLACEHOLDER.source, "g"), "");
+  // Nothing in the literal text is special inside double quotes: one word.
+  if (!/["\\`$]/.test(literal)) return `"${word}"`;
+  // Otherwise quote each piece on its own: placeholders in double quotes,
+  // literal runs in single quotes, concatenated into one shell word.
+  return word
+    .split(new RegExp(`(${PLACEHOLDER.source})`))
+    .filter((p) => p !== "")
+    .map((p) => (/^\$\{[A-Za-z0-9_]+\}$/.test(p) ? `"${p}"` : SHELL_SAFE.test(p) ? p : singleQuote(p)))
+    .join("");
 }
 
 function json(v: unknown): string {
