@@ -48,6 +48,9 @@ describe("validateNamespaceGlob", () => {
     ["a/b/c", /exactly one slash/],
     ["io.github.acme/*", null],
     ["com.acme.*", null],
+    ["com.acme/weathe?", /letters, digits/],
+    [`a/${"b".repeat(198)}`, null],
+    [`a/${"b".repeat(199)}`, /At most 200 characters/],
   ])("%s", (glob, expected) => {
     const r = validateNamespaceGlob(glob);
     if (expected === null) expect(r).toBeNull();
@@ -71,6 +74,14 @@ describe("McpNamespaceApproveDialog", () => {
     expect(screen.getByText("and 1 more")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText(/Deny globs always win/)).toBeInTheDocument();
+  });
+
+  it("previews matches as the backend does: ignoring case, * crossing /, input trimmed", async () => {
+    const { user } = setup();
+    await user.type(screen.getByLabelText("Namespace glob"), "  IO.GITHUB.ACME*A  ");
+    expect(screen.getByText("Matches 1 pending server of 7.")).toBeInTheDocument();
+    expect(screen.getByText("io.github.acme/a")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/This glob is broad/);
   });
 
   it("warns on a broad glob", async () => {

@@ -135,19 +135,19 @@ export function namespaceAdmits(prefix: string, name: string): boolean {
 }
 
 /**
- * Glob match used for deny / auto-approve lists, as the backend's
- * `glob_matches` evaluates it: `*` matches any run of characters including
- * `/`, every other character is literal (there is no `?` wildcard), and the
- * comparison is ASCII case-insensitive so `Com.Evil/x` cannot dodge
- * `com.evil/*`. Anchored on the full server name.
+ * Glob match used for deny / auto-approve lists, exactly as the backend's
+ * `glob_matches` (services/mcp_settings.rs) evaluates it: `*` matches any run
+ * of characters including `/`, every other character is literal (there is
+ * no `?` wildcard), and the comparison is ASCII case-insensitive so
+ * `Com.Evil/x` cannot dodge `com.evil/*`. Anchored on the full server name.
+ * Like the backend it does not trim: the backend stores globs trimmed, so a
+ * caller previewing typed input trims it first.
  */
 export function mcpGlobMatches(glob: string, name: string): boolean {
-  const g = glob.trim();
-  if (!g) return false;
   // ASCII-only folding, like `eq_ignore_ascii_case`: a non-ASCII letter
   // must match exactly.
   const fold = (v: string) => v.replace(/[A-Z]/g, (c) => c.toLowerCase());
-  const pattern = fold(g)
+  const pattern = fold(glob)
     .split(/\*+/)
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join(".*");

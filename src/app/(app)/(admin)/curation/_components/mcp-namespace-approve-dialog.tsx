@@ -30,6 +30,8 @@ const PREVIEW_LIMIT = 5;
 export function validateNamespaceGlob(glob: string): string | null {
   const g = glob.trim();
   if (!g) return "Enter a namespace glob, e.g. io.github.acme/*";
+  // The backend's MAX_GLOB_LEN.
+  if (g.length > 200) return "At most 200 characters";
   // The backend's glob alphabet: `*` is the only wildcard.
   if (!/^[A-Za-z0-9.\-_*/]+$/.test(g)) return "Use letters, digits, dots, hyphens, underscores, slashes and * only";
   if ((g.match(/\//g) ?? []).length > 1) return "A server name has exactly one slash";

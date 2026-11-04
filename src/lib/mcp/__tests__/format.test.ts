@@ -169,6 +169,23 @@ describe("mcpGlobMatches", () => {
     ["a+b(c)/[d]$", "a+b(c)/[d]$", true],
     ["", "anything", false],
     ["  ", "anything", false],
+    // The backend's own cases (mcp_settings.rs).
+    ["com.evil/*", "com.evil/x", true],
+    ["com.evil/*", "Com.Evil/X", true],
+    ["*.typo/*", "io.github.typo/y", true],
+    ["io.github.acme-*", "io.github.acme-labs", true],
+    ["a/b", "a/b", true],
+    ["a/b", "a/bc", false],
+    ["com.evil/*", "com.evilx/y", false],
+    ["***", "", true],
+    // An empty pattern matches only the empty name, and nothing is trimmed.
+    ["", "", true],
+    [" a/b", "a/b", false],
+    // Only ASCII letters fold.
+    ["\u00c9/x", "\u00e9/x", false],
+    ["\u00e9/*", "\u00e9/x", true],
+    // A line break in a name is a character like any other.
+    ["a*b", "a\nb", true],
   ])("%j vs %j -> %s", (glob, name, expected) => {
     expect(mcpGlobMatches(glob, name)).toBe(expected);
   });
@@ -182,6 +199,12 @@ describe("isBroadNamespaceGlob", () => {
     ["com.*/weather", true],
     ["com.acme/*", false],
     ["com.acme/weather", false],
+    // `*` crosses `/`, so a wildcard anywhere in the namespace part (or a
+    // glob without a slash) admits other publishers.
+    ["com.acme*", true],
+    ["io.github.acme-*", true],
+    ["IO.GITHUB.*/x", true],
+    ["com.acme/x*", false],
   ])("%j -> %s", (glob, expected) => {
     expect(isBroadNamespaceGlob(glob)).toBe(expected);
   });
