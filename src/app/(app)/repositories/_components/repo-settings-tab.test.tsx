@@ -2859,6 +2859,38 @@ describe("RepoSettingsTab - MCP registry", () => {
     expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(true);
   });
 
+  it.each([
+    [422, "UNPROCESSABLE_ENTITY", "mcp_server_deny: `com.acme` matches no server name (patterns match the full name `namespace/name`); use `com.acme/*` for every server in the namespace", "Not saved: not a full-name glob."],
+    [400, "VALIDATION_ERROR", "mcp_server_deny: `a b` is not a valid pattern", "Not saved: invalid pattern."],
+  ])("shows a %s refusal of the deny list on its field until the next edit", async (status, code, message, lead) => {
+    const user = userEvent.setup();
+    mockUpdate.mockRejectedValue({ status, code, message });
+    show({ ...mcpRepo, mcp_server_deny: [] });
+    await user.type(screen.getByLabelText("Deny"), "com.evil/*{Enter}");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const alert = await screen.findByText((_, el) => el?.getAttribute("data-status") === String(status));
+    expect(alert.textContent).toBe(`${lead} ${message}`);
+    await user.click(screen.getByRole("button", { name: "Remove com.evil/*" }));
+    expect(screen.queryByText((_, el) => el?.getAttribute("data-status") === String(status))).toBeNull();
+  });
+
+  it("keeps other save errors off the glob fields", async () => {
+    const user = userEvent.setup();
+    mockUpdate.mockRejectedValue({ status: 500, message: "boom" });
+    show({ ...mcpRepo, mcp_server_deny: [] });
+    await user.type(screen.getByLabelText("Deny"), "com.evil/*{Enter}");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    expect(screen.queryByText(/^Not saved:/)).toBeNull();
+  });
+
+  it("lets a repository admin who is not an instance admin edit the MCP settings", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show({ ...mcpRepo, mcp_caller_is_repo_admin: true });
+    expect(screen.getByLabelText("Namespace allowlist")).toBeTruthy();
+    expect(screen.queryByText("Only an administrator can change these settings.")).toBeNull();
+  });
+
   it("offers the lock switch when the backend says the caller can lock", () => {
     show({ ...lockedRemote, mcp_caller_can_lock: true });
     expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();

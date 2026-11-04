@@ -448,7 +448,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       resetMcp();
       toast.success("Repository settings saved");
     },
-    onError: mutationErrorToast("Failed to save repository settings"),
+    onError: (err: unknown) => {
+      // A refused deny / auto-approve glob (422 bare namespace, 400 other
+      // syntax) is also shown on its field.
+      mcpForm.setSaveFailure(err);
+      mutationErrorToast("Failed to save repository settings")(err);
+    },
   });
 
   // -- Cache TTL mutation (#448, separate endpoint from `update`) --

@@ -438,8 +438,12 @@ export interface McpCatalogItem {
   /** `null` until a sync has seen a document of the name. */
   summary: McpCatalogSummary | null;
   flags: { typosquat?: { similarTo: string } } & Record<string, unknown>;
+  /**
+   * Always `{count}` (`{count: 0}` when nobody asked); the last request's
+   * details for holders, and `requesters` for repository admins.
+   */
   approvalRequests: {
-    count?: number;
+    count: number;
     lastRequestedAt?: string;
     lastRequestedBy?: string;
     lastNote?: string;

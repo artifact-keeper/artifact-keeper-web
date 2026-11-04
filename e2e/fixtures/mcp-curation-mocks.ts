@@ -47,7 +47,7 @@ function item(n: number, name: string, over: Record<string, unknown> = {}) {
     upstreamUpdatedAt: '2026-11-01T00:00:00Z',
     summary: null,
     flags: {},
-    approvalRequests: {},
+    approvalRequests: { count: 0 },
     evaluationReason: null,
     evaluatedAt: null,
     evaluatedBy: null,

@@ -112,3 +112,42 @@ export function mcpSettingsBody(input: McpRepositorySettings): Partial<McpReposi
   }
   return out as Partial<McpRepositorySettings>;
 }
+
+/** The settings whose globs are over the full server name. */
+export type McpNameGlobKey = 'mcp_server_deny' | 'mcp_auto_approve_namespaces';
+
+const NAME_GLOB_KEYS: readonly McpNameGlobKey[] = ['mcp_server_deny', 'mcp_auto_approve_namespaces'];
+
+/** A save refusal that belongs to one glob setting. */
+export interface McpGlobSaveError {
+  key: McpNameGlobKey;
+  /** `422`: a bare namespace (matches no name); `400`: any other bad pattern or too many. */
+  status: 400 | 422;
+  message: string;
+}
+
+function field(o: unknown, k: string): unknown {
+  return o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined;
+}
+
+/**
+ * The refusal of a repository save that names `mcp_server_deny` or
+ * `mcp_auto_approve_namespaces`, so the form can show it on that field. The
+ * backend answers `422 UNPROCESSABLE_ENTITY` for a bare namespace and
+ * `400 VALIDATION_ERROR` for other bad syntax; either message starts with the
+ * setting's key. `null` for any other error.
+ */
+export function mcpGlobSaveError(err: unknown): McpGlobSaveError | null {
+  const body = field(err, 'body') ?? err;
+  const message = [field(body, 'message'), field(err, 'message'), field(body, 'error')].find(
+    (m): m is string => typeof m === 'string' && m.trim() !== '',
+  );
+  if (!message) return null;
+  const key = NAME_GLOB_KEYS.find((k) => new RegExp(`^${k}\\b`).test(message.trim()));
+  if (!key) return null;
+  const rawStatus = [field(err, 'status'), field(body, 'status')].find((v): v is number => typeof v === 'number');
+  const code = field(body, 'code') ?? field(err, 'code');
+  const status = rawStatus === 422 || code === 'UNPROCESSABLE_ENTITY' ? 422 : rawStatus === 400 || code === 'VALIDATION_ERROR' ? 400 : null;
+  if (status === null) return null;
+  return { key, status, message: message.trim() };
+}

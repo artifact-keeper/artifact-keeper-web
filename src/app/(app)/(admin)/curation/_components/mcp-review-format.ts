@@ -46,7 +46,7 @@ export function typosquatNote(item: McpCatalogItem): string | null {
 
 /** "Requested 3 times: needed for the release bot", or null when nobody asked. */
 export function requestNote(item: McpCatalogItem): string | null {
-  const count = item.approvalRequests?.count ?? 0;
+  const count = item.approvalRequests.count;
   if (count <= 0) return null;
   const base = `Requested ${count === 1 ? "once" : `${count} times`}`;
   const note = item.approvalRequests.lastNote?.trim();

@@ -46,6 +46,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { mcpGlobSaveError, type McpGlobSaveError } from "@/lib/api/mcp-settings";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -283,6 +284,8 @@ export function validateMcpGlob(glob: string): string | null {
   if (!/^[A-Za-z0-9.*/_-]+$/.test(g)) {
     return "Use letters, digits, dots, hyphens, underscores, slashes and * wildcards";
   }
+  // The globs match the full name; the backend refuses a bare namespace (422).
+  if (!g.includes("/") && !g.includes("*")) return `Match the full name: write ${g}/* for this namespace's servers`;
   return null;
 }
 
@@ -335,6 +338,8 @@ interface ChipListEditorProps {
   readOnly?: boolean;
   /** A warning shown on a chip (text, not colour only), or null. */
   warnFor?: (value: string) => string | null;
+  /** The backend's refusal of the saved list, shown under the field. */
+  serverError?: McpGlobSaveError | null;
 }
 
 /** Add/remove list of short strings (namespaces, globs) shown as chips. */
@@ -348,6 +353,7 @@ function ChipListEditor({
   help,
   readOnly = false,
   warnFor,
+  serverError,
 }: ChipListEditorProps) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -433,6 +439,17 @@ function ChipListEditor({
       {error && (
         <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
           {error}
+        </p>
+      )}
+      {serverError && (
+        <p
+          id={`${id}-server-error`}
+          role="alert"
+          className="text-sm text-destructive"
+          data-status={serverError.status}
+        >
+          {serverError.status === 422 ? "Not saved: not a full-name glob. " : "Not saved: invalid pattern. "}
+          {serverError.message}
         </p>
       )}
       <div id={`${id}-help`} className="text-xs text-muted-foreground">
@@ -669,6 +686,8 @@ export interface McpConfigFieldsProps {
   repoKey?: string;
   /** Remote creation wizard: offer the official reference servers pre-ticked. */
   offerOfficialPreset?: boolean;
+  /** The last save's refusal of a glob setting, shown on that field. */
+  saveError?: McpGlobSaveError | null;
 }
 
 export function McpConfigFields({
@@ -684,6 +703,7 @@ export function McpConfigFields({
   readOnly = false,
   repoKey,
   offerOfficialPreset = false,
+  saveError = null,
 }: McpConfigFieldsProps) {
   const keys = visibleKeys ?? new Set(mcpKeysForRepoType(repoType));
   const shows = (k: McpConfigKey) => keys.has(k);
@@ -844,6 +864,7 @@ export function McpConfigFields({
           values={value.mcp_server_deny}
           onChange={(v) => set({ mcp_server_deny: v })}
           validate={validateMcpGlob}
+          serverError={saveError?.key === "mcp_server_deny" ? saveError : null}
           placeholder="io.github.*/crypto-*"
           readOnly={readOnly}
           help="Globs on the full server name. Deny always wins, even over approval."
@@ -875,6 +896,7 @@ export function McpConfigFields({
             values={value.mcp_auto_approve_namespaces}
             onChange={(v) => set({ mcp_auto_approve_namespaces: v })}
             validate={validateMcpGlob}
+            serverError={saveError?.key === "mcp_auto_approve_namespaces" ? saveError : null}
             placeholder="io.github.acme/*"
             readOnly={readOnly}
             warnFor={(g) => (isBroadNamespaceGlob(g) ? "Broad" : null)}
@@ -988,6 +1010,10 @@ export interface McpSettingsForm {
   changedFields: Partial<McpRepositorySettings>;
   changed: boolean;
   reset: () => void;
+  /** The last save's refusal of a glob setting; cleared by an edit or a reset. */
+  saveError: McpGlobSaveError | null;
+  /** Record a failed save (anything other than a glob refusal clears it). */
+  setSaveFailure: (err: unknown) => void;
 }
 
 /**
@@ -1013,14 +1039,25 @@ export function useMcpSettingsForm(repository: Repository, isInstanceAdmin = fal
     () => mcpChangedFields(value, baseline, visibleKeys),
     [value, baseline, visibleKeys],
   );
-  const reset = useCallback(() => setOverride(null), []);
+  const [saveError, setSaveError] = useState<McpGlobSaveError | null>(null);
+  const reset = useCallback(() => {
+    setOverride(null);
+    setSaveError(null);
+  }, []);
+  const onChange = useCallback((next: McpConfigValue) => {
+    setOverride(next);
+    setSaveError(null);
+  }, []);
+  const setSaveFailure = useCallback((err: unknown) => setSaveError(mcpGlobSaveError(err)), []);
   return {
     value,
-    onChange: setOverride,
+    onChange,
     visibleKeys,
     changedFields,
     changed: Object.keys(changedFields).length > 0,
     reset,
+    saveError,
+    setSaveFailure,
   };
 }
 
@@ -1060,6 +1097,7 @@ export function McpSettingsSection({ repository, form, readOnly, canLock = false
         canLock={canLock}
         readOnly={readOnly}
         repoKey={repository.key}
+        saveError={form.saveError}
       />
     </section>
   );

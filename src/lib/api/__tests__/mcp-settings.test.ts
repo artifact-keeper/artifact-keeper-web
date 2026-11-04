@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mcpSettingsBody, readMcpSettings } from "../mcp-settings";
+import { mcpGlobSaveError, mcpSettingsBody, readMcpSettings } from "../mcp-settings";
 
 describe("readMcpSettings", () => {
   it("returns {} for a non-MCP repository or nothing at all", () => {
@@ -124,5 +124,38 @@ describe("mcpSettingsBody", () => {
       mcp_require_bundle_signature: true,
     };
     expect(mcpSettingsBody(input)).toEqual(input);
+  });
+});
+
+describe("mcpGlobSaveError", () => {
+  const BARE = "mcp_auto_approve_namespaces: `com.acme` matches no server name (patterns match the full name `namespace/name`); use `com.acme/*` for every server in the namespace";
+
+  it("maps a 422 bare-namespace refusal to its setting", () => {
+    expect(mcpGlobSaveError({ code: "UNPROCESSABLE_ENTITY", message: BARE })).toEqual({
+      key: "mcp_auto_approve_namespaces",
+      status: 422,
+      message: BARE,
+    });
+    expect(mcpGlobSaveError({ status: 422, body: { message: ` ${BARE} ` } })).toMatchObject({ status: 422, message: BARE });
+  });
+
+  it("maps a 400 syntax refusal, from the status or the code", () => {
+    expect(mcpGlobSaveError({ status: 400, message: "mcp_server_deny: `a b` is not a valid pattern" })).toMatchObject({
+      key: "mcp_server_deny",
+      status: 400,
+    });
+    expect(mcpGlobSaveError({ code: "VALIDATION_ERROR", error: "mcp_server_deny accepts at most 64 entries" })).toMatchObject({
+      key: "mcp_server_deny",
+      status: 400,
+    });
+  });
+
+  it("ignores other errors", () => {
+    expect(mcpGlobSaveError(undefined)).toBeNull();
+    expect(mcpGlobSaveError("mcp_server_deny: x")).toBeNull();
+    expect(mcpGlobSaveError({ status: 400, message: "name is required" })).toBeNull();
+    expect(mcpGlobSaveError({ status: 400, message: "mcp_server_denylist: x" })).toBeNull();
+    expect(mcpGlobSaveError({ status: 500, message: "mcp_server_deny: boom" })).toBeNull();
+    expect(mcpGlobSaveError({ status: 422, message: "   " })).toBeNull();
   });
 });

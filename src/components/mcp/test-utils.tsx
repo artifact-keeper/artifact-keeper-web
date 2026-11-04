@@ -189,7 +189,7 @@ export function catalogItem(over: Partial<McpCatalogItem> = {}): McpCatalogItem 
     upstreamUpdatedAt: "2026-10-30T00:00:00Z",
     summary: null,
     flags: {},
-    approvalRequests: {},
+    approvalRequests: { count: 0 },
     evaluationReason: null,
     evaluatedAt: null,
     evaluatedBy: null,

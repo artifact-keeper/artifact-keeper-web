@@ -256,8 +256,11 @@ describe("MCP config helpers", () => {
     expect(validateMcpGlob("a b")).toMatch(/\* wildcards/);
     // `?` is not part of the backend alphabet.
     expect(validateMcpGlob("com.acme/weathe?")).toMatch(/\* wildcards/);
-    expect(validateMcpGlob("a".repeat(200))).toBeNull();
+    expect(validateMcpGlob(`a/${"a".repeat(198)}`)).toBeNull();
     expect(validateMcpGlob("a".repeat(201))).toBe("At most 200 characters");
+    // Full-name globs only: the backend refuses a bare namespace with 422.
+    expect(validateMcpGlob(" com.acme ")).toBe("Match the full name: write com.acme/* for this namespace's servers");
+    expect(validateMcpGlob("com.acme.*")).toBeNull();
   });
 });
 
