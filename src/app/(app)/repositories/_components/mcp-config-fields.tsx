@@ -5,12 +5,17 @@
  * shared by the create dialog and the Settings tab like the other groups in
  * `format-config-fields.tsx`.
  *
- * Hosted repositories (Local, Staging) get the Phase 1 settings: namespace
- * allowlist, package policy and the backing repository per registryType,
- * plus the Phase 3 namespace-grant switch. Remote repositories get the
- * Phase 2 curation settings. Phase 2/3 settings exist only on a backend that
- * reports them: the Settings tab shows a field only when the repository
- * response carries it, and the create dialog sends one only when it was set.
+ * Which setting applies to which repository type follows the backend's
+ * table (docs/mcp-registry.md, "Repository settings (Phase 2 and 3)"):
+ * hosted repositories (Local, Staging) get the Phase 1 settings (namespace
+ * allowlist, package policy, backing repository per registryType), Remote
+ * repositories the curation settings, and every type that holds versions
+ * itself the probe, sandbox, grant and signature settings. A Virtual takes
+ * only the deny list and the OCI label rule. Phase 2/3 settings exist only on
+ * a backend that reports them: the Settings tab shows a field only when the
+ * repository response carries it, and the create dialog sends one only when
+ * it was changed. The two instance locks are offered to an instance
+ * administrator only; anyone else sees a locked setting disabled.
  */
 
 import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -276,7 +281,7 @@ export function validateMcpGlob(glob: string): string | null {
   if (!g) return "Enter a pattern";
   if (g.length > MCP_GLOB_MAX_LEN) return `At most ${MCP_GLOB_MAX_LEN} characters`;
   if (!/^[A-Za-z0-9.*/_-]+$/.test(g)) {
-    return "Use letters, digits, dots, hyphens, underscores, slashes and the wildcard *";
+    return "Use letters, digits, dots, hyphens, underscores, slashes and * wildcards";
   }
   return null;
 }
@@ -419,7 +424,7 @@ function ChipListEditor({
             autoComplete="off"
             spellCheck={false}
           />
-          <Button type="button" variant="outline" size="sm" onClick={add}>
+          <Button type="button" variant="outline" size="sm" onClick={add} aria-label={`Add to ${label}`}>
             <Plus className="size-3.5" aria-hidden="true" />
             Add
           </Button>
@@ -535,6 +540,56 @@ const PROBE_OPTIONS: { value: McpProbeRemotes; label: string }[] = [
   { value: "all", label: "All remote servers" },
 ];
 
+const REMOTE_MODE_OPTIONS: RadioOption<McpRemoteMode>[] = [
+  {
+    value: "allowlist",
+    label: "Allowlist: sync only the names that are approved",
+    hint: "Upstream names outside the approved and auto-approved namespaces are not ingested.",
+  },
+  {
+    value: "mirror",
+    label: "Mirror: sync every upstream name",
+    hint: "Every name is ingested; serving is still curated by the posture above.",
+  },
+];
+
+const SANDBOX_OPTIONS: { value: McpSandboxIntrospection; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+];
+
+interface SwitchFieldProps {
+  id: string;
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  help: ReactNode;
+}
+
+/** A labelled switch with its explanation, the shape of every boolean setting. */
+function SwitchField({ id, label, checked, onChange, disabled = false, help }: SwitchFieldProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="space-y-0.5">
+        <Label htmlFor={id}>{label}</Label>
+        <p id={`${id}-help`} className="text-xs text-muted-foreground">
+          {help}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        aria-describedby={`${id}-help`}
+      />
+    </div>
+  );
+}
+
+const LOCK_SWITCH_LABEL = "Lock for repository administrators";
+
 const REGISTRY_TYPE_LABEL: Record<(typeof MCP_BACKABLE_REGISTRY_TYPES)[number], string> = {
   npm: "npm",
   pypi: "PyPI",
@@ -599,8 +654,16 @@ export interface McpConfigFieldsProps {
   repositories: Repository[];
   /** Settings to render; defaults to every setting of the repository type. */
   visibleKeys?: ReadonlySet<McpConfigKey>;
+  /** Stored lock on the posture (read from the repository, not the form). */
   postureLocked?: boolean;
+  /** Stored lock on the probe setting. */
   probeLocked?: boolean;
+  /**
+   * The viewer is an instance administrator: they may change a locked
+   * setting and get the lock switches. Anyone else sees a locked setting
+   * disabled with the lock indicator.
+   */
+  canLock?: boolean;
   readOnly?: boolean;
   /** Set on an existing repository: links to its namespace grants. */
   repoKey?: string;
@@ -617,6 +680,7 @@ export function McpConfigFields({
   visibleKeys,
   postureLocked = false,
   probeLocked = false,
+  canLock = false,
   readOnly = false,
   repoKey,
   offerOfficialPreset = false,
@@ -625,20 +689,37 @@ export function McpConfigFields({
   const shows = (k: McpConfigKey) => keys.has(k);
   const set = (patch: Partial<McpConfigValue>) => onChange({ ...value, ...patch });
   const fid = (name: string) => `${idPrefix}-mcp-${name}`;
+  // The backend refuses a locked setting from anyone but an instance
+  // administrator (403), so for everyone else it is read-only.
+  const postureBlocked = postureLocked && !canLock;
+  const probeBlocked = probeLocked && !canLock;
+  const lockSwitch = (key: "mcp_remote_posture_locked" | "mcp_probe_remotes_locked", name: string) =>
+    canLock && shows(key) ? (
+      <SwitchField
+        id={fid(name)}
+        label={LOCK_SWITCH_LABEL}
+        checked={value[key]}
+        onChange={(v) => set({ [key]: v } as Partial<McpConfigValue>)}
+        disabled={readOnly}
+        help="While locked, only an instance administrator can change this setting."
+      />
+    ) : null;
 
-  if (keys.size === 0) {
-    return (
+  const virtualNote =
+    repoType === "virtual" ? (
       <p className="text-xs text-muted-foreground">
         A Virtual MCP repository merges the servers of its members; the
         policies live on each member.
       </p>
-    );
-  }
+    ) : null;
+
+  if (keys.size === 0) return virtualNote;
 
   const presetTicked = value.mcp_auto_approve_namespaces.includes(MCP_OFFICIAL_NAMESPACE_GLOB);
 
   return (
     <div className="space-y-5">
+      {virtualNote}
       {shows("mcp_namespace_allow") && (
         <ChipListEditor
           id={fid("namespace-allow")}
@@ -707,10 +788,14 @@ export function McpConfigFields({
       )}
 
       {shows("mcp_require_namespace_grant") && (
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <Label htmlFor={fid("require-grant")}>Require a namespace grant to publish</Label>
-            <p className="text-xs text-muted-foreground">
+        <SwitchField
+          id={fid("require-grant")}
+          label="Require a namespace grant to publish"
+          checked={value.mcp_require_namespace_grant}
+          onChange={(v) => set({ mcp_require_namespace_grant: v })}
+          disabled={readOnly}
+          help={
+            <>
               Plain repository write is not enough; publishers need a namespace grant.
               {repoKey && (
                 <>
@@ -723,15 +808,9 @@ export function McpConfigFields({
                   </Link>
                 </>
               )}
-            </p>
-          </div>
-          <Switch
-            id={fid("require-grant")}
-            checked={value.mcp_require_namespace_grant}
-            onCheckedChange={(v) => set({ mcp_require_namespace_grant: v })}
-            disabled={readOnly}
-          />
-        </div>
+            </>
+          }
+        />
       )}
 
       {shows("mcp_remote_posture") && (
@@ -742,7 +821,19 @@ export function McpConfigFields({
           value={value.mcp_remote_posture}
           onChange={(v) => set({ mcp_remote_posture: v })}
           disabled={readOnly}
-          locked={postureLocked}
+          locked={postureBlocked}
+        />
+      )}
+      {lockSwitch("mcp_remote_posture_locked", "posture-locked")}
+
+      {shows("mcp_remote_mode") && (
+        <RadioField
+          name={fid("remote-mode")}
+          legend="Sync scope"
+          options={REMOTE_MODE_OPTIONS}
+          value={value.mcp_remote_mode}
+          onChange={(v) => set({ mcp_remote_mode: v })}
+          disabled={readOnly}
         />
       )}
 
@@ -807,12 +898,12 @@ export function McpConfigFields({
         <div className="space-y-1" data-testid="mcp-probe">
           <div className="flex items-center gap-2">
             <Label htmlFor={fid("probe")}>Remote probe</Label>
-            {probeLocked && <LockIndicator />}
+            {probeBlocked && <LockIndicator />}
           </div>
           <Select
             value={value.mcp_probe_remotes}
             onValueChange={(v) => set({ mcp_probe_remotes: v as McpProbeRemotes })}
-            disabled={readOnly || probeLocked}
+            disabled={readOnly || probeBlocked}
           >
             <SelectTrigger id={fid("probe")} className="w-full">
               <SelectValue />
@@ -830,6 +921,56 @@ export function McpConfigFields({
             It never calls a tool and never sends publisher-supplied headers.
           </p>
         </div>
+      )}
+      {lockSwitch("mcp_probe_remotes_locked", "probe-locked")}
+
+      {shows("mcp_sandbox_introspection") && (
+        <div className="space-y-1" data-testid="mcp-sandbox">
+          <Label htmlFor={fid("sandbox")}>Sandboxed introspection</Label>
+          <Select
+            value={value.mcp_sandbox_introspection}
+            onValueChange={(v) => set({ mcp_sandbox_introspection: v as McpSandboxIntrospection })}
+            disabled={readOnly}
+          >
+            <SelectTrigger id={fid("sandbox")} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SANDBOX_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Starts stdio servers to list their tools. Runs happen in an
+            isolated sandbox worker, install only from this instance and never
+            run with real credentials.
+          </p>
+        </div>
+      )}
+
+      {shows("mcp_require_oci_label") && (
+        <SwitchField
+          id={fid("require-oci-label")}
+          label="Require the MCP name label on OCI images"
+          checked={value.mcp_require_oci_label}
+          onChange={(v) => set({ mcp_require_oci_label: v })}
+          disabled={readOnly}
+          help="Refuse an OCI package whose image lacks a matching io.modelcontextprotocol.server.name label. Off: publishing warns instead."
+        />
+      )}
+
+      {shows("mcp_require_bundle_signature") && (
+        <SwitchField
+          id={fid("require-bundle-signature")}
+          label="Require signed MCPB bundles"
+          checked={value.mcp_require_bundle_signature}
+          onChange={(v) => set({ mcp_require_bundle_signature: v })}
+          disabled={readOnly}
+          help="Refuse a bundle whose signature does not verify. Off: unsigned bundles are accepted and labelled unsigned; an invalid signature is always refused."
+        />
       )}
     </div>
   );
@@ -854,12 +995,17 @@ export interface McpSettingsForm {
  * groups: the tab's save bar folds `changedFields` into the one
  * `repositoriesApi.update` call and calls `reset` after a save or discard.
  */
-export function useMcpSettingsForm(repository: Repository): McpSettingsForm {
+export function useMcpSettingsForm(repository: Repository, isInstanceAdmin = false): McpSettingsForm {
   const isMcp = hasMcpConfig(repository.format);
   const baseline = useMemo(() => mcpConfigFromRepo(repository), [repository]);
+  // The locks are writable by an instance administrator only (403 for anyone
+  // else), so for everyone else they are not part of the form at all.
   const visibleKeys = useMemo(
-    () => (isMcp ? mcpVisibleKeys(repository) : new Set<McpConfigKey>()),
-    [isMcp, repository],
+    () =>
+      isMcp
+        ? new Set([...mcpVisibleKeys(repository)].filter((k) => isInstanceAdmin || !MCP_LOCK_KEYS.has(k)))
+        : new Set<McpConfigKey>(),
+    [isMcp, repository, isInstanceAdmin],
   );
   const [override, setOverride] = useState<McpConfigValue | null>(null);
   const value = override ?? baseline;
@@ -882,10 +1028,12 @@ interface McpSettingsSectionProps {
   repository: Repository;
   form: McpSettingsForm;
   readOnly: boolean;
+  /** Instance administrator: may change locked settings and the locks. */
+  canLock?: boolean;
 }
 
 /** The MCP section of the Settings tab; non-administrators see it read-only. */
-export function McpSettingsSection({ repository, form, readOnly }: McpSettingsSectionProps) {
+export function McpSettingsSection({ repository, form, readOnly, canLock = false }: McpSettingsSectionProps) {
   const pickers = form.visibleKeys.has("mcp_package_repos");
   const { data } = useRepositories({ per_page: 1000 }, { enabled: pickers });
   return (
@@ -909,6 +1057,7 @@ export function McpSettingsSection({ repository, form, readOnly }: McpSettingsSe
         visibleKeys={form.visibleKeys}
         postureLocked={repository.mcp_remote_posture_locked === true}
         probeLocked={repository.mcp_probe_remotes_locked === true}
+        canLock={canLock}
         readOnly={readOnly}
         repoKey={repository.key}
       />

@@ -96,6 +96,12 @@ vi.mock('@/components/common/confirm-dialog', () => ({
     ) : null,
 }));
 
+// The create dialog offers the MCP instance locks to an instance administrator.
+const mockAuth = vi.hoisted(() => ({ user: { is_admin: false } as { is_admin: boolean } | null }));
+vi.mock('@/providers/auth-provider', () => ({
+  useAuth: () => mockAuth,
+}));
+
 // Feature flags come from the system-config provider. Default to guest access
 // enabled (the provider's own permissive default); gating tests override this.
 const mockFlags = vi.hoisted(() => ({ guestAccessEnabled: true }));
@@ -107,6 +113,7 @@ vi.mock('@/providers/system-config-provider', () => ({
 // into other suites (their beforeEach hooks don't know about the mock).
 beforeEach(() => {
   mockFlags.guestAccessEnabled = true;
+  mockAuth.user = { is_admin: false };
   depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
   depthSupport.error = null;
   depthSupport.isLoading = false;
@@ -2536,24 +2543,74 @@ describe('RepoDialogs - MCP registry (create)', () => {
     expect(optionValues(selects()[0])).not.toContain('mcp');
   });
 
-  it('offers MCP Registry and limits it to Local and Staging on a Phase 1 backend', () => {
+  it('offers MCP Registry with every repository type when the handler advertises none', () => {
     formatHandlersState.data = [handler('mcp')];
     render(<RepoDialogs {...defaultProps} />);
     const format = selects()[0];
     expect(Array.from(format.options).find((o) => o.value === 'mcp')?.textContent).toBe('MCP Registry');
-    expect(optionValues(selects()[1])).toEqual(['local', 'staging', 'remote', 'virtual']);
     fireEvent.change(format, { target: { value: 'mcp' } });
-    expect(optionValues(selects()[1])).toEqual(['local', 'staging']);
+    expect(optionValues(selects()[1])).toEqual(['local', 'staging', 'remote', 'virtual']);
     expect(screen.getByTestId('mcp-type-hint').textContent).toContain('server.json');
     expect(screen.getByText('MCP Options')).toBeTruthy();
   });
 
-  it('falls back to Local when switching a Remote form to mcp', () => {
+  it('limits MCP to Local and Staging when the handler advertises repo_types without them', () => {
+    formatHandlersState.data = [handler('mcp', { repo_types: ['local', 'staging'] })];
+    render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    expect(optionValues(selects()[1])).toEqual(['local', 'staging']);
+  });
+
+  it('keeps a Remote form Remote when switching it to mcp', () => {
     formatHandlersState.data = [handler('mcp')];
     render(<RepoDialogs {...defaultProps} />);
     fireEvent.change(selects()[1], { target: { value: 'remote' } });
     fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    expect(selects()[1].value).toBe('remote');
+    expect(screen.getByTestId('mcp-type-hint').textContent).toContain('deny by default');
+  });
+
+  it('falls back to Local when switching a Remote form to mcp on a hosted-only backend', () => {
+    formatHandlersState.data = [handler('mcp', { repo_types: ['local', 'staging'] })];
+    render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
     expect(selects()[1].value).toBe('local');
+  });
+
+  it('never offers the namespace-grant switch on create', () => {
+    formatHandlersState.data = [handler('mcp')];
+    render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    expect(screen.queryByLabelText('Require a namespace grant to publish')).toBeNull();
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    expect(screen.queryByLabelText('Require a namespace grant to publish')).toBeNull();
+  });
+
+  it('offers the locks only to an instance administrator and sends them when set', async () => {
+    formatHandlersState.data = [handler('mcp')];
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    expect(screen.queryAllByLabelText('Lock for repository administrators')).toHaveLength(0);
+    cleanup();
+
+    mockAuth.user = { is_admin: true };
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    await fillKeyAndName(user);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    const locks = screen.getAllByLabelText('Lock for repository administrators');
+    expect(locks).toHaveLength(2);
+    await user.click(locks[0]);
+    await user.click(screen.getByLabelText(/^Mirror: sync every upstream name/));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+    const body = onCreateSubmit.mock.calls[0][0];
+    expect(body).toMatchObject({ mcp_remote_posture_locked: true, mcp_remote_mode: 'mirror' });
+    expect(body).not.toHaveProperty('mcp_probe_remotes_locked');
+    expect(body).not.toHaveProperty('mcp_sandbox_introspection');
   });
 
   it('submits the hosted settings: policy, allowlist and a backing repository of the right format', async () => {

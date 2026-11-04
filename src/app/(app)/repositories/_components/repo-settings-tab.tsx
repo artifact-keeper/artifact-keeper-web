@@ -326,8 +326,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       (k) => npmScopePolicy[k] !== npmDefaults[k]
     );
 
-  // MCP registry settings (artifact-keeper#5253): only changed keys are sent.
-  const mcpForm = useMcpSettingsForm(repository);
+  const { user } = useAuth();
+  const isRepoAdmin = !!user?.is_admin;
+
+  // MCP registry settings (artifact-keeper#5253): only changed keys are sent;
+  // the instance locks only by an instance administrator.
+  const mcpForm = useMcpSettingsForm(repository, isRepoAdmin);
   const mcpChanged = mcpForm.changed;
   const mcpChangedFields = mcpForm.changedFields;
   const resetMcp = mcpForm.reset;
@@ -645,9 +649,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // Repo-admin gated: the backend PUT is admin-only, so we only render the
   // section (and only run the GET) for admins — mirroring how the quarantine
   // decisions and other admin-only controls are gated on `user?.is_admin`
-  // elsewhere in the repository views.
-  const { user } = useAuth();
-  const isRepoAdmin = !!user?.is_admin;
+  // elsewhere in the repository views. (`user` / `isRepoAdmin` are read
+  // above, where the MCP form needs them.)
 
   const { data: scanConfig, isLoading: scanConfigLoading } = useQuery({
     queryKey: ["scan-config", repository.key],
@@ -1152,7 +1155,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {/* -- MCP Registry Section (artifact-keeper#5253; admin-only editing) -- */}
       {hasMcpConfig(repository.format) && (
         <>
-          <McpSettingsSection repository={repository} form={mcpForm} readOnly={!isRepoAdmin} />
+          <McpSettingsSection
+            repository={repository}
+            form={mcpForm}
+            readOnly={!isRepoAdmin}
+            canLock={isRepoAdmin}
+          />
           <Separator />
         </>
       )}

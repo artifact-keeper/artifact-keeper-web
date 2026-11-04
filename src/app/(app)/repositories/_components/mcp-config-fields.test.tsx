@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React, { useState } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, renderHook, act, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { Repository } from "@/types";
@@ -16,6 +16,7 @@ import {
   mcpKeysForRepoType,
   mcpVisibleKeys,
   seedMcpRemoteConfig,
+  useMcpSettingsForm,
   validateMcpGlob,
   type McpConfigFieldsProps,
   type McpConfigValue,
@@ -103,10 +104,39 @@ function renderFields(props: Partial<McpConfigFieldsProps> = {}, initial: McpCon
 
 describe("MCP config helpers", () => {
   it("maps repository types to their settings", () => {
-    expect(mcpKeysForRepoType("local")).toContain("mcp_namespace_allow");
-    expect(mcpKeysForRepoType("staging")).toContain("mcp_package_policy");
-    expect(mcpKeysForRepoType("remote")).toContain("mcp_remote_posture");
-    expect(mcpKeysForRepoType("virtual")).toEqual([]);
+    // The backend's applicability table (mcp_settings.rs `to_store` / `effective`).
+    const hosted = [
+      "mcp_namespace_allow",
+      "mcp_package_policy",
+      "mcp_package_repos",
+      "mcp_server_deny",
+      "mcp_require_oci_label",
+      "mcp_require_namespace_grant",
+      "mcp_probe_remotes",
+      "mcp_probe_remotes_locked",
+      "mcp_sandbox_introspection",
+      "mcp_require_bundle_signature",
+    ].sort();
+    expect([...mcpKeysForRepoType("local")].sort()).toEqual(hosted);
+    expect([...mcpKeysForRepoType("staging")].sort()).toEqual(hosted);
+    expect([...mcpKeysForRepoType("remote")].sort()).toEqual(
+      [
+        "mcp_remote_posture",
+        "mcp_remote_posture_locked",
+        "mcp_remote_mode",
+        "mcp_auto_approve_namespaces",
+        "mcp_oci_floating_tag_policy",
+        "mcp_server_deny",
+        "mcp_require_oci_label",
+        "mcp_require_namespace_grant",
+        "mcp_probe_remotes",
+        "mcp_probe_remotes_locked",
+        "mcp_sandbox_introspection",
+        "mcp_require_bundle_signature",
+      ].sort(),
+    );
+    expect([...mcpKeysForRepoType("virtual")].sort()).toEqual(["mcp_require_oci_label", "mcp_server_deny"]);
+    expect(mcpKeysForRepoType("other")).toEqual([]);
   });
 
   it("fills defaults for settings the repository does not carry", () => {
@@ -170,6 +200,48 @@ describe("MCP config helpers", () => {
       mcp_probe_remotes: "hosted_only",
     });
     expect(buildMcpCreateFields(EMPTY_MCP_CONFIG, "virtual")).toEqual({});
+    expect(
+      buildMcpCreateFields(
+        { ...EMPTY_MCP_CONFIG, mcp_server_deny: ["com.evil/*"], mcp_require_oci_label: true, mcp_probe_remotes: "all" },
+        "virtual",
+      ),
+    ).toEqual({ mcp_server_deny: ["com.evil/*"], mcp_require_oci_label: true });
+  });
+
+  it("sends the later-phase settings only when changed and valid for the type", () => {
+    const value: McpConfigValue = {
+      ...EMPTY_MCP_CONFIG,
+      mcp_remote_mode: "mirror",
+      mcp_sandbox_introspection: "on",
+      mcp_require_bundle_signature: true,
+      mcp_require_oci_label: true,
+    };
+    expect(buildMcpCreateFields(value, "local")).toEqual({
+      mcp_package_policy: "own-repos",
+      mcp_sandbox_introspection: "on",
+      mcp_require_bundle_signature: true,
+      mcp_require_oci_label: true,
+    });
+    expect(buildMcpCreateFields(value, "remote")).toEqual({
+      mcp_remote_mode: "mirror",
+      mcp_sandbox_introspection: "on",
+      mcp_require_bundle_signature: true,
+      mcp_require_oci_label: true,
+    });
+  });
+
+  it("sends a lock on create only for an instance administrator who set it", () => {
+    const locked = { ...EMPTY_MCP_CONFIG, mcp_remote_posture_locked: true, mcp_probe_remotes_locked: true };
+    expect(buildMcpCreateFields(locked, "remote")).toEqual({});
+    expect(buildMcpCreateFields(locked, "remote", true)).toEqual({
+      mcp_remote_posture_locked: true,
+      mcp_probe_remotes_locked: true,
+    });
+    expect(buildMcpCreateFields(locked, "local", true)).toEqual({
+      mcp_package_policy: "own-repos",
+      mcp_probe_remotes_locked: true,
+    });
+    expect(buildMcpCreateFields(EMPTY_MCP_CONFIG, "remote", true)).toEqual({});
   });
 
   it("seeds the Remote wizard once, never over an operator's list", () => {
@@ -181,7 +253,11 @@ describe("MCP config helpers", () => {
   it("validates glob patterns", () => {
     expect(validateMcpGlob("io.github.*/crypto-*")).toBeNull();
     expect(validateMcpGlob(" ")).toBe("Enter a pattern");
-    expect(validateMcpGlob("a b")).toMatch(/wildcards/);
+    expect(validateMcpGlob("a b")).toMatch(/\* wildcards/);
+    // `?` is not part of the backend alphabet.
+    expect(validateMcpGlob("com.acme/weathe?")).toMatch(/\* wildcards/);
+    expect(validateMcpGlob("a".repeat(200))).toBeNull();
+    expect(validateMcpGlob("a".repeat(201))).toBe("At most 200 characters");
   });
 });
 
@@ -196,7 +272,7 @@ describe("McpConfigFields - hosted", () => {
     expect(seen.value.mcp_namespace_allow).toEqual(["com.acme"]);
 
     await user.type(input, "com.acme/x");
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add to Namespace allowlist" }));
     expect(screen.getByRole("alert").textContent).toMatch(/no slash/);
 
     await user.clear(input);
@@ -263,7 +339,7 @@ describe("McpConfigFields - hosted", () => {
     renderFields({ readOnly: true }, { ...EMPTY_MCP_CONFIG, mcp_namespace_allow: ["com.acme"] });
     expect(screen.getByRole("list", { name: "Namespace allowlist entries" }).textContent).toBe("com.acme");
     expect(screen.queryByRole("button", { name: "Remove com.acme" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: /^Add to / })).toHaveLength(0);
     expect((screen.getByLabelText(/Own repositories/) as HTMLInputElement).matches(":disabled")).toBe(true);
     expect(within(screen.getByTestId("mcp-backing-npm")).getByTestId("mock-select")).toHaveProperty("disabled", true);
     expect(screen.getByLabelText("Require a namespace grant to publish")).toHaveProperty("disabled", true);
@@ -328,5 +404,126 @@ describe("McpConfigFields - remote", () => {
     expect(seen.value.mcp_auto_approve_namespaces).toEqual(["io.github.*/x"]);
     await user.click(preset);
     expect(seen.value.mcp_auto_approve_namespaces).toEqual(["io.github.*/x", MCP_OFFICIAL_NAMESPACE_GLOB]);
+  });
+});
+
+describe("McpConfigFields - later-phase settings", () => {
+  it("changes the sync scope, OCI label, sandbox and bundle signature", async () => {
+    const user = userEvent.setup();
+    const seen = renderFields({ repoType: "remote" });
+    expect(screen.getByText("Sync scope")).toBeTruthy();
+    expect(screen.getByLabelText(/^Allowlist: sync only the names that are approved/)).toHaveProperty("checked", true);
+    await user.click(screen.getByLabelText(/^Mirror: sync every upstream name/));
+    await user.click(screen.getByLabelText("Require the MCP name label on OCI images"));
+    await user.click(screen.getByLabelText("Require signed MCPB bundles"));
+    fireEvent.change(within(screen.getByTestId("mcp-sandbox")).getByTestId("mock-select"), {
+      target: { value: "on" },
+    });
+    expect(seen.value).toMatchObject({
+      mcp_remote_mode: "mirror",
+      mcp_require_oci_label: true,
+      mcp_require_bundle_signature: true,
+      mcp_sandbox_introspection: "on",
+    });
+  });
+
+  it("says where sandboxed runs happen", () => {
+    renderFields();
+    const note = within(screen.getByTestId("mcp-sandbox")).getByText(/isolated sandbox worker/);
+    expect(note.textContent).toMatch(/install only from this instance/);
+    expect(note.textContent).toMatch(/never run with real credentials/);
+  });
+
+  it("renders only the settings of the repository type", () => {
+    renderFields({ repoType: "local" });
+    expect(screen.queryByText("Sync scope")).toBeNull();
+    expect(screen.queryByText("Remote posture")).toBeNull();
+    expect(screen.getByLabelText("Require signed MCPB bundles")).toBeTruthy();
+    cleanup();
+    renderFields({ repoType: "virtual" });
+    expect(screen.getByText(/policies live on each member/)).toBeTruthy();
+    expect(screen.getByLabelText("Deny")).toBeTruthy();
+    expect(screen.getByLabelText("Require the MCP name label on OCI images")).toBeTruthy();
+    expect(screen.queryByTestId("mcp-sandbox")).toBeNull();
+    expect(screen.queryByTestId("mcp-probe")).toBeNull();
+    expect(screen.queryByLabelText("Require signed MCPB bundles")).toBeNull();
+    expect(screen.queryByLabelText("Require a namespace grant to publish")).toBeNull();
+  });
+
+  it("disables every later-phase control when read-only", () => {
+    renderFields({ repoType: "remote", readOnly: true });
+    expect((screen.getByLabelText(/^Mirror/) as HTMLInputElement).matches(":disabled")).toBe(true);
+    expect(screen.getByLabelText("Require the MCP name label on OCI images")).toHaveProperty("disabled", true);
+    expect(screen.getByLabelText("Require signed MCPB bundles")).toHaveProperty("disabled", true);
+    expect(within(screen.getByTestId("mcp-sandbox")).getByTestId("mock-select")).toHaveProperty("disabled", true);
+  });
+});
+
+describe("McpConfigFields - instance locks", () => {
+  it("offers no lock switch to anyone but an instance administrator", () => {
+    renderFields({ repoType: "remote" });
+    expect(screen.queryAllByLabelText("Lock for repository administrators")).toHaveLength(0);
+  });
+
+  it("lets an instance administrator lock posture and probe and still edit them", async () => {
+    const user = userEvent.setup();
+    const seen = renderFields({ repoType: "remote", canLock: true, postureLocked: true, probeLocked: true });
+    const switches = screen.getAllByLabelText("Lock for repository administrators");
+    expect(switches).toHaveLength(2);
+    expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
+    expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(false);
+    expect(within(screen.getByTestId("mcp-probe")).getByTestId("mock-select")).toHaveProperty("disabled", false);
+    await user.click(switches[0]);
+    expect(seen.value.mcp_remote_posture_locked).toBe(true);
+    expect(seen.value.mcp_probe_remotes_locked).toBe(false);
+    await user.click(switches[1]);
+    expect(seen.value.mcp_probe_remotes_locked).toBe(true);
+  });
+
+  it("offers only the probe lock on a hosted repository", () => {
+    renderFields({ repoType: "local", canLock: true });
+    expect(screen.getAllByLabelText("Lock for repository administrators")).toHaveLength(1);
+  });
+
+  it("shows no lock switch for a lock the response does not report", () => {
+    renderFields({ repoType: "remote", canLock: true, visibleKeys: new Set(["mcp_remote_posture"]) });
+    expect(screen.queryAllByLabelText("Lock for repository administrators")).toHaveLength(0);
+  });
+});
+
+describe("useMcpSettingsForm", () => {
+  const remote = repo({
+    repo_type: "remote",
+    mcp_remote_posture: "approval_required",
+    mcp_remote_posture_locked: false,
+    mcp_probe_remotes: "off",
+    mcp_probe_remotes_locked: true,
+    mcp_remote_mode: "allowlist",
+  });
+
+  it("keeps the locks out of a non-administrator's form", () => {
+    const { result } = renderHook(() => useMcpSettingsForm(remote));
+    expect(result.current.visibleKeys.has("mcp_remote_posture_locked")).toBe(false);
+    expect(result.current.visibleKeys.has("mcp_probe_remotes_locked")).toBe(false);
+    act(() => result.current.onChange({ ...result.current.value, mcp_remote_posture_locked: true }));
+    expect(result.current.changed).toBe(false);
+  });
+
+  it("sends a lock change for an instance administrator, and only when changed", () => {
+    const { result } = renderHook(() => useMcpSettingsForm(remote, true));
+    expect(result.current.visibleKeys.has("mcp_remote_posture_locked")).toBe(true);
+    expect(result.current.changedFields).toEqual({});
+    act(() =>
+      result.current.onChange({ ...result.current.value, mcp_remote_posture_locked: true, mcp_remote_mode: "mirror" }),
+    );
+    expect(result.current.changedFields).toEqual({ mcp_remote_posture_locked: true, mcp_remote_mode: "mirror" });
+    act(() => result.current.reset());
+    expect(result.current.changed).toBe(false);
+  });
+
+  it("shows a later-phase setting only when the response reports it", () => {
+    const { result } = renderHook(() => useMcpSettingsForm(repo({ mcp_sandbox_introspection: "off" })));
+    expect(result.current.visibleKeys.has("mcp_sandbox_introspection")).toBe(true);
+    expect(result.current.visibleKeys.has("mcp_require_bundle_signature")).toBe(false);
   });
 });

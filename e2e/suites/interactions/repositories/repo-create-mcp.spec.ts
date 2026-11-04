@@ -4,7 +4,8 @@ import type { Page, Route } from '@playwright/test';
 /**
  * Creating an MCP registry (artifact-keeper#5253). The e2e backend image does
  * not ship the `mcp` format yet, so GET /api/v1/formats is stubbed to list it
- * (or to leave it out) and the create call is answered at the network layer:
+ * (or to leave it out, or to advertise a narrower `capabilities.repo_types`)
+ * and the create call is answered at the network layer:
  * the assertions are on what the browser offers and sends.
  */
 
@@ -86,12 +87,11 @@ test.describe('Create MCP registry (#5253)', () => {
     await dialog.getByRole('combobox').nth(0).click();
     await page.getByRole('option', { name: 'MCP Registry', exact: true }).click();
 
-    // Phase 1: only the hosted types are offered.
+    // The handler advertises no repo_types: every type is offered.
     await dialog.getByRole('combobox').nth(1).click();
-    await expect(page.getByRole('option', { name: 'Local', exact: true })).toBeVisible();
-    await expect(page.getByRole('option', { name: 'Staging', exact: true })).toBeVisible();
-    await expect(page.getByRole('option', { name: 'Remote', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('option', { name: 'Virtual', exact: true })).toHaveCount(0);
+    for (const type of ['Local', 'Staging', 'Remote', 'Virtual']) {
+      await expect(page.getByRole('option', { name: type, exact: true })).toBeVisible();
+    }
     await page.getByRole('option', { name: 'Local', exact: true }).click();
 
     await expect(dialog.getByText('MCP Options')).toBeVisible();
@@ -108,6 +108,21 @@ test.describe('Create MCP registry (#5253)', () => {
       mcp_package_policy: 'own-repos',
       mcp_namespace_allow: ['com.acme'],
     });
+  });
+
+  test('offers only the hosted types when the handler advertises them alone', async ({ page }) => {
+    await page.route(FORMATS, (route) =>
+      json(route, [{ ...MCP_HANDLER, capabilities: { repo_types: ['local', 'staging'] } }]),
+    );
+    const dialog = await openCreateDialog(page);
+    await dialog.getByRole('combobox').nth(0).click();
+    await page.getByRole('option', { name: 'MCP Registry', exact: true }).click();
+    await dialog.getByRole('combobox').nth(1).click();
+    await expect(page.getByRole('option', { name: 'Local', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Staging', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Remote', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('option', { name: 'Virtual', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
   });
 
   test('does not offer MCP Registry when the backend lacks the format', async ({ page }) => {

@@ -2819,19 +2819,36 @@ describe("RepoSettingsTab - MCP registry", () => {
     );
   });
 
-  it("shows only the Remote settings the backend reports, with their locks", () => {
-    show({
-      ...mcpRepo,
-      key: "mcp-remote",
-      repo_type: "remote",
-      upstream_url: "https://registry.modelcontextprotocol.io",
-      mcp_remote_posture: "approval_required",
-      mcp_remote_posture_locked: true,
-    });
+  const lockedRemote: Repository = {
+    ...mcpRepo,
+    key: "mcp-remote",
+    repo_type: "remote",
+    upstream_url: "https://registry.modelcontextprotocol.io",
+    mcp_remote_posture: "approval_required",
+    mcp_remote_posture_locked: true,
+  };
+
+  it("shows only the Remote settings the backend reports, locked for a non-admin", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show(lockedRemote);
     expect(screen.getByText("Remote posture")).toBeTruthy();
     expect(screen.getByTestId("mcp-lock-indicator")).toBeTruthy();
+    expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(true);
+    expect(screen.queryByLabelText("Lock for repository administrators")).toBeNull();
     expect(screen.queryByLabelText("Namespace allowlist")).toBeNull();
     expect(screen.queryByLabelText("Deny")).toBeNull();
     expect(screen.queryByText("Remote probe")).toBeNull();
+  });
+
+  it("lets an instance administrator unlock the posture and saves only the lock", async () => {
+    show(lockedRemote);
+    expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
+    const lock = screen.getByLabelText("Lock for repository administrators");
+    expect(lock.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(lock);
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-remote", { mcp_remote_posture_locked: false }),
+    );
   });
 });

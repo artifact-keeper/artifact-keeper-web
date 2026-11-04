@@ -23,6 +23,7 @@ import {
   mcpCreatableRepoTypes,
   mcpRepoTypeSupport,
 } from "@/lib/mcp/format";
+import { useAuth } from "@/providers/auth-provider";
 import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
 import { toUserMessage } from "@/lib/error-utils";
 
@@ -228,9 +229,12 @@ export function RepoDialogs({
   );
 
   // MCP registry (artifact-keeper#5253). The option is offered only when
-  // GET /api/v1/formats lists `mcp` (hidden while that loads), and only the
-  // repository types the handler accepts: Local/Staging until the backend
-  // reports Remote/Virtual in its capabilities.
+  // GET /api/v1/formats lists `mcp` (hidden while that loads). Every
+  // repository type is offered unless the handler advertises a narrower
+  // `capabilities.repo_types`. Only an instance administrator may set the
+  // posture/probe locks (anyone else gets 403).
+  const { user } = useAuth();
+  const isInstanceAdmin = !!user?.is_admin;
   const { data: formatHandlers } = useFormatHandlers();
   const mcpSupported = backendSupportsMcp(formatHandlers);
   const mcpTypes = mcpCreatableRepoTypes(mcpRepoTypeSupport(formatHandlers));
@@ -476,7 +480,10 @@ export function RepoDialogs({
                 );
               }
               if (hasMcpConfig(createForm.format)) {
-                Object.assign(submitData, buildMcpCreateFields(mcpConfig, createForm.repo_type));
+                Object.assign(
+                  submitData,
+                  buildMcpCreateFields(mcpConfig, createForm.repo_type, isInstanceAdmin),
+                );
               }
               if (hasRepodataDepth && parsedDepth !== null && parsedDepth > 0) {
                 submitData.repodata_depth = parsedDepth;
@@ -798,6 +805,7 @@ export function RepoDialogs({
                   onChange={setMcpConfig}
                   repositories={allRepos?.items ?? []}
                   visibleKeys={mcpCreateKeys(createForm.repo_type)}
+                  canLock={isInstanceAdmin}
                   offerOfficialPreset
                 />
               </div>
