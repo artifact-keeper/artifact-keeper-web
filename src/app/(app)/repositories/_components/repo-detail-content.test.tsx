@@ -475,6 +475,15 @@ describe("RepoDetailContent default primary tab (#2793)", () => {
     // Active panel is the Packages view (stubbed), not the artifact browser.
     expect(document.querySelector('[data-stub="packages"]')).toBeInTheDocument();
   });
+
+  it("labels the catalog tab Servers for an MCP repository", () => {
+    repository.format = "mcp";
+    render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getByRole("tab", { name: /servers/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: /^packages$/i })).toBeNull();
+    repository.format = "generic";
+  });
 });
 
 describe("RepoDetailContent artifact detail dialog — Versions tab (#571)", () => {

@@ -45,13 +45,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TreeNode } from "@/types/tree";
 import { PackageDependencies } from "./package-dependencies";
 import { PackageMetadataViewer } from "./package-metadata-viewer";
+import { McpServerGallery } from "./mcp-server-gallery";
+import { isMcpFormat } from "@/lib/mcp/format";
 
 interface PackagesTabContentProps {
   repositoryKey: string;
   repositoryFormat: string;
+  /** Repository type; the MCP gallery picks its empty state from it. */
+  repositoryType?: string;
 }
 
-export function PackagesTabContent({
+export function PackagesTabContent(props: PackagesTabContentProps) {
+  // An MCP repository's catalog is its servers: the package rows carry no
+  // server.json, so the gallery reads the registry API instead.
+  if (isMcpFormat(props.repositoryFormat)) {
+    return <McpServerGallery repositoryKey={props.repositoryKey} repositoryType={props.repositoryType} />;
+  }
+  return <CatalogPackagesTab {...props} />;
+}
+
+function CatalogPackagesTab({
   repositoryKey,
   repositoryFormat,
 }: PackagesTabContentProps) {
