@@ -128,6 +128,14 @@ export function getInstallCommand(
       const versionFlag = version ? ` --version ${version}` : "";
       return `ak agent plugins install ${packageName}${repoFlag} --harness claude${versionFlag}`;
     }
+    case "mcp": {
+      // An MCP server entry is a recipe, not a package: the copyable one-liner
+      // is the registry read of the exact version, whose served document
+      // carries the Artifact Keeper coordinates (artifact-keeper#5253). The
+      // per-client snippets live in the server's Install panel.
+      const base = host && repoKey ? `https://${host}/mcp/${repoKey}` : `<registry>/mcp/${repoKey ?? "<repo>"}`;
+      return `curl ${base}/v0.1/servers/${encodeURIComponent(packageName)}/versions/${encodeURIComponent(v)}`;
+    }
     case "chocolatey":
       return `choco install ${packageName} --version ${v}`;
     case "powershell":
@@ -208,6 +216,7 @@ export const FORMAT_OPTIONS: string[] = [
   "vscode",
   "jetbrains",
   "agentplugins",
+  "mcp",
   "huggingface",
   "mlmodel",
   "cran",
