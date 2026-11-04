@@ -45,6 +45,8 @@ import {
 } from "@/lib/utils";
 import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
+import { isMcpFormat } from "@/lib/mcp/format";
+import { McpServerDetail } from "./_components/mcp-server-detail";
 
 // ---- Helpers ----
 
@@ -200,6 +202,10 @@ function PackageDetailContent() {
       </div>
     );
   }
+
+  // An MCP server version is a registry document, not an installable file:
+  // it gets its own detail body (artifact-keeper#5253).
+  if (isMcpFormat(pkg.format)) return <McpServerDetail pkg={pkg} />;
 
   const installLocation = { host: currentRegistryHost(), repoKey: pkg.repository_key };
   const installCmd = getInstallCommand(
