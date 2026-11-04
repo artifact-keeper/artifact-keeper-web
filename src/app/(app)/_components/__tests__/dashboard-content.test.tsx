@@ -36,6 +36,10 @@ vi.mock("@/lib/api/repositories", () => ({
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
+const mockPendingReviewCount = vi.fn();
+vi.mock("@/lib/api/mcp", () => ({
+  mcpApi: { pendingReviewCount: () => mockPendingReviewCount() },
+}));
 
 vi.mock("@/lib/utils", () => ({
   formatBytes: (bytes: number) => `${bytes} B`,
@@ -63,6 +67,7 @@ vi.mock("lucide-react", () => {
     ShieldAlert: stub("ShieldAlert"),
     ShieldX: stub("ShieldX"),
     ShieldCheck: stub("ShieldCheck"),
+    Plug: stub("Plug"),
   };
 });
 
@@ -463,5 +468,42 @@ describe("DashboardContent", () => {
     expect(screen.queryByText("Open CVEs by Severity")).not.toBeInTheDocument();
     // But Security Overview stats should still render
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
+  });
+
+  describe("MCP servers awaiting approval tile", () => {
+    const ADMIN = { user: { username: "admin", is_admin: true }, isAuthenticated: true };
+    const TILE = "stat-MCP servers awaiting approval";
+
+    it("shows the pending count to admins and links to curation", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const tile = screen.getByTestId(TILE);
+      expect(tile).toHaveTextContent("MCP servers awaiting approval: 4");
+      expect(tile).toHaveAttribute("data-href", "/curation");
+      expect(mockPendingReviewCount).toHaveBeenCalled();
+    });
+
+    it("shows a zero count", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 0 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.getByTestId(TILE)).toHaveTextContent(": 0");
+    });
+
+    it("hides the tile when the backend does not report MCP reviews", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: null }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+    });
+
+    it("never asks for or shows the count to non-admins", () => {
+      mockUseAuth.mockReturnValue({ user: { username: "dev", is_admin: false }, isAuthenticated: true });
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+      expect(mockPendingReviewCount).not.toHaveBeenCalled();
+    });
   });
 });

@@ -17,11 +17,14 @@ import {
   ShieldAlert,
   ShieldX,
   ShieldCheck,
+  Plug,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { sbomApi } from "@/lib/api/sbom";
+import { mcpApi } from "@/lib/api/mcp";
+import { mcpKeys } from "@/lib/mcp/query-keys";
 import { formatBytes } from "@/lib/utils";
 import { repoSizeLabel } from "@/lib/repo-size";
 import type { Repository } from "@/types";
@@ -285,6 +288,14 @@ export function DashboardContent() {
     enabled: !!user?.is_admin,
   });
 
+  // Phase 2 backends report MCP versions awaiting approval on Remote MCP
+  // repositories; older ones answer null and the tile stays hidden.
+  const { data: mcpPending } = useQuery({
+    queryKey: mcpKeys.pendingCount,
+    queryFn: () => mcpApi.pendingReviewCount(),
+    enabled: !!user?.is_admin,
+  });
+
   const isRefreshing = healthFetching || statsFetching || reposFetching || cveTrendsFetching;
 
   function handleRefresh() {
@@ -292,6 +303,7 @@ export function DashboardContent() {
     queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
     queryClient.invalidateQueries({ queryKey: ["cve-trends"] });
+    queryClient.invalidateQueries({ queryKey: mcpKeys.pendingCount });
   }
 
   const greeting = user?.display_name || user?.username;
@@ -411,6 +423,18 @@ export function DashboardContent() {
           {!statsLoading && !stats && (
             <div className="rounded-lg border bg-destructive/5 px-4 py-3 text-sm text-destructive">
               Failed to load admin statistics.
+            </div>
+          )}
+          {typeof mcpPending === "number" && (
+            <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatCard
+                icon={Plug}
+                label="MCP servers awaiting approval"
+                value={mcpPending}
+                color={mcpPending > 0 ? "yellow" : "default"}
+                href="/curation"
+                tooltip="Upstream MCP servers requested on a Remote MCP repository and not yet approved. Nothing is served to clients until it is."
+              />
             </div>
           )}
         </section>

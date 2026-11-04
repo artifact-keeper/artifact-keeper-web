@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { Suspense, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus, Pencil, Trash2, Shield } from "lucide-react";
@@ -68,6 +68,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { McpNamespaceGrants } from "./_components/mcp-namespace-grants";
 
 // -- constants --
 
@@ -689,6 +690,13 @@ export default function PermissionsPage() {
         shown={permissions.length}
         total={permissionsData?.pagination?.total ?? 0}
       />
+
+      {/* MCP namespace grants (Phase 3); renders nothing without a hosted MCP
+          repository or on a backend that does not serve the grants API.
+          useSearchParams() inside needs a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <McpNamespaceGrants repositories={repositories} />
+      </Suspense>
 
       {/* Create Permission Dialog */}
       <Dialog
