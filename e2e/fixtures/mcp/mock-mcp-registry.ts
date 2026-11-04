@@ -84,7 +84,14 @@ export async function mockMcpRegistry(page: Page, opts: MockMcpRegistryOptions =
   });
 
   // Sub-resources first: Playwright tries the most recently added route first.
-  await page.route(`**/api/v1/repositories/${MCP_REPO_KEY}/**`, (route) => json(route, EMPTY_PAGE));
+  // Every other sub-resource of the fake repository answers as the backend
+  // does for a resource it has nothing for. A list-shaped body would crash
+  // panels that expect an object (the storage panel reads `blob_count`).
+  await page.route(`**/api/v1/repositories/${MCP_REPO_KEY}/**`, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (/\/(artifacts|packages|members)$/.test(path)) return json(route, EMPTY_PAGE);
+    return json(route, { code: 'NOT_FOUND', message: 'Not found' }, 404);
+  });
   await page.route(`**/api/v1/repositories/${MCP_REPO_KEY}`, (route) => json(route, REPOSITORY));
 
   await page.route(/\/api\/v1\/packages(\?|$)/, async (route) => {
