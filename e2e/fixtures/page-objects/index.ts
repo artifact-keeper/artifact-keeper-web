@@ -13,6 +13,7 @@ export { GroupsPage } from './GroupsPage';
 export { LicensePoliciesPage } from './LicensePoliciesPage';
 export { LifecyclePage } from './LifecyclePage';
 export { LoginPage } from './LoginPage';
+export { McpServerPage } from './McpServerPage';
 export { MigrationPage } from './MigrationPage';
 export { MonitoringPage } from './MonitoringPage';
 export { PackageDetailPage } from './PackageDetailPage';
