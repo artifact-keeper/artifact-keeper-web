@@ -10,6 +10,7 @@ import {
   EMPTY_MCP_CONFIG,
   McpConfigFields,
   buildMcpCreateFields,
+  mcpCreateKeys,
   mcpChangedFields,
   mcpConfigFromRepo,
   mcpKeysForRepoType,
@@ -158,8 +159,9 @@ describe("MCP config helpers", () => {
       mcp_package_policy: "own-repos",
       mcp_namespace_allow: ["com.acme"],
       mcp_package_repos: { npm: "npm-local" },
-      mcp_require_namespace_grant: true,
     });
+    expect(mcpCreateKeys("local").has("mcp_require_namespace_grant")).toBe(false);
+    expect(mcpCreateKeys("local").has("mcp_namespace_allow")).toBe(true);
     expect(
       buildMcpCreateFields({ ...EMPTY_MCP_CONFIG, mcp_package_policy: "open", mcp_package_repos: { npm: "x" } }, "local"),
     ).toEqual({ mcp_package_policy: "open" });

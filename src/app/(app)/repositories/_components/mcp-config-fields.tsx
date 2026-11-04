@@ -191,8 +191,18 @@ export function buildMcpCreateFields(
   if (value.mcp_package_policy === "own-repos" && Object.keys(repos).length > 0) {
     out.mcp_package_repos = repos;
   }
-  if (value.mcp_require_namespace_grant) out.mcp_require_namespace_grant = true;
   return out;
+}
+
+/**
+ * Settings the create dialog offers for a repository type. The namespace
+ * grant requirement (Phase 3) is left to the Settings tab: the backend
+ * ignores request fields it does not know, so on a backend that predates it
+ * the switch would be accepted and silently not applied. Settings shows it
+ * only when the repository response reports the field.
+ */
+export function mcpCreateKeys(repoType: string): ReadonlySet<McpConfigKey> {
+  return new Set(mcpKeysForRepoType(repoType).filter((k) => k !== "mcp_require_namespace_grant"));
 }
 
 /**

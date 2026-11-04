@@ -62,6 +62,7 @@ import {
   NpmScopePolicyFields,
   McpConfigFields,
   buildMcpCreateFields,
+  mcpCreateKeys,
   seedMcpRemoteConfig,
   EMPTY_MCP_CONFIG,
   buildRpmConfigFields,
@@ -796,6 +797,7 @@ export function RepoDialogs({
                   value={mcpConfig}
                   onChange={setMcpConfig}
                   repositories={allRepos?.items ?? []}
+                  visibleKeys={mcpCreateKeys(createForm.repo_type)}
                   offerOfficialPreset
                 />
               </div>

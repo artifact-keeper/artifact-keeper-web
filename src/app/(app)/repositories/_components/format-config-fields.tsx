@@ -33,6 +33,7 @@ export {
   McpSettingsSection,
   useMcpSettingsForm,
   buildMcpCreateFields,
+  mcpCreateKeys,
   seedMcpRemoteConfig,
   EMPTY_MCP_CONFIG,
   type McpConfigValue,
