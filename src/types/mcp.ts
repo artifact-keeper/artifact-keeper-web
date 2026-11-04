@@ -174,7 +174,8 @@ export type McpHoldClass =
   | 'backing'
   | 'age_gate'
   | 'unresolvable'
-  | 'curation';
+  | 'curation'
+  | 'content_drift';
 
 /** The RFC 9457 body a repository holder gets for a held exact version. */
 export interface McpHoldProblem {
@@ -190,7 +191,7 @@ export interface McpHoldProblem {
   hold?: McpHoldClass | string;
   /** Package as submitted, e.g. `npm:@acme/db-tool@2.0.0`. */
   package?: string;
-  /** `quarantine` | `scan_policy` | `age_gate` | `curation`. */
+  /** `quarantine` | `scan_policy` | `age_gate` | `curation` (also for `content_drift`). */
   gate?: string;
   review_id?: string | null;
   min_age_days?: number;
@@ -255,14 +256,19 @@ export type McpPackagePolicy = 'own-repos' | 'open';
 export type McpRemotePosture = 'approval_required' | 'allow_with_gates';
 export type McpOciFloatingTagPolicy = 'pin' | 'hide';
 export type McpProbeRemotes = 'off' | 'hosted_only' | 'all';
+export type McpRemoteMode = 'allowlist' | 'mirror';
+export type McpSandboxIntrospection = 'off' | 'on';
 
 /** registryType -> backing repository key. */
 export type McpPackageRepos = Partial<Record<McpRegistryType, string>>;
 
 /**
  * MCP fields on `RepositoryResponse` / create / update. Phase 1 fields are on
- * the backend today; the rest follow the issue's settings table and are
- * omitted by a backend that predates them.
+ * the backend today; the rest follow the backend's settings table
+ * (docs/mcp-registry.md, "Repository settings (Phase 2 and 3)") and are
+ * omitted by a backend that predates them. The response echoes each later
+ * setting with its default filled in, and omits one that does not apply to
+ * the repository type; a request carrying such a setting is refused (400).
  */
 export interface McpRepositorySettings {
   /** Phase 1. Effective policy (`own-repos` when unset). */
@@ -271,22 +277,30 @@ export interface McpRepositorySettings {
   mcp_package_repos?: McpPackageRepos;
   /** Phase 1. Namespace prefixes; `[]` admits any name. */
   mcp_namespace_allow?: string[];
-  /** Phase 2. Deny globs on the full name; deny always wins. */
+  /** Every type. Deny globs on the full name; deny always wins. */
   mcp_server_deny?: string[];
-  /** Phase 2. Remote posture (`approval_required` default). */
+  /** Remote. Posture (`approval_required` default). */
   mcp_remote_posture?: McpRemotePosture;
-  /** Phase 2. True when an instance administrator locked the posture. */
+  /** Remote. Instance-administrator lock on the posture (only they may write it). */
   mcp_remote_posture_locked?: boolean;
-  /** Phase 2. Namespace globs auto-approved on a Remote. */
-  auto_approve_namespaces?: string[];
-  /** Phase 2. Remote only: `pin` (default) or `hide` floating OCI tags. */
+  /** Remote. Namespace globs approved automatically on sync. */
+  mcp_auto_approve_namespaces?: string[];
+  /** Remote. `pin` (default) or `hide` floating OCI tags. */
   mcp_oci_floating_tag_policy?: McpOciFloatingTagPolicy;
-  /** Phase 2. Isolated remote `tools/list` probe (`off` default). */
+  /** Remote. `allowlist` (default) ingests approved names; `mirror` every name. */
+  mcp_remote_mode?: McpRemoteMode;
+  /** Local, Staging, Remote. Isolated remote `tools/list` probe (`off` default). */
   mcp_probe_remotes?: McpProbeRemotes;
-  /** Phase 2. True when an instance administrator locked the probe setting. */
+  /** Local, Staging, Remote. Instance-administrator lock on the probe setting. */
   mcp_probe_remotes_locked?: boolean;
-  /** Phase 3. Publishing needs a namespace-conditioned grant. */
+  /** Every type. Refuse OCI packages whose image lacks the MCP name label. */
+  mcp_require_oci_label?: boolean;
+  /** Local, Staging, Remote. Publishing needs a namespace-conditioned grant. */
   mcp_require_namespace_grant?: boolean;
+  /** Local, Staging, Remote. Sandboxed stdio introspection (`off` default). */
+  mcp_sandbox_introspection?: McpSandboxIntrospection;
+  /** Local, Staging, Remote. Refuse unsigned MCPB bundles. */
+  mcp_require_bundle_signature?: boolean;
 }
 
 // ---------------------------------------------------------------------------

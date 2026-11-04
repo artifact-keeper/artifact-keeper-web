@@ -30,7 +30,8 @@ const PREVIEW_LIMIT = 5;
 export function validateNamespaceGlob(glob: string): string | null {
   const g = glob.trim();
   if (!g) return "Enter a namespace glob, e.g. io.github.acme/*";
-  if (!/^[A-Za-z0-9.\-_*?/]+$/.test(g)) return "Use letters, digits, dots, hyphens, slashes and * or ? only";
+  // The backend's glob alphabet: `*` is the only wildcard.
+  if (!/^[A-Za-z0-9.\-_*/]+$/.test(g)) return "Use letters, digits, dots, hyphens, underscores, slashes and * only";
   if ((g.match(/\//g) ?? []).length > 1) return "A server name has exactly one slash";
   return null;
 }
@@ -116,7 +117,7 @@ function NamespaceApproveBody({
             autoComplete="off"
           />
           <p id="mcp-ns-glob-help" className={`text-xs ${error ? "text-destructive" : "text-muted-foreground"}`}>
-            {error ?? "Matched against the full server name: * is any run of characters, ? one character."}
+            {error ?? "Matched against the full server name, ignoring case: * is any run of characters, including /."}
           </p>
         </div>
         {broad && (

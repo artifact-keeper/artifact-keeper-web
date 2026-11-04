@@ -31,9 +31,9 @@ export function isMcpFormat(format: string | null | undefined): boolean {
 
 /** The repository types the backend accepts for `mcp` repositories. */
 export type McpRepoTypeSupport = {
-  /** Local + Staging (Phase 1). */
+  /** Local + Staging. */
   hosted: true;
-  /** Remote + Virtual (Phase 2). */
+  /** Remote + Virtual. */
   proxy: boolean;
 };
 
@@ -49,17 +49,17 @@ export function backendSupportsMcp(handlers: FormatHandler[] | undefined | null)
 }
 
 /**
- * Whether the backend accepts Remote/Virtual MCP repositories. Phase 1
- * refuses them with 400. The handler's capability bag is the only signal the
- * API can give without a failed create; a backend that sets
- * `capabilities.repo_types` is believed, otherwise Remote/Virtual are
- * assumed unsupported (the Phase 1 contract).
+ * Whether the backend accepts Remote/Virtual MCP repositories. The backend
+ * accepts all four types and does not advertise them, so every type is
+ * offered by default. A handler that does list `capabilities.repo_types` is
+ * believed: without `remote` or `virtual` there, only the hosted types are
+ * offered.
  */
 export function mcpRepoTypeSupport(handlers: FormatHandler[] | undefined | null): McpRepoTypeSupport {
   const handler = (handlers ?? []).find((h) => h.format_key === MCP_FORMAT);
   const types = handler?.capabilities?.["repo_types"];
-  const proxy = Array.isArray(types) && (types.includes("remote") || types.includes("virtual"));
-  return { hosted: true, proxy };
+  if (!Array.isArray(types)) return { hosted: true, proxy: true };
+  return { hosted: true, proxy: types.includes("remote") || types.includes("virtual") };
 }
 
 /** Repository types offered for `mcp` in the create dialog. */
@@ -135,16 +135,23 @@ export function namespaceAdmits(prefix: string, name: string): boolean {
 }
 
 /**
- * Glob match used for deny / auto-approve lists (`*` any run of characters,
- * `?` one character), anchored on the full server name.
+ * Glob match used for deny / auto-approve lists, as the backend's
+ * `glob_matches` evaluates it: `*` matches any run of characters including
+ * `/`, every other character is literal (there is no `?` wildcard), and the
+ * comparison is ASCII case-insensitive so `Com.Evil/x` cannot dodge
+ * `com.evil/*`. Anchored on the full server name.
  */
 export function mcpGlobMatches(glob: string, name: string): boolean {
   const g = glob.trim();
   if (!g) return false;
-  const re = new RegExp(
-    `^${g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`,
-  );
-  return re.test(name);
+  // ASCII-only folding, like `eq_ignore_ascii_case`: a non-ASCII letter
+  // must match exactly.
+  const fold = (v: string) => v.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  const pattern = fold(g)
+    .split(/\*+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${pattern}$`, "s").test(fold(name));
 }
 
 /** Whether a namespace glob is broad enough to warrant a warning (`io.github.*`). */

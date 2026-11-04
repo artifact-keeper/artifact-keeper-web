@@ -23,8 +23,10 @@ import type {
   McpPackagePolicy,
   McpPackageRepos,
   McpProbeRemotes,
+  McpRemoteMode,
   McpRemotePosture,
   McpRepositorySettings,
+  McpSandboxIntrospection,
 } from "@/types/mcp";
 import {
   MCP_BACKABLE_REGISTRY_TYPES,
@@ -60,43 +62,82 @@ export interface McpConfigValue {
   mcp_namespace_allow: string[];
   mcp_require_namespace_grant: boolean;
   mcp_remote_posture: McpRemotePosture;
+  mcp_remote_posture_locked: boolean;
+  mcp_remote_mode: McpRemoteMode;
   mcp_server_deny: string[];
-  auto_approve_namespaces: string[];
+  mcp_auto_approve_namespaces: string[];
   mcp_oci_floating_tag_policy: McpOciFloatingTagPolicy;
   mcp_probe_remotes: McpProbeRemotes;
+  mcp_probe_remotes_locked: boolean;
+  mcp_require_oci_label: boolean;
+  mcp_sandbox_introspection: McpSandboxIntrospection;
+  mcp_require_bundle_signature: boolean;
 }
 
 export type McpConfigKey = keyof McpConfigValue;
 
-/** The backend defaults (section 3.3): what an absent setting means. */
+/** The backend defaults (docs/mcp-registry.md): what an absent setting means. */
 export const EMPTY_MCP_CONFIG: McpConfigValue = {
   mcp_package_policy: "own-repos",
   mcp_package_repos: {},
   mcp_namespace_allow: [],
   mcp_require_namespace_grant: false,
   mcp_remote_posture: "approval_required",
+  mcp_remote_posture_locked: false,
+  mcp_remote_mode: "allowlist",
   mcp_server_deny: [],
-  auto_approve_namespaces: [],
+  mcp_auto_approve_namespaces: [],
   mcp_oci_floating_tag_policy: "pin",
   mcp_probe_remotes: "off",
+  mcp_probe_remotes_locked: false,
+  mcp_require_oci_label: false,
+  mcp_sandbox_introspection: "off",
+  mcp_require_bundle_signature: false,
 };
+
+/** The instance-administrator locks; nobody else may write them (403). */
+export const MCP_LOCK_KEYS: ReadonlySet<McpConfigKey> = new Set<McpConfigKey>([
+  "mcp_remote_posture_locked",
+  "mcp_probe_remotes_locked",
+]);
+
+/** Settings every MCP repository type accepts, Virtual included. */
+const MCP_ALL_TYPE_KEYS: readonly McpConfigKey[] = ["mcp_server_deny", "mcp_require_oci_label"];
+
+/**
+ * Settings of the repositories that hold server versions themselves (Local,
+ * Staging, Remote). A Virtual refuses them: it serves what its members serve.
+ */
+const MCP_NON_VIRTUAL_KEYS: readonly McpConfigKey[] = [
+  "mcp_require_namespace_grant",
+  "mcp_probe_remotes",
+  "mcp_probe_remotes_locked",
+  "mcp_sandbox_introspection",
+  "mcp_require_bundle_signature",
+];
 
 /** Settings of a hosted (Local, Staging) MCP repository. */
 export const MCP_HOSTED_KEYS: readonly McpConfigKey[] = [
   "mcp_namespace_allow",
   "mcp_package_policy",
   "mcp_package_repos",
-  "mcp_require_namespace_grant",
+  ...MCP_ALL_TYPE_KEYS,
+  ...MCP_NON_VIRTUAL_KEYS,
 ];
 
-/** Settings of a Remote MCP repository (Phase 2). */
+/** Settings of a Remote MCP repository. */
 export const MCP_REMOTE_KEYS: readonly McpConfigKey[] = [
   "mcp_remote_posture",
-  "mcp_server_deny",
-  "auto_approve_namespaces",
+  "mcp_remote_posture_locked",
+  "mcp_remote_mode",
+  "mcp_auto_approve_namespaces",
   "mcp_oci_floating_tag_policy",
-  "mcp_probe_remotes",
+  ...MCP_ALL_TYPE_KEYS,
+  ...MCP_NON_VIRTUAL_KEYS,
 ];
+
+/** Settings of a Virtual MCP repository: the rest live on its members. */
+export const MCP_VIRTUAL_KEYS: readonly McpConfigKey[] = MCP_ALL_TYPE_KEYS;
 
 /**
  * Phase 1 settings, shown whether or not the response carries them: the
@@ -109,10 +150,14 @@ const MCP_PHASE1_KEYS: ReadonlySet<McpConfigKey> = new Set<McpConfigKey>([
   "mcp_package_repos",
 ]);
 
-/** The settings that apply to a repository type. Virtual has none of its own. */
+/**
+ * The settings the backend accepts for a repository type; any other one is
+ * refused with 400.
+ */
 export function mcpKeysForRepoType(repoType: string): readonly McpConfigKey[] {
   if (repoType === "local" || repoType === "staging") return MCP_HOSTED_KEYS;
   if (repoType === "remote") return MCP_REMOTE_KEYS;
+  if (repoType === "virtual") return MCP_VIRTUAL_KEYS;
   return [];
 }
 
@@ -173,28 +218,6 @@ export function mcpChangedFields(
 }
 
 /**
- * The MCP fields of a create request. A hosted repository always states its
- * package policy (explicit beats the server default in an audit trail) and
- * sends the allowlist and backing map only when filled in; the backing map is
- * meaningless under `open`. Everything else is sent only when it differs
- * from the default, so a backend that predates it is not asked to store it.
- */
-export function buildMcpCreateFields(
-  value: McpConfigValue,
-  repoType: string,
-): Partial<McpRepositorySettings> {
-  if (repoType === "remote") return mcpChangedFields(value, EMPTY_MCP_CONFIG, MCP_REMOTE_KEYS);
-  if (repoType !== "local" && repoType !== "staging") return {};
-  const out: Partial<McpRepositorySettings> = { mcp_package_policy: value.mcp_package_policy };
-  if (value.mcp_namespace_allow.length > 0) out.mcp_namespace_allow = value.mcp_namespace_allow;
-  const repos = pruneRepos(value.mcp_package_repos);
-  if (value.mcp_package_policy === "own-repos" && Object.keys(repos).length > 0) {
-    out.mcp_package_repos = repos;
-  }
-  return out;
-}
-
-/**
  * Settings the create dialog offers for a repository type. The namespace
  * grant requirement (Phase 3) is left to the Settings tab: the backend
  * ignores request fields it does not know, so on a backend that predates it
@@ -206,20 +229,54 @@ export function mcpCreateKeys(repoType: string): ReadonlySet<McpConfigKey> {
 }
 
 /**
+ * The MCP fields of a create request, limited to what the backend accepts for
+ * the type. A hosted repository always states its package policy (explicit
+ * beats the server default in an audit trail) and sends the backing map only
+ * under `own-repos`, where it means something. Everything else is sent only
+ * when it differs from the default, so a backend that predates a setting is
+ * not asked to store it; the locks only when an instance administrator set
+ * them (anyone else gets 403).
+ */
+export function buildMcpCreateFields(
+  value: McpConfigValue,
+  repoType: string,
+  isInstanceAdmin = false,
+): Partial<McpRepositorySettings> {
+  const hosted = repoType === "local" || repoType === "staging";
+  const keys = [...mcpCreateKeys(repoType)].filter(
+    (k) => !MCP_PHASE1_KEYS.has(k) && (isInstanceAdmin || !MCP_LOCK_KEYS.has(k)),
+  );
+  const out: Partial<McpRepositorySettings> = mcpChangedFields(value, EMPTY_MCP_CONFIG, keys);
+  if (!hosted) return out;
+  out.mcp_package_policy = value.mcp_package_policy;
+  if (value.mcp_namespace_allow.length > 0) out.mcp_namespace_allow = value.mcp_namespace_allow;
+  const repos = pruneRepos(value.mcp_package_repos);
+  if (value.mcp_package_policy === "own-repos" && Object.keys(repos).length > 0) {
+    out.mcp_package_repos = repos;
+  }
+  return out;
+}
+
+/**
  * Seed the Remote creation wizard: the official reference servers are
  * pre-approved (section 8, Phase 2) unless the operator already chose a list.
  */
 export function seedMcpRemoteConfig(value: McpConfigValue): McpConfigValue {
-  if (value.auto_approve_namespaces.length > 0) return value;
-  return { ...value, auto_approve_namespaces: [MCP_OFFICIAL_NAMESPACE_GLOB] };
+  if (value.mcp_auto_approve_namespaces.length > 0) return value;
+  return { ...value, mcp_auto_approve_namespaces: [MCP_OFFICIAL_NAMESPACE_GLOB] };
 }
 
-// Validation for a deny / auto-approve glob such as io.github.*/crypto-*.
+/** Longest glob the backend stores (`MAX_GLOB_LEN`). */
+const MCP_GLOB_MAX_LEN = 200;
+
+// Validation for a deny / auto-approve glob such as io.github.*/crypto-*,
+// with the backend's alphabet (`validate_globs`): `*` is the only wildcard.
 export function validateMcpGlob(glob: string): string | null {
   const g = glob.trim();
   if (!g) return "Enter a pattern";
-  if (!/^[A-Za-z0-9.*?/_-]+$/.test(g)) {
-    return "Use letters, digits, dots, hyphens, slashes and the wildcards * and ?";
+  if (g.length > MCP_GLOB_MAX_LEN) return `At most ${MCP_GLOB_MAX_LEN} characters`;
+  if (!/^[A-Za-z0-9.*/_-]+$/.test(g)) {
+    return "Use letters, digits, dots, hyphens, underscores, slashes and the wildcard *";
   }
   return null;
 }

@@ -69,16 +69,19 @@ describe("backendSupportsMcp", () => {
 });
 
 describe("mcpRepoTypeSupport / mcpCreatableRepoTypes", () => {
-  it("assumes hosted only when capabilities are absent", () => {
-    expect(mcpRepoTypeSupport(undefined)).toEqual({ hosted: true, proxy: false });
-    expect(mcpRepoTypeSupport([handler()])).toEqual({ hosted: true, proxy: false });
-    expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: "remote" } })]).proxy).toBe(false);
+  it("offers every type when the handler does not advertise repo_types", () => {
+    expect(mcpRepoTypeSupport(undefined)).toEqual({ hosted: true, proxy: true });
+    expect(mcpRepoTypeSupport([handler()])).toEqual({ hosted: true, proxy: true });
+    expect(mcpRepoTypeSupport([handler({ capabilities: { other: 1 } })]).proxy).toBe(true);
+    // Not a list: not an advertisement either.
+    expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: "remote" } })]).proxy).toBe(true);
   });
 
-  it("believes repo_types listing remote or virtual", () => {
+  it("restricts to hosted only when repo_types is advertised without remote or virtual", () => {
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: ["local", "remote"] } })]).proxy).toBe(true);
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: ["virtual"] } })]).proxy).toBe(true);
     expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: ["local"] } })]).proxy).toBe(false);
+    expect(mcpRepoTypeSupport([handler({ capabilities: { repo_types: [] } })]).proxy).toBe(false);
   });
 
   it("offers proxy types only when supported", () => {
@@ -147,9 +150,20 @@ describe("mcpGlobMatches", () => {
     ["io.github.*", "io.github.foo/bar", true],
     ["com.acme/*", "com.acme/weather", true],
     ["com.acme/*", "xcom.acme/weather", false],
-    ["com.acme/weathe?", "com.acme/weather", true],
-    ["com.acme/weathe?", "com.acme/weatherx", false],
+    // `?` is literal, as in the backend (there is no single-character wildcard).
+    ["com.acme/weathe?", "com.acme/weather", false],
+    ["com.acme/weathe?", "com.acme/weathe?", true],
     ["com.acme/weather", "com.acme/weather/extra", false],
+    // `*` crosses `/`.
+    ["com.*", "com.acme/weather", true],
+    ["*/weather", "com.acme/team/weather", true],
+    ["*", "anything/at/all", true],
+    ["io.github.*/crypto-*", "io.github.x/y/crypto-z", true],
+    ["a**b", "axyzb", true],
+    ["*.typo/*", "com.typo/x", true],
+    // ASCII case-insensitive, both ways.
+    ["com.evil/*", "Com.Evil/x", true],
+    ["COM.EVIL/X", "com.evil/x", true],
     // `.` is literal, not "any character".
     ["com.acme/x", "comXacme/x", false],
     ["a+b(c)/[d]$", "a+b(c)/[d]$", true],
