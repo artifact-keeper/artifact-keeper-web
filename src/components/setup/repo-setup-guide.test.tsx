@@ -347,4 +347,108 @@ describe("RepoSetupGuide", () => {
       expect(claudeMarketplaceName("claudeai-x")).toBe("claudeai-x-ak");
     });
   });
+
+  // MCP registries (artifact-keeper#5253): registry-aware clients read
+  // /mcp/<key>; Claude Code installs per server.
+  describe("mcp", () => {
+    const origin = window.location.origin;
+    const base = `${origin}/mcp/mcp-local`;
+    const mcp = (over: Partial<Repository> = {}) =>
+      makeRepo({ format: "mcp", key: "mcp-local", ...over });
+    const panelText = (name: string) => screen.getByRole("tabpanel", { name }).textContent ?? "";
+
+    it("points the VS Code gallery at a public repository", () => {
+      render(<RepoSetupGuide repo={mcp({ is_public: true, visibility: "public" })} />);
+      for (const tab of ["VS Code", "GitHub Copilot", "Claude Code", "Publish", "Registry API"]) {
+        expect(screen.getByRole("tab", { name: tab })).toBeTruthy();
+      }
+      expect(screen.getByRole("tab", { name: "VS Code", selected: true })).toBeTruthy();
+      const text = panelText("VS Code");
+      expect(text).toContain(`"chat.mcp.gallery.serviceUrl": "${base}"`);
+      expect(text).toContain("McpGalleryServiceUrl");
+      expect(text).toContain("/v0.1/servers");
+    });
+
+    it.each(["private", "internal"] as const)(
+      "explains that the VS Code gallery cannot read a %s repository",
+      (visibility) => {
+        render(<RepoSetupGuide repo={mcp({ visibility })} />);
+        const text = panelText("VS Code");
+        expect(text).toContain("sends no credential");
+        expect(text).toContain(`This repository is ${visibility}`);
+        expect(text).not.toContain(`"chat.mcp.gallery.serviceUrl": "${base}"`);
+      },
+    );
+
+    it("gives Copilot the registry base URL and Claude Code the per-server route", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={mcp({ visibility: "private" })} />);
+      await user.click(screen.getByRole("tab", { name: "GitHub Copilot" }));
+      const copilot = panelText("GitHub Copilot");
+      expect(copilot).toContain(base);
+      expect(copilot).toContain("appends /v0.1/servers");
+      expect(copilot).toContain("CORS");
+      expect(copilot).toContain("This repository is private");
+      await user.click(screen.getByRole("tab", { name: "Claude Code" }));
+      const claude = panelText("Claude Code");
+      expect(claude).toContain("no registry subscription");
+      expect(claude).toContain(".mcp.json");
+      expect(claude).toContain("Install");
+    });
+
+    it("publishes with curl or a hand-written mcp-publisher token, packages first", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={mcp({ mcp_package_policy: "own-repos" })} />);
+      await user.click(screen.getByRole("tab", { name: "Publish" }));
+      const text = panelText("Publish");
+      expect(text).toContain(`curl -X POST ${base}/v0.1/publish`);
+      expect(text).toContain('-H "Authorization: Bearer $AK_TOKEN"');
+      expect(text).toContain("--data @server.json");
+      expect(text).toContain(
+        `{"token": "$AK_TOKEN", "method": "none", "registry": "${base}"}`,
+      );
+      expect(text).toContain("~/.config/mcp-publisher/token.json");
+      expect(text).toContain("mcp-publisher publish");
+      expect(text).toContain(
+        "publish (or pull through a Remote) your package to Artifact Keeper first, then publish the server.json",
+      );
+      for (const code of ["mcp_external_registry", "mcp_package_not_found", "mcp_oci_floating_tag"]) {
+        expect(text).toContain(code);
+      }
+      expect(text).toContain("generic artifact upload routes refuse MCP repositories");
+    });
+
+    it("labels an open catalog instead of the packages-first note", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={mcp({ mcp_package_policy: "open" })} />);
+      await user.click(screen.getByRole("tab", { name: "Publish" }));
+      const text = panelText("Publish");
+      expect(text).toContain("package policy is open");
+      expect(text).not.toContain("your package to Artifact Keeper first");
+    });
+
+    it("replaces Publish with the approval note on a Remote repository", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={mcp({ repo_type: "remote" })} />);
+      expect(screen.queryByRole("tab", { name: "Publish" })).toBeNull();
+      await user.click(screen.getByRole("tab", { name: "Approvals" }));
+      const text = panelText("Approvals");
+      expect(text).toContain("Remote repositories are read-only");
+      expect(text).toContain("curation queue");
+      expect(text).not.toContain("/v0.1/publish");
+    });
+
+    it("reads the registry API with a credential only when the repository is not public", async () => {
+      const user = userEvent.setup();
+      render(<RepoSetupGuide repo={mcp({ visibility: "private" })} />);
+      await user.click(screen.getByRole("tab", { name: "Registry API" }));
+      const text = panelText("Registry API");
+      expect(text).toContain(`curl "${base}/v0.1/servers?search=weather&version=latest"`);
+      expect(text).toContain("Authorization: Bearer $AK_TOKEN");
+      cleanup();
+      render(<RepoSetupGuide repo={mcp({ visibility: "public", is_public: true })} />);
+      await user.click(screen.getByRole("tab", { name: "Registry API" }));
+      expect(panelText("Registry API")).not.toContain("Authorization");
+    });
+  });
 });

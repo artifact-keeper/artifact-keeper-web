@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/common/copy-button";
 import { repodataRootExample } from "@/lib/rpm-repodata";
+import { resolveVisibility } from "@/lib/repo-visibility";
+import { isRemoteMcpRepo, mcpRegistryBaseUrl } from "@/lib/mcp/format";
 
 // -- types --
 
@@ -727,6 +729,140 @@ function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
   ];
 }
 
+/** MCP registry client variants (artifact-keeper#5253). The registry is
+ *  read by clients that know the registry API (the VS Code gallery, GitHub
+ *  Copilot's registry policy, any /v0.1 reader); Claude Code has no registry
+ *  subscription, so its tab points at the per-server Install panel instead. */
+function getMcpClientVariants(repo: Repository): SetupClientVariant[] {
+  const base = mcpRegistryBaseUrl(REGISTRY_URL, repo.key);
+  const visibility = resolveVisibility(repo);
+  const isPublic = visibility === "public";
+  const anonymousNote = `This repository is ${visibility}, and these clients read the registry without an Artifact Keeper credential, so they would see it as empty. Make the repository public to use it here, or install servers one by one from their Install panel in Artifact Keeper.`;
+
+  const vscodeSteps: SetupStep[] = isPublic
+    ? [
+        {
+          title: "Point the VS Code MCP gallery at this registry",
+          description:
+            "Add this to your VS Code user settings (settings.json), or deploy the same URL through the McpGalleryServiceUrl enterprise policy. The gallery reads /v0.1/servers and /versions/latest from it.",
+          code: `{
+  "chat.mcp.gallery.serviceUrl": "${base}"
+}`,
+        },
+      ]
+    : [
+        {
+          title: "The VS Code gallery needs a public repository",
+          description: `The VS Code gallery (chat.mcp.gallery.serviceUrl, or the McpGalleryServiceUrl policy) sends no credential. ${anonymousNote}`,
+        },
+      ];
+
+  const copilotSteps: SetupStep[] = [
+    {
+      title: "Set the organization's MCP registry URL",
+      description:
+        "In the GitHub organization (or enterprise) Copilot policies, set the MCP registry URL to this value. Copilot appends /v0.1/servers itself and checks the CORS headers, which the registry's read routes send.",
+      code: base,
+    },
+    ...(isPublic ? [] : [{ title: "Visibility", description: anonymousNote }]),
+  ];
+
+  const claudeSteps: SetupStep[] = [
+    {
+      title: "Install servers one at a time",
+      description:
+        "Claude Code has no registry subscription: it does not read /v0.1/servers. Browse this repository's servers in Artifact Keeper and use Install on a server for its claude mcp add command, which runs the package through Artifact Keeper. Add --scope project to write the entry to the project's .mcp.json so everyone working in the project gets it.",
+      code: "claude mcp add --scope project <alias> -- <command from the Install panel>",
+    },
+  ];
+
+  const policyStep: SetupStep =
+    repo.mcp_package_policy === "open"
+      ? {
+          title: "Open catalog",
+          description:
+            "This repository's package policy is open: packages[] is stored and served as published, and nothing is resolved or gated.",
+        }
+      : {
+          title: "Publish the package first",
+          description:
+            "Under the own-repos package policy every package must already be in Artifact Keeper: publish (or pull through a Remote) your package to Artifact Keeper first, then publish the server.json. A refused publish answers 422 with one line naming the entry and the fix: mcp_external_registry (no backing repository for the registryType, mcpb included, or a registryBaseUrl or image host outside this instance), mcp_package_not_found (that exact version, tag or digest is not in the backing repository; pull it through first), mcp_package_version_unpinned (an npm, PyPI, NuGet or Cargo entry without version), mcp_oci_floating_tag (:latest or no tag), mcp_oci_legacy_fields (version, registryBaseUrl or fileSha256 on an OCI entry) and mcp_oci_not_an_image.",
+        };
+
+  const publishVariant: SetupClientVariant = isRemoteMcpRepo(repo)
+    ? {
+        key: "publish",
+        label: "Approvals",
+        steps: [
+          {
+            title: "Remote repositories are read-only",
+            description:
+              "A Remote MCP repository serves servers from its upstream registry and accepts no publishes. Deny by default: an upstream server stays invisible to clients until an administrator approves it in the curation queue.",
+          },
+        ],
+      }
+    : {
+        key: "publish",
+        label: "Publish",
+        steps: [
+          {
+            title: "Publish a server.json with curl",
+            description:
+              "Needs repository write; an API token also needs the write:artifacts scope. Any Artifact Keeper credential works, there is no separate registry login.",
+            code: `curl -X POST ${base}/v0.1/publish \\
+  -H "Authorization: Bearer $AK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  --data @server.json`,
+          },
+          {
+            title: "Or publish with mcp-publisher",
+            description:
+              "Write mcp-publisher's token file yourself with an Artifact Keeper API token instead of running mcp-publisher login.",
+            code: `mkdir -p ~/.config/mcp-publisher
+cat > ~/.config/mcp-publisher/token.json <<EOF
+{"token": "$AK_TOKEN", "method": "none", "registry": "${base}"}
+EOF
+mcp-publisher publish`,
+          },
+          policyStep,
+          {
+            title: "Versions are write-once",
+            description:
+              "Republishing a version answers 409; publish a new version instead, and deprecate or delete old ones through the status route. Server versions enter only through /v0.1/publish: the generic artifact upload routes refuse MCP repositories.",
+            code: `curl -X PATCH ${base}/v0.1/servers/<namespace>%2F<name>/versions/<version>/status \\
+  -H "Authorization: Bearer $AK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status": "deprecated", "statusMessage": "Use 2.0.0"}'`,
+          },
+        ],
+      };
+
+  const auth = isPublic ? "" : ` \\\n  -H "Authorization: Bearer $AK_TOKEN"`;
+  const apiVariant: SetupClientVariant = {
+    key: "api",
+    label: "Registry API",
+    steps: [
+      {
+        title: "Search the registry",
+        description: `Any client of the MCP registry API reads ${base}/v0.1/servers (/v0 is an alias). search needs at least 3 characters.${isPublic ? "" : " This repository is not public, so send a credential."}`,
+        code: `curl "${base}/v0.1/servers?search=weather&version=latest"${auth}`,
+      },
+      {
+        title: "Read one server's latest version",
+        code: `curl "${base}/v0.1/servers/<namespace>%2F<name>/versions/latest"${auth}`,
+      },
+    ],
+  };
+
+  return [
+    { key: "vscode", label: "VS Code", steps: vscodeSteps },
+    { key: "copilot", label: "GitHub Copilot", steps: copilotSteps },
+    { key: "claude", label: "Claude Code", steps: claudeSteps },
+    publishVariant,
+    apiVariant,
+  ];
+}
+
 /** Generate repo-specific setup content based on format. JVM, npm, PyPI, and
  *  conda formats return a set of client variants (rendered as tabs); all other
  *  formats return a flat list of steps. */
@@ -765,6 +901,9 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
       variants: getAgentPluginsClientVariants(repo),
       defaultKey: "claude",
     };
+  }
+  if (repo.format === "mcp") {
+    return { kind: "variants", variants: getMcpClientVariants(repo), defaultKey: "vscode" };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
 }

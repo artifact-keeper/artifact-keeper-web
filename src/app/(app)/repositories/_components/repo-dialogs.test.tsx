@@ -6,6 +6,23 @@ import userEvent from '@testing-library/user-event';
 import { RepoDialogs } from './repo-dialogs';
 import type { FormatHandler } from '@/lib/api/format-handlers';
 import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
+import type { Repository } from '@/types';
+import { MCP_OFFICIAL_NAMESPACE_GLOB, MCP_OFFICIAL_REGISTRY_URL } from '@/lib/mcp/format';
+
+// The dialog reads GET /api/v1/formats (to offer `mcp` only on a backend that
+// has it) and the repository list (MCP backing pickers) through hooks.
+const formatHandlersState = vi.hoisted(() => ({
+  data: undefined as import('@/lib/api/format-handlers').FormatHandler[] | undefined,
+}));
+vi.mock('@/hooks/use-format-handlers', () => ({
+  useFormatHandlers: () => formatHandlersState,
+}));
+const reposState = vi.hoisted(() => ({
+  data: undefined as { items: import('@/types').Repository[] } | undefined,
+}));
+vi.mock('@/hooks/use-repositories', () => ({
+  useRepositories: () => reposState,
+}));
 
 const depthSupport = vi.hoisted(() => ({
   data: { supported: true, min: 0, max: 1023, default: 0 } as RpmRepodataCapabilities | undefined,
@@ -93,6 +110,8 @@ beforeEach(() => {
   depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
   depthSupport.error = null;
   depthSupport.isLoading = false;
+  formatHandlersState.data = undefined;
+  reposState.data = undefined;
 });
 
 const defaultProps = {
@@ -2473,5 +2492,159 @@ describe('RepoDialogs - npm scope policy (create)', () => {
       npm_allowed_name_patterns: [],
       npm_allow_unscoped: false,
     });
+  });
+});
+
+// MCP registry (artifact-keeper#5253): the format is offered only when the
+// backend lists it, with the repository types its handler accepts.
+describe('RepoDialogs - MCP registry (create)', () => {
+  const handler = (format_key: string, capabilities: Record<string, unknown> | null = null): FormatHandler => ({
+    id: `h-${format_key}`,
+    format_key,
+    display_name: format_key,
+    description: null,
+    extensions: [],
+    handler_type: 'Core',
+    is_enabled: true,
+    priority: 0,
+    plugin_id: null,
+    capabilities,
+  });
+  const repo = (key: string, format: string, repo_type = 'local') =>
+    ({ id: key, key, name: key, format, repo_type }) as unknown as Repository;
+
+  const selects = () => within(screen.getByRole('dialog')).getAllByTestId('mock-select') as HTMLSelectElement[];
+  const optionValues = (el: HTMLSelectElement) => Array.from(el.options).map((o) => o.value);
+
+  async function fillKeyAndName(user: ReturnType<typeof userEvent.setup>) {
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'mcp-local');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'MCP Local');
+  }
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it('hides the MCP option while the format list loads and when the backend lacks mcp', () => {
+    render(<RepoDialogs {...defaultProps} />);
+    expect(optionValues(selects()[0])).not.toContain('mcp');
+    cleanup();
+    formatHandlersState.data = [handler('npm')];
+    render(<RepoDialogs {...defaultProps} />);
+    expect(optionValues(selects()[0])).not.toContain('mcp');
+  });
+
+  it('offers MCP Registry and limits it to Local and Staging on a Phase 1 backend', () => {
+    formatHandlersState.data = [handler('mcp')];
+    render(<RepoDialogs {...defaultProps} />);
+    const format = selects()[0];
+    expect(Array.from(format.options).find((o) => o.value === 'mcp')?.textContent).toBe('MCP Registry');
+    expect(optionValues(selects()[1])).toEqual(['local', 'staging', 'remote', 'virtual']);
+    fireEvent.change(format, { target: { value: 'mcp' } });
+    expect(optionValues(selects()[1])).toEqual(['local', 'staging']);
+    expect(screen.getByTestId('mcp-type-hint').textContent).toContain('server.json');
+    expect(screen.getByText('MCP Options')).toBeTruthy();
+  });
+
+  it('falls back to Local when switching a Remote form to mcp', () => {
+    formatHandlersState.data = [handler('mcp')];
+    render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    expect(selects()[1].value).toBe('local');
+  });
+
+  it('submits the hosted settings: policy, allowlist and a backing repository of the right format', async () => {
+    formatHandlersState.data = [handler('mcp')];
+    reposState.data = { items: [repo('npm-local', 'npm'), repo('pypi-remote', 'pypi', 'remote')] };
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    await fillKeyAndName(user);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+
+    await user.type(screen.getByLabelText('Namespace allowlist'), 'com.acme{Enter}');
+    const npmPicker = within(screen.getByTestId('mcp-backing-npm')).getByTestId('mock-select') as HTMLSelectElement;
+    expect(optionValues(npmPicker)).toEqual(['__none__', 'npm-local']);
+    fireEvent.change(npmPicker, { target: { value: 'npm-local' } });
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+    const body = onCreateSubmit.mock.calls[0][0];
+    expect(body).toMatchObject({
+      format: 'mcp',
+      repo_type: 'local',
+      mcp_package_policy: 'own-repos',
+      mcp_namespace_allow: ['com.acme'],
+      mcp_package_repos: { npm: 'npm-local' },
+    });
+    expect(body).not.toHaveProperty('mcp_remote_posture');
+    expect(body).not.toHaveProperty('mcp_require_namespace_grant');
+  });
+
+  it('sends an open catalog without backing repositories', async () => {
+    formatHandlersState.data = [handler('mcp')];
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    await fillKeyAndName(user);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    await user.click(screen.getByLabelText(/Open catalog/));
+    expect(screen.queryByTestId('mcp-backing-npm')).toBeNull();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+    const body = onCreateSubmit.mock.calls[0][0];
+    expect(body.mcp_package_policy).toBe('open');
+    expect(body).not.toHaveProperty('mcp_package_repos');
+    expect(body).not.toHaveProperty('mcp_namespace_allow');
+  });
+
+  it('pre-fills a Remote with the official registry and pre-ticks its reference servers', async () => {
+    formatHandlersState.data = [handler('mcp', { repo_types: ['local', 'staging', 'remote', 'virtual'] })];
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    await fillKeyAndName(user);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    expect(optionValues(selects()[1])).toEqual(['local', 'staging', 'remote', 'virtual']);
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+
+    expect((screen.getByLabelText('Upstream URL') as HTMLInputElement).value).toBe(MCP_OFFICIAL_REGISTRY_URL);
+    const preset = screen.getByRole('checkbox', { name: /official reference servers/ }) as HTMLInputElement;
+    expect(preset.checked).toBe(true);
+    expect(screen.getByTestId('mcp-type-hint').textContent).toContain('deny by default');
+    expect(screen.queryByLabelText('Namespace allowlist')).toBeNull();
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+    const body = onCreateSubmit.mock.calls[0][0];
+    expect(body).toMatchObject({
+      format: 'mcp',
+      repo_type: 'remote',
+      upstream_url: MCP_OFFICIAL_REGISTRY_URL,
+      auto_approve_namespaces: [MCP_OFFICIAL_NAMESPACE_GLOB],
+    });
+    expect(body).not.toHaveProperty('mcp_package_policy');
+    expect(body).not.toHaveProperty('mcp_remote_posture');
+  });
+
+  it('drops the pre-ticked namespace when the operator unticks it', async () => {
+    formatHandlersState.data = [handler('mcp', { repo_types: ['remote'] })];
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    await fillKeyAndName(user);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    fireEvent.change(selects()[1], { target: { value: 'remote' } });
+    await user.click(screen.getByRole('checkbox', { name: /official reference servers/ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create$/i }));
+    expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('auto_approve_namespaces');
+  });
+
+  it('describes a Virtual MCP repository without settings of its own', () => {
+    formatHandlersState.data = [handler('mcp', { repo_types: ['virtual'] })];
+    render(<RepoDialogs {...defaultProps} />);
+    fireEvent.change(selects()[0], { target: { value: 'mcp' } });
+    fireEvent.change(selects()[1], { target: { value: 'virtual' } });
+    expect(screen.getByText(/policies live on each member/)).toBeTruthy();
   });
 });

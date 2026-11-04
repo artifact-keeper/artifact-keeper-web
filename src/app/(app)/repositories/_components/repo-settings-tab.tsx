@@ -37,6 +37,8 @@ import type {
   CreateRepositoryRequest,
   RepositoryVisibility,
 } from "@/types";
+import type { McpRepositorySettings } from "@/types/mcp";
+import { hasMcpConfig } from "@/lib/mcp/format";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { VisibilitySelect, resolveVisibility } from "./visibility-select";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
@@ -57,6 +59,8 @@ import {
   RpmRepodataDepthField,
   DebianConfigFields,
   NpmScopePolicyFields,
+  McpSettingsSection,
+  useMcpSettingsForm,
   buildDebianConfigFields,
   buildNpmScopePolicyFields,
   formatList,
@@ -145,7 +149,7 @@ function formatTtlHint(seconds: number): string {
   return parts.join(" ");
 }
 
-export interface UpdateRepositoryFields {
+export interface UpdateRepositoryFields extends Partial<McpRepositorySettings> {
   key?: string;
   name?: string;
   description?: string;
@@ -322,6 +326,12 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       (k) => npmScopePolicy[k] !== npmDefaults[k]
     );
 
+  // MCP registry settings (artifact-keeper#5253): only changed keys are sent.
+  const mcpForm = useMcpSettingsForm(repository);
+  const mcpChanged = mcpForm.changed;
+  const mcpChangedFields = mcpForm.changedFields;
+  const resetMcp = mcpForm.reset;
+
   // -- Proxy cache TTL state (#448) --
   // Only meaningful for Remote (proxy) repos; the section is hidden for
   // Local / Virtual / Staging because writes against those types are
@@ -393,6 +403,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (currentQuotaBytes !== originalQuotaBytes) return true;
     if (cacheTtlChanged) return true;
     if (rpmChanged || debianChanged || npmChanged || depthChanged) return true;
+    if (mcpChanged) return true;
     return false;
   }, [
     form,
@@ -405,6 +416,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     depthChanged,
     debianChanged,
     npmChanged,
+    mcpChanged,
   ]);
 
   // -- Save mutation --
@@ -427,6 +439,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       setRpmClear(false);
       setDebianOverrides({});
       setNpmOverrides({});
+      resetMcp();
       toast.success("Repository settings saved");
     },
     onError: mutationErrorToast("Failed to save repository settings"),
@@ -492,6 +505,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (isNpmScoped && npmChanged) {
       Object.assign(fields, buildNpmScopePolicyFields(npmScopePolicy));
     }
+    if (mcpChanged) Object.assign(fields, mcpChangedFields);
 
     const promises: Promise<unknown>[] = [];
     if (Object.keys(fields).length > 0) {
@@ -525,6 +539,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     isNpmScoped,
     npmChanged,
     npmScopePolicy,
+    mcpChanged,
+    mcpChangedFields,
     depthInvalid,
     depthChanged,
     parsedDepth,
@@ -539,7 +555,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     setRpmClear(false);
     setDebianOverrides({});
     setNpmOverrides({});
-  }, []);
+    resetMcp();
+  }, [resetMcp]);
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
   // Seeded from the persisted `quarantine_enabled` / `quarantine_duration_minutes`
@@ -1128,6 +1145,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               onChange={(v) => setNpmOverrides(v)}
             />
           </section>
+          <Separator />
+        </>
+      )}
+
+      {/* -- MCP Registry Section (artifact-keeper#5253; admin-only editing) -- */}
+      {hasMcpConfig(repository.format) && (
+        <>
+          <McpSettingsSection repository={repository} form={mcpForm} readOnly={!isRepoAdmin} />
           <Separator />
         </>
       )}

@@ -290,6 +290,13 @@ vi.mock("@/components/ui/separator", () => ({
   Separator: () => <hr />,
 }));
 
+// Candidate backing repositories for the MCP section (artifact-keeper#5253).
+vi.mock("@/hooks/use-repositories", () => ({
+  useRepositories: () => ({
+    data: { items: [{ key: "npm-local", format: "npm", repo_type: "local" }] },
+  }),
+}));
+
 // The allowlist section has its own suite (conda-allowlist-settings.test.tsx);
 // here only where it appears matters.
 vi.mock("./conda-allowlist-settings", () => ({
@@ -2731,5 +2738,100 @@ describe("RepoSettingsTab - conda allowlist section (#971)", () => {
       wrapper: createWrapper(),
     });
     expect(!!screen.queryByTestId("allowlist-section-stub")).toBe(shown);
+  });
+});
+
+// MCP registry settings (artifact-keeper#5253): admins edit them in the one
+// save bar, the update body carries only the changed MCP keys, and settings
+// the backend does not report stay hidden.
+describe("RepoSettingsTab - MCP registry", () => {
+  const mcpRepo: Repository = {
+    ...baseRepo,
+    key: "mcp-local",
+    name: "MCP Local",
+    format: "mcp",
+    repo_type: "local",
+    mcp_package_policy: "own-repos",
+    mcp_namespace_allow: ["com.acme"],
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockListPolicies.mockResolvedValue([]);
+    mockUpdate.mockResolvedValue(mcpRepo);
+  });
+  afterEach(() => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+  });
+  const show = (repo: Repository) =>
+    render(<RepoSettingsTab repository={repo} />, { wrapper: createWrapper() });
+
+  it("is absent for other formats", () => {
+    show(baseRepo);
+    expect(screen.queryByRole("heading", { name: "MCP Registry" })).toBeNull();
+  });
+
+  it("saves only the changed MCP keys and resets after the save", async () => {
+    const user = userEvent.setup();
+    show(mcpRepo);
+    expect(screen.getByRole("heading", { name: "MCP Registry" })).toBeTruthy();
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+    await user.type(screen.getByLabelText("Namespace allowlist"), "org.example{Enter}");
+    const npm = screen.getByRole("option", { name: "npm-local (local)" }).closest("select")!;
+    fireEvent.change(npm, { target: { value: "npm-local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-local", {
+        mcp_namespace_allow: ["com.acme", "org.example"],
+        mcp_package_repos: { npm: "npm-local" },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("You have unsaved changes")).toBeNull());
+  });
+
+  it("discards MCP edits", async () => {
+    const user = userEvent.setup();
+    show(mcpRepo);
+    await user.click(screen.getByRole("button", { name: "Remove com.acme" }));
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Remove com.acme" })).toBeTruthy();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("is read-only for non-admin users", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show(mcpRepo);
+    expect(screen.getByText("Only an administrator can change these settings.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove com.acme" })).toBeNull();
+    expect(screen.queryByLabelText("Namespace allowlist")).toBeNull();
+  });
+
+  it("shows the namespace-grant switch only when the backend reports it", async () => {
+    show(mcpRepo);
+    expect(screen.queryByLabelText("Require a namespace grant to publish")).toBeNull();
+    cleanup();
+    show({ ...mcpRepo, mcp_require_namespace_grant: false });
+    fireEvent.click(screen.getByLabelText("Require a namespace grant to publish"));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-local", { mcp_require_namespace_grant: true }),
+    );
+  });
+
+  it("shows only the Remote settings the backend reports, with their locks", () => {
+    show({
+      ...mcpRepo,
+      key: "mcp-remote",
+      repo_type: "remote",
+      upstream_url: "https://registry.modelcontextprotocol.io",
+      mcp_remote_posture: "approval_required",
+      mcp_remote_posture_locked: true,
+    });
+    expect(screen.getByText("Remote posture")).toBeTruthy();
+    expect(screen.getByTestId("mcp-lock-indicator")).toBeTruthy();
+    expect(screen.queryByLabelText("Namespace allowlist")).toBeNull();
+    expect(screen.queryByLabelText("Deny")).toBeNull();
+    expect(screen.queryByText("Remote probe")).toBeNull();
   });
 });

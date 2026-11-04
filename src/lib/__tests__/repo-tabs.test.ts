@@ -25,6 +25,8 @@ describe("isPackageOrientedFormat", () => {
     ["helm", true],
     ["rpm", true],
     ["debian", true],
+    // One catalog row per MCP server, versions under it (artifact-keeper#5253).
+    ["mcp", true],
     // NOT package-oriented (artifact / image / blob)
     ["generic", false],
     ["docker", false],
@@ -43,6 +45,7 @@ describe("defaultRepoTab", () => {
     expect(defaultRepoTab("npm")).toBe("packages");
     expect(defaultRepoTab("pypi")).toBe("packages");
     expect(defaultRepoTab("jupyter")).toBe("packages");
+    expect(defaultRepoTab("mcp")).toBe("packages");
   });
 
   it("defaults RAW/Generic and container formats to the Artifacts tab", () => {

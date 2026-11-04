@@ -15,6 +15,9 @@
  *  - RPM curation trusted GPG key (#2568)
  *  - Advanced Debian/APT config + Release metadata (#2407/#2460/#2489/#2459)
  *  - npm scope policy (#2424)
+ *
+ * The MCP registry options (artifact-keeper#5253) live in
+ * `mcp-config-fields.tsx` and are re-exported here with the other groups.
  */
 
 import type { DebianRepoConfig } from "@/types";
@@ -24,6 +27,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { repodataRootExample, type RpmRepodataCapabilities } from "@/lib/rpm-repodata";
+
+export {
+  McpConfigFields,
+  McpSettingsSection,
+  useMcpSettingsForm,
+  buildMcpCreateFields,
+  seedMcpRemoteConfig,
+  EMPTY_MCP_CONFIG,
+  type McpConfigValue,
+} from "./mcp-config-fields";
 
 // ---------------------------------------------------------------------------
 // Value shapes (string-based so every field stays a controlled input)
