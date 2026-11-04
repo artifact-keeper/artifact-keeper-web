@@ -295,7 +295,7 @@ export function DashboardContent() {
     queryKey: mcpKeys.pendingCount,
     queryFn: async () => {
       const remotes = await repositoriesApi.list({ format: "mcp", repo_type: "remote", per_page: 100 });
-      return mcpApi.pendingReviewCount(remotes.items.map((r) => r.key));
+      return mcpApi.pendingReviewCount((remotes?.items ?? []).map((r) => r.key));
     },
     enabled: !!user?.is_admin,
   });
