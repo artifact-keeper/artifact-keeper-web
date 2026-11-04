@@ -1,4 +1,5 @@
-import type { McpCatalogItem, McpCatalogPin, McpCatalogVersion } from "@/types/mcp";
+import { riskLevel, type McpRiskLevel } from "@/lib/mcp/risk";
+import type { McpCatalogItem, McpCatalogPin, McpCatalogSummary, McpCatalogVersion } from "@/types/mcp";
 
 /**
  * Pure formatting for MCP approval-queue rows (artifact-keeper#5253, lens-ui
@@ -57,4 +58,48 @@ export function unresolvedNote(item: McpCatalogItem): string | null {
   const stuck = item.ingested.filter((v) => v.unresolved.length > 0);
   if (stuck.length === 0) return null;
   return `${plural(stuck.length, "version")} with unresolved packages (${stuck.map((v) => v.version).join(", ")})`;
+}
+
+/** "1 blocking, 2 to review, 1 warning", or null when the lint found nothing (or is not shown). */
+export function lintSummary(lint: McpCatalogSummary["lint"]): string | null {
+  if (!lint) return null;
+  const parts: string[] = [];
+  if (lint.block > 0) parts.push(`${lint.block} blocking`);
+  if (lint.review > 0) parts.push(`${lint.review} to review`);
+  if (lint.warn > 0) parts.push(plural(lint.warn, "warning"));
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** Transport chips of a catalog row: `stdio·npm`, `http`, ... from the cached summary. */
+export function summaryTransports(summary: McpCatalogSummary): { key: string; label: string }[] {
+  const out: { key: string; label: string }[] = [];
+  const local = summary.transports.includes("stdio");
+  if (local) {
+    for (const t of summary.registryTypes) out.push({ key: `stdio:${t}`, label: `stdio·${t}` });
+    if (summary.registryTypes.length === 0) out.push({ key: "stdio", label: "stdio" });
+  }
+  for (const t of summary.transports) {
+    if (t === "stdio") continue;
+    out.push({ key: `remote:${t}`, label: t === "streamable-http" ? "http" : t });
+  }
+  return out;
+}
+
+/**
+ * Risk of a queued name from what the catalog knows before approval: the
+ * cached summary of its latest upstream document (local execution, lint
+ * verdict), a lookalike flag and the upstream status. Same weights and
+ * levels as the server detail's risk reading; `null` before the first sync
+ * saw a document.
+ */
+export function catalogRisk(item: McpCatalogItem): { level: McpRiskLevel; score: number } | null {
+  const s = item.summary;
+  if (!s) return null;
+  let score = 0;
+  if (s.transports.includes("stdio")) score += 1;
+  if (s.lint && s.lint.block > 0) score += 4;
+  else if (s.lint && s.lint.review > 0) score += 2;
+  if (item.flags?.typosquat) score += 3;
+  if (item.upstreamStatus === "deprecated" || item.upstreamStatus === "deleted") score += 3;
+  return { level: riskLevel(score), score };
 }

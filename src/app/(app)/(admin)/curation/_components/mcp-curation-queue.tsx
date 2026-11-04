@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Ban, Check, FolderCheck, RefreshCw } from "lucide-react";
+import { AlertCircle, Ban, Check, FolderCheck, FolderX, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { mcpApi } from "@/lib/api/mcp";
@@ -20,8 +20,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReasonDialog } from "./reason-dialog";
 import { McpNamespaceApproveDialog } from "./mcp-namespace-approve-dialog";
 import { McpUpstreamCatalog } from "./mcp-upstream-catalog";
-import { McpCatalogNotes, McpCatalogToolDiff, McpNotAvailable, McpReviewStatusBadge } from "./mcp-queue-parts";
-import { driftedPins, needsNameDecision, plural, reviewVersion } from "./mcp-review-format";
+import {
+  McpCatalogNotes,
+  McpCatalogToolDiff,
+  McpNotAvailable,
+  McpReviewStatusBadge,
+  McpRiskText,
+  McpSummaryChips,
+} from "./mcp-queue-parts";
+import { catalogRisk, driftedPins, lintSummary, needsNameDecision, plural, reviewVersion } from "./mcp-review-format";
 
 const REVIEW_TABS = ["queue", "approved", "blocked"] as const;
 type ReviewTab = (typeof REVIEW_TABS)[number];
@@ -65,7 +72,7 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
   const [bulkAction, setBulkAction] = useState<Action | null>(null);
   const [rowAction, setRowAction] = useState<{ action: Action; target: Target } | null>(null);
   const [pinVersion, setPinVersion] = useState(false);
-  const [namespaceOpen, setNamespaceOpen] = useState(false);
+  const [patternAction, setPatternAction] = useState<Action | null>(null);
 
   const results = useQueries({
     queries: REVIEW_TABS.map((t) => ({
@@ -100,25 +107,24 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
     onError: mutationErrorToast("Decision failed"),
   });
 
-  // The management API decides one row at a time (repository admins included);
-  // the bulk action fans out and reports what went through.
+  // `POST /catalog/bulk-decide` (repository admins included), one call for the selection.
   const bulkMutation = useMutation({
-    mutationFn: async ({ action, ids, why }: { action: Action; ids: string[]; why: string }) => {
-      const settled = await Promise.allSettled(ids.map((id) => mcpApi.decide(repoKey, id, action, why)));
-      return { ok: settled.filter((s) => s.status === "fulfilled").length, failed: settled.filter((s) => s.status === "rejected").length };
-    },
-    onSuccess: ({ ok, failed }, { action }) => {
+    mutationFn: ({ action, ids, why }: { action: Action; ids: string[]; why: string }) =>
+      mcpApi.bulkDecide(repoKey, ids, action, why || undefined),
+    onSuccess: (r, { action }) => {
       done();
-      toast.success(`${plural(ok, "server")} ${action === "approve" ? "approved" : "blocked"}`);
-      if (failed > 0) toast.error(`${plural(failed, "server")} could not be changed`);
+      toast.success(`${plural(r.decided.length, "server")} ${action === "approve" ? "approved" : "blocked"}`);
+      const left: string[] = [];
+      if (r.unchanged.length > 0) left.push(`${r.unchanged.length} already ${action === "approve" ? "approved" : "blocked"}`);
+      if (r.skippedDenied.length > 0) left.push(`${r.skippedDenied.length} refused by a deny glob`);
+      if (r.notFound.length > 0) left.push(`${r.notFound.length} no longer in the catalog`);
+      if (left.length > 0) toast.warning(`Left alone: ${left.join("; ")}`);
     },
     onError: mutationErrorToast("Bulk action failed"),
   });
 
   if (byTab.queue.data === null) return <McpNotAvailable what="The MCP approval queue" />;
 
-  const pendingNames = (byTab.queue.data?.items ?? []).filter((r) => r.status === "pending").map((r) => r.name);
-  const reviewNames = (byTab.queue.data?.items ?? []).filter((r) => r.status === "review").map((r) => r.name);
   const reviewTab = tab === "catalog" ? null : tab;
   const rowPinVersion = rowAction && !rowAction.target.pin ? reviewVersion(rowAction.target.item) : null;
   const rowLabel = rowAction ? `${rowAction.target.item.name}${rowAction.target.pin ? ` ${rowAction.target.pin.version}` : ""}` : "";
@@ -164,8 +170,11 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
                   )}
                 </>
               )}
-              <Button size="sm" variant="outline" onClick={() => setNamespaceOpen(true)}>
+              <Button size="sm" variant="outline" onClick={() => setPatternAction("approve")}>
                 <FolderCheck className="size-4" /> Approve namespace
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setPatternAction("block")}>
+                <FolderX className="size-4" /> Block namespace
               </Button>
             </div>
           )}
@@ -239,10 +248,11 @@ export function McpCurationQueue({ repoKey }: { repoKey: string }) {
 
       <McpNamespaceApproveDialog
         repoKey={repoKey}
-        open={namespaceOpen}
-        onOpenChange={setNamespaceOpen}
-        pendingNames={pendingNames}
-        reviewNames={reviewNames}
+        action={patternAction ?? "approve"}
+        open={patternAction !== null}
+        onOpenChange={(o) => {
+          if (!o) setPatternAction(null);
+        }}
       />
     </div>
   );
@@ -317,7 +327,8 @@ function ReviewList({ repoKey, tab, result, selected, onSelect, onAction }: Revi
                 />
               </th>
               <th className="px-3 py-2 font-medium">Server</th>
-              <th className="px-3 py-2 font-medium">Signals</th>
+              <th className="px-3 py-2 font-medium">Risk</th>
+              <th className="px-3 py-2 font-medium">Findings</th>
               <th className="px-3 py-2 font-medium">First seen</th>
               <th className="px-3 py-2" />
             </tr>
@@ -394,6 +405,8 @@ function ReviewRow({
   onAction: (action: Action, target: Target) => void;
 }) {
   const drifted = tab === "queue" ? driftedPins(item) : [];
+  const risk = catalogRisk(item);
+  const lint = lintSummary(item.summary?.lint);
   const nameRow = tab !== "queue" || needsNameDecision(item);
   return (
     <>
@@ -412,9 +425,24 @@ function ReviewRow({
           </div>
           {item.title && <p className="mt-0.5 text-xs font-medium">{item.title}</p>}
           {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+          {item.summary && (
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              <McpSummaryChips summary={item.summary} />
+            </div>
+          )}
+          <div className="text-xs">
+            <McpCatalogNotes item={item} />
+          </div>
+        </td>
+        <td className="px-3 py-2 align-top">
+          {risk ? <McpRiskText level={risk.level} score={risk.score} /> : <span className="text-xs text-muted-foreground">unknown</span>}
         </td>
         <td className="px-3 py-2 align-top text-xs">
-          <McpCatalogNotes item={item} />
+          {lint && (
+            <p className={item.summary?.lint && item.summary.lint.block > 0 ? "text-destructive" : "text-amber-700 dark:text-amber-400"}>
+              Lint ({item.summary?.lint?.version}): {lint}
+            </p>
+          )}
           <McpCatalogToolDiff repoKey={repoKey} item={item} />
         </td>
         <td className="px-3 py-2 align-top text-xs text-muted-foreground">
@@ -437,7 +465,7 @@ function ReviewRow({
       {drifted.map((pin) => (
         <tr key={pin.id} className="bg-amber-50/40 dark:bg-amber-950/10">
           <td />
-          <td className="px-3 py-2 align-top text-xs" colSpan={3}>
+          <td className="px-3 py-2 align-top text-xs" colSpan={4}>
             <span className="font-mono">
               {item.name} {pin.version}
             </span>

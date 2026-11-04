@@ -308,6 +308,20 @@ const READERS: { name: string; call: () => Promise<unknown>; url: string; ok: un
     expected: { holds: [], count: 0, nextCursor: undefined },
   },
   {
+    name: "pendingSummary",
+    call: () => mcpApi.pendingSummary(),
+    url: "/api/v1/mcp/pending-summary",
+    ok: { pending: 2, review: 1, drifted: 1, total: 4, repositories: [{ key: "a", pending: 2, review: 1, drifted: 1 }] },
+    expected: { pending: 2, review: 1, drifted: 1, total: 4, repositories: [{ key: "a", pending: 2, review: 1, drifted: 1 }] },
+  },
+  {
+    name: "pendingSummary (empty answer)",
+    call: () => mcpApi.pendingSummary(),
+    url: "/api/v1/mcp/pending-summary",
+    ok: {},
+    expected: { pending: 0, review: 0, drifted: 0, total: 0, repositories: [] },
+  },
+  {
     name: "capabilities",
     call: () => mcpApi.capabilities("r", NAME, "1.0.0", { snapshot: "s1", source: "remote_probe", limit: 3 }),
     url: `${REG}/versions/1.0.0/capabilities?snapshot=s1&source=remote_probe&limit=3`,
@@ -406,40 +420,11 @@ describe("Phase 2/3 readers", () => {
   });
 });
 
-describe("pendingReviewCount", () => {
-  it("sums pending and review over every Remote that serves the catalog", async () => {
-    mockApiFetch
-      .mockResolvedValueOnce({ items: [], counts: { pending: 2, review: 1, approved: 9 } })
-      .mockRejectedValueOnce(new ApiError(404, ""))
-      .mockRejectedValueOnce(new ApiError(500, ""))
-      .mockResolvedValueOnce({ items: [], counts: { review: 4 } });
-    expect(await mcpApi.pendingReviewCount(["a", "b", "c", "d e"])).toBe(7);
-    expect(mockApiFetch.mock.calls.map((c) => c[0])).toEqual([
-      "/api/v1/repositories/a/mcp/catalog?queue=true&limit=1",
-      "/api/v1/repositories/b/mcp/catalog?queue=true&limit=1",
-      "/api/v1/repositories/c/mcp/catalog?queue=true&limit=1",
-      "/api/v1/repositories/d%20e/mcp/catalog?queue=true&limit=1",
-    ]);
-  });
-
-  it("is null without keys or when no Remote serves the catalog", async () => {
-    expect(await mcpApi.pendingReviewCount([])).toBeNull();
-    expect(mockApiFetch).not.toHaveBeenCalled();
-    reject(404);
-    expect(await mcpApi.pendingReviewCount(["a"])).toBeNull();
-  });
-
-  it("counts a catalog without counts as zero", async () => {
-    mockApiFetch.mockResolvedValueOnce({ items: [] });
-    expect(await mcpApi.pendingReviewCount(["a"])).toBe(0);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Writers
 // ---------------------------------------------------------------------------
 
-const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method: string; body?: unknown }[] = [
+const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method: string; body?: unknown; normalised?: true }[] = [
   {
     name: "decide approve",
     call: () => mcpApi.decide("r", "id 1", "approve", "ok"),
@@ -479,6 +464,7 @@ const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method
     name: "bulkApprovePattern",
     call: () => mcpApi.bulkApprovePattern("r", { pattern: "com.acme/*", includeReview: true, reason: "trusted" }),
     url: `${MGMT}/catalog/bulk-approve`,
+    normalised: true,
     method: "POST",
     body: { pattern: "com.acme/*", includeReview: true, reason: "trusted" },
   },
@@ -486,8 +472,49 @@ const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method
     name: "bulkApprovePattern (defaults)",
     call: () => mcpApi.bulkApprovePattern("r", { pattern: "com.acme/*" }),
     url: `${MGMT}/catalog/bulk-approve`,
+    normalised: true,
     method: "POST",
     body: { pattern: "com.acme/*", includeReview: false },
+  },
+  {
+    name: "bulkApprovePattern (dry run)",
+    call: () => mcpApi.bulkApprovePattern("r", { pattern: "com.acme/*", dryRun: true }),
+    url: `${MGMT}/catalog/bulk-approve`,
+    normalised: true,
+    method: "POST",
+    body: { pattern: "com.acme/*", includeReview: false, dryRun: true },
+  },
+  {
+    name: "bulkBlockPattern",
+    call: () => mcpApi.bulkBlockPattern("r", { pattern: "*.evil/*", reason: "squatters", dryRun: true }),
+    url: `${MGMT}/catalog/bulk-block`,
+    normalised: true,
+    method: "POST",
+    body: { pattern: "*.evil/*", reason: "squatters", dryRun: true },
+  },
+  {
+    name: "bulkBlockPattern (defaults)",
+    call: () => mcpApi.bulkBlockPattern("r", { pattern: "*.evil/*" }),
+    url: `${MGMT}/catalog/bulk-block`,
+    normalised: true,
+    method: "POST",
+    body: { pattern: "*.evil/*" },
+  },
+  {
+    name: "bulkDecide",
+    call: () => mcpApi.bulkDecide("r", ["c1", "c2"], "block", "bad"),
+    url: `${MGMT}/catalog/bulk-decide`,
+    normalised: true,
+    method: "POST",
+    body: { ids: ["c1", "c2"], action: "block", reason: "bad" },
+  },
+  {
+    name: "bulkDecide (no reason)",
+    call: () => mcpApi.bulkDecide("r", ["c1"], "approve"),
+    url: `${MGMT}/catalog/bulk-decide`,
+    normalised: true,
+    method: "POST",
+    body: { ids: ["c1"], action: "approve" },
   },
   {
     name: "requestApproval",
@@ -538,9 +565,11 @@ const WRITERS: { name: string; call: () => Promise<unknown>; url: string; method
 ];
 
 describe("writers", () => {
-  it.each(WRITERS)("$name sends $method to the right URL", async ({ call, url, method, body }) => {
+  it.each(WRITERS)("$name sends $method to the right URL", async ({ call, url, method, body, ...w }) => {
     mockApiFetch.mockResolvedValueOnce("ok");
-    expect(await call()).toBe("ok");
+    const result = await call();
+    // Bulk answers are normalised (covered under "bulk results").
+    if (!("normalised" in w)) expect(result).toBe("ok");
     expect(lastUrl()).toBe(url);
     expect(lastCall()[1]?.method).toBe(method);
     expect(lastBody()).toEqual(body);
@@ -595,7 +624,45 @@ const GRANT = {
   created_at: "2026-11-01T00:00:00Z",
 };
 
+describe("bulk results", () => {
+  it("normalises a pattern result, keeping dryRun and the full name list", async () => {
+    mockApiFetch.mockResolvedValueOnce({ approved: 2, names: ["a/x", "a/y"], dryRun: true });
+    expect(await mcpApi.bulkApprovePattern("r", { pattern: "a/*", dryRun: true })).toEqual({
+      approved: 2,
+      blocked: 0,
+      names: ["a/x", "a/y"],
+      skippedDenied: 0,
+      skippedReview: 0,
+      dryRun: true,
+    });
+    mockApiFetch.mockResolvedValueOnce(undefined);
+    expect(await mcpApi.bulkBlockPattern("r", { pattern: "a/*" })).toMatchObject({ blocked: 0, names: [], dryRun: false });
+  });
+
+  it("normalises a bulk-decide answer of id lists", async () => {
+    mockApiFetch.mockResolvedValueOnce({ decided: ["c1"], skippedDenied: ["c2"] });
+    expect(await mcpApi.bulkDecide("r", ["c1", "c2", "c3"], "approve")).toEqual({
+      action: "approve",
+      decided: ["c1"],
+      unchanged: [],
+      skippedDenied: ["c2"],
+      notFound: [],
+    });
+    mockApiFetch.mockResolvedValueOnce({ action: "block", decided: [], unchanged: ["c1"], skippedDenied: [], notFound: ["c9"] });
+    expect(await mcpApi.bulkDecide("r", ["c1", "c9"], "block")).toMatchObject({ unchanged: ["c1"], notFound: ["c9"] });
+  });
+});
+
 describe("toNamespaceGrant", () => {
+  it("reads the claim issuer", () => {
+    expect(
+      toNamespaceGrant({
+        ...RULE,
+        conditions: { mcp_namespaces: ["io.github.{repository_owner}/*"], mcp_namespace_issuer: "https://token.actions.githubusercontent.com" },
+      }),
+    ).toMatchObject({ issuer: "https://token.actions.githubusercontent.com" });
+  });
+
   it("maps a rule carrying conditions.mcp_namespaces", () => {
     expect(toNamespaceGrant(RULE)).toEqual(GRANT);
   });
@@ -675,6 +742,17 @@ describe("createNamespaceGrant", () => {
       target_id: "repo-uuid",
       actions: ["read", "write"],
       conditions: { mcp_namespaces: ["io.github.{repository_owner}/*", "com.acme"] },
+    });
+  });
+
+  it("sends mcp_namespace_issuer when given", async () => {
+    mockApiFetch.mockResolvedValueOnce(RULE);
+    await mcpApi.createNamespaceGrant("repo-uuid", { ...BODY, issuer: "https://token.actions.githubusercontent.com" });
+    expect(lastBody()).toMatchObject({
+      conditions: {
+        mcp_namespaces: ["io.github.{repository_owner}/*", "com.acme"],
+        mcp_namespace_issuer: "https://token.actions.githubusercontent.com",
+      },
     });
   });
 

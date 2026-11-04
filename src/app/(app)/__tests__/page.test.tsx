@@ -41,7 +41,7 @@ vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
 vi.mock("@/lib/api/mcp", () => ({
-  mcpApi: { pendingReviewCount: vi.fn().mockResolvedValue(null) },
+  mcpApi: { pendingSummary: vi.fn().mockResolvedValue(null) },
 }));
 
 // Utils

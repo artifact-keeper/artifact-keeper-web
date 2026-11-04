@@ -5,9 +5,9 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { McpBulkApproveResult } from "@/types/mcp";
+import type { McpBulkResult } from "@/types/mcp";
 
-const api = vi.hoisted(() => ({ bulkApprovePattern: vi.fn() }));
+const api = vi.hoisted(() => ({ bulkApprovePattern: vi.fn(), bulkBlockPattern: vi.fn() }));
 vi.mock("@/lib/api/mcp", () => ({ mcpApi: api }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
@@ -18,22 +18,24 @@ import {
   validateNamespaceGlob,
 } from "./mcp-namespace-approve-dialog";
 
-const NAMES = [
-  "io.github.acme/a",
-  "io.github.acme/b",
-  "io.github.acme/c",
-  "io.github.acme/d",
-  "io.github.acme/e",
-  "io.github.acme/f",
-  "com.other/x",
-];
+const NAMES = Array.from({ length: 12 }, (_, i) => `io.github.acme/s${i}`);
 
-function setup(onOpenChange = vi.fn()) {
+const result = (over: Partial<McpBulkResult> = {}): McpBulkResult => ({
+  approved: 0,
+  blocked: 0,
+  names: [],
+  skippedDenied: 0,
+  skippedReview: 0,
+  dryRun: false,
+  ...over,
+});
+
+function setup(action: "approve" | "block" = "approve", onOpenChange = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const spy = vi.spyOn(qc, "invalidateQueries");
   render(
     <QueryClientProvider client={qc}>
-      <McpNamespaceApproveDialog repoKey="mcp-proxy" open onOpenChange={onOpenChange} pendingNames={NAMES} />
+      <McpNamespaceApproveDialog repoKey="mcp-proxy" action={action} open onOpenChange={onOpenChange} />
     </QueryClientProvider>,
   );
   return { spy, onOpenChange, user: userEvent.setup() };
@@ -44,7 +46,7 @@ afterEach(() => cleanup());
 
 describe("validateNamespaceGlob", () => {
   it.each([
-    ["", /Enter a namespace glob/],
+    ["", /Enter a full-name glob/],
     ["com acme/*", /letters, digits/],
     ["a/b/c", /exactly one slash/],
     ["io.github.acme/*", null],
@@ -64,42 +66,61 @@ describe("validateNamespaceGlob", () => {
 });
 
 describe("namespaceResultMessage", () => {
-  const result = (over: Partial<McpBulkApproveResult> = {}): McpBulkApproveResult => ({
-    approved: 0,
-    names: [],
-    skippedDenied: 0,
-    skippedReview: 0,
-    ...over,
-  });
-
   it("mentions skipped names only when there are some", () => {
     expect(namespaceResultMessage(result({ approved: 1, names: ["a/b"] }))).toBe("Approved 1 server");
     expect(namespaceResultMessage(result({ approved: 3, skippedDenied: 2 }))).toBe(
       "Approved 3 servers; 2 refused by a deny glob",
     );
-    expect(namespaceResultMessage(result({ approved: 0, skippedDenied: 1, skippedReview: 4 }))).toBe(
+    expect(namespaceResultMessage(result({ skippedDenied: 1, skippedReview: 4 }))).toBe(
       "Approved 0 servers; 1 refused by a deny glob; 4 flagged left for review",
     );
+    expect(namespaceResultMessage(result({ blocked: 2 }), "block")).toBe("Blocked 2 servers");
   });
 });
 
 describe("McpNamespaceApproveDialog", () => {
-  it("previews the pending names a glob matches", async () => {
+  it("previews the backend's dry run before Approve is enabled", async () => {
+    api.bulkApprovePattern.mockResolvedValue(result({ approved: 12, names: NAMES, dryRun: true, skippedReview: 1 }));
     const { user } = setup();
-    await user.type(screen.getByLabelText("Namespace glob"), "io.github.acme/*");
-    expect(screen.getByText("Matches 6 pending servers of 7.")).toBeInTheDocument();
-    expect(screen.getByText("io.github.acme/a")).toBeInTheDocument();
-    expect(screen.getByText("and 1 more")).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Namespace glob"), " io.github.acme/* ");
+    await user.type(screen.getByLabelText("Reason"), "trusted");
+    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(api.bulkApprovePattern).toHaveBeenCalledWith("mcp-proxy", {
+        pattern: "io.github.acme/*",
+        includeReview: false,
+        reason: "trusted",
+        dryRun: true,
+      }),
+    );
+    expect(await screen.findByText("Would approve 12 servers; 1 flagged left for review.")).toBeInTheDocument();
+    expect(screen.getByText("io.github.acme/s0")).toBeInTheDocument();
+    expect(screen.getByText("and 2 more")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeEnabled();
     expect(screen.getByText(/Deny globs always win/)).toBeInTheDocument();
   });
 
-  it("previews matches as the backend does: ignoring case, * crossing /, input trimmed", async () => {
+  it("drops the preview when the glob or include-review choice changes", async () => {
+    api.bulkApprovePattern.mockResolvedValue(result({ approved: 1, names: ["com.other/x"], dryRun: true }));
     const { user } = setup();
-    await user.type(screen.getByLabelText("Namespace glob"), "  IO.GITHUB.ACME*A  ");
-    expect(screen.getByText("Matches 1 pending server of 7.")).toBeInTheDocument();
-    expect(screen.getByText("io.github.acme/a")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(/This glob is broad/);
+    await user.type(screen.getByLabelText("Namespace glob"), "com.other/*");
+    await user.type(screen.getByLabelText("Reason"), "r");
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText("Would approve 1 server.");
+    await user.click(screen.getByRole("checkbox", { name: /Also approve flagged names/ }));
+    expect(screen.queryByTestId("mcp-pattern-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
+  });
+
+  it("keeps Approve disabled when the dry run matches nothing", async () => {
+    api.bulkApprovePattern.mockResolvedValue(result({ dryRun: true, skippedDenied: 2 }));
+    const { user } = setup();
+    await user.type(screen.getByLabelText("Namespace glob"), "com.other/*");
+    await user.type(screen.getByLabelText("Reason"), "r");
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText("Would approve 0 servers; 2 refused by a deny glob.");
+    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
   });
 
   it("warns on a broad glob", async () => {
@@ -108,76 +129,77 @@ describe("McpNamespaceApproveDialog", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/This glob is broad/);
   });
 
-  it("shows a validation error and keeps Approve disabled", async () => {
-    const { user } = setup();
-    await user.type(screen.getByLabelText("Namespace glob"), "a/b/c");
-    await user.type(screen.getByLabelText("Reason"), "x");
-    expect(screen.getByText(/exactly one slash/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Namespace glob")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
-  });
-
   it("refuses a bare namespace, which matches no full name", async () => {
     const { user } = setup();
     await user.type(screen.getByLabelText("Namespace glob"), "io.github.acme");
-    await user.type(screen.getByLabelText("Reason"), "x");
     expect(screen.getByText("Match the full name: write io.github.acme/* for this namespace's servers")).toBeInTheDocument();
-    expect(screen.queryByText(/^Matches /)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
+    expect(screen.getByLabelText("Namespace glob")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
   });
 
-  it("approves the pattern and reports approved and skipped counts", async () => {
-    api.bulkApprovePattern.mockResolvedValue({
-      approved: 5,
-      names: NAMES.slice(0, 5),
-      skippedDenied: 1,
-      skippedReview: 2,
-    } satisfies McpBulkApproveResult);
+  it("approves after the preview and reports approved and skipped counts", async () => {
+    api.bulkApprovePattern
+      .mockResolvedValueOnce(result({ approved: 5, names: NAMES.slice(0, 5), dryRun: true }))
+      .mockResolvedValueOnce(result({ approved: 5, names: NAMES.slice(0, 5), skippedDenied: 1, skippedReview: 2 }));
     const { user, spy, onOpenChange } = setup();
-    await user.type(screen.getByLabelText("Namespace glob"), " io.github.acme/* ");
-    expect(screen.getByRole("button", { name: "Approve namespace" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Namespace glob"), "io.github.acme/*");
+    await user.click(screen.getByRole("checkbox", { name: /Also approve flagged names/ }));
     await user.type(screen.getByLabelText("Reason"), " trusted publisher ");
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByTestId("mcp-pattern-preview");
     await user.click(screen.getByRole("button", { name: "Approve namespace" }));
     await waitFor(() =>
-      expect(api.bulkApprovePattern).toHaveBeenCalledWith("mcp-proxy", {
+      expect(api.bulkApprovePattern).toHaveBeenLastCalledWith("mcp-proxy", {
         pattern: "io.github.acme/*",
-        includeReview: false,
+        includeReview: true,
         reason: "trusted publisher",
+        dryRun: false,
       }),
     );
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(
-        "Approved 5 servers; 1 refused by a deny glob; 2 flagged left for review",
-      ),
+      expect(toast.success).toHaveBeenCalledWith("Approved 5 servers; 1 refused by a deny glob; 2 flagged left for review"),
     );
     expect(spy).toHaveBeenCalledWith({ queryKey: ["mcp"] });
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("includes flagged names when asked", async () => {
-    api.bulkApprovePattern.mockResolvedValue({ approved: 1, names: ["com.other/x"], skippedDenied: 0, skippedReview: 0 });
-    const { user } = setup();
-    await user.type(screen.getByLabelText("Namespace glob"), "com.other/*");
-    await user.click(screen.getByRole("checkbox", { name: /Also approve flagged names/ }));
-    await user.type(screen.getByLabelText("Reason"), "reviewed lookalikes");
-    await user.click(screen.getByRole("button", { name: "Approve namespace" }));
+  it("blocks by pattern through bulk-block, with its own preview", async () => {
+    api.bulkBlockPattern
+      .mockResolvedValueOnce(result({ blocked: 2, names: ["x.evil/a", "x.evil/b"], dryRun: true }))
+      .mockResolvedValueOnce(result({ blocked: 2, names: ["x.evil/a", "x.evil/b"] }));
+    const { user } = setup("block");
+    expect(screen.getByText("Block a namespace")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Namespace glob"), "*.evil/*");
+    await user.type(screen.getByLabelText("Reason"), "squatters");
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText("Would block 2 servers.");
+    await user.click(screen.getByRole("button", { name: "Block namespace" }));
     await waitFor(() =>
-      expect(api.bulkApprovePattern).toHaveBeenCalledWith("mcp-proxy", {
-        pattern: "com.other/*",
-        includeReview: true,
-        reason: "reviewed lookalikes",
+      expect(api.bulkBlockPattern).toHaveBeenLastCalledWith("mcp-proxy", {
+        pattern: "*.evil/*",
+        reason: "squatters",
+        dryRun: false,
       }),
     );
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Approved 1 server"));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Blocked 2 servers"));
+    expect(api.bulkApprovePattern).not.toHaveBeenCalled();
   });
 
-  it("toasts the error when the approval fails", async () => {
-    api.bulkApprovePattern.mockRejectedValue(new Error("nope"));
+  it("toasts the error when the preview or the approval fails", async () => {
+    api.bulkApprovePattern.mockRejectedValueOnce(new Error("nope"));
     const { user } = setup();
     await user.type(screen.getByLabelText("Namespace glob"), "com.other/*");
-    await user.type(screen.getByLabelText("Reason"), "r");
-    await user.click(screen.getByRole("button", { name: "Approve namespace" }));
+    await user.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    api.bulkApprovePattern
+      .mockResolvedValueOnce(result({ approved: 1, names: ["com.other/x"], dryRun: true }))
+      .mockRejectedValueOnce(new Error("locked"));
+    await user.type(screen.getByLabelText("Reason"), "r");
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByTestId("mcp-pattern-preview");
+    await user.click(screen.getByRole("button", { name: "Approve namespace" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(2));
   });
 
   it("cancels", async () => {

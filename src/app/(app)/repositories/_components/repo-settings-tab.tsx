@@ -1160,7 +1160,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
           <McpSettingsSection
             repository={repository}
             form={mcpForm}
-            readOnly={!isRepoAdmin}
+            readOnly={!(isRepoAdmin || repository.mcp_caller_is_repo_admin === true)}
             canLock={repository.mcp_caller_can_lock ?? isRepoAdmin}
           />
           <Separator />

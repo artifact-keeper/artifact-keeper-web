@@ -26,16 +26,20 @@ describe("McpBundlePanel", () => {
     expect(screen.getByText("weather-1.4.2.mcpb")).toBeInTheDocument();
     expect(screen.getByText("2 KB")).toBeInTheDocument();
     expect(screen.getByText("sha256:abc123")).toBeInTheDocument();
-    expect(screen.getByText("signature valid")).toBeInTheDocument();
+    expect(screen.getByText("signed, trusted signer")).toBeInTheDocument();
     expect(screen.getByText("signed by Acme Inc")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Download bundle/ })).toHaveAttribute("href", URL);
   });
 
-  it("labels a self-signed signer and an invalid signature", () => {
+  it("labels a signature from an untrusted signer", () => {
     renderWithClient(
-      <McpBundlePanel bundle={{ ...BUNDLE, signature: { state: "invalid", signer: "me", selfSigned: true } }} />,
+      <McpBundlePanel bundle={{ ...BUNDLE, signature: { state: "self_signed", signer: "me", selfSigned: true } }} />,
     );
-    expect(screen.getByText("signature invalid")).toBeInTheDocument();
+    expect(screen.getByText("signed, untrusted signer")).toBeInTheDocument();
+    expect(screen.getByText("signed, untrusted signer").closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("not on this instance's trusted list"),
+    );
     expect(screen.getByText("signed by me (self-signed)")).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
   });

@@ -225,6 +225,17 @@ describe("McpNamespaceGrants", () => {
     await user.click(d.getByRole("button", { name: "Remove org.example" }));
     await user.click(d.getByRole("checkbox", { name: "delete (edit status)" }));
 
+    // A {claim} pattern needs the issuer of the CI tokens it reads claims from.
+    const issuer = d.getByLabelText("Claim issuer");
+    expect(issuer).toHaveValue("https://token.actions.githubusercontent.com");
+    await user.clear(issuer);
+    expect(d.getByText("Enter the issuer of the CI OIDC tokens")).toBeInTheDocument();
+    expect(submit).toBeDisabled();
+    await user.type(issuer, "http://insecure.example");
+    expect(d.getByText("The issuer is an https URL")).toBeInTheDocument();
+    await user.clear(issuer);
+    await user.type(issuer, "https://token.actions.githubusercontent.com");
+
     await user.click(submit);
     await waitFor(() =>
       expect(api.createNamespaceGrant).toHaveBeenCalledWith("1", {
@@ -232,6 +243,7 @@ describe("McpNamespaceGrants", () => {
         principal_id: "g1",
         actions: ["write", "delete"],
         namespaces: ["com.acme", "io.github.{repository_owner}/*"],
+        issuer: "https://token.actions.githubusercontent.com",
       }),
     );
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Namespace grant created"));

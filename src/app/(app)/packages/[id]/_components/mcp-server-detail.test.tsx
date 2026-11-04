@@ -200,7 +200,7 @@ describe("McpServerDetail", () => {
       },
     });
     renderDetail();
-    expect(await screen.findByText("signature valid")).toBeInTheDocument();
+    expect(await screen.findByText("signed, trusted signer")).toBeInTheDocument();
     expect(screen.getByText("weather-1.4.2.mcpb")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Download bundle/ })).toHaveAttribute("href", url);
   });
@@ -219,7 +219,13 @@ describe("McpServerDetail", () => {
     renderDetail();
     await screen.findByText("weather");
     expect(screen.queryByRole("button", { name: "Admin actions" })).toBeNull();
-    expect(repoApi.get).not.toHaveBeenCalled();
+  });
+
+  it("shows admin actions to a repository admin who is not an instance admin", async () => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "local", mcp_caller_is_repo_admin: true });
+    renderDetail();
+    expect(await screen.findByRole("button", { name: "Admin actions" })).toBeInTheDocument();
   });
 
   it("deprecates a version with a reason", async () => {

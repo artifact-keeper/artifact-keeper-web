@@ -160,6 +160,11 @@ function GrantsTable({ repoKey, grants }: { repoKey: string; grants: McpNamespac
                         <Badge key={ns} variant="secondary" className="font-mono">{ns}</Badge>
                       ))}
                     </div>
+                    {g.issuer && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Claims from <span className="font-mono">{g.issuer}</span>
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Button

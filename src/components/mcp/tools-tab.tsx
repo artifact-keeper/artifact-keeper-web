@@ -199,7 +199,18 @@ export function sourcePicks(caps: McpCapabilities): McpCapabilitySnapshot[] {
 /** The backend's "current" order: observed first, the declaration last. */
 const SOURCE_ORDER = ["sandbox_run", "remote_probe", "gateway_reported", "ci_reported", "publisher_declared"];
 
-export function McpToolsTab({ repoKey, name, version }: { repoKey: string; name: string; version: string }) {
+export function McpToolsTab({
+  repoKey,
+  name,
+  version,
+  canProbe: callerCanProbe,
+}: {
+  repoKey: string;
+  name: string;
+  version: string;
+  /** Repository admin (`mcp_caller_is_repo_admin`); defaults to `is_admin`. */
+  canProbe?: boolean;
+}) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [picked, setPicked] = useState<string | null>(null);
@@ -234,7 +245,7 @@ export function McpToolsTab({ repoKey, name, version }: { repoKey: string; name:
   }
 
   const canProbe = data.introspection.probeEnabled || data.introspection.sandboxEnabled;
-  const probeButton = user?.is_admin && canProbe && (
+  const probeButton = (callerCanProbe ?? !!user?.is_admin) && canProbe && (
     <Button variant="outline" size="sm" onClick={() => probe.mutate()} disabled={probe.isPending} className="gap-1.5">
       <RefreshCw className="size-3.5" aria-hidden="true" />
       Re-probe

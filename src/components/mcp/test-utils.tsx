@@ -187,6 +187,7 @@ export function catalogItem(over: Partial<McpCatalogItem> = {}): McpCatalogItem 
     versions: ["1.2.0", "1.1.0"],
     upstreamStatus: "active",
     upstreamUpdatedAt: "2026-10-30T00:00:00Z",
+    summary: null,
     flags: {},
     approvalRequests: {},
     evaluationReason: null,

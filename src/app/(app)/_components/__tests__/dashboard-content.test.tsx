@@ -37,9 +37,9 @@ vi.mock("@/lib/api/repositories", () => ({
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
-const mockPendingReviewCount = vi.fn();
+const mockPendingSummary = vi.fn();
 vi.mock("@/lib/api/mcp", () => ({
-  mcpApi: { pendingReviewCount: (...a: unknown[]) => mockPendingReviewCount(...a) },
+  mcpApi: { pendingSummary: (...a: unknown[]) => mockPendingSummary(...a) },
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -155,7 +155,7 @@ describe("DashboardContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepositoriesList.mockResolvedValue({ items: [] });
-    mockPendingReviewCount.mockResolvedValue(null);
+    mockPendingSummary.mockResolvedValue(null);
     setupUseQuery({
       "recent-repositories": {
         data: { items: [] },
@@ -486,25 +486,25 @@ describe("DashboardContent", () => {
       expect(tile).toHaveAttribute("data-href", "/curation");
     });
 
-    it("counts over the Remote MCP repositories only", async () => {
+    it("reads the total of GET /api/v1/mcp/pending-summary", async () => {
       mockUseAuth.mockReturnValue(ADMIN);
-      mockRepositoriesList.mockResolvedValue({ items: [{ key: "mcp-proxy" }, { key: "mcp-mirror" }] });
-      mockPendingReviewCount.mockResolvedValue(3);
+      mockPendingSummary.mockResolvedValue({ pending: 1, review: 1, drifted: 1, total: 3, repositories: [] });
       setupUseQuery({ "recent-repositories": { data: { items: [] } } });
       render(<DashboardContent />);
       const opts = mockUseQuery.mock.calls.map((c) => c[0]).find((o) => o.queryKey[1] === "pending-count");
       expect(opts.queryKey).toEqual(["mcp", "pending-count"]);
       expect(opts.enabled).toBe(true);
       await expect(opts.queryFn()).resolves.toBe(3);
-      expect(mockRepositoriesList).toHaveBeenCalledWith({ format: "mcp", repo_type: "remote", per_page: 100 });
-      expect(mockPendingReviewCount).toHaveBeenCalledWith(["mcp-proxy", "mcp-mirror"]);
+      expect(mockRepositoriesList).not.toHaveBeenCalledWith(expect.objectContaining({ format: "mcp" }));
+      mockPendingSummary.mockResolvedValue(null);
+      await expect(opts.queryFn()).resolves.toBeNull();
     });
 
-    it("shows a zero count", () => {
+    it("hides the tile when nothing is queued", () => {
       mockUseAuth.mockReturnValue(ADMIN);
       setupUseQuery({ mcp: { data: 0 }, "recent-repositories": { data: { items: [] } } });
       render(<DashboardContent />);
-      expect(screen.getByTestId(TILE)).toHaveTextContent(": 0");
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
     });
 
     it("hides the tile when the backend does not report MCP reviews", () => {
@@ -519,7 +519,7 @@ describe("DashboardContent", () => {
       setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
       render(<DashboardContent />);
       expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
-      expect(mockPendingReviewCount).not.toHaveBeenCalled();
+      expect(mockPendingSummary).not.toHaveBeenCalled();
     });
   });
 });

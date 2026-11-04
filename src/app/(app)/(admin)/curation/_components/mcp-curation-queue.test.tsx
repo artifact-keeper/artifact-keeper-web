@@ -21,6 +21,8 @@ const api = vi.hoisted(() => ({
   decide: vi.fn(),
   pinVersion: vi.fn(),
   bulkApprovePattern: vi.fn(),
+  bulkBlockPattern: vi.fn(),
+  bulkDecide: vi.fn(),
   requestApproval: vi.fn(),
   capabilitiesDiff: vi.fn(),
 }));
@@ -42,6 +44,14 @@ const WEATHER = catalogItem({
   flags: { typosquat: { similarTo: "io.github.acme/weathr" } },
   approvalRequests: { count: 2, lastNote: "release bot" },
   ingested: [{ version: "1.2.0", artifactId: "a-1.2.0", upstreamStatus: "active", unresolved: [] }],
+  summary: {
+    transports: ["stdio", "streamable-http"],
+    registryTypes: ["npm"],
+    secretsCount: 2,
+    packagesCount: 1,
+    remotesCount: 1,
+    lint: { version: "1.2.0", block: 1, review: 2, warn: 0 },
+  },
 });
 /** A flagged name with no known version (nothing to pin). */
 const SQL = catalogItem({
@@ -196,7 +206,8 @@ describe("McpCurationQueue", () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Blocked version 1.1.0"));
   });
 
-  it("bulk-approves the selected names one decision at a time", async () => {
+  it("bulk-approves the selected names in one bulk-decide call", async () => {
+    api.bulkDecide.mockResolvedValue({ action: "approve", decided: ["c1", "c2"], unchanged: [], skippedDenied: [], notFound: [] });
     const { user, spy } = renderQueue();
     await screen.findByText("io.github.acme/weather");
     await user.click(screen.getByRole("checkbox", { name: "Select all" }));
@@ -208,17 +219,21 @@ describe("McpCurationQueue", () => {
     await user.type(within(dialog).getByLabelText("Reason"), "reviewed");
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("2 servers approved"));
-    expect(api.decide).toHaveBeenCalledTimes(2);
-    expect(api.decide).toHaveBeenCalledWith("mcp-proxy", "c1", "approve", "reviewed");
-    expect(api.decide).toHaveBeenCalledWith("mcp-proxy", "c2", "approve", "reviewed");
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(api.bulkDecide).toHaveBeenCalledTimes(1);
+    expect(api.bulkDecide).toHaveBeenCalledWith("mcp-proxy", ["c1", "c2"], "approve", "reviewed");
+    expect(api.decide).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
     expect(spy).toHaveBeenCalledWith({ queryKey: ["mcp"] });
   });
 
-  it("bulk-blocks and reports the decisions that failed", async () => {
-    api.decide.mockImplementation((_k: string, id: string) =>
-      id === "c2" ? Promise.reject(new Error("403")) : Promise.resolve({ item: WEATHER, ingestError: null }),
-    );
+  it("bulk-blocks and reports the rows it left alone", async () => {
+    api.bulkDecide.mockResolvedValue({
+      action: "block",
+      decided: ["c1"],
+      unchanged: ["c2"],
+      skippedDenied: ["c7"],
+      notFound: ["c8"],
+    });
     const { user } = renderQueue();
     await user.click(await screen.findByRole("checkbox", { name: "Select io.github.acme/weather" }));
     await user.click(screen.getByRole("checkbox", { name: "Select com.other/sql" }));
@@ -227,9 +242,34 @@ describe("McpCurationQueue", () => {
     await user.type(within(dialog).getByLabelText("Reason"), "unknown publisher");
     await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("1 server blocked"));
-    expect(toast.error).toHaveBeenCalledWith("1 server could not be changed");
-    expect(api.decide).toHaveBeenCalledWith("mcp-proxy", "c1", "block", "unknown publisher");
-    expect(api.decide).toHaveBeenCalledWith("mcp-proxy", "c2", "block", "unknown publisher");
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Left alone: 1 already blocked; 1 refused by a deny glob; 1 no longer in the catalog",
+    );
+    expect(api.bulkDecide).toHaveBeenCalledWith("mcp-proxy", ["c1", "c2"], "block", "unknown publisher");
+  });
+
+  it("toasts a failed bulk decision", async () => {
+    api.bulkDecide.mockRejectedValue(new Error("403"));
+    const { user } = renderQueue();
+    await user.click(await screen.findByRole("checkbox", { name: "Select io.github.acme/weather" }));
+    await user.click(screen.getByRole("button", { name: /Block selected/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Reason"), "x");
+    await user.click(within(dialog).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  });
+
+  it("shows risk, transports, secrets and lint from the catalog summary", async () => {
+    renderQueue();
+    await screen.findByText("io.github.acme/weather");
+    expect(screen.getByText("stdio·npm")).toBeInTheDocument();
+    expect(screen.getByText("http")).toBeInTheDocument();
+    expect(screen.getByLabelText("2 secrets")).toBeInTheDocument();
+    expect(screen.getByText("Lint (1.2.0): 1 blocking, 2 to review")).toBeInTheDocument();
+    // stdio 1 + a blocking lint 4 + a lookalike 3 = 8: critical.
+    expect(screen.getByText("Risk Critical")).toBeInTheDocument();
+    // No summary yet: the risk is unknown.
+    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
   });
 
   it("toggles a row and select-all off again", async () => {
@@ -337,14 +377,20 @@ describe("McpCurationQueue", () => {
     await waitFor(() => expect(api.listCatalog.mock.calls.length).toBeGreaterThan(calls));
   });
 
-  it("previews the namespace dialog over the pending names", async () => {
+  it("opens the pattern dialog to approve or to block", async () => {
+    api.bulkBlockPattern.mockResolvedValue({ approved: 0, blocked: 1, names: ["io.github.acme/weather"], skippedDenied: 0, skippedReview: 0, dryRun: true });
     const { user } = renderQueue();
     await screen.findByText("io.github.acme/weather");
     await user.click(screen.getByRole("button", { name: /Approve namespace/ }));
+    expect(within(await screen.findByRole("dialog")).getByText("Approve a namespace")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: /Block namespace/ }));
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Block a namespace")).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Namespace glob"), "io.github.acme/*");
-    // Only `pending` names are previewed: weather (maps is approved, sql is flagged).
-    expect(within(dialog).getByText(/Matches 1 pending server of 1/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Preview" }));
+    expect(await within(dialog).findByText("Would block 1 server.")).toBeInTheDocument();
+    expect(api.bulkBlockPattern).toHaveBeenCalledWith("mcp-proxy", { pattern: "io.github.acme/*", reason: undefined, dryRun: true });
   });
 
   it("browses the catalog on the Catalog tab", async () => {

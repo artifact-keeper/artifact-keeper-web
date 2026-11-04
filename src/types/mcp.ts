@@ -276,7 +276,8 @@ export interface McpBundle {
   fileSha256: string;
   size?: number;
   signature?: {
-    state: 'valid' | 'unsigned' | 'invalid' | string;
+    /** `valid` only for a signer in `MCP_TRUSTED_BUNDLE_SIGNERS`; any other verifying signature is `self_signed`. */
+    state: 'valid' | 'self_signed' | 'unsigned' | string;
     signer?: string;
     issuer?: string;
     fingerprint?: string;
@@ -364,6 +365,11 @@ export interface McpRepositorySettings {
    * role that may set or clear a `*_locked` setting or change a locked one.
    */
   mcp_caller_can_lock?: boolean;
+  /**
+   * Response only, same responses: `true` for an instance administrator or
+   * the repository `admin` action (admin edit, catalog decisions, probes).
+   */
+  mcp_caller_is_repo_admin?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +405,20 @@ export interface McpCatalogVersion {
   unresolved: { index: number; error: string; detail?: string }[];
 }
 
+/**
+ * Risk inputs of a name, cached by the sync from the latest upstream
+ * document it saw. `lint` is absent for readers who are not holders.
+ */
+export interface McpCatalogSummary {
+  transports: string[];
+  registryTypes: string[];
+  secretsCount: number;
+  packagesCount: number;
+  remotesCount: number;
+  /** Unacknowledged lint findings of the ingested `version`. */
+  lint?: { version: string; block: number; review: number; warn: number };
+}
+
 /** One upstream server name of a Remote's catalog. */
 export interface McpCatalogItem {
   /** `curation_packages` id of the name row. */
@@ -406,8 +426,8 @@ export interface McpCatalogItem {
   name: string;
   namespace: string;
   status: McpCatalogStatus | string;
-  /** Matches `mcp_server_deny`: never served, whatever `status`. */
-  denied: boolean;
+  /** Matches `mcp_server_deny`: never served, whatever `status`. Absent for non-holders. */
+  denied?: boolean;
   title: string | null;
   description: string | null;
   latestVersion: string | null;
@@ -415,12 +435,16 @@ export interface McpCatalogItem {
   versions: string[];
   upstreamStatus: McpServerStatus | string | null;
   upstreamUpdatedAt: string | null;
+  /** `null` until a sync has seen a document of the name. */
+  summary: McpCatalogSummary | null;
   flags: { typosquat?: { similarTo: string } } & Record<string, unknown>;
   approvalRequests: {
     count?: number;
     lastRequestedAt?: string;
     lastRequestedBy?: string;
     lastNote?: string;
+    /** Repository admins only: one entry per requester. */
+    requesters?: { userId?: string; requestedAt?: string; note?: string | null }[];
   };
   evaluationReason: string | null;
   evaluatedAt: string | null;
@@ -460,14 +484,40 @@ export interface McpDecisionResult {
   ingestError: string | null;
 }
 
-export interface McpBulkApproveResult {
+/** `POST /catalog/bulk-approve|bulk-block`. */
+export interface McpBulkResult {
   approved: number;
-  /** The first 100 approved names. */
+  blocked: number;
+  /** The first 100 names decided; every match (up to 5000) on a dry run. */
   names: string[];
   /** Matching names left alone because they match `mcp_server_deny`. */
   skippedDenied: number;
   /** Matching flagged (`review`) names left alone without `includeReview`. */
   skippedReview: number;
+  /** Nothing was written: `approved`/`blocked` and `names` say what would be. */
+  dryRun: boolean;
+}
+
+/** `POST /catalog/bulk-decide`: row ids by outcome. */
+export interface McpBulkDecideResult {
+  action: 'approve' | 'block';
+  decided: string[];
+  /** Already in the requested state. */
+  unchanged: string[];
+  /** Approvals refused because the name matches `mcp_server_deny`. */
+  skippedDenied: string[];
+  notFound: string[];
+}
+
+/** `GET /api/v1/mcp/pending-summary`: the approval queue over the Remotes the caller can read. */
+export interface McpPendingSummary {
+  pending: number;
+  review: number;
+  /** `name@version` rows awaiting a decision after a content drift. */
+  drifted: number;
+  total: number;
+  /** Only Remotes with something queued. */
+  repositories: { key: string; pending: number; review: number; drifted: number }[];
 }
 
 export interface McpSyncSummary {
@@ -705,6 +755,8 @@ export interface McpNamespaceGrant {
   principal_name?: string;
   actions: string[];
   namespaces: string[];
+  /** `conditions.mcp_namespace_issuer`: required when a pattern uses `{claim}`. */
+  issuer?: string;
   created_at?: string;
 }
 

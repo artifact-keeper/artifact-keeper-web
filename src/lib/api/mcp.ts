@@ -3,7 +3,8 @@ import { artifactsApi } from '@/lib/api/artifacts';
 import { MCP_API_VERSION, MCP_ROUTE_PREFIX, mcpArtifactPath } from '@/lib/mcp/format';
 import { parseServedEntry, parseServerList, parseStoredMetadata } from '@/lib/mcp/server-json';
 import type {
-  McpBulkApproveResult,
+  McpBulkDecideResult,
+  McpBulkResult,
   McpCapabilities,
   McpCapabilityDiff,
   McpCatalogDecision,
@@ -16,6 +17,7 @@ import type {
   McpHoldProblem,
   McpHoldsPage,
   McpNamespaceGrant,
+  McpPendingSummary,
   McpServedEntry,
   McpServerJson,
   McpServerStatus,
@@ -297,21 +299,55 @@ export const mcpApi = {
 
   /**
    * `POST /catalog/bulk-approve`: every `pending` name whose full name
-   * matches the glob (`io.github.acme/*`); deny globs still win, flagged
-   * names only with `includeReview`.
+   * matches the glob (`io.github.acme/*`; a bare namespace is 422); deny
+   * globs still win, flagged names only with `includeReview`. `dryRun`
+   * answers every match without writing.
    */
   bulkApprovePattern: (
     repoKey: string,
-    body: { pattern: string; includeReview?: boolean; reason?: string },
-  ): Promise<McpBulkApproveResult> =>
-    apiFetch<McpBulkApproveResult>(`${remoteBase(repoKey)}/catalog/bulk-approve`, {
+    body: { pattern: string; includeReview?: boolean; reason?: string; dryRun?: boolean },
+  ): Promise<McpBulkResult> =>
+    apiFetch<McpBulkResult>(`${remoteBase(repoKey)}/catalog/bulk-approve`, {
       method: 'POST',
       body: JSON.stringify({
         pattern: body.pattern,
         includeReview: body.includeReview ?? false,
         ...(body.reason ? { reason: body.reason } : {}),
+        ...(body.dryRun ? { dryRun: true } : {}),
       }),
-    }),
+    }).then(normalizeBulk),
+
+  /** `POST /catalog/bulk-block`: block every name whose full name matches the glob. */
+  bulkBlockPattern: (
+    repoKey: string,
+    body: { pattern: string; reason?: string; dryRun?: boolean },
+  ): Promise<McpBulkResult> =>
+    apiFetch<McpBulkResult>(`${remoteBase(repoKey)}/catalog/bulk-block`, {
+      method: 'POST',
+      body: JSON.stringify({
+        pattern: body.pattern,
+        ...(body.reason ? { reason: body.reason } : {}),
+        ...(body.dryRun ? { dryRun: true } : {}),
+      }),
+    }).then(normalizeBulk),
+
+  /** `POST /catalog/bulk-decide`: approve or block up to 500 rows (names or `name@version` rows) by id. */
+  bulkDecide: (
+    repoKey: string,
+    ids: string[],
+    action: 'approve' | 'block',
+    reason?: string,
+  ): Promise<McpBulkDecideResult> =>
+    apiFetch<McpBulkDecideResult>(`${remoteBase(repoKey)}/catalog/bulk-decide`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { ids, action, reason } : { ids, action }),
+    }).then((r) => ({
+      action: r?.action ?? action,
+      decided: r?.decided ?? [],
+      unchanged: r?.unchanged ?? [],
+      skippedDenied: r?.skippedDenied ?? [],
+      notFound: r?.notFound ?? [],
+    })),
 
   /** `POST /catalog/{id}/request-approval` (any reader): flags a name as wanted. */
   requestApproval: (repoKey: string, id: string, note?: string): Promise<McpCatalogItem> =>
@@ -329,18 +365,20 @@ export const mcpApi = {
     apiFetch<{ repository: string; summary: McpSyncSummary }>(`${remoteBase(repoKey)}/sync`, { method: 'POST' }),
 
   /**
-   * Names awaiting a decision (`pending` + `review`) across the given Remote
-   * MCP repositories, for the dashboard tile. `null` when none of them
-   * serves the catalog (or no key is given), so the tile stays hidden.
+   * `GET /api/v1/mcp/pending-summary`: names and drifted versions awaiting a
+   * decision across the Remote MCP repositories the caller can read
+   * (`null`: not served).
    */
-  pendingReviewCount: async (remoteRepoKeys: string[]): Promise<number | null> => {
-    const pages = await Promise.all(
-      remoteRepoKeys.map((k) => mcpApi.listCatalog(k, { queue: true, limit: 1 }).catch(() => null)),
-    );
-    const seen = pages.filter((p): p is McpCatalogPage => p !== null);
-    if (seen.length === 0) return null;
-    return seen.reduce((n, p) => n + (p.counts.pending ?? 0) + (p.counts.review ?? 0), 0);
-  },
+  pendingSummary: (): Promise<McpPendingSummary | null> =>
+    orNull(
+      apiFetch<McpPendingSummary>('/api/v1/mcp/pending-summary').then((r) => ({
+        pending: r?.pending ?? 0,
+        review: r?.review ?? 0,
+        drifted: r?.drifted ?? 0,
+        total: r?.total ?? 0,
+        repositories: r?.repositories ?? [],
+      })),
+    ),
 
   /**
    * Reason-gated holds of a hosted or Remote repository
@@ -479,7 +517,14 @@ export const mcpApi = {
    */
   createNamespaceGrant: async (
     repositoryId: string,
-    body: { principal_type: McpGrantPrincipalType; principal_id: string; actions: string[]; namespaces: string[] },
+    body: {
+      principal_type: McpGrantPrincipalType;
+      principal_id: string;
+      actions: string[];
+      namespaces: string[];
+      /** Required by the backend when a pattern uses `{claim}`. */
+      issuer?: string;
+    },
   ): Promise<McpNamespaceGrant> => {
     const created = await apiFetch<PermissionRule>('/api/v1/permissions', {
       method: 'POST',
@@ -489,7 +534,10 @@ export const mcpApi = {
         target_type: 'repository',
         target_id: repositoryId,
         actions: body.actions,
-        conditions: { mcp_namespaces: body.namespaces },
+        conditions: {
+          mcp_namespaces: body.namespaces,
+          ...(body.issuer ? { mcp_namespace_issuer: body.issuer } : {}),
+        },
       }),
     });
     const grant = created ? toNamespaceGrant(created) : null;
@@ -508,6 +556,17 @@ export const mcpApi = {
     apiFetch<void>(`/api/v1/permissions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
+function normalizeBulk(r: McpBulkResult | null | undefined): McpBulkResult {
+  return {
+    approved: r?.approved ?? 0,
+    blocked: r?.blocked ?? 0,
+    names: r?.names ?? [],
+    skippedDenied: r?.skippedDenied ?? 0,
+    skippedReview: r?.skippedReview ?? 0,
+    dryRun: r?.dryRun === true,
+  };
+}
+
 /** Pages of permission rules read per repository (100 each). */
 const GRANT_PAGE_LIMIT = 20;
 
@@ -519,7 +578,7 @@ interface PermissionRule {
   target_type: string;
   target_id: string;
   actions: string[];
-  conditions?: { mcp_namespaces?: unknown } | null;
+  conditions?: { mcp_namespaces?: unknown; mcp_namespace_issuer?: unknown } | null;
   created_at?: string;
 }
 
@@ -535,6 +594,7 @@ export function toNamespaceGrant(rule: PermissionRule): McpNamespaceGrant | null
     principal_name: rule.principal_name ?? undefined,
     actions: rule.actions ?? [],
     namespaces: ns.filter((n): n is string => typeof n === 'string'),
+    issuer: typeof rule.conditions?.mcp_namespace_issuer === 'string' ? rule.conditions.mcp_namespace_issuer : undefined,
     created_at: rule.created_at,
   };
 }

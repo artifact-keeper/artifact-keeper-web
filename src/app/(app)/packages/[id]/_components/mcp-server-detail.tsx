@@ -175,8 +175,11 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
   const repoQ = useQuery({
     queryKey: ["repository", repoKey],
     queryFn: () => repositoriesApi.get(repoKey),
-    enabled: isAdmin,
   });
+  // Repository administration (admin edit, probes, catalog decisions): an
+  // instance administrator, or the repository `admin` action, which the
+  // single-repository response reports as `mcp_caller_is_repo_admin`.
+  const isRepoAdmin = isAdmin || repoQ.data?.mcp_caller_is_repo_admin === true;
 
   const stored = storedQ.data?.metadata;
   const server = entry?.server ?? stored?.server;
@@ -274,7 +277,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
         </div>
         <div className="flex items-center gap-2">
           {entry && <Button onClick={() => setParam("tab", "install")}>Install / Connect</Button>}
-          {isAdmin && (
+          {isRepoAdmin && (
             <McpAdminMenu
               repoKey={repoKey}
               name={name}
@@ -357,7 +360,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
               <McpLineageGraph server={server} pins={pins} health={healthQ.data} repoKey={repoKey} policy={policy} />
             </TabsContent>
             <TabsContent value="tools" className="pt-4">
-              <McpToolsTab repoKey={repoKey} name={name} version={version} />
+              <McpToolsTab repoKey={repoKey} name={name} version={version} canProbe={isRepoAdmin} />
             </TabsContent>
           </>
         )}

@@ -288,15 +288,13 @@ export function DashboardContent() {
     enabled: !!user?.is_admin,
   });
 
-  // Upstream MCP server names awaiting a decision on the Remote MCP
-  // repositories (their catalogs' pending + review counts). Without a Remote
-  // MCP repository, or on a backend without the catalog, the tile is hidden.
+  // Upstream MCP server names and drifted versions awaiting a decision on
+  // the Remote MCP repositories (`GET /api/v1/mcp/pending-summary`). On a
+  // backend without the route the answer is null and the tile is hidden;
+  // with nothing queued it is hidden too.
   const { data: mcpPending } = useQuery({
     queryKey: mcpKeys.pendingCount,
-    queryFn: async () => {
-      const remotes = await repositoriesApi.list({ format: "mcp", repo_type: "remote", per_page: 100 });
-      return mcpApi.pendingReviewCount((remotes?.items ?? []).map((r) => r.key));
-    },
+    queryFn: async () => (await mcpApi.pendingSummary())?.total ?? null,
     enabled: !!user?.is_admin,
   });
 
@@ -429,15 +427,15 @@ export function DashboardContent() {
               Failed to load admin statistics.
             </div>
           )}
-          {typeof mcpPending === "number" && (
+          {typeof mcpPending === "number" && mcpPending > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatCard
                 icon={Plug}
                 label="MCP servers awaiting approval"
                 value={mcpPending}
-                color={mcpPending > 0 ? "yellow" : "default"}
+                color="yellow"
                 href="/curation"
-                tooltip="Upstream MCP server names on a Remote MCP repository that await an approval decision (pending or flagged for review). Nothing is served to clients until it is approved."
+                tooltip="Upstream MCP server names on Remote MCP repositories that await a decision (pending, flagged for review, or a version whose upstream content changed). Nothing is served to clients until it is approved."
               />
             </div>
           )}

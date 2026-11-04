@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { KeyRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
-import type { McpCatalogItem } from "@/types/mcp";
-import { diffVersion, requestNote, typosquatNote, unresolvedNote } from "./mcp-review-format";
+import { MCP_RISK_LEVEL_LABEL, type McpRiskLevel } from "@/lib/mcp/risk";
+import type { McpCatalogItem, McpCatalogSummary } from "@/types/mcp";
+import { diffVersion, plural, requestNote, summaryTransports, typosquatNote, unresolvedNote } from "./mcp-review-format";
 
 /** Muted note for a surface the backend does not serve. */
 export function McpNotAvailable({ what }: { what: string }) {
@@ -72,5 +74,43 @@ export function McpCatalogToolDiff({ repoKey, item }: { repoKey: string; item: M
     <p className={`text-xs ${destructive ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
       {data.summary.text}
     </p>
+  );
+}
+
+/** Transport chips and the secret count of a catalog row's cached summary. */
+export function McpSummaryChips({ summary }: { summary: McpCatalogSummary }) {
+  return (
+    <>
+      {summaryTransports(summary).map((t) => (
+        <Badge key={t.key} variant="outline" className="font-mono text-[11px]">
+          {t.label}
+        </Badge>
+      ))}
+      {summary.secretsCount > 0 && (
+        <span
+          className="inline-flex items-center gap-0.5 text-xs text-muted-foreground"
+          aria-label={plural(summary.secretsCount, "secret")}
+          title={plural(summary.secretsCount, "secret")}
+        >
+          <KeyRound className="size-3" aria-hidden="true" />
+          {summary.secretsCount}
+        </span>
+      )}
+    </>
+  );
+}
+
+const RISK_CLASS: Record<McpRiskLevel, string> = {
+  low: "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400",
+  medium: "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-400",
+  high: "border-red-300 text-red-700 dark:border-red-800 dark:text-red-400",
+  critical: "border-red-500 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300",
+};
+
+export function McpRiskText({ level, score }: { level: McpRiskLevel; score: number }) {
+  return (
+    <Badge variant="outline" className={RISK_CLASS[level]} title={`Risk score ${score}`}>
+      Risk {MCP_RISK_LEVEL_LABEL[level]}
+    </Badge>
   );
 }

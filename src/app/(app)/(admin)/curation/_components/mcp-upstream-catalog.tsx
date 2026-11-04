@@ -13,7 +13,7 @@ import type { McpCatalogItem } from "@/types/mcp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { McpCatalogNotes, McpNotAvailable, McpReviewStatusBadge } from "./mcp-queue-parts";
+import { McpCatalogNotes, McpNotAvailable, McpReviewStatusBadge, McpSummaryChips } from "./mcp-queue-parts";
 
 /**
  * The Remote's upstream catalog (`GET /catalog`), browsable only here, never
@@ -134,8 +134,8 @@ function CatalogRow({
   requesting: boolean;
   onRequest: () => void;
 }) {
-  const served = item.status === "approved" && !item.denied;
-  const requestable = !item.denied && (item.status === "pending" || item.status === "review");
+  const served = item.status === "approved" && item.denied !== true;
+  const requestable = item.denied !== true && (item.status === "pending" || item.status === "review");
   return (
     <li className="flex flex-wrap items-start gap-3 px-3 py-2">
       {/* Greyed: an upstream name is not served until it is approved. */}
@@ -146,6 +146,11 @@ function CatalogRow({
           <McpReviewStatusBadge status={item.status} />
         </div>
         {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+        {item.summary && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <McpSummaryChips summary={item.summary} />
+          </div>
+        )}
         <McpCatalogNotes item={item} />
         {!served && <p className="mt-1 text-xs text-muted-foreground">Not visible to clients until approved</p>}
       </div>

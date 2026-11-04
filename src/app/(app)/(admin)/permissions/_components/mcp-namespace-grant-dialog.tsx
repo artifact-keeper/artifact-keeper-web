@@ -70,6 +70,26 @@ function usePrincipalOptions(type: PrincipalType) {
   }, [type, users.data, groups.data, accounts.data]);
 }
 
+/** GitHub Actions' OIDC issuer, the usual source of `{repository_owner}`. */
+export const GITHUB_ACTIONS_ISSUER = "https://token.actions.githubusercontent.com";
+
+/** Whether a namespace pattern interpolates a CI OIDC claim. */
+export function patternUsesClaim(pattern: string): boolean {
+  return /\{[a-z0-9_]+\}/.test(pattern);
+}
+
+/** The issuer must be an absolute https URL (the `iss` of the provider's assertions). */
+export function validateIssuer(issuer: string): string | null {
+  const v = issuer.trim();
+  if (!v) return "Enter the issuer of the CI OIDC tokens";
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" ? null : "The issuer is an https URL";
+  } catch {
+    return "The issuer is an https URL";
+  }
+}
+
 interface Props {
   repoKey: string;
   /** The repository id the rule targets. */
@@ -96,7 +116,12 @@ function GrantForm({ repoKey, repositoryId, onDone }: { repoKey: string; reposit
   const [namespaces, setNamespaces] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [issuer, setIssuer] = useState(GITHUB_ACTIONS_ISSUER);
   const options = usePrincipalOptions(principalType);
+  // `{claim}` patterns are bound to the issuer of the CI OIDC assertion
+  // (`conditions.mcp_namespace_issuer`); the backend refuses them without one.
+  const usesClaims = namespaces.some(patternUsesClaim);
+  const issuerError = usesClaims ? validateIssuer(issuer) : null;
 
   const create = useMutation({
     mutationFn: () =>
@@ -105,6 +130,7 @@ function GrantForm({ repoKey, repositoryId, onDone }: { repoKey: string; reposit
         principal_id: principalId,
         actions,
         namespaces,
+        issuer: usesClaims ? issuer.trim() : undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: mcpKeys.all });
@@ -126,7 +152,8 @@ function GrantForm({ repoKey, repositoryId, onDone }: { repoKey: string; reposit
     setDraftError(null);
   }
 
-  const canSubmit = principalId !== "" && actions.length > 0 && namespaces.length > 0 && !create.isPending;
+  const canSubmit =
+    principalId !== "" && actions.length > 0 && namespaces.length > 0 && !issuerError && !create.isPending;
 
   return (
     <form
@@ -243,6 +270,24 @@ function GrantForm({ repoKey, repositoryId, onDone }: { repoKey: string; reposit
           </ul>
         )}
       </div>
+
+      {usesClaims && (
+        <div className="space-y-2">
+          <Label htmlFor="mcp-grant-issuer">Claim issuer</Label>
+          <Input
+            id="mcp-grant-issuer"
+            value={issuer}
+            onChange={(e) => setIssuer(e.target.value)}
+            autoComplete="off"
+            aria-invalid={!!issuerError}
+            aria-describedby="mcp-grant-issuer-help"
+          />
+          <p id="mcp-grant-issuer-help" className={`text-xs ${issuerError ? "text-destructive" : "text-muted-foreground"}`}>
+            {issuerError ??
+              "A {claim} is filled in only from tokens exchanged for an OIDC assertion of this issuer (the CI provider's iss)."}
+          </p>
+        </div>
+      )}
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onDone}>Cancel</Button>
