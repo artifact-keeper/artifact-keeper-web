@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks (hoisted before imports)
@@ -82,9 +82,10 @@ vi.mock("@/components/common/page-header", () => ({
   ),
 }));
 vi.mock("@/components/common/stat-card", () => ({
-  StatCard: ({ label, value, href }: any) => (
+  StatCard: ({ label, value, href, tooltip }: any) => (
     <div data-testid={`stat-${label}`} data-href={href}>
-      {label}: {value}
+      <span>{label}: {value}</span>
+      {tooltip}
     </div>
   ),
 }));
@@ -210,13 +211,35 @@ describe("DashboardContent", () => {
     render(<DashboardContent />);
     expect(screen.getByText("Statistics")).toBeInTheDocument();
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
-    // Cards show the combined total: local + remote (200+50, 1024000+512000).
+    // Artifact counts are disjoint; storage already includes the proxy cache.
     expect(screen.getByTestId("stat-Artifacts")).toHaveTextContent("250");
     // #822: the Repositories tile leads to the repositories page.
     expect(screen.getByTestId("stat-Repositories")).toHaveAttribute("data-href", "/repositories");
     expect(screen.getByTestId("stat-Storage Used")).toHaveTextContent(
-      "1536000 B"
+      "Storage Used: 1024000 B"
     );
+  });
+
+  it.each([
+    [1000, 400, 600],
+    [1000, 0, 1000],
+    [1000, 1000, 0],
+    [0, 0, 0],
+  ])("shows storage total %i with proxy %i and local %i", (total, proxy, local) => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true }, isAuthenticated: true });
+    setupUseQuery({
+      "admin-stats": {
+        data: { total_repositories: 1, total_artifacts: 2, total_users: 1,
+          total_storage_bytes: total, proxy_artifact_count: 1, proxy_storage_bytes: proxy },
+      },
+    });
+    render(<DashboardContent />);
+    const card = screen.getByTestId("stat-Storage Used");
+    expect(within(card).getByText(`Storage Used: ${total} B`)).toBeInTheDocument();
+    expect(within(within(card).getByText("Local").parentElement!).getByText(`${local} B`))
+      .toBeInTheDocument();
+    expect(within(within(card).getByText("Remote").parentElement!).getByText(`${proxy} B`))
+      .toBeInTheDocument();
   });
 
   it("shows personalized greeting with display_name", () => {
