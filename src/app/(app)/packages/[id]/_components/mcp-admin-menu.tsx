@@ -130,7 +130,7 @@ export function McpAdminMenu({
           {choices.length > 0 && (showCuration || showProbe) && <DropdownMenuSeparator />}
           {showCuration && (
             <DropdownMenuItem asChild>
-              <Link href={`/curation?repo=${encodeURIComponent(repoKey)}`}>Open in curation queue</Link>
+              <Link href={`/repositories/${encodeURIComponent(repoKey)}?tab=curation`}>Open in curation queue</Link>
             </DropdownMenuItem>
           )}
           {showProbe && <DropdownMenuItem onSelect={() => probe.mutate()}>Re-probe tools</DropdownMenuItem>}
