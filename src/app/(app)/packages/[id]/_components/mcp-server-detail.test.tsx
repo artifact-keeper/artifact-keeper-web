@@ -230,7 +230,7 @@ describe("McpServerDetail", () => {
   // `mcp_caller_is_repo_admin` must not gate them.
   it("lets a signed-in writer who is no repository admin delete a version through the soft-delete route", async () => {
     auth.user = { is_admin: false };
-    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "remote", mcp_caller_is_repo_admin: false });
+    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "local", mcp_caller_is_repo_admin: false });
     api.capabilities.mockResolvedValue(
       capsOf(null, [], { introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false } }),
     );
@@ -251,6 +251,58 @@ describe("McpServerDetail", () => {
     );
     expect(api.setVersionStatus).not.toHaveBeenCalled();
     expect(toast.success).toHaveBeenCalledWith("Version deleted");
+  });
+
+  // A Remote or Virtual registry refuses every version write with
+  // `405 mcp_read_only` (docs/mcp-registry.md "Write path"), whoever asks.
+  it.each(["remote", "virtual"])("offers a writer on a %s MCP repository no version writes", async (repoType) => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: repoType, mcp_caller_is_repo_admin: false });
+    renderDetail();
+    await screen.findByText("weather");
+    await waitFor(() => expect(repoApi.get).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole("button", { name: "Version actions" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Deprecate" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Delete version" })).toBeNull();
+  });
+
+  it("keeps the curation link but no version writes for a repository admin of a Remote", async () => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockResolvedValue({ key: "mcp-remote", format: "mcp", repo_type: "remote", mcp_caller_is_repo_admin: true });
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toBeInTheDocument();
+    for (const item of ["Deprecate", "Mark active", "Delete version"]) {
+      expect(screen.queryByRole("menuitem", { name: item })).toBeNull();
+    }
+  });
+
+  it("offers no version writes on a Virtual even to an instance admin", async () => {
+    repoApi.get.mockResolvedValue({ key: "mcp-virtual", format: "mcp", repo_type: "virtual" });
+    renderDetail();
+    await waitFor(() => expect(repoApi.get).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    await screen.findByText("weather");
+    expect(screen.queryByRole("button", { name: "Version actions" })).toBeNull();
+  });
+
+  it("holds version writes back until the repository type is known", async () => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockReturnValue(new Promise(() => {}));
+    renderDetail();
+    await screen.findByText("weather");
+    expect(screen.queryByRole("button", { name: "Version actions" })).toBeNull();
+  });
+
+  it("still offers version writes when the repository cannot be read", async () => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockRejectedValue(new ApiError(500, "{}"));
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
+    expect(screen.getByRole("menuitem", { name: "Delete version" })).toBeInTheDocument();
   });
 
   it("explains a 403 mcp_namespace_not_granted on delete", async () => {

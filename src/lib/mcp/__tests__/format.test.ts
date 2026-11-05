@@ -10,6 +10,7 @@ import {
   isHostedMcpRepo,
   isMcpFormat,
   isRemoteMcpRepo,
+  isVirtualMcpRepo,
   mcpArtifactPath,
   mcpServerVersionFromArtifactPath,
   mcpCreatableRepoTypes,
@@ -119,17 +120,19 @@ describe("mcpRegistryBaseUrl", () => {
   });
 });
 
-describe("isHostedMcpRepo / isRemoteMcpRepo", () => {
+describe("isHostedMcpRepo / isRemoteMcpRepo / isVirtualMcpRepo", () => {
   it.each([
-    ["mcp", "local", true, false],
-    ["mcp", "staging", true, false],
-    ["mcp", "remote", false, true],
-    ["mcp", "virtual", false, false],
-    ["npm", "local", false, false],
-    ["npm", "remote", false, false],
-  ])("%s/%s -> hosted=%s remote=%s", (format, type, hosted, remote) => {
+    ["mcp", "local", true, false, false],
+    ["mcp", "staging", true, false, false],
+    ["mcp", "remote", false, true, false],
+    ["mcp", "virtual", false, false, true],
+    ["npm", "local", false, false, false],
+    ["npm", "remote", false, false, false],
+    ["npm", "virtual", false, false, false],
+  ])("%s/%s -> hosted=%s remote=%s virtual=%s", (format, type, hosted, remote, virtual) => {
     expect(isHostedMcpRepo(repo(format, type))).toBe(hosted);
     expect(isRemoteMcpRepo(repo(format, type))).toBe(remote);
+    expect(isVirtualMcpRepo(repo(format, type))).toBe(virtual);
   });
 });
 

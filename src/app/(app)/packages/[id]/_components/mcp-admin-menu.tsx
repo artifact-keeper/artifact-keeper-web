@@ -37,6 +37,11 @@ import type { McpServerStatus } from "@/types/mcp";
  * `mcp-publisher status` would; `active` takes no message, the registry
  * clears it); Delete version is the registry's own soft delete,
  * `DELETE .../versions/{version}`.
+ *
+ * A Remote or Virtual registry accepts no write from anyone (the backend
+ * answers `405 mcp_read_only`), so `readOnly` drops the status and delete
+ * items there; the menu then holds only the admin items, and is not drawn
+ * when it would be empty.
  */
 
 export const MCP_STATUS_MESSAGE_MAX = 500;
@@ -53,6 +58,7 @@ export function McpAdminMenu({
   version,
   status,
   isRemote,
+  readOnly,
   probeAvailable,
   isRepoAdmin,
 }: {
@@ -61,6 +67,8 @@ export function McpAdminMenu({
   version: string;
   status?: McpServerStatus;
   isRemote: boolean;
+  /** Remote or Virtual repository (or its type not known yet): no version writes. */
+  readOnly: boolean;
   probeAvailable: boolean;
   /** Repository administration (`mcp_caller_is_repo_admin` or instance admin). */
   isRepoAdmin: boolean;
@@ -96,7 +104,10 @@ export function McpAdminMenu({
 
   const showCuration = isRepoAdmin && isRemote;
   const showProbe = isRepoAdmin && probeAvailable;
-  const choices: McpServerStatus[] = (["deprecated", "active", "deleted"] as const).filter((s) => s !== status);
+  const choices: McpServerStatus[] = readOnly
+    ? []
+    : (["deprecated", "active", "deleted"] as const).filter((s) => s !== status);
+  if (choices.length === 0 && !showCuration && !showProbe) return null;
 
   return (
     <>
@@ -116,7 +127,7 @@ export function McpAdminMenu({
               {ACTION_TEXT[s].item}
             </DropdownMenuItem>
           ))}
-          {(showCuration || showProbe) && <DropdownMenuSeparator />}
+          {choices.length > 0 && (showCuration || showProbe) && <DropdownMenuSeparator />}
           {showCuration && (
             <DropdownMenuItem asChild>
               <Link href={`/curation?repo=${encodeURIComponent(repoKey)}`}>Open in curation queue</Link>

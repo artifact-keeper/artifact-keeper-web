@@ -97,6 +97,11 @@ export function isRemoteMcpRepo(repo: Pick<Repository, "format" | "repo_type">):
   return isMcpFormat(repo.format) && repo.repo_type === "remote";
 }
 
+/** Whether a repository is a Virtual MCP registry (read-only, members' rows). */
+export function isVirtualMcpRepo(repo: Pick<Repository, "format" | "repo_type">): boolean {
+  return isMcpFormat(repo.format) && repo.repo_type === "virtual";
+}
+
 /**
  * MCP options section in the create dialog / settings tab. Every repository
  * type has some MCP setting (hosted: namespace allowlist, package policy,
