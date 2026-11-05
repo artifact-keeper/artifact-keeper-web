@@ -130,6 +130,50 @@ export function isQuarantineRejected(
   return source?.quarantine_status === "rejected";
 }
 
+/**
+ * Which badge an artifact row carries for its quarantine state.
+ *
+ * - `held` — `quarantined` and still waiting for review ("Quarantined"),
+ * - `policy_refused` — a `quarantined` hold a scan policy placed
+ *   (`hold_source: "scan_policy"`, backend #4510),
+ * - `withdrawn` — a conda channel withdrawal (a permanent hold),
+ * - `rejected` — a reviewer rejected it; terminal, never "Quarantined" (#1085).
+ */
+export type QuarantineBadgeKind =
+  | "held"
+  | "policy_refused"
+  | "withdrawn"
+  | "rejected";
+
+/** Badge text for each kind. */
+export const QUARANTINE_BADGE_LABELS: Record<QuarantineBadgeKind, string> = {
+  held: "Quarantined",
+  policy_refused: "Policy refused",
+  withdrawn: "Withdrawn",
+  rejected: "Rejected",
+};
+
+/**
+ * The badge an artifact should carry, or null for none.
+ *
+ * A rejected artifact is badged "Rejected", never "Quarantined": both are
+ * blocked, but a rejection is a final verdict, not a pending review (#1085).
+ * A live hold is "Quarantined", unless it is known to come from a scan policy
+ * (`hold_source`, carried only by the download-holds queue today) or is a
+ * conda withdrawal. Released, clear, lapsed-hold and unknown (status never
+ * loaded) artifacts get no badge.
+ */
+export function quarantineBadgeKind(
+  source: (QuarantineFields & { hold_source?: string | null }) | null | undefined,
+  options: { withdrawn?: boolean } = {},
+): QuarantineBadgeKind | null {
+  if (isQuarantineRejected(source)) return "rejected";
+  if (!isActivelyQuarantined(source)) return null;
+  if (options.withdrawn) return "withdrawn";
+  if (source?.hold_source === "scan_policy") return "policy_refused";
+  return "held";
+}
+
 /** The sentence explaining why a download control is unavailable. */
 export function quarantineDownloadBlockedReason(
   source: QuarantineFields | null | undefined,

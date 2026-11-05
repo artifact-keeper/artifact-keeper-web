@@ -44,6 +44,7 @@ import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import {
   isActivelyQuarantined,
+  quarantineBadgeKind,
   isQuarantineRejected,
   quarantineKnowledge,
   quarantineDownloadBlockedReason,
@@ -733,21 +734,28 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <FileIcon className="size-4 shrink-0 text-muted-foreground" />
             <MiddleEllipsis text={a.name} />
           </button>
-          {isActivelyQuarantined(a) && (
-            // The listing carries no reason (#2966); the badge tooltip falls
-            // back to the hold expiry. `shrink-0` keeps the badge legible when
-            // the name beside it is being truncated.
-            <QuarantineBadge
-              quarantineUntil={a.quarantine_until}
-              className="shrink-0"
-              withdrawn={isCondaWithdrawal(
+          {(() => {
+            // Held, policy-refused, withdrawn and rejected each get their own
+            // badge; a rejected file is not "Quarantined" (#1085). The listing
+            // carries no reason (#2966); the badge tooltip falls back to the
+            // hold expiry. `shrink-0` keeps the badge legible when the name
+            // beside it is being truncated.
+            const kind = quarantineBadgeKind(a, {
+              withdrawn: isCondaWithdrawal(
                 repoFormat,
-                true,
+                isActivelyQuarantined(a),
                 condaFilename(a.path),
                 noticedFiles,
-              )}
-            />
-          )}
+              ),
+            });
+            return kind ? (
+              <QuarantineBadge
+                kind={kind}
+                quarantineUntil={a.quarantine_until}
+                className="shrink-0"
+              />
+            ) : null;
+          })()}
         </div>
       ),
     },
