@@ -45,6 +45,7 @@ import { searchApi, type SearchResult } from "@/lib/api/search";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
 import { buildMavenSearchQuery } from "@/lib/maven";
+import { formatVersionLabel } from "@/lib/package-display";
 import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { formatBytes as formatBytesUtil, formatDate } from "@/lib/utils";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -1096,7 +1097,7 @@ export function SearchContent() {
                       )}
                       {result.version && (
                         <span className="text-xs text-muted-foreground">
-                          v{result.version}
+                          {formatVersionLabel(result.version, result.format)}
                         </span>
                       )}
                       <span className="ml-auto text-xs text-muted-foreground">
