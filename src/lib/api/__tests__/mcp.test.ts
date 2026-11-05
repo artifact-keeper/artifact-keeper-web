@@ -24,6 +24,7 @@ import {
   isNotSupported,
   mcpApi,
   mcpProblemMessage,
+  mcpWriteRefusal,
   toNamespaceGrant,
 } from "../mcp";
 
@@ -814,5 +815,25 @@ describe("mcpProblemMessage", () => {
   it("is null for a non-ApiError", () => {
     expect(mcpProblemMessage(new Error("x"))).toBeNull();
     expect(mcpProblemMessage("x")).toBeNull();
+  });
+});
+
+describe("mcpWriteRefusal", () => {
+  it("names the missing namespace grant on 403 mcp_namespace_not_granted", () => {
+    const body = JSON.stringify({ status: 403, error: "mcp_namespace_not_granted", detail: "no grant for 'com.x'" });
+    const msg = mcpWriteRefusal(new ApiError(403, body));
+    expect(msg).toMatch(/requires a namespace grant/);
+    expect(msg).toContain("(no grant for 'com.x')");
+    expect(mcpWriteRefusal(new ApiError(403, JSON.stringify({ error: "mcp_namespace_not_granted" })))).not.toContain("(");
+  });
+
+  it("reads any other 403 as missing write and 401 as a rejected sign-in", () => {
+    expect(mcpWriteRefusal(new ApiError(403, "not json"))).toMatch(/need write access/);
+    expect(mcpWriteRefusal(new ApiError(401, ""))).toMatch(/Sign in again/);
+  });
+
+  it("leaves every other answer to mcpProblemMessage", () => {
+    expect(mcpWriteRefusal(new ApiError(422, "{}"))).toBeNull();
+    expect(mcpWriteRefusal(new Error("x"))).toBeNull();
   });
 });

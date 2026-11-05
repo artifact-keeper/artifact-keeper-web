@@ -31,9 +31,13 @@ const api = vi.hoisted(() => ({
   health: vi.fn(),
   capabilities: vi.fn(),
   setVersionStatus: vi.fn(),
+  deleteVersion: vi.fn(),
   probe: vi.fn(),
 }));
-vi.mock("@/lib/api/mcp", () => ({ mcpApi: api, mcpProblemMessage: () => "refused by registry" }));
+vi.mock("@/lib/api/mcp", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/api/mcp")>();
+  return { mcpApi: api, mcpProblemMessage: () => "refused by registry", mcpWriteRefusal: real.mcpWriteRefusal };
+});
 const pkgApi = vi.hoisted(() => ({ getVersions: vi.fn() }));
 vi.mock("@/lib/api/packages", () => ({ packagesApi: pkgApi }));
 const repoApi = vi.hoisted(() => ({ get: vi.fn() }));
@@ -214,25 +218,89 @@ describe("McpServerDetail", () => {
     expect(await screen.findByText("No metadata readable for this version")).toBeInTheDocument();
   });
 
-  it("hides admin actions from non-admins", async () => {
-    auth.user = { is_admin: false };
+  it("hides version actions from an anonymous caller", async () => {
+    auth.user = null;
     renderDetail();
     await screen.findByText("weather");
-    expect(screen.queryByRole("button", { name: "Admin actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Version actions" })).toBeNull();
+  });
+
+  // Soft delete and status changes need only repository write, not
+  // repository administration (artifact-keeper#5257 docs/mcp-registry.md):
+  // `mcp_caller_is_repo_admin` must not gate them.
+  it("lets a signed-in writer who is no repository admin delete a version through the soft-delete route", async () => {
+    auth.user = { is_admin: false };
+    repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "remote", mcp_caller_is_repo_admin: false });
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [], { introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false } }),
+    );
+    api.deleteVersion.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderDetail();
+    await waitFor(() => expect(api.capabilities).toHaveBeenCalled());
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
+    // Administration items stay with repository admins.
+    expect(screen.queryByRole("menuitem", { name: "Open in curation queue" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Re-probe tools" })).toBeNull();
+    await user.click(screen.getByRole("menuitem", { name: "Delete version" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/Reason/), "superseded");
+    await user.click(within(dialog).getByRole("button", { name: "Delete version" }));
+    await waitFor(() =>
+      expect(api.deleteVersion).toHaveBeenCalledWith("mcp-local", SERVER.name, "1.4.2", "superseded"),
+    );
+    expect(api.setVersionStatus).not.toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("Version deleted");
+  });
+
+  it("explains a 403 mcp_namespace_not_granted on delete", async () => {
+    auth.user = { is_admin: false };
+    api.deleteVersion.mockRejectedValue(
+      new ApiError(
+        403,
+        JSON.stringify({
+          status: 403,
+          error: "mcp_namespace_not_granted",
+          detail: "this credential holds no grant for namespace 'io.github.acme' in this repository",
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete version" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete version" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    const msg = String(toast.error.mock.calls[0][0]);
+    expect(msg).toMatch(/requires a namespace grant/);
+    expect(msg).toContain("no grant for namespace 'io.github.acme'");
+  });
+
+  it("says write access is missing on another 403", async () => {
+    auth.user = { is_admin: false };
+    api.setVersionStatus.mockRejectedValue(new ApiError(403, JSON.stringify({ status: 403, error: "mcp_forbidden" })));
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Deprecate" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Deprecate" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("You need write access to this repository to change or delete a version."),
+    );
   });
 
   it("shows admin actions to a repository admin who is not an instance admin", async () => {
     auth.user = { is_admin: false };
     repoApi.get.mockResolvedValue({ key: "mcp-local", format: "mcp", repo_type: "local", mcp_caller_is_repo_admin: true });
     renderDetail();
-    expect(await screen.findByRole("button", { name: "Admin actions" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Version actions" })).toBeInTheDocument();
   });
 
   it("deprecates a version with a reason", async () => {
     api.setVersionStatus.mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderDetail();
-    await user.click(await screen.findByRole("button", { name: "Admin actions" }));
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
     expect(screen.queryByRole("menuitem", { name: "Open in curation queue" })).toBeNull();
     await user.click(screen.getByRole("menuitem", { name: "Deprecate" }));
     const dialog = screen.getByRole("dialog");
@@ -252,7 +320,7 @@ describe("McpServerDetail", () => {
     api.setVersionStatus.mockRejectedValue(new ApiError(422, "{}"));
     const user = userEvent.setup();
     renderDetail();
-    await user.click(await screen.findByRole("button", { name: "Admin actions" }));
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
     expect(screen.queryByRole("menuitem", { name: "Deprecate" })).toBeNull();
     await user.click(screen.getByRole("menuitem", { name: "Mark active" }));
     const dialog = screen.getByRole("dialog");
@@ -271,7 +339,7 @@ describe("McpServerDetail", () => {
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => expect(repoApi.get).toHaveBeenCalled());
-    await user.click(await screen.findByRole("button", { name: "Admin actions" }));
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
     expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toHaveAttribute("href", "/curation?repo=mcp-local");
     await user.click(screen.getByRole("menuitem", { name: "Re-probe tools" }));
     await waitFor(() => expect(api.probe).toHaveBeenCalledWith("mcp-local", SERVER.name, "1.4.2"));
@@ -283,7 +351,7 @@ describe("McpServerDetail", () => {
     const user = userEvent.setup();
     renderDetail();
     await waitFor(() => expect(api.capabilities).toHaveBeenCalled());
-    await user.click(await screen.findByRole("button", { name: "Admin actions" }));
+    await user.click(await screen.findByRole("button", { name: "Version actions" }));
     expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Re-probe tools" })).toBeNull();
   });

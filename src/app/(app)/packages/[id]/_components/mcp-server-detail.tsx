@@ -277,7 +277,10 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
         </div>
         <div className="flex items-center gap-2">
           {entry && <Button onClick={() => setParam("tab", "install")}>Install / Connect</Button>}
-          {isRepoAdmin && (
+          {/* Status changes and the soft delete need only repository write,
+              which the UI cannot see: any signed-in caller gets the menu and
+              the backend's 403 is shown. Admin-only items gate inside. */}
+          {!!user && (
             <McpAdminMenu
               repoKey={repoKey}
               name={name}
@@ -285,6 +288,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
               status={status}
               isRemote={!!repoQ.data && isRemoteMcpRepo(repoQ.data)}
               probeAvailable={!!capsQ.data && (capsQ.data.introspection.probeEnabled || capsQ.data.introspection.sandboxEnabled)}
+              isRepoAdmin={isRepoAdmin}
             />
           )}
         </div>

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { MoreHorizontal } from "lucide-react";
-import { mcpApi, mcpProblemMessage } from "@/lib/api/mcp";
+import { mcpApi, mcpProblemMessage, mcpWriteRefusal } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,10 +28,15 @@ import {
 import type { McpServerStatus } from "@/types/mcp";
 
 /**
- * Admin actions on one server version. Status changes go through the
- * registry's own `PATCH .../status` so they behave exactly as
- * `mcp-publisher status` would; `active` takes no message (the registry
- * clears it).
+ * Actions on one server version. Status changes and the soft delete need
+ * only repository `write` (plus a namespace grant under
+ * `mcp_require_namespace_grant`), never repository administration, so they
+ * are offered to every signed-in caller and the backend's refusal is shown;
+ * only the curation link and re-probe need `isRepoAdmin`. Deprecate and
+ * Mark active go through the registry's `PATCH .../status` (as
+ * `mcp-publisher status` would; `active` takes no message, the registry
+ * clears it); Delete version is the registry's own soft delete,
+ * `DELETE .../versions/{version}`.
  */
 
 export const MCP_STATUS_MESSAGE_MAX = 500;
@@ -49,6 +54,7 @@ export function McpAdminMenu({
   status,
   isRemote,
   probeAvailable,
+  isRepoAdmin,
 }: {
   repoKey: string;
   name: string;
@@ -56,21 +62,27 @@ export function McpAdminMenu({
   status?: McpServerStatus;
   isRemote: boolean;
   probeAvailable: boolean;
+  /** Repository administration (`mcp_caller_is_repo_admin` or instance admin). */
+  isRepoAdmin: boolean;
 }) {
   const qc = useQueryClient();
   const [target, setTarget] = useState<McpServerStatus | null>(null);
   const [message, setMessage] = useState("");
 
   const setStatus = useMutation({
-    mutationFn: (s: McpServerStatus) =>
-      mcpApi.setVersionStatus(repoKey, name, version, s, s === "active" ? undefined : message.trim() || undefined),
+    mutationFn: (s: McpServerStatus) => {
+      const msg = s === "active" ? undefined : message.trim() || undefined;
+      return s === "deleted"
+        ? mcpApi.deleteVersion(repoKey, name, version, msg)
+        : mcpApi.setVersionStatus(repoKey, name, version, s, msg);
+    },
     onSuccess: (_d, s) => {
       toast.success(ACTION_TEXT[s].done);
       setTarget(null);
       setMessage("");
       qc.invalidateQueries({ queryKey: mcpKeys.all });
     },
-    onError: (err) => toast.error(mcpProblemMessage(err) ?? "Status change failed"),
+    onError: (err) => toast.error(mcpWriteRefusal(err) ?? mcpProblemMessage(err) ?? "Status change failed"),
   });
 
   const probe = useMutation({
@@ -82,13 +94,15 @@ export function McpAdminMenu({
     onError: (err) => toast.error(mcpProblemMessage(err) ?? "Probe failed"),
   });
 
+  const showCuration = isRepoAdmin && isRemote;
+  const showProbe = isRepoAdmin && probeAvailable;
   const choices: McpServerStatus[] = (["deprecated", "active", "deleted"] as const).filter((s) => s !== status);
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm" aria-label="Admin actions">
+          <Button variant="outline" size="icon-sm" aria-label="Version actions">
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -102,13 +116,13 @@ export function McpAdminMenu({
               {ACTION_TEXT[s].item}
             </DropdownMenuItem>
           ))}
-          {(isRemote || probeAvailable) && <DropdownMenuSeparator />}
-          {isRemote && (
+          {(showCuration || showProbe) && <DropdownMenuSeparator />}
+          {showCuration && (
             <DropdownMenuItem asChild>
               <Link href={`/curation?repo=${encodeURIComponent(repoKey)}`}>Open in curation queue</Link>
             </DropdownMenuItem>
           )}
-          {probeAvailable && <DropdownMenuItem onSelect={() => probe.mutate()}>Re-probe tools</DropdownMenuItem>}
+          {showProbe && <DropdownMenuItem onSelect={() => probe.mutate()}>Re-probe tools</DropdownMenuItem>}
         </DropdownMenuContent>
       </DropdownMenu>
 

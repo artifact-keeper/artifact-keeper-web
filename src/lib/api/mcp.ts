@@ -111,6 +111,29 @@ export function mcpProblemMessage(err: unknown): string | null {
   return p.detail || p.title || null;
 }
 
+/**
+ * Plain text for a refused version write (status change or soft delete) the
+ * caller can act on: `401` (credential not accepted), `403
+ * mcp_namespace_not_granted` (the repository requires a namespace grant for
+ * writes and the caller holds none for this server's namespace) and any other
+ * `403` (no repository write). `null` for every other answer, which
+ * `mcpProblemMessage` reads instead.
+ */
+export function mcpWriteRefusal(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.status === 401) return 'Your sign-in was not accepted. Sign in again and retry.';
+  if (err.status !== 403) return null;
+  const p = parseProblem(err.body);
+  if (p?.error === 'mcp_namespace_not_granted') {
+    const why = p.detail ? ` (${p.detail})` : '';
+    return (
+      "This repository requires a namespace grant for writes, and you hold none for this server's namespace" +
+      `${why}. Ask an administrator for a namespace grant.`
+    );
+  }
+  return 'You need write access to this repository to change or delete a version.';
+}
+
 export interface ListServersParams {
   cursor?: string;
   limit?: number;
