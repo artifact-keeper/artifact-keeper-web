@@ -11,6 +11,7 @@ import {
   isMcpFormat,
   isRemoteMcpRepo,
   mcpArtifactPath,
+  mcpServerVersionFromArtifactPath,
   mcpCreatableRepoTypes,
   mcpGlobMatches,
   mcpRegistryBaseUrl,
@@ -289,5 +290,36 @@ describe("mcpKeys", () => {
     expect(mcpKeys.grants("r")).toEqual(["mcp", "grants", "r"]);
     expect(mcpKeys.catalog()).toEqual(["mcp", "catalog", {}]);
     expect(mcpKeys.catalog({ s: "x" })).toEqual(["mcp", "catalog", { s: "x" }]);
+  });
+});
+
+describe("mcpServerVersionFromArtifactPath", () => {
+  it("reads the server version back from its server.json path", () => {
+    expect(mcpServerVersionFromArtifactPath(mcpArtifactPath("com.acme/echo", "1.0.0"))).toEqual({
+      name: "com.acme/echo",
+      version: "1.0.0",
+    });
+    expect(mcpServerVersionFromArtifactPath("/servers/solo/2.0/server.json")).toEqual({ name: "solo", version: "2.0" });
+  });
+
+  it("reads a bundle's server version", () => {
+    expect(mcpServerVersionFromArtifactPath("servers/com.acme/echo/1.0.0/bundles/echo.mcpb")).toEqual({
+      name: "com.acme/echo",
+      version: "1.0.0",
+    });
+  });
+
+  it("is null for anything else", () => {
+    for (const p of [
+      undefined,
+      "",
+      "a/b.bin",
+      "servers/com.acme/echo/1.0.0/readme.md",
+      "servers/1.0.0/server.json",
+      "servers/a/b/c/1.0.0/server.json",
+      "servers//1.0.0/server.json",
+    ]) {
+      expect(mcpServerVersionFromArtifactPath(p)).toBeNull();
+    }
   });
 });

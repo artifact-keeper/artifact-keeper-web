@@ -98,6 +98,22 @@ describe("McpServerGallery", () => {
     );
   });
 
+  it("follows a later ?server= while mounted (the Artifacts tab's MCP delete hand-off)", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const el = () => (
+      <QueryClientProvider client={client}>
+        <McpServerGallery repositoryKey="mcp-local" repositoryType="local" />
+      </QueryClientProvider>
+    );
+    const view = render(el());
+    await waitFor(() => expect(mockListServers).toHaveBeenCalledTimes(1));
+    searchParams = new URLSearchParams("tab=packages&server=com.acme/sql");
+    view.rerender(el());
+    await waitFor(() =>
+      expect(mockListServers).toHaveBeenLastCalledWith("mcp-local", { version: "latest", search: "com.acme/sql", cursor: undefined }),
+    );
+  });
+
   it("filters by transport, package type and status", async () => {
     renderGallery();
     await waitFor(() => expect(cards()).toHaveLength(3));

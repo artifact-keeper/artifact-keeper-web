@@ -94,6 +94,13 @@ export function McpServerGallery({ repositoryKey, repositoryType }: McpServerGal
   // A card without a catalog id links back here with `?server=<name>`.
   const serverParam = useSearchParams()?.get("server") ?? "";
   const [filters, setFilters] = useState<McpServerFilters>({ ...DEFAULT_MCP_FILTERS, search: serverParam });
+  // A later `?server=` (the Artifacts tab's "Delete in the MCP registry")
+  // narrows the already-mounted gallery to that server too.
+  const [seenServerParam, setSeenServerParam] = useState(serverParam);
+  if (serverParam !== seenServerParam) {
+    setSeenServerParam(serverParam);
+    if (serverParam) setFilters((f) => ({ ...f, search: serverParam }));
+  }
   const [view, setView] = useState<McpGalleryView>("grid");
   const [installing, setInstalling] = useState<McpServedEntry | null>(null);
   const search = effectiveMcpSearch(filters.search);

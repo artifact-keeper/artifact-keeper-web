@@ -29,6 +29,21 @@ export function isMcpFormat(format: string | null | undefined): boolean {
   return format === MCP_FORMAT;
 }
 
+/**
+ * The registry's soft delete, the only delete an MCP repository accepts
+ * (artifact-keeper#5257): the generic
+ * `DELETE /api/v1/repositories/{key}/artifacts/{path}` answers `400` for
+ * every `mcp` repository, administrators included.
+ */
+export const MCP_SOFT_DELETE_ROUTE =
+  "DELETE /mcp/{repository}/v0.1/servers/{serverName}/versions/{version}" as const;
+
+/** Why an MCP repository's artifacts offer no generic Delete. */
+export const MCP_GENERIC_DELETE_REASON =
+  "MCP server versions are not deleted as artifacts. Delete a version from its server page " +
+  "(Servers tab): a soft delete through the MCP registry, " +
+  `${MCP_SOFT_DELETE_ROUTE}.`;
+
 /** The repository types the backend accepts for `mcp` repositories. */
 export type McpRepoTypeSupport = {
   /** Local + Staging. */
@@ -113,6 +128,25 @@ export const MCP_BACKABLE_REGISTRY_TYPES = Object.keys(MCP_BACKING_FORMATS) as E
 /** Path of a server version's artifact (`servers/<name>/<version>/server.json`). */
 export function mcpArtifactPath(name: string, version: string): string {
   return `servers/${name}/${version}/server.json`;
+}
+
+/**
+ * The server version a stored MCP artifact belongs to. One version is one
+ * artifact at `servers/<name>/<version>/server.json`; an MCPB bundle sits at
+ * `servers/<name>/<version>/bundles/<file>`. A server name has at most one
+ * `/` (`com.acme/echo`). `null` for any other path.
+ */
+export function mcpServerVersionFromArtifactPath(
+  path: string | null | undefined,
+): { name: string; version: string } | null {
+  const segs = (path ?? "").replace(/^\/+/, "").split("/");
+  if (segs[0] !== "servers") return null;
+  let rest = segs.slice(1);
+  if (rest.length >= 2 && rest[rest.length - 2] === "bundles") rest = rest.slice(0, -2);
+  else if (rest[rest.length - 1] === "server.json") rest = rest.slice(0, -1);
+  else return null;
+  if (rest.length < 2 || rest.length > 3 || rest.some((s) => !s)) return null;
+  return { name: rest.slice(0, -1).join("/"), version: rest[rest.length - 1] };
 }
 
 /** Split `com.acme/weather` into namespace and short name. */
