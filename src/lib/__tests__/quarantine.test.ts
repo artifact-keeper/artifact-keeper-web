@@ -8,6 +8,8 @@ import {
   formatQuarantineExpiry,
   QUARANTINE_HOLD_DOWNLOAD_REASON,
   QUARANTINE_REJECTED_DOWNLOAD_REASON,
+  QUARANTINE_BADGE_LABELS,
+  quarantineBadgeKind,
 } from "../quarantine";
 import type { Artifact } from "@/types";
 
@@ -266,5 +268,96 @@ describe("formatQuarantineExpiry", () => {
     const result = formatQuarantineExpiry("2026-06-15T12:00:00Z");
     expect(result).toMatch(/^Expires on /);
     expect(result).toContain("2026");
+  });
+});
+
+describe("quarantineBadgeKind", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-17T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("badges a held artifact as Quarantined", () => {
+    const kind = quarantineBadgeKind({ quarantine_status: "quarantined" });
+    expect(kind).toBe("held");
+    expect(QUARANTINE_BADGE_LABELS[kind!]).toBe("Quarantined");
+  });
+
+  it("badges a live timed hold as Quarantined", () => {
+    expect(
+      quarantineBadgeKind({
+        quarantine_status: "quarantined",
+        quarantine_until: "2026-04-17T13:00:00Z",
+      }),
+    ).toBe("held");
+  });
+
+  it("badges a rejected artifact as Rejected, not Quarantined", () => {
+    const kind = quarantineBadgeKind({ quarantine_status: "rejected" });
+    expect(kind).toBe("rejected");
+    expect(QUARANTINE_BADGE_LABELS[kind!]).toBe("Rejected");
+  });
+
+  it("keeps Rejected even for a conda file with a withdrawal notice", () => {
+    expect(
+      quarantineBadgeKind({ quarantine_status: "rejected" }, { withdrawn: true }),
+    ).toBe("rejected");
+  });
+
+  it("badges a scan-policy hold as Policy refused", () => {
+    const kind = quarantineBadgeKind({
+      quarantine_status: "quarantined",
+      hold_source: "scan_policy",
+    });
+    expect(kind).toBe("policy_refused");
+    expect(QUARANTINE_BADGE_LABELS[kind!]).toBe("Policy refused");
+  });
+
+  it("treats upload and admin holds as plain holds", () => {
+    expect(
+      quarantineBadgeKind({ quarantine_status: "quarantined", hold_source: "upload" }),
+    ).toBe("held");
+    expect(
+      quarantineBadgeKind({ quarantine_status: "quarantined", hold_source: "admin" }),
+    ).toBe("held");
+  });
+
+  it("badges a conda withdrawal as Withdrawn", () => {
+    const kind = quarantineBadgeKind(
+      { quarantine_status: "quarantined" },
+      { withdrawn: true },
+    );
+    expect(kind).toBe("withdrawn");
+    expect(QUARANTINE_BADGE_LABELS[kind!]).toBe("Withdrawn");
+  });
+
+  it("gives a released artifact no badge", () => {
+    expect(quarantineBadgeKind({ quarantine_status: "released" })).toBeNull();
+  });
+
+  it("gives clear and scan-lifecycle states no badge", () => {
+    for (const status of ["not_quarantined", "clean", "flagged", "unscanned"]) {
+      expect(quarantineBadgeKind({ quarantine_status: status })).toBeNull();
+    }
+  });
+
+  it("gives a lapsed timed hold no badge", () => {
+    expect(
+      quarantineBadgeKind({
+        quarantine_status: "quarantined",
+        quarantine_until: "2026-04-17T11:00:00Z",
+      }),
+    ).toBeNull();
+  });
+
+  it("gives an unknown state (status never loaded) no badge", () => {
+    expect(quarantineBadgeKind(undefined)).toBeNull();
+    expect(quarantineBadgeKind(null)).toBeNull();
+    expect(quarantineBadgeKind({})).toBeNull();
+    expect(quarantineBadgeKind({ quarantine_status: null })).toBeNull();
   });
 });

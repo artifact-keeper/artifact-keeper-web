@@ -5,7 +5,8 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { QuarantineBadge } from "../quarantine-badge";
 
-vi.mock("@/lib/quarantine", () => ({
+vi.mock("@/lib/quarantine", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/quarantine")>()),
   formatQuarantineExpiry: (val: string | null | undefined) => {
     if (!val) return null;
     return "Expires in 3 hours";
@@ -22,6 +23,7 @@ vi.mock("lucide-react", () => {
   };
   return {
     ShieldAlert: stub("ShieldAlert"),
+    ShieldX: stub("ShieldX"),
   };
 });
 
@@ -117,5 +119,35 @@ describe("QuarantineBadge withdrawn", () => {
   it("labels a conda withdrawal as Withdrawn", () => {
     render(<QuarantineBadge withdrawn />);
     expect(screen.getByLabelText("Withdrawn")).toHaveTextContent("Withdrawn");
+  });
+});
+
+describe("QuarantineBadge kinds", () => {
+  it("labels a rejected artifact as Rejected with destructive styling", () => {
+    render(<QuarantineBadge kind="rejected" />);
+    const badge = screen.getByLabelText("Rejected");
+    expect(badge).toHaveTextContent("Rejected");
+    expect(badge.className).toContain("text-destructive");
+    expect(badge.className).not.toContain("text-amber-700");
+    expect(screen.getByTestId("icon-ShieldX")).toBeInTheDocument();
+    expect(screen.queryByText("Quarantined")).not.toBeInTheDocument();
+  });
+
+  it("shows no hold expiry for a rejected artifact", () => {
+    render(
+      <QuarantineBadge kind="rejected" quarantineUntil="2026-04-20T00:00:00Z" />
+    );
+    expect(screen.queryByText("Expires in 3 hours")).not.toBeInTheDocument();
+  });
+
+  it("labels a scan-policy hold as Policy refused", () => {
+    render(<QuarantineBadge kind="policy_refused" />);
+    expect(screen.getByLabelText("Policy refused")).toBeInTheDocument();
+  });
+
+  it("labels a plain hold as Quarantined with hold styling", () => {
+    render(<QuarantineBadge kind="held" />);
+    const badge = screen.getByLabelText("Quarantined");
+    expect(badge.className).toContain("text-amber-700");
   });
 });
