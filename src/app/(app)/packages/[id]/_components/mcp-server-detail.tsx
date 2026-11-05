@@ -9,7 +9,7 @@ import { mcpApi } from "@/lib/api/mcp";
 import { packagesApi } from "@/lib/api/packages";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { mcpKeys } from "@/lib/mcp/query-keys";
-import { isRemoteMcpRepo, splitServerName } from "@/lib/mcp/format";
+import { isRemoteMcpRepo, isVirtualMcpRepo, splitServerName } from "@/lib/mcp/format";
 import { akSourceMeta, isSafeHttpUrl, officialMeta, secretsOf, sourceKind, sourceKindOf } from "@/lib/mcp/server-json";
 import { assessRisk } from "@/lib/mcp/risk";
 import { useAuth } from "@/providers/auth-provider";
@@ -180,6 +180,12 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
   // instance administrator, or the repository `admin` action, which the
   // single-repository response reports as `mcp_caller_is_repo_admin`.
   const isRepoAdmin = isAdmin || repoQ.data?.mcp_caller_is_repo_admin === true;
+  // A Remote or Virtual registry refuses every version write with
+  // `405 mcp_read_only`. Until the repository type is known the write items
+  // stay hidden; if it cannot be read they are offered and the backend decides.
+  const readOnlyRepo = repoQ.data
+    ? isRemoteMcpRepo(repoQ.data) || isVirtualMcpRepo(repoQ.data)
+    : repoQ.isPending;
 
   const stored = storedQ.data?.metadata;
   const server = entry?.server ?? stored?.server;
@@ -278,8 +284,9 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
         <div className="flex items-center gap-2">
           {entry && <Button onClick={() => setParam("tab", "install")}>Install / Connect</Button>}
           {/* Status changes and the soft delete need only repository write,
-              which the UI cannot see: any signed-in caller gets the menu and
-              the backend's 403 is shown. Admin-only items gate inside. */}
+              which the UI cannot see: any signed-in caller gets them on a
+              hosted repository and the backend's 403 is shown. Remote and
+              Virtual repositories take no writes. Admin-only items gate inside. */}
           {!!user && (
             <McpAdminMenu
               repoKey={repoKey}
@@ -287,6 +294,7 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
               version={version}
               status={status}
               isRemote={!!repoQ.data && isRemoteMcpRepo(repoQ.data)}
+              readOnly={readOnlyRepo}
               probeAvailable={!!capsQ.data && (capsQ.data.introspection.probeEnabled || capsQ.data.introspection.sandboxEnabled)}
               isRepoAdmin={isRepoAdmin}
             />

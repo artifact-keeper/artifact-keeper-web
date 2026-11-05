@@ -334,6 +334,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // only a way to that server in the Servers tab (`?server=` filters the
   // gallery to it, the card opens the page with the Delete version action).
   const isMcpRepo = isMcpFormat(repoFormat);
+  // Remote and Virtual MCP registries take no version writes at all
+  // (`405 mcp_read_only`), so there is no delete to send the caller to.
+  const mcpDeletable =
+    isMcpRepo && (repository?.repo_type === "local" || repository?.repo_type === "staging");
   const openMcpServer = useCallback(
     (path: string) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -1002,7 +1006,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </TooltipContent>
             </Tooltip>
           )}
-          {isAuthenticated && isMcpRepo && (
+          {isAuthenticated && mcpDeletable && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -2024,16 +2028,18 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     <CondaWithdrawButton repoKey={repoKey} path={selectedArtifact.path} />
                   )}
                 {isMcpRepo ? (
-                  <Button
-                    variant="outline"
-                    title={MCP_GENERIC_DELETE_REASON}
-                    onClick={() => {
-                      if (selectedArtifact) openMcpServer(selectedArtifact.path);
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                    Delete in the MCP registry
-                  </Button>
+                  mcpDeletable && (
+                    <Button
+                      variant="outline"
+                      title={MCP_GENERIC_DELETE_REASON}
+                      onClick={() => {
+                        if (selectedArtifact) openMcpServer(selectedArtifact.path);
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete in the MCP registry
+                    </Button>
+                  )
                 ) : (
                   <Button
                     variant="destructive"

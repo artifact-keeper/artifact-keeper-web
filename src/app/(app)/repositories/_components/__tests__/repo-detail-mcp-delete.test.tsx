@@ -242,6 +242,21 @@ describe("MCP repository: no generic artifact delete (#5253)", () => {
     expect(lastReplace().get("server")).toBe("com.acme/echo");
   });
 
+  // A Remote or Virtual MCP registry refuses version writes with
+  // `405 mcp_read_only`; the server page offers no Delete there, so the
+  // repository page must not send the caller to it (#1088).
+  it.each(["remote", "virtual"])("offers no delete on a %s MCP repository", async (repoType) => {
+    repository.repo_type = repoType;
+    render(<RepoDetailContent repoKey="mcp-local" />);
+    expect(
+      within(screen.getByTestId("actions-cell")).queryByRole("button", { name: MCP_ROW_ACTION }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId(`stub-row-${MCP_ROW.id}`));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("button", { name: /delete in the mcp registry/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+  });
+
   it("keeps the generic Delete on other formats", async () => {
     repository.key = "gen";
     repository.format = "generic";
