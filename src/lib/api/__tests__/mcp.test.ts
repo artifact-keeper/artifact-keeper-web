@@ -284,8 +284,8 @@ const READERS: { name: string; call: () => Promise<unknown>; url: string; ok: un
     name: "syncState",
     call: () => mcpApi.syncState("r"),
     url: `${MGMT}/sync`,
-    ok: { lastError: null, lastSummary: null },
-    expected: { lastError: null, lastSummary: null },
+    ok: { lastError: null, lastSummary: null, running: true },
+    expected: { lastError: null, lastSummary: null, running: true },
   },
   {
     name: "listHolds",

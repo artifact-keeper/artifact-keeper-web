@@ -551,6 +551,22 @@ export interface McpSyncState {
   lastSucceededAt: string | null;
   lastError: string | null;
   lastSummary: McpSyncSummary | null;
+  /**
+   * A pass of the Remote (manual or scheduled, on any replica) runs now
+   * (artifact-keeper#5404). Absent from backends before that change.
+   */
+  running?: boolean;
+}
+
+/**
+ * `202` answer of `POST .../mcp/sync` (artifact-keeper#5404): the pass runs
+ * in the background; poll `statusUrl` (`GET .../mcp/sync`) until `running`
+ * is `false`.
+ */
+export interface McpSyncAccepted {
+  repository: string;
+  status: 'running';
+  statusUrl: string;
 }
 
 /** `GET /v0.1/x/com.artifactkeeper/holds`, one page. */

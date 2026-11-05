@@ -22,8 +22,8 @@ import type {
   McpServerJson,
   McpServerStatus,
   McpStoredMetadata,
+  McpSyncAccepted,
   McpSyncState,
-  McpSyncSummary,
   McpVersionRead,
 } from '@/types/mcp';
 
@@ -383,9 +383,13 @@ export const mcpApi = {
   syncState: (repoKey: string): Promise<McpSyncState | null> =>
     orNull(apiFetch<McpSyncState>(`${remoteBase(repoKey)}/sync`)),
 
-  /** `POST /sync`: run a sync now (409 while one runs, 502 when upstream is unreadable). */
-  triggerSync: (repoKey: string): Promise<{ repository: string; summary: McpSyncSummary }> =>
-    apiFetch<{ repository: string; summary: McpSyncSummary }>(`${remoteBase(repoKey)}/sync`, { method: 'POST' }),
+  /**
+   * `POST /sync`: start a sync pass in the background (`202`, artifact-keeper#5404);
+   * its outcome is read from `syncState`. `409` while a pass runs or scheduled
+   * upstream jobs are paused.
+   */
+  triggerSync: (repoKey: string): Promise<McpSyncAccepted> =>
+    apiFetch<McpSyncAccepted>(`${remoteBase(repoKey)}/sync`, { method: 'POST' }),
 
   /**
    * `GET /api/v1/mcp/pending-summary`: names and drifted versions awaiting a
