@@ -140,8 +140,21 @@ export function getInstallCommand(
       return `choco install ${packageName} --version ${v}`;
     case "powershell":
       return `Install-Module ${packageName} -RequiredVersion ${v}`;
-    case "huggingface":
-      return `huggingface-cli download ${packageName}`;
+    case "huggingface": {
+      // `hf` downloads from huggingface.co unless HF_ENDPOINT points it at
+      // this repository, so the endpoint is part of the command, not optional
+      // client config (artifact-keeper#5290). `huggingface-cli` is the
+      // deprecated name of the same CLI.
+      const endpoint =
+        host && repoKey
+          ? `https://${host}/huggingface/${repoKey}`
+          : "https://<registry>/huggingface/<repo>";
+      const revision = version ? ` --revision ${version}` : "";
+      return (
+        `HF_ENDPOINT=${endpoint} hf download ${packageName}${revision}\n` +
+        "# If the download fails with a 404 on xet-read-token, add HF_HUB_DISABLE_XET=1"
+      );
+    }
     case "bazel":
       return `bazel_dep(name = "${packageName}", version = "${v}")`;
     case "rpm":
