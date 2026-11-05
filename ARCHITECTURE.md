@@ -151,6 +151,14 @@ UI is built on shadcn/ui (the "new-york" style) over Radix primitives.
 - `src/components` also holds shared app components grouped by area (`auth`,
   `layout`, `package`, `search`, `common`, `dt`).
 - Feature-specific components live in the route's `_components` folder.
+- The MCP registry (`mcp` format, artifact-keeper#5253) keeps its pure logic in
+  `src/lib/mcp/` (format predicates, server.json parsing, per-client install
+  snippets, risk signals, query keys), every endpoint in `src/lib/api/mcp.ts`,
+  and its shared components in `src/components/mcp/`. A server.json is
+  publisher-controlled: render it as text, link only `isSafeHttpUrl` URLs,
+  never put a value typed into a secret input into a snippet. The later-phase
+  readers in `mcpApi` return `null` when the backend does not serve the
+  endpoint, and the UI hides the surface on `null`.
 - Toasts use `sonner` through the `Toaster` mounted in the root layout;
   `mutationErrorToast` in `src/lib/error-utils.ts` is the standard mutation
   error handler.

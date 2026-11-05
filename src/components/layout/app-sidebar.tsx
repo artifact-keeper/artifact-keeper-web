@@ -49,11 +49,14 @@ import {
   Network,
   Crosshair,
   Hourglass,
+  Plug,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { backendSupportsMcp } from "@/lib/mcp/format";
 import {
   Sidebar,
   SidebarContent,
@@ -83,6 +86,7 @@ const artifactItems: NavItem[] = [
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
   { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
+  { title: "MCP Servers", href: "/mcp-servers", icon: Plug },
   { title: "Setup Guide", href: "/setup", icon: BookOpen },
 ];
 
@@ -182,6 +186,14 @@ export function AppSidebar() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // The MCP catalog only exists on a backend that registers the `mcp`
+  // format (artifact-keeper#5253); an older one would show an empty page.
+  const { data: formatHandlers } = useFormatHandlers();
+  const mcpSupported = backendSupportsMcp(Array.isArray(formatHandlers) ? formatHandlers : undefined);
+  const visibleArtifactItems = mcpSupported
+    ? artifactItems
+    : artifactItems.filter((item) => item.href !== "/mcp-servers");
+
   // For integration items, non-admin authenticated users don't see Migration
   const visibleIntegrationItems = isAdmin
     ? integrationItems
@@ -237,7 +249,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="pb-4">
         <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
-        <NavGroup label="Artifacts" items={artifactItems} pathname={pathname} />
+        <NavGroup label="Artifacts" items={visibleArtifactItems} pathname={pathname} />
         {isAuthenticated && (
           <NavGroup
             label="Integration"

@@ -43,6 +43,21 @@ describe("formatHandlersApi", () => {
     expect(out[0]).toMatchObject({ format_key: "pypi", handler_type: "Core", extensions: [".whl", ".tar.gz"], description: null });
   });
 
+  it("list keeps the string entries of repository_types and omits it when absent", async () => {
+    m.listFormatHandlers.mockResolvedValue({
+      data: [{ ...SDK, format_key: "mcp", repository_types: ["local", "staging", 3, "remote", "virtual"] }, SDK],
+      error: undefined,
+    });
+    const [mcp, pypi] = await formatHandlersApi.list();
+    expect(mcp.repository_types).toEqual(["local", "staging", "remote", "virtual"]);
+    expect(pypi).not.toHaveProperty("repository_types");
+  });
+
+  it("list ignores a repository_types that is not a list", async () => {
+    m.listFormatHandlers.mockResolvedValue({ data: [{ ...SDK, repository_types: "local" }], error: undefined });
+    expect((await formatHandlersApi.list())[0]).not.toHaveProperty("repository_types");
+  });
+
   it("list throws on error", async () => {
     m.listFormatHandlers.mockResolvedValue({ data: undefined, error: { status: 500 } });
     await expect(formatHandlersApi.list()).rejects.toEqual({ status: 500 });

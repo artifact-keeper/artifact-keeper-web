@@ -35,6 +35,8 @@ export const QUERY_KEYS = {
   CI_OIDC: ["ci-oidc"],
   CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
   RPM_REPODATA_CAPABILITIES: ["rpm-repodata-capabilities"],
+  // Root of every MCP registry view (`mcpKeys` in src/lib/mcp/query-keys.ts).
+  MCP: ["mcp"],
 } as const;
 
 /**
@@ -65,6 +67,15 @@ export const INVALIDATION_GROUPS: Record<string, readonly (readonly string[])[]>
     QUERY_KEYS.REPOSITORIES,
     QUERY_KEYS.RECENT_REPOS,
     QUERY_KEYS.QUALITY_HEALTH,
+  ],
+  // Artifact CRUD: repository counts plus the MCP views, since an MCP server
+  // version is an artifact. Events carry no format, so this cannot be scoped
+  // to MCP repositories; only mounted MCP queries refetch (#5253).
+  artifacts: [
+    QUERY_KEYS.REPOSITORIES,
+    QUERY_KEYS.RECENT_REPOS,
+    QUERY_KEYS.QUALITY_HEALTH,
+    QUERY_KEYS.MCP,
   ],
   users: [QUERY_KEYS.ADMIN_USERS, QUERY_KEYS.ADMIN_GROUPS],
   groups: [QUERY_KEYS.ADMIN_GROUPS, QUERY_KEYS.ADMIN_PERMISSIONS],
@@ -107,11 +118,11 @@ export const EVENT_TYPE_MAP: Record<string, string> = {
   "webhook.updated": "webhooks",
   "webhook.deleted": "webhooks",
   "webhook.delivery": "webhooks",
-  // Artifact CRUD bumps the artifact_count shown on repo cards/lists, so
-  // map to repositories rather than introducing a separate artifacts group
-  // (no consumer queries `["artifacts"]` directly today). (#213)
-  "artifact.uploaded": "repositories",
-  "artifact.deleted": "repositories",
+  // Artifact CRUD bumps the artifact_count shown on repo cards/lists (#213)
+  // and changes the MCP registry views (#5253): the artifacts group is the
+  // repositories group plus ["mcp"].
+  "artifact.uploaded": "artifacts",
+  "artifact.deleted": "artifacts",
   // Scans + finding triage — security dashboard, scan list, per-scan
   // findings all live under the ["security", ...] prefix (#213)
   "scan.started": "security",

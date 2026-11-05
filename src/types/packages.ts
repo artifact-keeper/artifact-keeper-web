@@ -46,6 +46,7 @@ export type PackageType =
   | 'vscode'
   | 'jetbrains'
   | 'agentplugins'
+  | 'mcp'
   | 'huggingface'
   | 'mlmodel'
   | 'cran'

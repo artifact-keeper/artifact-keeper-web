@@ -163,6 +163,15 @@ describe("getInstallCommand", () => {
       );
     });
 
+    it("mcp reads the exact version from the repository's registry API", () => {
+      expect(getInstallCommand("com.acme/weather", ver, "mcp", location)).toBe(
+        "curl https://registry.example.com/mcp/images/v0.1/servers/com.acme%2Fweather/versions/1.2.3"
+      );
+      expect(getInstallCommand("com.acme/weather", undefined, "mcp", { repoKey: "images" })).toBe(
+        "curl <registry>/mcp/images/v0.1/servers/com.acme%2Fweather/versions/latest"
+      );
+    });
+
     it("huggingface points hf at this repository through HF_ENDPOINT", () => {
       // artifact-keeper#5290: without HF_ENDPOINT the command downloads from
       // huggingface.co and bypasses the registry.

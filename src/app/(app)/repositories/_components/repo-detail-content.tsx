@@ -90,6 +90,11 @@ import { ArtifactOriginSection } from "./artifact-origin-section";
 import { artifactDetailKey } from "@/lib/query-keys";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
+  isMcpFormat,
+  MCP_GENERIC_DELETE_REASON,
+  mcpServerVersionFromArtifactPath,
+} from "@/lib/mcp/format";
+import {
   ArtifactBrowserToggle,
   DOCKER_FAMILY_FORMATS,
   supportsGrouping,
@@ -323,6 +328,27 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     [router, searchParams],
   );
 
+  // An MCP repository refuses the generic artifact delete (400, admins
+  // included: artifact-keeper#5257); a server version is soft-deleted through
+  // the registry from its server page. So MCP artifacts get no Delete here,
+  // only a way to that server in the Servers tab (`?server=` filters the
+  // gallery to it, the card opens the page with the Delete version action).
+  const isMcpRepo = isMcpFormat(repoFormat);
+  const openMcpServer = useCallback(
+    (path: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "packages");
+      const sv = mcpServerVersionFromArtifactPath(path);
+      if (sv) params.set("server", sv.name);
+      else params.delete("server");
+      setDetailOpen(false);
+      setSelectedArtifact(null);
+      setRepoTab("packages");
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
+
   const { data: artifactsData, isLoading: artifactsLoading } = useQuery({
     queryKey: [
       "artifacts",
@@ -487,7 +513,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   // --- mutations ---
   const deleteMutation = useMutation({
-    mutationFn: (path: string) => artifactsApi.delete(repoKey, path),
+    mutationFn: (path: string) =>
+      isMcpRepo
+        ? Promise.reject(new Error(MCP_GENERIC_DELETE_REASON))
+        : artifactsApi.delete(repoKey, path),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
@@ -973,7 +1002,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </TooltipContent>
             </Tooltip>
           )}
-          {isAuthenticated && (
+          {isAuthenticated && isMcpRepo && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Delete through the MCP registry (open the server page)"
+                  onClick={() => openMcpServer(a.path)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm">
+                {MCP_GENERIC_DELETE_REASON}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isAuthenticated && !isMcpRepo && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1198,7 +1244,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </TabsTrigger>
           <TabsTrigger value="packages">
             <PackageIcon className="size-3.5 mr-1" />
-            Packages
+            {isMcpFormat(repository.format) ? "Servers" : "Packages"}
           </TabsTrigger>
           <TabsTrigger value="setup">
             <Rocket className="size-3.5 mr-1" />
@@ -1425,6 +1471,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <PackagesTabContent
             repositoryKey={repoKey}
             repositoryFormat={repository.format}
+            repositoryType={repository.repo_type}
           />
         </TabsContent>
 
@@ -1976,16 +2023,29 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   !selectedWithdrawn && (
                     <CondaWithdrawButton repoKey={repoKey} path={selectedArtifact.path} />
                   )}
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
+                {isMcpRepo ? (
+                  <Button
+                    variant="outline"
+                    title={MCP_GENERIC_DELETE_REASON}
+                    onClick={() => {
+                      if (selectedArtifact) openMcpServer(selectedArtifact.path);
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete in the MCP registry
+                  </Button>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
+                    }}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
+                )}
                 {repository.repo_type === "remote" && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

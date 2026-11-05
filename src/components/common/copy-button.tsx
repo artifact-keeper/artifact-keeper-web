@@ -14,20 +14,23 @@ interface CopyButtonProps {
   value: string;
   className?: string;
   label?: string;
+  /** Called after a successful copy, e.g. to announce it with a toast. */
+  onCopied?: () => void;
 }
 
-export function CopyButton({ value, className, label = "Copy" }: CopyButtonProps) {
+export function CopyButton({ value, className, label = "Copy", onCopied }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      onCopied?.();
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API not available
     }
-  }, [value]);
+  }, [value, onCopied]);
 
   return (
     <Tooltip>
