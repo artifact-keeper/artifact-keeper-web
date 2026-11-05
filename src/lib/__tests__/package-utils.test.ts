@@ -75,7 +75,7 @@ const FORMAT_EXPECTATIONS: [string, string, "exact" | "contains"][] = [
   ["chocolatey", "choco install my-package --version 1.2.3", "exact"],
   ["powershell", "Install-Module my-package -RequiredVersion 1.2.3", "exact"],
   // ML/AI
-  ["huggingface", "huggingface-cli download my-package", "exact"],
+  ["huggingface", "HF_ENDPOINT=https://<registry>/huggingface/<repo> hf download my-package --revision 1.2.3", "contains"],
   // Build systems
   ["bazel", 'bazel_dep(name = "my-package", version = "1.2.3")', "exact"],
   // OCI/WASM
@@ -161,6 +161,25 @@ describe("getInstallCommand", () => {
       expect(getInstallCommand(pkg, undefined, "agentplugins", location)).toBe(
         "ak agent plugins install my-package --repo images --harness claude"
       );
+    });
+
+    it("huggingface points hf at this repository through HF_ENDPOINT", () => {
+      // artifact-keeper#5290: without HF_ENDPOINT the command downloads from
+      // huggingface.co and bypasses the registry.
+      const [command, note] = getInstallCommand(pkg, ver, "huggingface", location).split("\n");
+      expect(command).toBe(
+        "HF_ENDPOINT=https://registry.example.com/huggingface/images hf download my-package --revision 1.2.3"
+      );
+      expect(note).toContain("HF_HUB_DISABLE_XET=1");
+      expect(getInstallCommand(pkg, undefined, "huggingface", location)).toMatch(
+        /^HF_ENDPOINT=https:\/\/registry\.example\.com\/huggingface\/images hf download my-package\n/
+      );
+    });
+
+    it("huggingface uses placeholders, never huggingface.co, when the location is unknown", () => {
+      const command = getInstallCommand(pkg, ver, "huggingface", { repoKey: "images" });
+      expect(command).toContain("HF_ENDPOINT=https://<registry>/huggingface/<repo> hf download");
+      expect(command).not.toContain("huggingface-cli");
     });
 
     it("leaves formats that resolve through client config unchanged", () => {
