@@ -190,9 +190,10 @@ export default function ReplicationPage() {
               <Info className="h-3.5 w-3.5 text-muted-foreground" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              Direction is relative to this instance. Push = this instance sends
-              the repo to the selected peer. Pull = this instance fetches it from
-              the peer.
+              Direction is relative to this instance. Push and Mirror = this
+              instance sends each new artifact to the selected peer as it is
+              uploaded. None = assigned, not replicated. Pull is not
+              implemented.
             </TooltipContent>
           </Tooltip>
         </span>
@@ -214,7 +215,11 @@ export default function ReplicationPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="push">Push</SelectItem>
-              <SelectItem value="pull">Pull</SelectItem>
+              {/* artifact-keeper#5293: refused by the backend; shown only so a
+                  subscription saved with it before then still renders. */}
+              <SelectItem value="pull" disabled>
+                Pull (not implemented)
+              </SelectItem>
               <SelectItem value="mirror">Mirror</SelectItem>
               <SelectItem value="none">None</SelectItem>
             </SelectContent>
