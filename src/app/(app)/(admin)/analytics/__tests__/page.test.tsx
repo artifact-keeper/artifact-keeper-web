@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import React from "react";
 
 const mockUseAuth = vi.hoisted(() => vi.fn());
@@ -141,15 +141,37 @@ describe("AnalyticsPage local/remote accounting", () => {
 
   afterEach(cleanup);
 
-  it("sums local and remote in the stat cards, with the split on hover", async () => {
+  it("counts proxy storage once in the stat card and its breakdown", async () => {
     await renderPage();
 
     expect(screen.getByText("250")).toBeDefined();
-    expect(screen.getByText("1500000 B")).toBeDefined();
+    const card = screen.getByText("Total Storage").closest("[data-slot=card]")!;
+    expect(within(card as HTMLElement).getByText("1000000 B")).toBeDefined();
+    expect(screen.queryByText("1500000 B")).toBeNull();
     expect(screen.getByText("200")).toBeDefined();
     expect(screen.getByText("50")).toBeDefined();
-    expect(screen.getByText("1000000 B")).toBeDefined();
-    expect(screen.getByText("500000 B")).toBeDefined();
+    expect(screen.getAllByText("500000 B")).toHaveLength(2);
+  });
+
+  it("falls back to snapshot storage when live stats are unavailable", async () => {
+    mockUseQuery.mockImplementation(({ queryKey }: any) => ({
+      data: queryKey[0] === "admin-stats" ? undefined : queryData(queryKey[0]),
+      isLoading: false,
+    }));
+    await renderPage();
+    expect(screen.getByText("2 B")).toBeDefined();
+  });
+
+  it("keeps a live zero total instead of falling back to snapshot storage", async () => {
+    mockUseQuery.mockImplementation(({ queryKey }: any) => ({
+      data: queryKey[0] === "admin-stats"
+        ? { ...STATS, total_storage_bytes: 0, proxy_storage_bytes: 0 }
+        : queryData(queryKey[0]),
+      isLoading: false,
+    }));
+    await renderPage();
+    const card = screen.getByText("Total Storage").closest("[data-slot=card]")!;
+    expect(within(card as HTMLElement).getByText("0 B")).toBeDefined();
   });
 
   it("sums artifacts, storage and downloads per repository", async () => {
@@ -166,12 +188,14 @@ describe("AnalyticsPage local/remote accounting", () => {
     expect(screen.getByText("20 B")).toBeDefined();
   });
 
-  it("sums the daily snapshot and download trend rows", async () => {
+  it("counts snapshot proxy storage once while adding disjoint artifact and download counts", async () => {
     await renderPage();
 
-    // Storage trend: 700 + 60, 9000 + 800, 400 + 70.
+    // Snapshot storage already includes its 800 proxy bytes; counts are disjoint.
     expect(screen.getByText("760")).toBeDefined();
-    expect(screen.getByText("9800 B")).toBeDefined();
+    expect(screen.getByText("9000 B")).toBeDefined();
+    expect(screen.getByText("8200 B")).toBeDefined();
+    expect(screen.queryByText("9800 B")).toBeNull();
     expect(screen.getByText("470")).toBeDefined();
     // Download trend: 1000 + 210.
     expect(screen.getByText("1,210")).toBeDefined();
@@ -198,6 +222,8 @@ describe("AnalyticsPage local/remote accounting", () => {
     expect(screen.queryByText("760")).toBeNull();
     expect(screen.getByText("70")).toBeDefined();
     expect(screen.getByText("800 B")).toBeDefined();
+    expect(screen.getByText("8200 B")).toBeDefined();
+    expect(screen.queryByText("9000 B")).toBeNull();
   });
 
   it("hides analytics from non-admins", async () => {
