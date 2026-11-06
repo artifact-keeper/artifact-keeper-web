@@ -13,6 +13,7 @@ import {
   hasNpmScopePolicy,
 } from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
+import type { UpstreamMode } from "@/lib/upstream-mode";
 import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { useRepositories } from "@/hooks/use-repositories";
@@ -210,6 +211,10 @@ export function RepoDialogs({
   const [upstreamAuthType, setUpstreamAuthType] = useState<string>("none");
   const [upstreamUsername, setUpstreamUsername] = useState("");
   const [upstreamPassword, setUpstreamPassword] = useState("");
+  // Upstream mode the Remote is born with (#1094). Create applies it
+  // atomically (artifact-keeper#5406), so a cache-only Remote never contacts
+  // its upstream, not even once.
+  const [createUpstreamMode, setCreateUpstreamMode] = useState<UpstreamMode>("online");
 
   // 1.6.0 format-specific config state for the create dialog (#602).
   const [rpmConfig, setRpmConfig] = useState<RpmConfigValue>(EMPTY_RPM_CONFIG);
@@ -377,6 +382,7 @@ export function RepoDialogs({
     setUpstreamAuthType("none");
     setUpstreamUsername("");
     setUpstreamPassword("");
+    setCreateUpstreamMode("online");
     setRpmConfig(EMPTY_RPM_CONFIG);
     setRepodataDepth("0");
     setDebianConfig(EMPTY_DEBIAN_CONFIG);
@@ -460,6 +466,11 @@ export function RepoDialogs({
                   submitData.upstream_username = upstreamUsername;
                 }
                 submitData.upstream_password = upstreamPassword;
+              }
+              // Only cache-only is sent: `online` is the default, and an older
+              // backend then sees the request it always did.
+              if (createForm.repo_type === "remote" && createUpstreamMode === "cache_only") {
+                submitData.upstream_mode = "cache_only";
               }
               // 1.6.0 format-specific config (#602): attach only the group that
               // matches the selected format so other formats send nothing.
@@ -697,6 +708,30 @@ export function RepoDialogs({
                     />
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Remote repository: upstream mode (#1094) */}
+            {createForm.repo_type === "remote" && (
+              <div className="space-y-2">
+                <Label htmlFor="create-upstream-mode">Upstream Mode</Label>
+                <Select
+                  value={createUpstreamMode}
+                  onValueChange={(v) => setCreateUpstreamMode(v as UpstreamMode)}
+                >
+                  <SelectTrigger className="w-full" id="create-upstream-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="online">Online (proxy the upstream)</SelectItem>
+                    <SelectItem value="cache_only">Cache-only (never contact the upstream)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {createUpstreamMode === "cache_only"
+                    ? "Serves only what is already in its cache, and a cache miss returns 404. Put it online later in its settings to fetch from the upstream."
+                    : "Fetches cache misses from the upstream and caches them."}
+                </p>
               </div>
             )}
 

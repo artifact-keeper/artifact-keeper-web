@@ -50,6 +50,7 @@ import {
 import { supportsScanOnProxy } from "@/lib/scan-on-proxy-formats";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ReleaseTargetSettings } from "./release-target-settings";
+import { UpstreamModeSettings } from "./upstream-mode-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
 import { CondaAllowlistSettings } from "./conda-allowlist-settings";
 import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
@@ -1472,6 +1473,13 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       {/* -- Proxy Cache Section (#448, Remote-only) -- */}
       {isRemote && (
         <>
+          {/* Upstream mode (#1094): online or cache-only, next to the TTL it
+              is used with. Renders nothing on a backend without it. */}
+          <UpstreamModeSettings
+            repository={repository}
+            canEdit={isRepoAdmin || repository.mcp_caller_is_repo_admin === true}
+          />
+
           <section aria-labelledby="settings-cache-heading">
             <h3 id="settings-cache-heading" className="text-base font-semibold mb-4">
               Proxy Cache

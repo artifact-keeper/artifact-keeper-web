@@ -51,7 +51,7 @@ vi.mock("@/lib/sdk-client", () => ({
   getActiveInstanceBaseUrl: () => "http://localhost:8080",
 }));
 
-import { repositoriesApi, supportsAgePolicy } from "../repositories";
+import { confirmCreatedUpstreamMode, repositoriesApi, supportsAgePolicy } from "../repositories";
 
 describe("RPM Repodata Depth API", () => {
   const capability = { supported: true, min: 0, max: 1023, default: 0 };
@@ -1485,5 +1485,102 @@ describe("repositoriesApi — member_storage_used_bytes (#958, backend artifact-
   it("is null when the backend omits it", async () => {
     mockGetRepository.mockResolvedValue({ data: sdkRepo(), error: undefined });
     expect((await repositoriesApi.get("r")).member_storage_used_bytes).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Upstream mode (#1094, artifact-keeper#5315 / #5406)
+// ---------------------------------------------------------------------------
+
+describe("repositoriesApi upstream mode", () => {
+  const MODE = {
+    repository_key: "npm-remote",
+    upstream_mode: "online",
+    effective_upstream_mode: "cache_only",
+  };
+  const apiError = (status: number) => Object.assign(new Error(`API error ${status}: `), { status, body: "" });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("reads the stored and effective mode", async () => {
+    mockApiFetch.mockResolvedValue(MODE);
+    expect(await repositoriesApi.getUpstreamMode("a/b")).toEqual(MODE);
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repositories/a%2Fb/upstream-mode");
+  });
+
+  it.each([404, 405, 501])("answers null when the backend has no route (%i)", async (status) => {
+    mockApiFetch.mockRejectedValue(apiError(status));
+    expect(await repositoriesApi.getUpstreamMode("npm-remote")).toBeNull();
+  });
+
+  it("answers null for a body that is not JSON", async () => {
+    mockApiFetch.mockRejectedValue(new SyntaxError("Unexpected token <"));
+    expect(await repositoriesApi.getUpstreamMode("npm-remote")).toBeNull();
+  });
+
+  it("still throws a real failure", async () => {
+    mockApiFetch.mockRejectedValue(apiError(500));
+    await expect(repositoriesApi.getUpstreamMode("npm-remote")).rejects.toThrow("API error 500");
+  });
+
+  it.each([
+    [{ upstream_mode: "cache_only" }],
+    [{ upstream_mode: "online", effective_upstream_mode: "offline" }],
+    [{}],
+  ])("answers null for an incomplete body %j", async (body) => {
+    mockApiFetch.mockResolvedValue(body);
+    expect(await repositoriesApi.getUpstreamMode("npm-remote")).toBeNull();
+  });
+
+  it("sets the mode with PUT", async () => {
+    mockApiFetch.mockResolvedValue({ ...MODE, upstream_mode: "cache_only" });
+    const info = await repositoriesApi.setUpstreamMode("npm-remote", "cache_only");
+    expect(info.upstream_mode).toBe("cache_only");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repositories/npm-remote/upstream-mode", {
+      method: "PUT",
+      body: JSON.stringify({ upstream_mode: "cache_only" }),
+    });
+  });
+
+  it("refuses an unconfirmed set", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    await expect(repositoriesApi.setUpstreamMode("npm-remote", "cache_only")).rejects.toThrow(/did not confirm/);
+  });
+
+  it("sends upstream_mode on create for a cache-only Remote only", async () => {
+    mockCreateRepository.mockResolvedValue({ data: sdkRepo({ repo_type: "remote" }) });
+    const base = { key: "k", name: "n", format: "npm" as const };
+    await repositoriesApi.create({ ...base, repo_type: "remote", upstream_mode: "cache_only" });
+    await repositoriesApi.create({ ...base, repo_type: "remote", upstream_mode: "online" });
+    await repositoriesApi.create({ ...base, repo_type: "local", upstream_mode: "cache_only" });
+    const bodies = mockCreateRepository.mock.calls.map((c) => c[0].body);
+    expect(bodies[0]).toMatchObject({ upstream_mode: "cache_only" });
+    expect(bodies[1]).not.toHaveProperty("upstream_mode");
+    expect(bodies[2]).not.toHaveProperty("upstream_mode");
+  });
+
+  describe("confirmCreatedUpstreamMode", () => {
+    it("is applied when the backend stored it on create", async () => {
+      mockApiFetch.mockResolvedValueOnce({ ...MODE, upstream_mode: "cache_only" });
+      expect(await confirmCreatedUpstreamMode("npm-remote", "cache_only")).toBe("applied");
+      expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("sets it with PUT when create did not take it", async () => {
+      mockApiFetch
+        .mockResolvedValueOnce({ ...MODE, effective_upstream_mode: "online" })
+        .mockResolvedValueOnce({ ...MODE, upstream_mode: "cache_only" });
+      expect(await confirmCreatedUpstreamMode("npm-remote", "cache_only")).toBe("applied");
+      expect(mockApiFetch).toHaveBeenLastCalledWith(
+        "/api/v1/repositories/npm-remote/upstream-mode",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    it("is unsupported on a backend without upstream mode", async () => {
+      mockApiFetch.mockRejectedValueOnce(apiError(404));
+      expect(await confirmCreatedUpstreamMode("npm-remote", "cache_only")).toBe("unsupported");
+      expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    });
   });
 });

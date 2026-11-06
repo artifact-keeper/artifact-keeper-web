@@ -86,6 +86,8 @@ import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
 import { StorageBackendBadge } from "./storage-backend-badge";
+import { CacheOnlyBadge } from "./upstream-mode-badge";
+import { useUpstreamMode } from "@/hooks/use-upstream-mode";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ArtifactOriginSection } from "./artifact-origin-section";
 import { artifactDetailKey } from "@/lib/query-keys";
@@ -272,6 +274,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // backed by a WASM plugin (#592), which report `format: "generic"`.
   const { data: formatHandlers } = useFormatHandlers();
 
+  // A Remote's upstream mode for the "Cache-only" header badge (#1094).
+  const { data: upstreamMode } = useUpstreamMode(repository);
   const repoFormat = repository?.format;
   // Derive effective view mode: explicit user choice wins; otherwise default
   // to `grouped` for formats that support grouping.
@@ -1138,6 +1142,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 className="text-xs font-normal"
               />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
+              {/* Only a Remote's mode is read (#1094). */}
+              <CacheOnlyBadge upstreamMode={upstreamMode} className="text-xs" />
               <span className="text-sm text-muted-foreground ml-2">
                 {repoHeaderSize(repository)}
               </span>
@@ -1184,6 +1190,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               className="text-xs font-normal"
             />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
+            {/* Only a Remote's mode is read (#1094). */}
+            <CacheOnlyBadge upstreamMode={upstreamMode} className="text-xs" />
             <span className="text-sm text-muted-foreground ml-2">
               {repoHeaderSize(repository)}
             </span>
