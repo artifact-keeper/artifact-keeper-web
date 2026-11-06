@@ -7,6 +7,9 @@ import { apiFetch } from "@/lib/api/fetch";
  */
 export type DownloadSource = "hosted" | "proxy";
 
+/** Whether a download was attributed to a user (backend artifact-keeper#4935) */
+export type DownloaderFilter = "all" | "anonymous" | "authenticated";
+
 /**
  * One attributed download event. Defined here rather than taken from the
  * generated SDK, whose `DownloadRecord` (SDK 1.7) predates backend
@@ -75,6 +78,8 @@ export interface DownloadsQuery {
   source?: DownloadSource;
   /** Filter to downloads served from one repository (UUID). */
   repository_id?: string;
+  /** Only anonymous or only signed-in downloads, every download when omitted or `all` */
+  downloader?: DownloaderFilter;
   /** 1-based page index (default 1). */
   page?: number;
   /** Page size (backend default 20, max 100). */
@@ -169,6 +174,8 @@ export function buildDownloadsQueryString(query: DownloadsQuery): string {
   if (query.source) params.set("source", query.source);
   if (query.repository_id?.trim())
     params.set("repository_id", query.repository_id.trim());
+  if (query.downloader && query.downloader !== "all")
+    params.set("downloader", query.downloader);
   if (query.page != null) params.set("page", String(Math.max(1, query.page)));
   if (query.per_page != null) {
     params.set(

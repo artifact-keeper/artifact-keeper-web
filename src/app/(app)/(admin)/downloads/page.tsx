@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Network, RefreshCw } from "lucide-react";
@@ -15,11 +15,14 @@ import {
   UNKNOWN_NETWORK,
   type DownloadRecord,
   type DownloadSource,
+  type DownloaderFilter,
   type DownloadsQuery,
   type IpGroup,
   type UserGroup,
 } from "@/lib/api/downloads";
 import { isValidUuid } from "@/lib/api/audit";
+import { adminApi } from "@/lib/api/admin";
+import { backendAtLeast, DOWNLOADER_FILTER_MIN } from "@/lib/backend-version";
 import { useRepositories } from "@/hooks/use-repositories";
 
 import { PageHeader } from "@/components/common/page-header";
@@ -50,6 +53,8 @@ interface DownloadFilters {
   to: string;
   /** "" for both hosted downloads and proxy serves (#960). */
   source: "" | DownloadSource;
+  /** "" for every downloader (#1036) */
+  downloader: "" | Exclude<DownloaderFilter, "all">;
 }
 
 const EMPTY_FILTERS: DownloadFilters = {
@@ -59,9 +64,15 @@ const EMPTY_FILTERS: DownloadFilters = {
   from: "",
   to: "",
   source: "",
+  downloader: "",
 };
 
 const ALL_SOURCES = "__all__";
+const ALL_DOWNLOADERS = "__all__";
+
+function parseDownloader(value: string | null): DownloadFilters["downloader"] {
+  return value === "anonymous" || value === "authenticated" ? value : "";
+}
 
 /**
  * Convert the date-input values (yyyy-mm-dd, local time) to the inclusive
@@ -98,6 +109,7 @@ export function fetchDownloads(
     per_page: perPage,
     artifact_id: filters.artifact_id || undefined,
     source: filters.source || undefined,
+    downloader: filters.downloader || undefined,
     ...dateBoundsToIso(filters),
   };
   const ip = filters.ip.trim();
@@ -186,13 +198,16 @@ export default function DownloadsPage() {
 function DownloadsContent() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   // Deep link from an artifact's detail (`?artifact_id=<uuid>`): start with
   // that artifact's downloads. A malformed id is ignored.
   const linkedArtifact = searchParams.get("artifact_id")?.trim() ?? "";
-  const initialFilters: DownloadFilters = isValidUuid(linkedArtifact)
-    ? { ...EMPTY_FILTERS, artifact_id: linkedArtifact }
-    : EMPTY_FILTERS;
+  const initialFilters: DownloadFilters = {
+    ...EMPTY_FILTERS,
+    artifact_id: isValidUuid(linkedArtifact) ? linkedArtifact : "",
+    downloader: parseDownloader(searchParams.get("downloader")),
+  };
 
   // -- view + pagination + filter state --
   const [view, setView] = useState<ViewMode>("events");
@@ -204,7 +219,29 @@ function DownloadsContent() {
   const [applied, setApplied] = useState<DownloadFilters>(initialFilters);
   const [filterError, setFilterError] = useState<string | null>(null);
 
-  const hasAppliedFilters = Object.values(applied).some((v) => v !== "");
+  // Older backends ignore `downloader` and list everything, so the filter is offered only from the release that has it
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const downloaderFilter = backendAtLeast(health?.version, DOWNLOADER_FILTER_MIN);
+  const effective: DownloadFilters = downloaderFilter
+    ? applied
+    : { ...applied, downloader: "" };
+  const anonymousOnly = effective.downloader === "anonymous";
+
+  const hasAppliedFilters = Object.values(effective).some((v) => v !== "");
+
+  // The downloader filter is kept in the URL so a filtered view can be shared
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (applied.downloader) params.set("downloader", applied.downloader);
+    else params.delete("downloader");
+    if (params.toString() !== searchParams.toString()) {
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [applied.downloader, router, searchParams]);
 
   // Proxy rows carry only a repository id; show its key when known. Shares the
   // cache entry other admin pages use for the full repository list.
@@ -219,8 +256,8 @@ function DownloadsContent() {
 
   // -- queries --
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: [...DOWNLOADS_QUERY_KEY, page, pageSize, applied],
-    queryFn: () => fetchDownloads(applied, page, pageSize),
+    queryKey: [...DOWNLOADS_QUERY_KEY, page, pageSize, effective],
+    queryFn: () => fetchDownloads(effective, page, pageSize),
     enabled: !!user?.is_admin && view === "events",
     retry: false,
     placeholderData: (prev) => prev,
@@ -234,8 +271,8 @@ function DownloadsContent() {
     isLoading: sampleLoading,
     isError: sampleError,
   } = useQuery({
-    queryKey: [...DOWNLOADS_QUERY_KEY, "sample", applied],
-    queryFn: () => fetchDownloads(applied, 1, DOWNLOADS_MAX_PER_PAGE),
+    queryKey: [...DOWNLOADS_QUERY_KEY, "sample", effective],
+    queryFn: () => fetchDownloads(effective, 1, DOWNLOADS_MAX_PER_PAGE),
     enabled: !!user?.is_admin && view !== "events",
     retry: false,
     placeholderData: (prev) => prev,
@@ -277,6 +314,16 @@ function DownloadsContent() {
     setPage(1);
   }
 
+  /** Applies as soon as it is picked, like the source filter */
+  function changeDownloader(value: string) {
+    const downloader = parseDownloader(value);
+    // The backend refuses anonymous together with a user id, which could only match nothing
+    const userId = downloader === "anonymous" ? { user_id: "" } : {};
+    setDraft({ ...draft, downloader, ...userId });
+    setApplied({ ...applied, downloader, ...userId });
+    setPage(1);
+  }
+
   function clearFilters() {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
@@ -295,7 +342,11 @@ function DownloadsContent() {
 
   /** Drill into one user's activity from the by-user view. */
   function drillIntoUser(userId: string) {
-    const next = { ...applied, user_id: userId };
+    const next: DownloadFilters = {
+      ...applied,
+      user_id: userId,
+      downloader: applied.downloader === "anonymous" ? "" : applied.downloader,
+    };
     setDraft(next);
     setApplied(next);
     setPage(1);
@@ -511,7 +562,22 @@ function DownloadsContent() {
       header: "",
       cell: (g) => {
         const uid = g.user_id;
-        return uid ? (
+        if (!uid) {
+          return downloaderFilter ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="View anonymous downloads"
+              onClick={() => {
+                changeDownloader("anonymous");
+                setView("events");
+              }}
+            >
+              View events
+            </Button>
+          ) : null;
+        }
+        return (
           <Button
             variant="ghost"
             size="sm"
@@ -520,7 +586,7 @@ function DownloadsContent() {
           >
             View events
           </Button>
-        ) : null;
+        );
       },
     },
   ];
@@ -591,6 +657,7 @@ function DownloadsContent() {
               className="w-[280px] font-mono"
               placeholder="UUID of the downloader"
               value={draft.user_id}
+              disabled={anonymousOnly}
               onChange={(e) => {
                 setDraft({ ...draft, user_id: e.target.value });
                 if (filterError) setFilterError(null);
@@ -600,6 +667,28 @@ function DownloadsContent() {
               aria-describedby="downloads-filter-error"
             />
           </div>
+          {downloaderFilter && (
+            <div className="space-y-1">
+              <Label htmlFor="downloads-filter-downloader">Downloader</Label>
+              <Select
+                value={applied.downloader || ALL_DOWNLOADERS}
+                onValueChange={changeDownloader}
+              >
+                <SelectTrigger
+                  id="downloads-filter-downloader"
+                  className="w-[170px]"
+                  aria-label="Downloader"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_DOWNLOADERS}>Anyone</SelectItem>
+                  <SelectItem value="anonymous">Anonymous only</SelectItem>
+                  <SelectItem value="authenticated">Signed in only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1">
             <Label htmlFor="downloads-filter-ip">Client IP</Label>
             <Input
