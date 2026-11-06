@@ -136,6 +136,29 @@ const TERMINAL_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "cancelled",
 ]);
 
+// Jobs whose progress moves on its own, so the page polls while any exist
+const ACTIVE_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
+  "running",
+  "assessing",
+]);
+const POLL_MS = 3000;
+
+// Scope a job by its target repos so jobs are distinguishable at a glance;
+// empty include_repos means the whole connection.
+function jobScope(job: MigrationJob): string {
+  const repos = [...(job.config.include_repos ?? [])].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const others = repos.length - 1;
+  if (repos.length === 0) return "All repositories";
+  if (repos.length === 1) return repos[0];
+  return `${repos[0]} and ${others} other repo${others > 1 ? "s" : ""}`;
+}
+
+function isStartable(job: MigrationJob): boolean {
+  return job.status === "pending" || job.status === "ready";
+}
+
 // A completed job is 100% by definition; the item-count ratio the backend
 // returns can lag (e.g. a job with nothing to transfer reports 0). Other
 // statuses keep their real, rounded progress.
@@ -148,8 +171,8 @@ function jobProgress(job: MigrationJob): number {
 // Statuses in which the backend is still enumerating work, so `total_items` is
 // "how many items have been found so far", not a known total (artifact-keeper
 // #3590). The percentage computed against it is provisional and can move
-// *down* as enumeration finds more, so it is labelled "~" and explained on
-// hover rather than presented as a measured figure. `effectiveTotal` below
+// *down* as enumeration finds more, so it is explained on hover rather than
+// presented as a measured figure. `effectiveTotal` below
 // already keeps the items ratio sane while that is happening.
 const ENUMERATING_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "pending",
@@ -164,8 +187,7 @@ const PROVISIONAL_PROGRESS_HINT =
   "and can go down as more items are found.";
 
 function jobProgressLabel(job: MigrationJob): string {
-  const provisional = ENUMERATING_STATUSES.has(job.status);
-  return `${provisional ? "~" : ""}${jobProgress(job)}%`;
+  return `${jobProgress(job)}%`;
 }
 
 function jobProgressHint(job: MigrationJob): string | undefined {
@@ -311,7 +333,7 @@ export default function MigrationPage() {
   // -- Migration state --
   const [createMigOpen, setCreateMigOpen] = useState(false);
   const [deleteMigId, setDeleteMigId] = useState<string | null>(null);
-  const [detailJob, setDetailJob] = useState<MigrationJob | null>(null);
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [migForm, setMigForm] = useState<{
     source_connection_id: string;
     job_type: MigrationJobType;
@@ -385,13 +407,21 @@ export default function MigrationPage() {
   const { data: migrationsData, isLoading: migrationsLoading } = useQuery({
     queryKey: ["migration", "jobs"],
     queryFn: () => migrationApi.listMigrations({ per_page: 100 }),
+    refetchInterval: (q) =>
+      q.state.data?.items.some((j) => ACTIVE_STATUSES.has(j.status))
+        ? POLL_MS
+        : false,
   });
+  const migrations = migrationsData?.items ?? [];
+  const detailJob = migrations.find((j) => j.id === detailJobId) ?? null;
 
   const { data: detailItems } = useQuery({
     queryKey: ["migration", "items", detailJob?.id],
     queryFn: () =>
       migrationApi.listMigrationItems(detailJob!.id, { per_page: 100 }),
     enabled: !!detailJob,
+    refetchInterval:
+      detailJob && ACTIVE_STATUSES.has(detailJob.status) ? POLL_MS : false,
   });
 
   // Source repositories for the selected connection — powers the include-repos
@@ -423,7 +453,23 @@ export default function MigrationPage() {
     enabled: !!detailJob && detailJob.job_type === "assessment",
   });
 
-  const migrations = migrationsData?.items ?? [];
+  // Jobs started from this page, grouped per click, alerted on once all finish
+  const watchedRef = useRef<string[][]>([]);
+  useEffect(() => {
+    watchedRef.current = watchedRef.current.filter((ids) => {
+      const jobs = ids.map((id) => migrationsData?.items.find((j) => j.id === id));
+      if (!jobs.every((j) => j && TERMINAL_STATUSES.has(j.status))) return true;
+      const done = jobs as MigrationJob[];
+      const ok = done.filter((j) => j.status === "completed").length;
+      const msg =
+        done.length === 1
+          ? `Migration ${jobScope(done[0])} finished: ${statusLabel(done[0].status)}`
+          : `All ${done.length} migrations finished: ${ok} completed, ${done.length - ok} with problems`;
+      const alert = ok === done.length ? toast.success : toast.warning;
+      alert(msg, { duration: Infinity, closeButton: true });
+      return false;
+    });
+  }, [migrationsData]);
 
   // -- SSE streaming --
   const startStream = useCallback(
@@ -543,10 +589,29 @@ export default function MigrationPage() {
     mutationFn: (id: string) => migrationApi.startMigration(id),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
+      watchedRef.current.push([job.id]);
       startStream(job.id);
       toast.success("Migration started");
     },
     onError: mutationErrorToast("Failed to start migration"),
+  });
+
+  const startableJobs = migrations.filter(isStartable);
+  const startAllMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) => migrationApi.startMigration(id))
+      );
+      return ids.filter((_, i) => results[i].status === "fulfilled");
+    },
+    onSuccess: (startedIds, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["migration", "jobs"] });
+      if (startedIds.length) watchedRef.current.push(startedIds);
+      const started = startedIds.length;
+      const failed = ids.length - started;
+      if (failed === 0) toast.success(`Started ${started} migrations`);
+      else toast.error(`Started ${started} migrations, ${failed} failed`);
+    },
   });
 
   const pauseMigMutation = useMutation({
@@ -744,28 +809,16 @@ export default function MigrationPage() {
       id: "id",
       header: "Job",
       cell: (j) => {
-        // Scope the row by its target repos so jobs are distinguishable at a
-        // glance; empty include_repos means the whole connection.
-        const repos = [...(j.config.include_repos ?? [])].sort((a, b) =>
-          a.localeCompare(b),
-        );
-        const others = repos.length - 1;
-        const scope =
-          repos.length === 0
-            ? "All repositories"
-            : repos.length === 1
-              ? repos[0]
-              : `${repos[0]} and ${others} other repo${others > 1 ? "s" : ""}`;
         return (
           <button
             className="flex flex-col items-start text-left"
             onClick={(e) => {
               e.stopPropagation();
-              setDetailJob(j);
+              setDetailJobId(j.id);
             }}
           >
             <span className="text-sm font-medium text-primary hover:underline">
-              {scope}
+              {jobScope(j)}
             </span>
             <span className="text-xs text-muted-foreground">
               {j.id.slice(0, 8)}...
@@ -856,7 +909,7 @@ export default function MigrationPage() {
           className="flex items-center gap-1 justify-end"
           onClick={(e) => e.stopPropagation()}
         >
-          {(j.status === "pending" || j.status === "ready") && (
+          {isStartable(j) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1137,13 +1190,27 @@ export default function MigrationPage() {
                 Create and manage migration jobs.
               </p>
             </div>
-            <Button
-              onClick={() => setCreateMigOpen(true)}
-              disabled={connections.length === 0}
-            >
-              <Plus className="size-4" />
-              Create Migration
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  startAllMutation.mutate(startableJobs.map((j) => j.id))
+                }
+                disabled={
+                  startableJobs.length === 0 || startAllMutation.isPending
+                }
+              >
+                <Play className="size-4" />
+                Start All ({startableJobs.length})
+              </Button>
+              <Button
+                onClick={() => setCreateMigOpen(true)}
+                disabled={connections.length === 0}
+              >
+                <Plus className="size-4" />
+                Create Migration
+              </Button>
+            </div>
           </div>
 
           {migrations.length === 0 && !migrationsLoading ? (
@@ -1660,7 +1727,7 @@ export default function MigrationPage() {
       <Dialog
         open={!!detailJob}
         onOpenChange={(o) => {
-          if (!o) setDetailJob(null);
+          if (!o) setDetailJobId(null);
         }}
       >
         <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-y-auto">
