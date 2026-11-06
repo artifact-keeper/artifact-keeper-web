@@ -303,6 +303,14 @@ vi.mock("./conda-allowlist-settings", () => ({
   CondaAllowlistSettings: () => <div data-testid="allowlist-section-stub" />,
 }));
 
+// The upstream-mode section has its own suite (upstream-mode-settings.test.tsx);
+// here only where it appears and who may edit it matter.
+vi.mock("./upstream-mode-settings", () => ({
+  UpstreamModeSettings: ({ canEdit }: { canEdit: boolean }) => (
+    <div data-testid="upstream-mode-stub" data-can-edit={String(canEdit)} />
+  ),
+}));
+
 const baseRepo: Repository = {
   id: "repo-1",
   key: "maven-releases",
@@ -2895,5 +2903,40 @@ describe("RepoSettingsTab - MCP registry", () => {
     show({ ...lockedRemote, mcp_caller_can_lock: true });
     expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
     expect(screen.getByLabelText("Lock for repository administrators").getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("RepoSettingsTab - Upstream mode (#1094)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+  });
+
+  it("is offered on a Remote only", () => {
+    const { unmount } = render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId("upstream-mode-stub")).toBeNull();
+    unmount();
+    render(<RepoSettingsTab repository={{ ...baseRepo, repo_type: "remote" }} />, { wrapper: createWrapper() });
+    expect(screen.getByTestId("upstream-mode-stub")).toBeTruthy();
+  });
+
+  it("lets an instance administrator edit it", () => {
+    render(<RepoSettingsTab repository={{ ...baseRepo, repo_type: "remote" }} />, { wrapper: createWrapper() });
+    expect(screen.getByTestId("upstream-mode-stub").getAttribute("data-can-edit")).toBe("true");
+  });
+
+  it("lets a repository administrator edit it", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    render(
+      <RepoSettingsTab repository={{ ...baseRepo, repo_type: "remote", mcp_caller_is_repo_admin: true }} />,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByTestId("upstream-mode-stub").getAttribute("data-can-edit")).toBe("true");
+  });
+
+  it("shows it read-only to anyone else", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    render(<RepoSettingsTab repository={{ ...baseRepo, repo_type: "remote" }} />, { wrapper: createWrapper() });
+    expect(screen.getByTestId("upstream-mode-stub").getAttribute("data-can-edit")).toBe("false");
   });
 });

@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useCallback, useDeferredValue, useMemo } from "react";
+import { useState, useCallback, useDeferredValue, useMemo, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { repositoriesApi, type UpstreamAuthPayload } from "@/lib/api/repositories";
+import {
+  confirmCreatedUpstreamMode,
+  repositoriesApi,
+  type CreatedUpstreamModeOutcome,
+  type UpstreamAuthPayload,
+} from "@/lib/api/repositories";
+import { upstreamModeKey } from "@/lib/upstream-mode";
 import { searchApi } from "@/lib/api/search";
 import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
@@ -15,6 +21,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { useUpstreamMode } from "@/hooks/use-upstream-mode";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +52,16 @@ import { backendSupportsMcp } from "@/lib/mcp/format";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
+
+/**
+ * A repository list row with its Remote's upstream mode (#1094). The list
+ * response does not carry the mode, so each Remote shown reads its own for the
+ * "Cache-only" badge; other types read nothing.
+ */
+function RepoListRow(props: ComponentProps<typeof RepoListItem>) {
+  const { data: upstreamMode } = useUpstreamMode(props.repo);
+  return <RepoListItem {...props} upstreamMode={upstreamMode} />;
+}
 
 export function RepositoriesContent() {
   useDocumentTitle("Repositories");
@@ -106,11 +123,35 @@ export function RepositoriesContent() {
   const invalidateAllRepoQueries = () => invalidateGroup(queryClient, "repositories");
 
   const createMutation = useMutation({
-    mutationFn: (d: CreateRepositoryRequest) => repositoriesApi.create(d),
-    onSuccess: (_data, variables) => {
+    mutationFn: async (d: CreateRepositoryRequest) => {
+      const repository = await repositoriesApi.create(d);
+      // #1094: an older backend drops `upstream_mode` without a word, so a
+      // Remote asked for cache-only is read back before the UI says it is.
+      let upstreamMode: CreatedUpstreamModeOutcome | "unverified" | null = null;
+      if (d.repo_type === "remote" && d.upstream_mode === "cache_only") {
+        try {
+          upstreamMode = await confirmCreatedUpstreamMode(repository.key, d.upstream_mode);
+        } catch {
+          upstreamMode = "unverified";
+        }
+      }
+      return { repository, upstreamMode };
+    },
+    onSuccess: ({ upstreamMode }, variables) => {
       invalidateAllRepoQueries();
+      queryClient.invalidateQueries({ queryKey: upstreamModeKey(variables.key) });
       setCreateOpen(false);
-      if (variables.repo_type === "staging") {
+      if (upstreamMode === "unsupported") {
+        toast.warning("Repository created online", {
+          description:
+            "This backend does not support cache-only mode, so the repository contacts its upstream. Upgrade the backend to use cache-only Remotes.",
+        });
+      } else if (upstreamMode === "unverified") {
+        toast.warning("Repository created", {
+          description:
+            "Its cache-only mode could not be confirmed. Check the upstream mode in the repository settings.",
+        });
+      } else if (variables.repo_type === "staging") {
         toast.success("Repository created", {
           description: "Configure promotion rules to start promoting artifacts.",
           action: {
@@ -375,7 +416,7 @@ export function RepositoriesContent() {
         {!isLoading && filtered.length > 0 && (
           <div className="divide-y">
             {filtered.map((repo) => (
-              <RepoListItem
+              <RepoListRow
                 key={repo.id}
                 repo={repo}
                 isSelected={effectiveSelectedKey === repo.key}

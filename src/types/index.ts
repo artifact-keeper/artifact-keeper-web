@@ -1,4 +1,5 @@
 import type { McpRepositorySettings } from './mcp';
+import type { UpstreamMode } from '@/lib/upstream-mode';
 export * from './groups';
 export * from './migration';
 export * from './permissions';
@@ -270,6 +271,12 @@ export interface CreateRepositoryRequest extends McpRepositorySettings {
   upstream_auth_type?: string;
   upstream_username?: string;
   upstream_password?: string;
+  /**
+   * Remote only: the upstream mode the repository is born with (#1094,
+   * artifact-keeper#5406). `cache_only` never contacts the upstream. Omit for
+   * the default, `online`.
+   */
+  upstream_mode?: UpstreamMode;
   // For virtual repositories - array of member repo keys with priorities
   member_repos?: VirtualRepoMemberInput[];
   // --- 1.6.0 format-specific config (#602) ---
