@@ -747,6 +747,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     repository
       ? downloadCountKind(a.download_count, repository, formatHandlers)
       : "count";
+  // Proxy-cached rows carry no `version` (the cache catalog has no column for
+  // one), so every file in a mirrored Maven repo showed a dash. Fall back to
+  // the coordinates, which prefer backend metadata and parse the path second.
+  const artifactVersion = (a: Artifact) =>
+    a.version ?? (isMavenFamily ? artifactGavc(a)?.version : undefined);
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
@@ -820,15 +825,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     {
       id: "version",
       header: "Version",
-      accessor: (a) => a.version ?? "",
-      cell: (a) =>
-        a.version ? (
+      accessor: (a) => artifactVersion(a) ?? "",
+      cell: (a) => {
+        const version = artifactVersion(a);
+        return version ? (
           <Badge variant="outline" className="text-xs font-normal">
-            {a.version}
+            {version}
           </Badge>
         ) : (
           <span className="text-xs text-muted-foreground">-</span>
-        ),
+        );
+      },
     },
     // Conda packages differ by platform subdir and build string as often as
     // by version (`linux-64` vs `noarch`, `py310h…` vs `py311h…`); neither was
