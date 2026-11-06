@@ -46,6 +46,9 @@ const h = vi.hoisted(() => ({
   // of the query that decides whether the Environments tab is shown.
   environments: undefined as unknown[] | undefined,
   environmentsEnabled: [] as Array<boolean | undefined>,
+  // What the upstream-mode query (#1094) returns, and its `enabled` flag.
+  upstreamMode: undefined as Record<string, unknown> | null | undefined,
+  upstreamModeEnabled: undefined as boolean | undefined,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -137,6 +140,10 @@ vi.mock("@tanstack/react-query", () => ({
         isLoading: false,
         isFetching: false,
       };
+    }
+    if (key === "upstream-mode") {
+      h.upstreamModeEnabled = opts.enabled;
+      return { data: opts.enabled ? h.upstreamMode : undefined, isLoading: false, isFetching: false };
     }
     if (key === "artifact-stats") {
       return { data: h.artifactStats ?? undefined, isLoading: false, isFetching: false };
@@ -1010,6 +1017,48 @@ describe("RepoDetailContent header storage backend (#918)", () => {
     repository.storage_backend = undefined;
     render(<RepoDetailContent repoKey="demo" standalone />);
     expect(screen.queryByText(/^Storage:/)).not.toBeInTheDocument();
+  });
+});
+
+describe("RepoDetailContent header Cache-only badge (#1094)", () => {
+  const originalType = repository.repo_type;
+  const CACHE_ONLY = { repository_key: "demo", upstream_mode: "online", effective_upstream_mode: "cache_only" };
+  beforeEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    repository.repo_type = originalType;
+    h.upstreamMode = undefined;
+    h.upstreamModeEnabled = undefined;
+  });
+
+  it.each([true, false])(
+    "badges a Remote whose effective mode is cache-only (standalone=%s)",
+    (standalone) => {
+      repository.repo_type = "remote";
+      h.upstreamMode = CACHE_ONLY;
+      render(<RepoDetailContent repoKey="demo" standalone={standalone} />);
+      const badge = screen.getByText("Cache-only");
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveAccessibleName(/cache miss returns 404/);
+    },
+  );
+
+  it("shows nothing for an online Remote or a backend without upstream mode", () => {
+    repository.repo_type = "remote";
+    h.upstreamMode = { ...CACHE_ONLY, effective_upstream_mode: "online" };
+    render(<RepoDetailContent repoKey="demo" standalone />);
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
+    cleanup();
+    h.upstreamMode = null;
+    render(<RepoDetailContent repoKey="demo" standalone />);
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
+  });
+
+  it("does not read the mode of a non-Remote", () => {
+    h.upstreamMode = CACHE_ONLY;
+    render(<RepoDetailContent repoKey="demo" standalone />);
+    expect(h.upstreamModeEnabled).toBe(false);
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
   });
 });
 

@@ -2705,3 +2705,77 @@ describe('RepoDialogs - MCP registry (create)', () => {
     expect(screen.getByText(/policies live on each member/)).toBeTruthy();
   });
 });
+
+describe('RepoDialogs - Upstream Mode (Create, #1094)', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  function modeSelect(dialog: HTMLElement): HTMLSelectElement | undefined {
+    return within(dialog)
+      .getAllByTestId('mock-select')
+      .find((s) => s.querySelector('option[value="cache_only"]')) as HTMLSelectElement | undefined;
+  }
+
+  async function fillRemote(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement) {
+    await user.type(within(dialog).getByPlaceholderText('my-repo'), 'offline-remote');
+    await user.type(within(dialog).getByPlaceholderText('My Repository'), 'Offline Remote');
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], { target: { value: 'remote' } });
+    const urlInput = within(dialog).getByLabelText(/upstream url/i);
+    await user.clear(urlInput);
+    await user.type(urlInput, 'https://repo.example.com');
+  }
+
+  it('offers the upstream mode only for a Remote', () => {
+    render(<RepoDialogs {...defaultProps} />);
+    const dialog = screen.getByRole('dialog');
+    expect(modeSelect(dialog)).toBeUndefined();
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], { target: { value: 'remote' } });
+    expect(modeSelect(dialog)?.value).toBe('online');
+  });
+
+  it('submits upstream_mode cache_only for a cache-only Remote', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    const dialog = screen.getByRole('dialog');
+    await fillRemote(user, dialog);
+    fireEvent.change(modeSelect(dialog)!, { target: { value: 'cache_only' } });
+    expect(within(dialog).getByText(/cache miss returns 404/i)).toBeTruthy();
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ repo_type: 'remote', upstream_mode: 'cache_only' }),
+    );
+  });
+
+  it('omits upstream_mode for an online Remote', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    const dialog = screen.getByRole('dialog');
+    await fillRemote(user, dialog);
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledTimes(1);
+    expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('upstream_mode');
+  });
+
+  it('drops a cache-only choice when the type is switched away from Remote', async () => {
+    const onCreateSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+    const dialog = screen.getByRole('dialog');
+    await fillRemote(user, dialog);
+    fireEvent.change(modeSelect(dialog)!, { target: { value: 'cache_only' } });
+    fireEvent.change(within(dialog).getAllByTestId('mock-select')[1], { target: { value: 'local' } });
+
+    await user.click(within(dialog).getByRole('button', { name: /^create$/i }));
+
+    expect(onCreateSubmit).toHaveBeenCalledTimes(1);
+    expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('upstream_mode');
+  });
+});
