@@ -392,7 +392,7 @@ describe("McpServerDetail", () => {
     renderDetail();
     await waitFor(() => expect(repoApi.get).toHaveBeenCalled());
     await user.click(await screen.findByRole("button", { name: "Version actions" }));
-    expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toHaveAttribute("href", "/curation?repo=mcp-local");
+    expect(await screen.findByRole("menuitem", { name: "Open in curation queue" })).toHaveAttribute("href", "/repositories/mcp-local?tab=curation");
     await user.click(screen.getByRole("menuitem", { name: "Re-probe tools" }));
     await waitFor(() => expect(api.probe).toHaveBeenCalledWith("mcp-local", SERVER.name, "1.4.2"));
   });

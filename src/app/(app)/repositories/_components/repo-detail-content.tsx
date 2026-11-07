@@ -33,6 +33,7 @@ import {
   Rocket,
   Hammer,
   FileCode2,
+  PackageCheck,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -91,9 +92,11 @@ import { artifactDetailKey } from "@/lib/query-keys";
 import { PackagesTabContent } from "./packages-tab-content";
 import {
   isMcpFormat,
+  isRemoteMcpRepo,
   MCP_GENERIC_DELETE_REASON,
   mcpServerVersionFromArtifactPath,
 } from "@/lib/mcp/format";
+import { McpCurationQueue } from "@/app/(app)/(admin)/curation/_components/mcp-curation-queue";
 import {
   ArtifactBrowserToggle,
   DOCKER_FAMILY_FORMATS,
@@ -297,6 +300,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // container repositories do not get the tab (it would only say so, and
   // the tab strip is full enough already).
   const showBuildTab = isContainerRepo && repository?.repo_type === "local";
+  // A Remote MCP registry's approval queue (artifact-keeper#5253). The
+  // backend lets the repository's administrators decide its catalog rows
+  // (`/api/v1/repositories/{key}/mcp/catalog`), not only instance admins, so
+  // the queue is a tab here for anyone the single-repository response reports
+  // `mcp_caller_is_repo_admin` for. `/curation` stays the instance-wide view.
+  const canCurateMcp =
+    !!repository &&
+    isRemoteMcpRepo(repository) &&
+    (!!user?.is_admin || repository.mcp_caller_is_repo_admin === true);
   // Folder-tree view for RAW/Generic repos (#2791): folders load one level
   // at a time from /api/v1/tree (#850), not from the flat artifact list.
   const isTreeView =
@@ -1229,11 +1241,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       <Tabs
         value={
           repoTab ??
-          resolveInitialRepoTab(
-            searchParams.get("tab"),
-            searchParams.get("view"),
-            repoFormat,
-          )
+          (canCurateMcp && searchParams.get("tab") === "curation"
+            ? "curation"
+            : resolveInitialRepoTab(
+                searchParams.get("tab"),
+                searchParams.get("view"),
+                repoFormat,
+              ))
         }
         onValueChange={setRepoTab}
       >
@@ -1287,6 +1301,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Notices
               </TabsTrigger>
             )}
+          {canCurateMcp && (
+            <TabsTrigger value="curation">
+              <PackageCheck className="size-3.5 mr-1" />
+              Curation
+            </TabsTrigger>
+          )}
           {isAuthenticated && (
             <TabsTrigger value="environments">
               <Boxes className="size-3.5 mr-1" />
@@ -1686,6 +1706,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {user?.is_admin && (
           <TabsContent value="notifications" className="mt-4">
             <NotificationsTabContent repositoryId={repository.id} />
+          </TabsContent>
+        )}
+
+        {/* --- Curation Tab (Remote MCP registries) --- */}
+        {canCurateMcp && (
+          <TabsContent value="curation" className="mt-4">
+            <McpCurationQueue key={repository.key} repoKey={repository.key} />
           </TabsContent>
         )}
 
