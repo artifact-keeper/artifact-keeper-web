@@ -5,8 +5,8 @@ export interface StorageSnapshot {
   total_storage_bytes: number;
   total_downloads: number;
   total_users: number;
-  // The proxy-cache half of the totals above. 0 for snapshots taken before the
-  // backend started recording them.
+  // Proxy bytes are included in total_storage_bytes; artifact and download
+  // counts are disjoint from their total_* fields. 0 in older snapshots.
   proxy_artifact_count: number;
   proxy_storage_bytes: number;
   proxy_download_count: number;
