@@ -22,6 +22,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.e2e.yml"
+# Hostile MCP upstream for the RT-15 rendering suite (artifact-keeper#5472),
+# as in the CI interaction job.
+UPSTREAM_OVERLAY="$PROJECT_DIR/docker-compose.e2e-mcp-upstream.yml"
 
 KEEP=false
 BACKEND_TAG="${BACKEND_TAG:-dev}"
@@ -46,10 +49,10 @@ export BACKEND_TAG E2E_WEB_PORT="$WEB_PORT"
 cleanup() {
   if [[ "$KEEP" = false ]]; then
     echo "Tearing down E2E stack..."
-    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    docker compose -f "$COMPOSE_FILE" -f "$UPSTREAM_OVERLAY" down -v --remove-orphans 2>/dev/null || true
   else
     echo "Keeping containers running (--keep). Tear down with:"
-    echo "  docker compose -f docker-compose.e2e.yml down -v"
+    echo "  docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml down -v"
   fi
   return 0
 }
@@ -62,7 +65,7 @@ echo ""
 
 # Build web from current source and start the stack
 echo "Starting E2E stack..."
-docker compose -f "$COMPOSE_FILE" up -d --build --wait
+docker compose -f "$COMPOSE_FILE" -f "$UPSTREAM_OVERLAY" up -d --build --wait
 
 echo ""
 echo "All services healthy. Running Playwright tests..."

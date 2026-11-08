@@ -323,8 +323,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The overlay adds the hostile MCP upstream registry the RT-15
+      # rendering suite syncs a Remote from (artifact-keeper#5472).
       - name: Start E2E stack
-        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -344,11 +346,11 @@ jobs:
 
       - name: Dump container logs on failure
         if: failure()
-        run: docker compose -f docker-compose.e2e.yml logs --tail=100
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml logs --tail=100
 
       - name: Tear down E2E stack
         if: always()
-        run: docker compose -f docker-compose.e2e.yml down -v
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml down -v
 
   e2e-roles:
     name: E2E RBAC Roles
