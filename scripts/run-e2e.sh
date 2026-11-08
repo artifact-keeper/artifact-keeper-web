@@ -25,6 +25,8 @@ COMPOSE_FILE="$PROJECT_DIR/docker-compose.e2e.yml"
 # Hostile MCP upstream for the RT-15 rendering suite (artifact-keeper#5472),
 # as in the CI interaction job.
 UPSTREAM_OVERLAY="$PROJECT_DIR/docker-compose.e2e-mcp-upstream.yml"
+# The overlay is always applied here, so the RT-15 Remote cases must not skip.
+export RT15_REQUIRE_UPSTREAM=1
 
 KEEP=false
 BACKEND_TAG="${BACKEND_TAG:-dev}"

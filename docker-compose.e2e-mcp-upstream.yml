@@ -7,10 +7,17 @@
 # only (no host port). The `z` mount option relabels the file for SELinux
 # hosts (Fedora, podman) and is a no-op elsewhere.
 #
-# The backend's SSRF guard refuses private addresses, so the overlay pins the
-# network's subnet and allows exactly the upstream's address (/32), not the
-# range: every other outbound target keeps the default guard. Without this
-# overlay the suite's Remote cases skip and say why.
+# The backend's SSRF guard refuses private addresses, so the upstream sits on
+# a network of its own (`rt15-upstream`, joined only by the backend and the
+# upstream) with a pinned subnet, and the backend admits exactly the
+# upstream's address (/32), not the range: every other outbound target keeps
+# the default guard. The shared `ak-e2e-network` is left as the base file
+# defines it, so a stale copy of it with another subnet cannot break this.
+# The network is project-scoped (no fixed name).
+#
+# CI sets RT15_REQUIRE_UPSTREAM=1, so the suite fails rather than skips when
+# the upstream does not work; without the overlay (and without that variable)
+# the suite's Remote cases skip and say why.
 
 services:
   mcp-upstream:
@@ -26,7 +33,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      e2e:
+      rt15-upstream:
         ipv4_address: 172.30.215.10
 
   backend:
@@ -35,9 +42,12 @@ services:
         condition: service_healthy
     environment:
       AK_SSRF_ALLOW_PRIVATE_CIDRS: 172.30.215.10/32
+    networks:
+      - e2e
+      - rt15-upstream
 
 networks:
-  e2e:
+  rt15-upstream:
     ipam:
       config:
-        - subnet: 172.30.215.0/24
+        - subnet: 172.30.215.0/28
