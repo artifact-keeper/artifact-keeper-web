@@ -323,8 +323,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The overlay adds the hostile MCP upstream registry the RT-15
+      # rendering suite syncs a Remote from (artifact-keeper#5472).
       - name: Start E2E stack
-        run: docker compose -f docker-compose.e2e.yml up -d --build --wait
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml up -d --build --wait
         env:
           BACKEND_TAG: dev
 
@@ -333,6 +335,9 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
           ADMIN_PASSWORD: TestRunner!2026secure
+          # The overlay is applied above, so a Remote case that cannot be
+          # seeded fails instead of skipping (artifact-keeper#5472).
+          RT15_REQUIRE_UPSTREAM: '1'
 
       - name: Upload test report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -344,11 +349,11 @@ jobs:
 
       - name: Dump container logs on failure
         if: failure()
-        run: docker compose -f docker-compose.e2e.yml logs --tail=100
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml logs --tail=100
 
       - name: Tear down E2E stack
         if: always()
-        run: docker compose -f docker-compose.e2e.yml down -v
+        run: docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml down -v
 
   e2e-roles:
     name: E2E RBAC Roles

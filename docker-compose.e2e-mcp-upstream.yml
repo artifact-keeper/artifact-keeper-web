@@ -1,0 +1,53 @@
+# Overlay for docker-compose.e2e.yml: a hostile MCP upstream registry for the
+# RT-15 rendering suite (artifact-keeper#5472).
+#
+#   docker compose -f docker-compose.e2e.yml -f docker-compose.e2e-mcp-upstream.yml up -d --build --wait
+#
+# `mcp-upstream` serves e2e/fixtures/mcp/rt15-upstream.mjs on the e2e network
+# only (no host port). The `z` mount option relabels the file for SELinux
+# hosts (Fedora, podman) and is a no-op elsewhere.
+#
+# The backend's SSRF guard refuses private addresses, so the upstream sits on
+# a network of its own (`rt15-upstream`, joined only by the backend and the
+# upstream) with a pinned subnet, and the backend admits exactly the
+# upstream's address (/32), not the range: every other outbound target keeps
+# the default guard. The shared `ak-e2e-network` is left as the base file
+# defines it, so a stale copy of it with another subnet cannot break this.
+# The network is project-scoped (no fixed name).
+#
+# CI sets RT15_REQUIRE_UPSTREAM=1, so the suite fails rather than skips when
+# the upstream does not work; without the overlay (and without that variable)
+# the suite's Remote cases skip and say why.
+
+services:
+  mcp-upstream:
+    image: node:24-alpine
+    command: ["node", "/srv/rt15-upstream.mjs"]
+    environment:
+      PORT: "8090"
+    volumes:
+      - ./e2e/fixtures/mcp/rt15-upstream.mjs:/srv/rt15-upstream.mjs:ro,z
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/v0.1/ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      rt15-upstream:
+        ipv4_address: 172.30.215.10
+
+  backend:
+    depends_on:
+      mcp-upstream:
+        condition: service_healthy
+    environment:
+      AK_SSRF_ALLOW_PRIVATE_CIDRS: 172.30.215.10/32
+    networks:
+      - e2e
+      - rt15-upstream
+
+networks:
+  rt15-upstream:
+    ipam:
+      config:
+        - subnet: 172.30.215.0/28
