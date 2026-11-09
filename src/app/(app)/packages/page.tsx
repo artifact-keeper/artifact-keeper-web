@@ -506,9 +506,13 @@ function PackagesContent() {
 
   // Fetch versions
   const { data: packageVersions, isLoading: versionsLoading } = useQuery({
-    queryKey: ["package-versions", effectiveSelectedId],
+    queryKey: ["package-versions", effectiveSelectedId, selectedRepositoryKey],
     queryFn: () =>
-      effectiveSelectedId ? packagesApi.getVersions(effectiveSelectedId) : null,
+      effectiveSelectedId
+        ? packagesApi.getVersions(effectiveSelectedId, {
+            repository_key: selectedRepositoryKey,
+          })
+        : null,
     enabled: !!effectiveSelectedId,
   });
 

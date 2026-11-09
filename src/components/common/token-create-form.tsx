@@ -43,6 +43,9 @@ interface TokenCreateFormProps {
   onRepoSelectorChange?: (selector: RepoSelector) => void;
   /** Extra content shown below the scopes, above the actions. */
   notice?: ReactNode;
+  /** Sharpens the selector preview: with it the backend can also report
+   *  members this account has no access to (artifact-keeper#4215). */
+  serviceAccountId?: string;
 }
 
 export function TokenCreateForm({
@@ -61,6 +64,7 @@ export function TokenCreateForm({
   onCancel,
   submitLabel = "Create",
   showRepoSelector = false,
+  serviceAccountId,
   repoSelector,
   onRepoSelectorChange,
   notice,
@@ -136,6 +140,7 @@ export function TokenCreateForm({
               unrestricted access.
             </p>
             <RepoSelectorForm
+              serviceAccountId={serviceAccountId}
               value={repoSelector}
               onChange={onRepoSelectorChange}
             />

@@ -97,6 +97,31 @@ describe("packagesApi.get virtual-repo context", () => {
     );
   });
 
+  // artifact-keeper#4808: a token scoped only to the virtual repository
+  // 404'd on the versions panel because the context did not travel along.
+  it("passes repository_key to getVersions via apiFetch", async () => {
+    mockApiFetch.mockResolvedValue({ versions: [{ version: "1.0.0" }] });
+    const { packagesApi } = await import("../packages");
+
+    const result = await packagesApi.getVersions("p 1", { repository_key: "npm virtual" });
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/v1/packages/p%201/versions?repository_key=npm+virtual",
+    );
+    expect(mockGetPackageVersions).not.toHaveBeenCalled();
+    expect(result).toEqual([{ version: "1.0.0" }]);
+  });
+
+  it("keeps getVersions on the generated SDK operation without a repository_key", async () => {
+    mockGetPackageVersions.mockResolvedValue({ data: { versions: [] }, error: undefined });
+    const { packagesApi } = await import("../packages");
+
+    await packagesApi.getVersions("p1", {});
+
+    expect(mockGetPackageVersions).toHaveBeenCalledWith({ path: { id: "p1" } });
+    expect(mockApiFetch).not.toHaveBeenCalled();
+  });
+
   it("stays on the generated SDK operation when no repository_key is given", async () => {
     mockGetPackage.mockResolvedValue({
       data: { id: "p1", name: "lodash" },
