@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { QuickSearch } from "@/components/search/quick-search";
 import { InstanceSwitcher } from "./instance-switcher";
 import { ThemeMenu } from "./theme-menu";
+import { ProjectSwitcher } from "./project-switcher";
 
 export function AppHeader() {
   const router = useRouter();
@@ -63,6 +64,7 @@ export function AppHeader() {
           <span className="font-semibold text-sm hidden sm:inline">
             Artifact Keeper
           </span>
+          {isAuthenticated && <ProjectSwitcher />}
         </div>
         <div className="flex items-center gap-2">
           {/* Quick search trigger */}

@@ -70,6 +70,7 @@ vi.mock("@/components/ui/sidebar", () => ({
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
+    FolderKanban: icon,
     LayoutDashboard: icon,
     Database: icon,
     Boxes: icon,

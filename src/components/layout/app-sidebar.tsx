@@ -50,6 +50,7 @@ import {
   Crosshair,
   Hourglass,
   Plug,
+  FolderKanban,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -82,6 +83,7 @@ const overviewItems: NavItem[] = [
 ];
 
 const artifactItems: NavItem[] = [
+  { title: "Projects", href: "/projects", icon: FolderKanban },
   { title: "Repositories", href: "/repositories", icon: Database },
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
