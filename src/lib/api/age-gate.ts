@@ -149,6 +149,13 @@ export interface AgeGateRepoConfig {
   repositoryKey: string;
   enabled: boolean;
   minAgeDays: number;
+  /**
+   * Whether an instance administrator locked the policy (backend
+   * artifact-keeper#4239): while locked a repository administrator can only
+   * tighten it. `undefined` when the backend does not report the field, so the
+   * UI neither shows nor sends a lock it cannot know about.
+   */
+  instanceLocked?: boolean;
 }
 
 function daysBetween(earlier: string, later: string): number | null {
@@ -178,10 +185,14 @@ function adaptReview(sdk: AgeGateReviewResponse): AgeGateReview {
 }
 
 function adaptConfig(sdk: AgeGateConfigResponse): AgeGateRepoConfig {
+  // `instance_locked` is not on the SDK 1.7.0 type this build pins, so read it
+  // defensively; anything but a boolean means the backend does not report it.
+  const locked = (sdk as { instance_locked?: unknown }).instance_locked;
   return {
     repositoryKey: sdk.repository_key,
     enabled: sdk.enabled,
     minAgeDays: sdk.min_age_days,
+    instanceLocked: typeof locked === 'boolean' ? locked : undefined,
   };
 }
 
@@ -302,14 +313,29 @@ export const ageGateApi = {
    * (`require_remote_repo_for_age_gate`), so callers gate the UI the same
    * way. `minAgeDays` must be within 0..=3650 (`validate_min_age_days`); 0 is
    * the "trusted remote" setting — no age delay, but rejections still block.
+   *
+   * `instanceLocked` is the instance-admin lock (artifact-keeper#4239) and is
+   * only sent when the caller passes it. Omitting it is not neutral: the
+   * backend then LOCKS the policy, so an instance administrator who saves
+   * without it re-locks a policy that was handed back. An instance admin must
+   * therefore pass the current value (or the new one); anyone else must leave
+   * it out, because a repository administrator sending the field at all gets
+   * a 403 (#1038).
    */
   updateRepoConfig: async (
     repositoryKey: string,
-    config: { enabled: boolean; minAgeDays: number },
+    config: { enabled: boolean; minAgeDays: number; instanceLocked?: boolean },
   ): Promise<AgeGateRepoConfig> => {
     const data = await unwrap(updateRepoAgeGate({
       path: { key: repositoryKey },
-      body: { enabled: config.enabled, min_age_days: config.minAgeDays },
+      body: {
+        enabled: config.enabled,
+        min_age_days: config.minAgeDays,
+        // Not on the SDK 1.7.0 request type; the cast carries it.
+        ...(config.instanceLocked === undefined
+          ? {}
+          : { instance_locked: config.instanceLocked }),
+      } as { enabled: boolean; min_age_days: number },
     }));
     return adaptConfig(assertData(data, 'ageGateApi.updateRepoConfig'));
   },

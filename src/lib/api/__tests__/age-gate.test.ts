@@ -382,4 +382,48 @@ describe("ageGateApi", () => {
     });
     expect(out).toEqual({ repositoryKey: "npm-remote", enabled: false, minAgeDays: 0 });
   });
+
+  describe("instance-admin lock (#1038)", () => {
+    const raw = (over: object = {}) => ({
+      data: { repository_key: "npm-remote", enabled: true, min_age_days: 7, ...over },
+      error: undefined,
+    });
+
+    it("reads instance_locked from the policy", async () => {
+      m.getRepoAgeGate.mockResolvedValue(raw({ instance_locked: true }));
+      expect((await ageGateApi.getRepoConfig("npm-remote")).instanceLocked).toBe(true);
+      m.getRepoAgeGate.mockResolvedValue(raw({ instance_locked: false }));
+      expect((await ageGateApi.getRepoConfig("npm-remote")).instanceLocked).toBe(false);
+    });
+
+    it("leaves it undefined when the backend does not report it, or reports something else", async () => {
+      m.getRepoAgeGate.mockResolvedValue(raw());
+      expect((await ageGateApi.getRepoConfig("npm-remote")).instanceLocked).toBeUndefined();
+      m.getRepoAgeGate.mockResolvedValue(raw({ instance_locked: "yes" }));
+      expect((await ageGateApi.getRepoConfig("npm-remote")).instanceLocked).toBeUndefined();
+    });
+
+    it("sends instance_locked on PUT when given, including false", async () => {
+      m.updateRepoAgeGate.mockResolvedValue(raw({ instance_locked: false }));
+      await ageGateApi.updateRepoConfig("npm-remote", { enabled: true, minAgeDays: 7, instanceLocked: false });
+      expect(m.updateRepoAgeGate).toHaveBeenCalledWith({
+        path: { key: "npm-remote" },
+        body: { enabled: true, min_age_days: 7, instance_locked: false },
+      });
+    });
+
+    it("does not send the field at all when it is not given, because omitting it is the only safe request for a non-instance admin", async () => {
+      m.updateRepoAgeGate.mockResolvedValue(raw());
+      await ageGateApi.updateRepoConfig("npm-remote", { enabled: true, minAgeDays: 7 });
+      const body = m.updateRepoAgeGate.mock.calls.at(-1)?.[0].body;
+      expect(body).toEqual({ enabled: true, min_age_days: 7 });
+      expect(Object.keys(body)).not.toContain("instance_locked");
+    });
+
+    it("carries the echoed lock state back", async () => {
+      m.updateRepoAgeGate.mockResolvedValue(raw({ instance_locked: true }));
+      const out = await ageGateApi.updateRepoConfig("npm-remote", { enabled: true, minAgeDays: 7, instanceLocked: true });
+      expect(out.instanceLocked).toBe(true);
+    });
+  });
 });
