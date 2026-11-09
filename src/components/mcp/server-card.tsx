@@ -1,4 +1,6 @@
 import { useId } from "react";
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import Link from "next/link";
 import { KeyRound, Plug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +73,7 @@ export function McpServerCard({
               <span className="font-semibold">{shortName}</span>
             </Link>
           </h3>
-          {server.title && <p className="truncate text-xs text-muted-foreground">{server.title}</p>}
+          {server.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="truncate text-xs text-muted-foreground" value={server.title} />}
         </div>
       </div>
 
@@ -95,7 +97,7 @@ export function McpServerCard({
         )}
       </div>
 
-      {server.description && <p className="line-clamp-2 text-sm text-muted-foreground">{server.description}</p>}
+      {server.description && <SafeText as="p" className="line-clamp-2 text-sm text-muted-foreground" value={server.description} />}
 
       <div className="mt-auto flex flex-wrap items-center gap-1.5">
         <McpTransportBadges server={server} />

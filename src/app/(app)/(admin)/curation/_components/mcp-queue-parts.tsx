@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import { useQuery } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 
@@ -46,10 +48,10 @@ export function McpCatalogNotes({ item }: { item: McpCatalogItem }) {
       {item.denied && (
         <p className="mt-1 text-xs text-destructive">Matches a deny glob: never served, whatever its status.</p>
       )}
-      {typo && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{typo}</p>}
-      {requested && <p className="mt-1 text-xs text-muted-foreground">{requested}</p>}
+      {typo && <SafeText as="p" max={NAME_MAX_LENGTH} className="mt-1 text-xs text-amber-700 dark:text-amber-400" value={typo} />}
+      {requested && <SafeText as="p" className="mt-1 text-xs text-muted-foreground" value={requested} />}
       {unresolved && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{unresolved}</p>}
-      {item.evaluationReason && <p className="mt-1 text-xs text-muted-foreground">Reason: {item.evaluationReason}</p>}
+      {item.evaluationReason && <SafeText as="p" className="mt-1 text-xs text-muted-foreground" value={`Reason: ${item.evaluationReason}`} />}
     </>
   );
 }
@@ -71,9 +73,11 @@ export function McpCatalogToolDiff({ repoKey, item }: { repoKey: string; item: M
   if (!data || data.summary.identical) return null;
   const destructive = data.summary.destructiveAdded.length > 0;
   return (
-    <p className={`text-xs ${destructive ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
-      {data.summary.text}
-    </p>
+    <SafeText
+      as="p"
+      className={`text-xs ${destructive ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}
+      value={data.summary.text}
+    />
   );
 }
 

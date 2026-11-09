@@ -16,6 +16,7 @@ import {
   scanDom,
   seedRt15,
   seedRt15Remote,
+  shown,
   type Rt15Seed,
 } from '../../../fixtures/mcp/rt15-stored-content';
 
@@ -257,10 +258,10 @@ const VIEWS: View[] = [
       const queue = [UPSTREAM_TEXT.hostileTitle, UPSTREAM_TEXT.hostileDescriptionStart, UPSTREAM_TEXT.requestNote];
       if (role === 'viewer') {
         // An administrator's page: a reader sees none of the queue.
-        for (const t of queue) await expect(page.getByText(t, { exact: false })).toHaveCount(0);
+        for (const t of queue) await expect(page.getByText(shown(t), { exact: false })).toHaveCount(0);
         return;
       }
-      for (const t of queue) await expect(page.getByText(t, { exact: false }).first()).toBeAttached();
+      for (const t of queue) await expect(page.getByText(shown(t), { exact: false }).first()).toBeAttached();
     },
   },
   {
@@ -430,7 +431,9 @@ test.describe('RT-15: stored MCP content renders inert', () => {
             // `expectText`/`ready`, never through network idleness.
             await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
             for (const text of view.expectText) {
-              await expect(page.getByText(text, { exact: false }).first(), `"${text}" rendered as text`).toBeAttached();
+              // Control and bidi characters are shown as [U+XXXX] (#1107).
+              const rendered = shown(text);
+              await expect(page.getByText(rendered, { exact: false }).first(), `"${rendered}" rendered as text`).toBeAttached();
             }
             if (view.ready) await expect(view.ready(page, role), `${label}: view rendered`).toBeVisible();
             if (view.interact) await view.interact(page, role, () => expectInert(page, mon, label));
