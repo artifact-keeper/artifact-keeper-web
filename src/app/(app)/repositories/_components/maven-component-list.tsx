@@ -200,10 +200,12 @@ function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) 
             {component.artifact_files.map((filename) => {
               const filePath = mavenFilePath(component, filename);
               const isPom = isPomFile(filename);
-              // The POM is offered as a direct download link so it is reachable
-              // even without opening the detail dialog (issue #442). Every other
-              // file row stays a button that opens the artifact detail dialog
-              // (issues #444, #445).
+              // Every file row opens the artifact detail dialog (issues #444,
+              // #445), which is also where Delete lives, so the POM must too:
+              // as a bare download link it was the one file of a component that
+              // could not be inspected or deleted (#1035). It keeps its POM badge
+              // and a separate one-click download from #442, as a sibling of the
+              // button so no interactive element nests inside another.
               if (isPom) {
                 const downloadUrl = artifactsApi.getDownloadUrl(
                   component.repository_key,
@@ -212,28 +214,35 @@ function MavenComponentRow({ component, onFileSelect }: MavenComponentRowProps) 
                 return (
                   <li
                     key={filename}
-                    className="flex items-center gap-2 px-12 py-2 text-xs"
+                    className="flex items-center"
                     data-testid="maven-component-pom-file"
                     data-filename={filename}
                   >
-                    <FileIcon
-                      className="size-3.5 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-2 rounded px-12 py-2 text-left text-xs text-muted-foreground",
+                        "hover:bg-muted/50 hover:text-foreground focus-visible:bg-muted/50",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      )}
+                      onClick={() => onFileSelect?.(filePath, filename)}
+                      aria-label={`Open details for ${filename}`}
+                    >
+                      <FileIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                      <span className="truncate font-mono">{filename}</span>
+                      <Badge variant="secondary" className="font-normal">
+                        POM
+                      </Badge>
+                    </button>
                     <a
                       href={downloadUrl}
-                      className="truncate rounded font-mono text-foreground hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       download
+                      className="mr-3 shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Download ${filename}`}
+                      title={`Download ${filename}`}
                     >
-                      {filename}
+                      <Download className="size-3.5" aria-hidden="true" />
                     </a>
-                    <Badge variant="secondary" className="font-normal">
-                      POM
-                    </Badge>
-                    <Download
-                      className="ml-auto size-3.5 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
                   </li>
                 );
               }
