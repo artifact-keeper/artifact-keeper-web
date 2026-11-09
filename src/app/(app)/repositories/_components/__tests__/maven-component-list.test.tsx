@@ -347,4 +347,55 @@ describe("MavenComponentList", () => {
     expect(within(fileList).getByText("lib-1.0.0.zip")).toBeInTheDocument();
     expect(within(fileList).getByText("lib-1.0.0.jar.sha1")).toBeInTheDocument();
   });
+
+  // ---------------------------------------------------------------------
+  // The POM row opens the detail dialog like every other file (#1035)
+  // ---------------------------------------------------------------------
+
+  describe("POM row (#1035)", () => {
+    const POM = "junit-jupiter-api-5.11.0.pom";
+    const POM_PATH =
+      "org/junit/jupiter/junit-jupiter-api/5.11.0/junit-jupiter-api-5.11.0.pom";
+
+    async function expandA(onFileSelect = vi.fn()) {
+      render(<MavenComponentList components={[COMP_A]} onFileSelect={onFileSelect} />);
+      await userEvent.click(screen.getByRole("button", { name: /org\.junit\.jupiter/ }));
+      await screen.findByTestId("maven-component-files");
+      return onFileSelect;
+    }
+
+    it("opens the detail dialog for the POM, so it can be inspected and deleted", async () => {
+      const onFileSelect = await expandA();
+      await userEvent.click(screen.getByRole("button", { name: `Open details for ${POM}` }));
+      expect(onFileSelect).toHaveBeenCalledTimes(1);
+      expect(onFileSelect).toHaveBeenCalledWith(POM_PATH, POM);
+    });
+
+    it("keeps the POM badge so it stays easy to spot", async () => {
+      await expandA();
+      const row = screen.getByTestId("maven-component-pom-file");
+      expect(within(row).getByText("POM")).toBeInTheDocument();
+    });
+
+    it("keeps a separate one-click download for the POM", async () => {
+      await expandA();
+      const link = screen.getByRole("link", { name: `Download ${POM}` });
+      expect(link).toHaveAttribute("download");
+      expect(link.getAttribute("href")).toContain("junit-jupiter-api-5.11.0.pom");
+    });
+
+    it("does not open the dialog when the download link is used", async () => {
+      const onFileSelect = await expandA();
+      const link = screen.getByRole("link", { name: `Download ${POM}` });
+      link.addEventListener("click", (e) => e.preventDefault());
+      await userEvent.click(link);
+      expect(onFileSelect).not.toHaveBeenCalled();
+    });
+
+    it("never nests a link inside the button", async () => {
+      await expandA();
+      const button = screen.getByRole("button", { name: `Open details for ${POM}` });
+      expect(button.querySelector("a")).toBeNull();
+    });
+  });
 });
