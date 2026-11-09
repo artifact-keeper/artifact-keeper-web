@@ -71,6 +71,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { currentWebBuildLabel } from "@/lib/build-version";
+import { ProjectSwitcher } from "./project-switcher";
 
 interface NavItem {
   title: string;
@@ -250,6 +251,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="pb-4">
+        {isAuthenticated && <ProjectSwitcher />}
         <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
         <NavGroup label="Artifacts" items={visibleArtifactItems} pathname={pathname} />
         {isAuthenticated && (
