@@ -44,8 +44,8 @@ describe("QUERY_KEYS", () => {
     MCP: ["mcp"],
   };
 
-  it("has 18 key constants (#213, #669, #906, #5253)", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(18);
+  it("has 19 key constants (#213, #669, #906, #5253)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(19);
   });
 
   it.each(Object.entries(expectedKeys))(
@@ -78,6 +78,7 @@ describe("INVALIDATION_GROUPS", () => {
       "groups",
       "permissions",
       "plugins",
+      "projects",
       "qualityGates",
       "repositories",
       "security",

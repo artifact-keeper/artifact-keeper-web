@@ -89,6 +89,8 @@ export interface Repository extends McpRepositorySettings {
    * safe against a backend that predates the flag.
    */
   versioning_enabled?: boolean;
+  /** Project the repository belongs to, if any. */
+  project_id?: string;
   storage_used_bytes: number;
   /**
    * Virtual repositories only (backend artifact-keeper#4423, 1.11.0): the
@@ -265,6 +267,11 @@ export interface CreateRepositoryRequest extends McpRepositorySettings {
   /** Opt a Generic/Mlmodel repository into first-class versioning (#571). */
   versioning_enabled?: boolean;
   quota_bytes?: number;
+  /**
+   * Project to assign the repository to. On update: omit = unchanged,
+   * `null` = take it out of its project.
+   */
+  project_id?: string | null;
   // For remote repositories
   upstream_url?: string;
   upstream_auth_type?: string;
