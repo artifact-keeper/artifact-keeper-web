@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import '@/lib/sdk-client';
+import { refreshSession } from '@/lib/sdk-client';
 import {
   login as sdkLogin,
   logout as sdkLogout,
@@ -269,8 +269,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Try to authenticate via httpOnly cookies (sent automatically by browser).
       // refreshUser will set user state if a valid session cookie exists.
+      //
+      // The access cookie lives only as long as the access token, while the
+      // refresh cookie lasts longer and is scoped to the refresh endpoint, so
+      // it is never sent to `/auth/me`. A 401 here can therefore just mean the
+      // access token expired: refresh once and ask again before deciding the
+      // visitor is anonymous. Otherwise the shell stays signed out until a
+      // reload even though the data requests on the page recover on their own
+      // (#1084).
       try {
-        const { data, error } = await sdkGetCurrentUser();
+        const first = await sdkGetCurrentUser();
+        let { data, error } = first;
+        if (error && first.response?.status === 401 && (await refreshSession())) {
+          ({ data, error } = await sdkGetCurrentUser());
+        }
         if (!error && data) {
           const userData = data as unknown as User;
           // The session cookie went out with the initial system-config

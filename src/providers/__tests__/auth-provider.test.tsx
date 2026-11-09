@@ -9,7 +9,10 @@ import React from "react";
 // Mocks (must be before component import)
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/sdk-client", () => ({}));
+const mockRefreshSession = vi.fn();
+vi.mock("@/lib/sdk-client", () => ({
+  refreshSession: () => mockRefreshSession(),
+}));
 
 const mockSdkLogin = vi.fn();
 const mockSdkLogout = vi.fn();
@@ -93,6 +96,8 @@ describe("AuthProvider", () => {
     mockSdkVerifyTotp.mockReset();
     mockSdkChangePassword.mockReset();
     mockSdkSetupStatus.mockReset();
+    mockRefreshSession.mockReset();
+    mockRefreshSession.mockResolvedValue(false);
     capturedAuthRef.current = null;
 
     // Default: setup not required, not authenticated
@@ -123,6 +128,89 @@ describe("AuthProvider", () => {
     });
 
     expect(screen.getByTestId("authenticated").textContent).toBe("false");
+  });
+
+  // -- #1084: an expired access cookie with a still-valid refresh cookie ----
+
+  describe("initial load with an expired access cookie (#1084)", () => {
+    const USER = {
+      id: "u1",
+      username: "admin",
+      email: "admin@test.com",
+      is_admin: true,
+      must_change_password: false,
+    };
+    const unauthorized = { data: undefined, error: { code: "UNAUTHORIZED" }, response: { status: 401 } };
+
+    function mount() {
+      renderWithQuery(
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>
+      );
+    }
+
+    it("refreshes the session and asks again, so the shell renders signed in", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
+    });
+
+    it("stays anonymous, without asking again, when the refresh fails", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(false);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("stays anonymous when the second ask is refused too, and does not loop", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("does not try to refresh on an error that is not a 401", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({
+        data: undefined,
+        error: { code: "INTERNAL" },
+        response: { status: 500 },
+      });
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("does not refresh when the first ask already succeeded", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({ data: USER, error: undefined });
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
+    });
   });
 
   it("sets passwordExpiresAt from user data on init when authenticated", async () => {

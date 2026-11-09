@@ -1113,6 +1113,85 @@ describe("sdk-client", () => {
   // Exports
   // -------------------------------------------------------------------------
 
+  describe("refreshSession (#1084)", () => {
+    const refreshCalls = (mockFetch: ReturnType<typeof vi.fn>) =>
+      mockFetch.mock.calls.filter(([url]) => String(url).includes("/auth/refresh"));
+
+    it("posts to the refresh endpoint with credentials and reports success", async () => {
+      setupBrowserEnv();
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+      const { refreshSession } = await import("../sdk-client");
+
+      await expect(refreshSession()).resolves.toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/v1/auth/refresh",
+        expect.objectContaining({ method: "POST", credentials: "include" }),
+      );
+    });
+
+    it("reports failure when there is no valid refresh token", async () => {
+      setupBrowserEnv();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
+      const { refreshSession } = await import("../sdk-client");
+
+      await expect(refreshSession()).resolves.toBe(false);
+    });
+
+    it("shares one request between callers that overlap, so rotating tokens are not raced", async () => {
+      setupBrowserEnv();
+      let release: (r: Response) => void = () => {};
+      const mockFetch = vi.fn().mockImplementation(
+        () => new Promise<Response>((resolve) => { release = resolve; }),
+      );
+      vi.stubGlobal("fetch", mockFetch);
+      const { refreshSession } = await import("../sdk-client");
+
+      const first = refreshSession();
+      const second = refreshSession();
+      expect(refreshCalls(mockFetch)).toHaveLength(1);
+
+      release(new Response("{}", { status: 200 }));
+      await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    });
+
+    it("lets a later refresh run once the earlier one has finished", async () => {
+      setupBrowserEnv();
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+      const { refreshSession } = await import("../sdk-client");
+
+      await refreshSession();
+      await refreshSession();
+      expect(refreshCalls(mockFetch)).toHaveLength(2);
+    });
+
+    it("is shared with the 401 interceptor: one refresh serves both", async () => {
+      setupBrowserEnv();
+      let release: (r: Response) => void = () => {};
+      const mockFetch = vi.fn().mockImplementation((url: string) =>
+        String(url).includes("/auth/refresh")
+          ? new Promise<Response>((resolve) => { release = resolve; })
+          : Promise.resolve(new Response("{}", { status: 200 })),
+      );
+      vi.stubGlobal("fetch", mockFetch);
+      const { refreshSession } = await import("../sdk-client");
+      const interceptor = responseInterceptors[0];
+
+      const fromAuthProvider = refreshSession();
+      const fromDataRequest = interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request("http://localhost:3000/api/v1/repositories"),
+      );
+      expect(refreshCalls(mockFetch)).toHaveLength(1);
+
+      release(new Response("{}", { status: 200 }));
+      await expect(fromAuthProvider).resolves.toBe(true);
+      expect((await fromDataRequest).status).toBe(200);
+      expect(refreshCalls(mockFetch)).toHaveLength(1);
+    });
+  });
+
   describe("exports", () => {
     it("exports client from the SDK", async () => {
       setupBrowserEnv();
