@@ -72,6 +72,7 @@ import {
 } from "@/components/ui/sidebar";
 import { currentWebBuildLabel } from "@/lib/build-version";
 import { ProjectSwitcher } from "./project-switcher";
+import { useActiveProject } from "@/providers/project-provider";
 
 interface NavItem {
   title: string;
@@ -83,8 +84,9 @@ const overviewItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
 ];
 
+const projectsItem: NavItem = { title: "Projects", href: "/projects", icon: FolderKanban };
+
 const artifactItems: NavItem[] = [
-  { title: "Projects", href: "/projects", icon: FolderKanban },
   { title: "Repositories", href: "/repositories", icon: Database },
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
@@ -181,6 +183,14 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
   const flags = useFeatureFlags();
+  const { projects } = useActiveProject();
+
+  // Global admins always get the page (to create projects). Anyone else only
+  // sees the projects they administer, so the link is pointless without one.
+  const visibleOverviewItems =
+    isAuthenticated && (isAdmin || projects.length > 0)
+      ? [...overviewItems, projectsItem]
+      : overviewItems;
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -252,7 +262,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="pb-4">
         {isAuthenticated && <ProjectSwitcher />}
-        <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
+        <NavGroup label="Overview" items={visibleOverviewItems} pathname={pathname} />
         <NavGroup label="Artifacts" items={visibleArtifactItems} pathname={pathname} />
         {isAuthenticated && (
           <NavGroup

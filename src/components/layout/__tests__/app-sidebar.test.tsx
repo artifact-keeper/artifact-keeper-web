@@ -37,6 +37,11 @@ vi.mock("@/providers/system-config-provider", () => ({
   useFeatureFlags: () => mockUseFeatureFlags(),
 }));
 
+const mockUseActiveProject = vi.fn();
+vi.mock("@/providers/project-provider", () => ({
+  useActiveProject: () => mockUseActiveProject(),
+}));
+
 const mockUseQuery = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
@@ -71,6 +76,8 @@ vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
     FolderKanban: icon,
+    ChevronsUpDown: icon,
+    Check: icon,
     LayoutDashboard: icon,
     Database: icon,
     Boxes: icon,
@@ -170,6 +177,7 @@ describe("AppSidebar", () => {
     mockUseQuery.mockReturnValue({ data: undefined });
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
     mockFormatHandlers.mockReturnValue(undefined);
+    mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
   });
 
   it("shows MCP Servers only when the backend registers the mcp format", () => {
@@ -341,6 +349,31 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.getByText("Operations")).toBeDefined();
     expect(screen.getByText("Administration")).toBeDefined();
+  });
+
+  describe("Projects entry (#988)", () => {
+    const project = { id: "p1", key: "alpha", name: "Alpha" };
+
+    it("shows Projects to a global admin even with no projects", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.getByText("Projects")).toBeDefined();
+    });
+
+    it("shows Projects to a non-admin who has a project", () => {
+      authState({ isAuthenticated: true, isAdmin: false });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.getByText("Projects")).toBeDefined();
+    });
+
+    it("hides Projects from a non-admin without any project", () => {
+      authState({ isAuthenticated: true, isAdmin: false });
+      mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Projects")).toBeNull();
+    });
   });
 
   it("hides Scan Results and DT Projects when no scanner is configured (#271)", () => {
