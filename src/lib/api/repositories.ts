@@ -115,6 +115,8 @@ export interface ListRepositoriesParams {
   repo_type?: string;
   /** Server-side name/key search filter. */
   q?: string;
+  /** Only repositories assigned to this project id. */
+  project?: string;
 }
 
 export interface ReorderMemberInput {
@@ -332,9 +334,17 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
   'lxc',
 ]);
 
+// `project_id` (backend 1.11, artifact-keeper#2472) is not on the SDK 1.7.0
+// response type this build pins, so read it defensively.
+function readProjectId(sdk: RepositoryResponse): string | undefined {
+  const value = (sdk as { project_id?: unknown }).project_id;
+  return typeof value === 'string' ? value : undefined;
+}
+
 function adaptRepository(sdk: RepositoryResponse): Repository {
   return {
     id: sdk.id,
+    project_id: readProjectId(sdk),
     key: sdk.key,
     name: sdk.name,
     description: sdk.description ?? undefined,
@@ -455,7 +465,10 @@ export const repositoriesApi = {
   repodataSupport: requireRepodataSupport,
 
   list: async (params: ListRepositoriesParams = {}): Promise<PaginatedResponse<Repository>> => {
-    const data = await unwrap(listRepositories({ query: params }));
+    // `project` filter: backend 1.11, not on the SDK 1.7.0 query type.
+    const data = await unwrap(
+      listRepositories({ query: params as NonNullable<Parameters<typeof listRepositories>[0]>['query'] }),
+    );
     return adaptRepositoryList(assertData(data, 'repositoriesApi.list'));
   },
 
@@ -468,7 +481,9 @@ export const repositoriesApi = {
     // Default-zero creates retain their legacy wire shape on older backends.
     const depth = input.repodata_depth === 0 ? undefined : input.repodata_depth;
     await validateRepodataWrite(depth);
-    const body: SdkCreateRepositoryRequest & { repodata_depth?: number } = {
+    const body: SdkCreateRepositoryRequest & { repodata_depth?: number; project_id?: string | null } = {
+      // Assign to a project at creation (backend 1.11, not on the SDK 1.7.0 type).
+      project_id: input.project_id,
       key: input.key,
       name: input.name,
       description: input.description,
@@ -554,7 +569,10 @@ export const repositoriesApi = {
       // 1.7.0 types this build pins, so it is named here rather than widening
       // the cast to `unknown`: dropping the intersection once the SDK is
       // bumped is then a type error, not a silent no-op.
-    } as SdkUpdateRepositoryRequest & { upstream_url?: string };
+      // Three-way (backend 1.11): omit = unchanged, null = take out of its
+      // project, id = (re)assign. Not on the SDK 1.7.0 type, hence the cast.
+      project_id: input.project_id,
+    } as SdkUpdateRepositoryRequest & { upstream_url?: string; project_id?: string | null };
     const data = await unwrap(
       updateRepository({ path: { key }, body: withVisibility(body, input.visibility) }),
     );

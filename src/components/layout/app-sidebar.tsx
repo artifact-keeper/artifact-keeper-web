@@ -50,6 +50,7 @@ import {
   Crosshair,
   Hourglass,
   Plug,
+  FolderKanban,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
@@ -70,6 +71,8 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { currentWebBuildLabel } from "@/lib/build-version";
+import { ProjectSwitcher } from "./project-switcher";
+import { useActiveProject } from "@/providers/project-provider";
 
 interface NavItem {
   title: string;
@@ -80,6 +83,8 @@ interface NavItem {
 const overviewItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
 ];
+
+const projectsItem: NavItem = { title: "Projects", href: "/projects", icon: FolderKanban };
 
 const artifactItems: NavItem[] = [
   { title: "Repositories", href: "/repositories", icon: Database },
@@ -130,6 +135,7 @@ const operationsItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
+  projectsItem,
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
@@ -178,6 +184,15 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
   const flags = useFeatureFlags();
+  const { projects } = useActiveProject();
+
+  // Global admins find Projects under Administration. The Administration group
+  // is hidden from everyone else, so a project admin gets the link under
+  // Overview instead, and only when they have a project to show.
+  const visibleOverviewItems =
+    isAuthenticated && !isAdmin && projects.length > 0
+      ? [...overviewItems, projectsItem]
+      : overviewItems;
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -248,7 +263,8 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="pb-4">
-        <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
+        {isAuthenticated && <ProjectSwitcher />}
+        <NavGroup label="Overview" items={visibleOverviewItems} pathname={pathname} />
         <NavGroup label="Artifacts" items={visibleArtifactItems} pathname={pathname} />
         {isAuthenticated && (
           <NavGroup

@@ -117,6 +117,7 @@ import { QuarantineBadge } from "@/components/common/quarantine-badge";
 import { QuarantineBanner } from "@/components/common/quarantine-banner";
 import { RepoSettingsTab } from "./repo-settings-tab";
 import { VisibilityBadge } from "@/components/common/visibility-badge";
+import { ProjectBadge } from "@/components/common/project-badge";
 import { resolveVisibility } from "@/lib/repo-visibility";
 import { RepoStoragePanel } from "./repo-storage-panel";
 import { RepoFolderStoragePanel } from "./repo-folder-storage-panel";
@@ -1137,6 +1138,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 visibility={resolveVisibility(repository)}
                 className="text-xs font-normal"
               />
+              <ProjectBadge projectId={repository.project_id} />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
               <span className="text-sm text-muted-foreground ml-2">
                 {repoHeaderSize(repository)}
@@ -1183,6 +1185,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               visibility={resolveVisibility(repository)}
               className="text-xs font-normal"
             />
+            <ProjectBadge projectId={repository.project_id} />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
             <span className="text-sm text-muted-foreground ml-2">
               {repoHeaderSize(repository)}

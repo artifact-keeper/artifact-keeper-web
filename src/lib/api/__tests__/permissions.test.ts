@@ -61,6 +61,17 @@ describe("permissionsApi", () => {
     });
   });
 
+  it("list keeps a project target instead of coercing it to repository (#988)", async () => {
+    const data = {
+      items: [sdkPermissionFixture({ target_type: "project", target_id: "p1", target_name: "Platform" })],
+      pagination: { total: 1 },
+    };
+    mockListPermissions.mockResolvedValue({ data, error: undefined });
+    const { permissionsApi } = await import("../permissions");
+    const result = await permissionsApi.list();
+    expect(result.items[0]).toMatchObject({ target_type: "project", target_name: "Platform" });
+  });
+
   it("list throws on error", async () => {
     mockListPermissions.mockResolvedValue({ data: undefined, error: "fail" });
     const { permissionsApi } = await import("../permissions");

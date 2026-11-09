@@ -18,7 +18,7 @@ import { groupsApi } from "@/lib/api/groups";
 import { useRepositories } from "@/hooks/use-repositories";
 import { adminApi } from "@/lib/api/admin";
 import { serviceAccountsApi } from "@/lib/api/service-accounts";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 import type { User, Repository } from "@/types";
 import type { Group } from "@/types/groups";
@@ -69,6 +69,9 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { McpNamespaceGrants } from "./_components/mcp-namespace-grants";
+import { RepositoryMultiSelect } from "./_components/repository-multi-select";
+import { runSequentially } from "@/lib/bulk-grant";
+import { useProjects } from "@/hooks/use-projects";
 
 // -- constants --
 
@@ -126,6 +129,11 @@ export default function PermissionsPage() {
   const [form, setForm] = useState<PermissionForm>(EMPTY_FORM);
   const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
   const [principalSearch, setPrincipalSearch] = useState("");
+  // Create mode grants one rule per selected repository (#959). The backend
+  // takes a single target per request, so these are sent one after another.
+  const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>([]);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkFailures, setBulkFailures] = useState<{ id: string; label: string; message: string }[]>([]);
 
   // -- queries --
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
@@ -164,6 +172,8 @@ export default function PermissionsPage() {
     queryFn: () => serviceAccountsApi.list(),
     enabled: !!currentUser?.is_admin,
   });
+
+  const { data: projectsData } = useProjects({ enabled: !!currentUser?.is_admin });
 
   const permissions = permissionsData?.items ?? [];
   const users = usersData ?? [];
@@ -243,10 +253,12 @@ export default function PermissionsPage() {
         return repositoryOptions;
       case "group":
         return groups.map((g: Group) => ({ value: g.id, label: g.name }));
+      case "project":
+        return (projectsData ?? []).map((p) => ({ value: p.id, label: `${p.name} (${p.key})` }));
       default:
         return [];
     }
-  }, [form.target_type, repositoryOptions, groups]);
+  }, [form.target_type, repositoryOptions, groups, projectsData]);
 
   // -- mutations --
   const createMutation = useMutation({
@@ -258,6 +270,58 @@ export default function PermissionsPage() {
       setForm(EMPTY_FORM);
     },
     onError: mutationErrorToast("Failed to create permission"),
+  });
+
+  const resetBulk = useCallback(() => {
+    setSelectedRepoIds([]);
+    setBulkProgress(null);
+    setBulkFailures([]);
+  }, []);
+
+  const bulkCreateMutation = useMutation({
+    mutationFn: async (input: {
+      base: Omit<CreatePermissionRequest, "target_id" | "target_type">;
+      repoIds: string[];
+    }) => {
+      setBulkFailures([]);
+      setBulkProgress({ done: 0, total: input.repoIds.length });
+      return runSequentially(
+        input.repoIds,
+        (id) =>
+          permissionsApi.create({ ...input.base, target_type: "repository", target_id: id }),
+        (done, total) => setBulkProgress({ done, total }),
+      );
+    },
+    onSuccess: (results) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
+      const failed = results.filter((r) => !r.ok);
+      const created = results.length - failed.length;
+      if (failed.length === 0) {
+        toast.success(
+          created === 1 ? "Permission created successfully" : `${created} permissions created`,
+        );
+        setCreateOpen(false);
+        setForm(EMPTY_FORM);
+        resetBulk();
+        return;
+      }
+      // Keep the successful grants; leave only the failed repositories selected
+      // so a retry does not hit "already exists" on the ones that worked.
+      const label = (id: string) =>
+        repositoryOptions.find((o) => o.value === id)?.label ?? id;
+      setBulkFailures(
+        failed.map((r) => ({
+          id: r.item,
+          label: label(r.item),
+          message: toUserMessage(r.error, "Failed to create permission"),
+        })),
+      );
+      setSelectedRepoIds(failed.map((r) => r.item));
+      if (created > 0) toast.success(`${created} of ${results.length} permissions created`);
+      toast.error(`${failed.length} failed. See the list in the dialog.`);
+    },
+    onSettled: () => setBulkProgress(null),
+    onError: mutationErrorToast("Failed to create permissions"),
   });
 
   const updateMutation = useMutation({
@@ -550,14 +614,30 @@ export default function PermissionsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="repository">Repository</SelectItem>
+              <SelectItem value="project">Project</SelectItem>
               <SelectItem value="group">Group</SelectItem>
               <SelectItem value="artifact">Artifact</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>{form.target_type === "repository" ? "Repository" : form.target_type === "group" ? "Group (view / manage access)" : "Artifact ID"}</Label>
-          {form.target_type === "artifact" ? (
+          <Label>{
+            form.target_type === "repository"
+              ? createOpen ? "Repositories" : "Repository"
+              : form.target_type === "project"
+                ? "Project"
+                : form.target_type === "group"
+                  ? "Group (view / manage access)"
+                  : "Artifact ID"
+          }</Label>
+          {form.target_type === "repository" && createOpen ? (
+            <RepositoryMultiSelect
+              options={repositoryOptions}
+              selected={selectedRepoIds}
+              onChange={setSelectedRepoIds}
+              disabled={bulkCreateMutation.isPending}
+            />
+          ) : form.target_type === "artifact" ? (
             <Input
               placeholder="Artifact UUID"
               value={form.target_id}
@@ -589,6 +669,36 @@ export default function PermissionsPage() {
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {form.target_type === "project" && (
+            <p className="text-xs text-muted-foreground">
+              A grant on a project applies to every repository in it, including
+              repositories added later. To manage who belongs to a project, use
+              its{" "}
+              <Link href="/projects" className="underline underline-offset-2">
+                Members tab
+              </Link>
+              .
+            </p>
+          )}
+          {bulkProgress && (
+            <p className="text-xs text-muted-foreground" role="status">
+              Creating {bulkProgress.done} of {bulkProgress.total}...
+            </p>
+          )}
+          {bulkFailures.length > 0 && (
+            <div className="rounded-md border border-destructive/40 p-2 text-xs" role="alert">
+              <p className="mb-1 font-medium text-destructive">
+                {bulkFailures.length} not created (the rest were):
+              </p>
+              <ul className="space-y-0.5">
+                {bulkFailures.map((f) => (
+                  <li key={f.id}>
+                    <span className="font-medium">{f.label}</span>: {f.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {form.target_type === "group" && (
             // #4653: a group-target rule grants read/admin on the group
@@ -651,6 +761,7 @@ export default function PermissionsPage() {
           <Button
             onClick={() => {
               setForm(EMPTY_FORM);
+              resetBulk();
               setCreateOpen(true);
             }}
           >
@@ -669,6 +780,7 @@ export default function PermissionsPage() {
             <Button
               onClick={() => {
                 setForm(EMPTY_FORM);
+                resetBulk();
                 setCreateOpen(true);
               }}
             >
@@ -705,6 +817,7 @@ export default function PermissionsPage() {
           setCreateOpen(o);
           if (!o) {
             setForm(EMPTY_FORM);
+            resetBulk();
             setPrincipalPickerOpen(false);
             setPrincipalSearch("");
           }
@@ -721,6 +834,21 @@ export default function PermissionsPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              if (form.target_type === "repository") {
+                if (!form.principal_id || selectedRepoIds.length === 0 || form.actions.length === 0) {
+                  toast.error("Please fill in all required fields");
+                  return;
+                }
+                bulkCreateMutation.mutate({
+                  base: {
+                    principal_type: form.principal_type,
+                    principal_id: form.principal_id,
+                    actions: form.actions,
+                  },
+                  repoIds: selectedRepoIds,
+                });
+                return;
+              }
               if (!form.principal_id || !form.target_id || form.actions.length === 0) {
                 toast.error("Please fill in all required fields");
                 return;
@@ -742,12 +870,20 @@ export default function PermissionsPage() {
                 onClick={() => {
                   setCreateOpen(false);
                   setForm(EMPTY_FORM);
+                  resetBulk();
                 }}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating..." : "Create Permission"}
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || bulkCreateMutation.isPending}
+              >
+                {createMutation.isPending || bulkCreateMutation.isPending
+                  ? "Creating..."
+                  : form.target_type === "repository" && selectedRepoIds.length > 1
+                    ? `Create ${selectedRepoIds.length} Permissions`
+                    : "Create Permission"}
               </Button>
             </DialogFooter>
           </form>
