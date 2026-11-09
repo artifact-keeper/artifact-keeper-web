@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import { useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Ban, Check, FolderCheck, FolderX, RefreshCw } from "lucide-react";
@@ -416,15 +418,15 @@ function ReviewRow({
         </td>
         <td className="px-3 py-2 align-top">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium break-all">{item.name}</span>
+            <SafeText max={NAME_MAX_LENGTH} className="font-medium break-all" value={item.name} />
             {item.latestVersion && <span className="font-mono text-xs text-muted-foreground">latest {item.latestVersion}</span>}
             {(tab === "queue" || item.status !== tab) && <McpReviewStatusBadge status={item.status} />}
             {item.upstreamStatus && item.upstreamStatus !== "active" && (
               <Badge variant="outline" className="text-[11px]">upstream {item.upstreamStatus}</Badge>
             )}
           </div>
-          {item.title && <p className="mt-0.5 text-xs font-medium">{item.title}</p>}
-          {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+          {item.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="mt-0.5 text-xs font-medium" value={item.title} />}
+          {item.description && <SafeText as="p" className="mt-0.5 text-xs text-muted-foreground" value={item.description} />}
           {item.summary && (
             <div className="mt-1 flex flex-wrap items-center gap-1">
               <McpSummaryChips summary={item.summary} />

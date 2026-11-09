@@ -1,5 +1,6 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
 import { useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, EyeOff, Info, KeyRound } from "lucide-react";
@@ -120,7 +121,7 @@ function SecretOrPlainInput({
           )}
         </div>
       )}
-      {input.description && <p className="text-xs text-muted-foreground">{input.description}</p>}
+      {input.description && <SafeText as="p" className="text-xs text-muted-foreground" value={input.description} />}
       {secret && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           secret, emitted as {`\${${placeholderName(key)}}`}; never stored or put in a snippet

@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import Link from "next/link";
 import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -246,8 +248,8 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
             {namespace && <span className="text-muted-foreground">{namespace} / </span>}
             <span className="font-semibold">{shortName}</span>
           </h1>
-          {server?.title && <p className="text-sm font-medium">{server.title}</p>}
-          {server?.description && <p className="text-sm text-muted-foreground">{server.description}</p>}
+          {server?.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="text-sm font-medium" value={server.title} />}
+          {server?.description && <SafeText as="p" className="text-sm text-muted-foreground" value={server.description} />}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <McpStatusBadge status={notServed ? "held" : (status ?? "active")} />
             {source && (

@@ -952,3 +952,30 @@ describe("RepoDetailContent allowlist summary (#971)", () => {
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "true");
   });
 });
+
+describe("RepoDetailContent - untrusted repository description (#1107)", () => {
+  beforeEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    delete (repository as { description?: string }).description;
+  });
+
+  it("shows hidden and bidi characters in the description visibly", () => {
+    (repository as { description?: string }).description =
+      "RT15 repo \u202efdp.exe \u200bzw \u0007";
+    const { container } = render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getAllByText("RT15 repo [U+202E]fdp.exe [U+200B]zw [U+0007]").length).toBeGreaterThan(0);
+    expect(container.textContent).not.toMatch(/[\u202e\u200b\u0007]/);
+  });
+
+  it("cuts an over-long description and keeps the whole text in a tooltip", () => {
+    const long = Array.from({ length: 100 }, () => "a long description").join(" ");
+    (repository as { description?: string }).description = long;
+    render(<RepoDetailContent repoKey="demo" />);
+
+    const shown = screen.getAllByTitle(long);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown[0].textContent?.endsWith("…")).toBe(true);
+  });
+});
