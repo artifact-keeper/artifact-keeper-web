@@ -354,14 +354,29 @@ describe("AppSidebar", () => {
   describe("Projects entry (#988)", () => {
     const project = { id: "p1", key: "alpha", name: "Alpha" };
 
-    it("shows Projects to a global admin even with no projects", () => {
+    it("shows Projects to a global admin even with no projects, once", () => {
       authState({ isAuthenticated: true, isAdmin: true });
       mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
       render(<AppSidebar />);
-      expect(screen.getByText("Projects")).toBeDefined();
+      expect(screen.getAllByText("Projects")).toHaveLength(1);
     });
 
-    it("shows Projects to a non-admin who has a project", () => {
+    it("lists Projects under Administration for a global admin, not Overview", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      const entry = screen.getByText("Projects");
+      const labels = screen.getAllByText(/^(Overview|Administration)$/);
+      const position = (el: Element) => el.compareDocumentPosition(entry);
+      const admin = labels.find((l) => l.textContent === "Administration")!;
+      const overview = labels.find((l) => l.textContent === "Overview")!;
+      // Projects comes after the Administration label, and not just after Overview's.
+      expect(position(admin) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(position(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByText("Groups").compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    });
+
+    it("shows Projects under Overview to a non-admin who has a project", () => {
       authState({ isAuthenticated: true, isAdmin: false });
       mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
       render(<AppSidebar />);

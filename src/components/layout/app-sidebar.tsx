@@ -135,6 +135,7 @@ const operationsItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
+  projectsItem,
   { title: "Users", href: "/users", icon: Users },
   { title: "Groups", href: "/groups", icon: UsersRound },
   { title: "Service Accounts", href: "/service-accounts", icon: Bot },
@@ -185,10 +186,11 @@ export function AppSidebar() {
   const flags = useFeatureFlags();
   const { projects } = useActiveProject();
 
-  // Global admins always get the page (to create projects). Anyone else only
-  // sees the projects they administer, so the link is pointless without one.
+  // Global admins find Projects under Administration. The Administration group
+  // is hidden from everyone else, so a project admin gets the link under
+  // Overview instead, and only when they have a project to show.
   const visibleOverviewItems =
-    isAuthenticated && (isAdmin || projects.length > 0)
+    isAuthenticated && !isAdmin && projects.length > 0
       ? [...overviewItems, projectsItem]
       : overviewItems;
 
