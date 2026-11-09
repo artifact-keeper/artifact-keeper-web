@@ -732,6 +732,96 @@ describe("PermissionsPage", () => {
     });
   });
 
+  // -- #892: the User picker searches the server as you type ----------------
+
+  describe("search-driven user picker (#892)", () => {
+    const person = (n: number) => ({
+      id: `u-${n}`,
+      username: `person${n}`,
+      email: `person${n}@test.com`,
+      display_name: `Person ${n}`,
+      is_admin: false,
+    });
+
+    it("sends the typed text to the server as the search term", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
+        p.search === "zed" ? [person(500)] : MOCK_USERS,
+      );
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "zed");
+
+      await waitFor(() =>
+        expect(mockAdminApi.listUsers).toHaveBeenCalledWith({
+          isServiceAccount: false,
+          perPage: 100,
+          search: "zed",
+        }),
+      );
+      // A person who was never in the first page can now be picked.
+      expect(await screen.findByRole("button", { name: "Person 500" })).toBeTruthy();
+    });
+
+    it("does not filter server results again by the label (the server also matches username and email)", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
+        p.search === "person9@" ? [person(9)] : MOCK_USERS,
+      );
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "person9@");
+
+      expect(await screen.findByRole("button", { name: "Person 9" })).toBeTruthy();
+    });
+
+    it("keeps the chosen user's name on the button after the search changes", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
+        p.search ? [person(7)] : MOCK_USERS,
+      );
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      const picker = screen.getByRole("combobox", { name: "Principal" });
+      await user.click(picker);
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "seven");
+      await user.click(await screen.findByRole("button", { name: "Person 7" }));
+
+      // The picker closes and its search resets, so the unfiltered list no
+      // longer contains this person; the button must still name them.
+      await waitFor(() => expect(picker.textContent).toContain("Person 7"));
+    });
+
+    it("tells the admin when a search is capped at one page", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsers.mockResolvedValue(Array.from({ length: 100 }, (_, i) => person(i)));
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(await screen.findByText(/Showing the first 100 matches/)).toBeTruthy();
+    });
+
+    it("does not show the cap notice for a short list", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(screen.queryByText(/Showing the first 100 matches/)).toBeNull();
+    });
+  });
+
   describe("principal picker state", () => {
     it("clears the principal search when the picker is closed", async () => {
       const user = userEvent.setup();
