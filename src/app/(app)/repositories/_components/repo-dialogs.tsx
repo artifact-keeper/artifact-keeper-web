@@ -179,7 +179,12 @@ export function RepoDialogs({
   initialProjectId,
 }: RepoDialogsProps) {
   const { projects, activeProject } = useActiveProject();
-  const defaultProjectId = initialProjectId ?? activeProject?.id;
+  const { user: currentUser } = useAuth();
+  // Only a global admin may create a repository outside a project; a project
+  // admin must pick one of the projects they administer (#1043).
+  const requireProject = !currentUser?.is_admin && projects.length > 0;
+  const defaultProjectId =
+    initialProjectId ?? activeProject?.id ?? (requireProject ? projects[0]?.id : undefined);
   // Create form state
   // Private by default: matches the backend default and keeps new
   // repositories from being exposed unintentionally.
@@ -440,6 +445,7 @@ export function RepoDialogs({
             onSubmit={(e) => {
               e.preventDefault();
               if (depthError) return;
+              if (requireProject && !createForm.project_id) return;
               // #591: a selected WASM plugin layout is submitted as
               // `format: "generic"` plus the plugin's `format_key` — the
               // backend binds plugin-backed repos that way (migration 065).
@@ -853,7 +859,7 @@ export function RepoDialogs({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">No project</SelectItem>
+                    {!requireProject && <SelectItem value="__none__">No project</SelectItem>}
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.name} ({p.key})
@@ -861,6 +867,11 @@ export function RepoDialogs({
                     ))}
                   </SelectContent>
                 </Select>
+                {requireProject && (
+                  <p className="text-xs text-muted-foreground">
+                    You can create repositories in the projects you administer.
+                  </p>
+                )}
                 {createForm.project_id && (
                   <p className="text-xs text-muted-foreground">
                     Name it{" "}
@@ -908,7 +919,10 @@ export function RepoDialogs({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createPending || keyTaken || !!depthError}>
+              <Button
+                type="submit"
+                disabled={createPending || keyTaken || !!depthError || (requireProject && !createForm.project_id)}
+              >
                 {createPending ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>

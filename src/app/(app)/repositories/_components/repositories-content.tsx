@@ -46,6 +46,7 @@ import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
 import { useActiveProject } from "@/providers/project-provider";
+import { canCreateRepository, canManageRepository } from "@/lib/repo-permissions";
 
 export function RepositoriesContent() {
   useDocumentTitle("Repositories");
@@ -293,7 +294,13 @@ export function RepositoriesContent() {
     : null;
   const effectiveSelectedKey = selectedKey ?? autoSelectedKey;
 
-  const isAdmin = isAuthenticated && user?.is_admin;
+  // Project admins manage the repositories in their project; plain members
+  // cannot create or change any (#1043). The backend enforces the same rules.
+  const administeredProjectIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
+  const canCreate =
+    isAuthenticated && canCreateRepository(!!user?.is_admin, administeredProjectIds);
+  const canManage = (repo: Repository) =>
+    isAuthenticated && canManageRepository(!!user?.is_admin, repo.project_id, administeredProjectIds);
   const totalPages = data?.pagination?.total_pages ?? 1;
 
   // --- render ---
@@ -423,8 +430,8 @@ export function RepositoriesContent() {
                 repo={repo}
                 isSelected={effectiveSelectedKey === repo.key}
                 onSelect={handleSelect}
-                onEdit={isAdmin ? handleEdit : undefined}
-                onDelete={isAdmin ? handleDelete : undefined}
+                onEdit={canManage(repo) ? handleEdit : undefined}
+                onDelete={canManage(repo) ? handleDelete : undefined}
                 artifactMatchCount={searchQuery ? artifactMatchMap.get(repo.key) : undefined}
                 formatLabel={repoFormatLabel(repo, formatHandlers)}
                 projectName={repo.project_id ? projectNames.get(repo.project_id) : undefined}
@@ -494,7 +501,7 @@ export function RepositoriesContent() {
             </TooltipTrigger>
             <TooltipContent>Refresh</TooltipContent>
           </Tooltip>
-          {isAuthenticated && (
+          {canCreate && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               Create Repository
@@ -535,7 +542,7 @@ export function RepositoriesContent() {
 
       {/* Dialogs */}
       <RepoDialogs
-        createOpen={createOpen}
+        createOpen={createOpen && canCreate}
         onCreateOpenChange={setCreateOpen}
         onCreateSubmit={(d) => createMutation.mutate(d)}
         createPending={createMutation.isPending}
