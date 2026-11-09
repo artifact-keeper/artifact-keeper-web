@@ -42,6 +42,10 @@ const h = vi.hoisted(() => ({
   // flag it was issued with on the latest render.
   artifactDetail: undefined as Record<string, unknown> | undefined,
   artifactDetailEnabled: undefined as boolean | undefined,
+  // The repository's registered environments (#1037), and the `enabled` flag
+  // of the query that decides whether the Environments tab is shown.
+  environments: undefined as unknown[] | undefined,
+  environmentsEnabled: [] as Array<boolean | undefined>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -122,6 +126,14 @@ vi.mock("@tanstack/react-query", () => ({
       h.artifactDetailEnabled = opts.enabled;
       return {
         data: opts.enabled ? h.artifactDetail : undefined,
+        isLoading: false,
+        isFetching: false,
+      };
+    }
+    if (key === "environments") {
+      h.environmentsEnabled.push(opts.enabled);
+      return {
+        data: opts.enabled === false ? undefined : h.environments,
         isLoading: false,
         isFetching: false,
       };
@@ -950,5 +962,57 @@ describe("RepoDetailContent allowlist summary (#971)", () => {
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "false");
     await userEvent.click(screen.getByRole("button", { name: "Allowlist: on, 2 entries" }));
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("RepoDetailContent - Environments tab (#1037)", () => {
+  const envsTab = () => screen.queryByRole("tab", { name: /environments/i });
+
+  beforeEach(() => {
+    cleanup();
+    h.environments = undefined;
+    h.environmentsEnabled = [];
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.environments = undefined;
+  });
+
+  it.each(["maven", "gradle", "docker", "helm", "debian", "rpm", "nuget", "go", "generic"])(
+    "hides the tab on a %s repository that has no registered environment",
+    (format) => {
+      repository.format = format;
+      render(<RepoDetailContent repoKey="demo" />);
+      expect(envsTab()).toBeNull();
+    },
+  );
+
+  it.each(["conda", "conda_native", "npm", "cargo", "pypi", "poetry", "jupyter"])(
+    "shows the tab on a %s repository",
+    (format) => {
+      repository.format = format;
+      render(<RepoDetailContent repoKey="demo" />);
+      expect(envsTab()).not.toBeNull();
+    },
+  );
+
+  it("keeps the tab on an unrelated repository that already holds an environment", () => {
+    repository.format = "maven";
+    h.environments = [{ id: "env-1", name: "pinned" }];
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(envsTab()).not.toBeNull();
+  });
+
+  it("only looks up the stored environments when the format does not already decide it", () => {
+    repository.format = "npm";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(h.environmentsEnabled.every((e) => e === false)).toBe(true);
+
+    cleanup();
+    h.environmentsEnabled = [];
+    repository.format = "maven";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(h.environmentsEnabled.some((e) => e === true)).toBe(true);
   });
 });

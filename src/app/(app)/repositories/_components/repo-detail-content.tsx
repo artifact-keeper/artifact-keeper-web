@@ -190,6 +190,8 @@ import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
 import { EnvironmentsTabContent } from "./environments-tab-content";
+import { environmentsApi } from "@/lib/api/environments";
+import { formatHasLockfiles, showEnvironmentsTab } from "@/lib/environment-formats";
 import { CondaWithdrawButton } from "./conda-withdraw-dialog";
 import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
@@ -738,6 +740,19 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // path parser as fallback (#482).
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
   const isConda = isCondaFormat(repoFormat);
+  // The Environments tab only helps where the ecosystem has a supported
+  // lockfile, or where environments are already registered. The stored list is
+  // only fetched when the format alone does not decide it, and shares its cache
+  // entry with the tab's own query (#1037).
+  const formatLocksEnvironments = formatHasLockfiles(repoFormat);
+  const { data: storedEnvironments } = useQuery({
+    queryKey: ["environments", repoKey],
+    queryFn: () => environmentsApi.list(repoKey),
+    retry: false,
+    enabled: isAuthenticated && !!repoFormat && !formatLocksEnvironments,
+  });
+  const showEnvironments =
+    isAuthenticated && showEnvironmentsTab(repoFormat, storedEnvironments?.length ?? 0);
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   // Whether a download count is a real number or an unmeasured blank (#808).
@@ -1307,7 +1322,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Curation
             </TabsTrigger>
           )}
-          {isAuthenticated && (
+          {showEnvironments && (
             <TabsTrigger value="environments">
               <Boxes className="size-3.5 mr-1" />
               Environments
@@ -1572,7 +1587,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           )}
 
         {/* --- Environments Tab (registered lockfiles, PURL lookup) --- */}
-        {isAuthenticated && (
+        {showEnvironments && (
           <TabsContent value="environments" className="mt-4">
             <EnvironmentsTabContent repoKey={repoKey} canRegister={!!user?.is_admin} />
           </TabsContent>
