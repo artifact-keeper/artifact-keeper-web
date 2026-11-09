@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -83,10 +85,10 @@ function ToolRow({ tool }: { tool: McpTool }) {
   return (
     <li className="rounded-md border p-3 space-y-1" data-tool={tool.name}>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="font-mono text-sm font-medium">{tool.name}</code>
+        <SafeText as="code" max={NAME_MAX_LENGTH} className="font-mono text-sm font-medium break-all" value={tool.name} />
         <AnnotationChips tool={tool} />
       </div>
-      {tool.description && <p className="text-sm text-muted-foreground whitespace-pre-line">{tool.description}</p>}
+      {tool.description && <SafeText as="p" className="text-sm text-muted-foreground whitespace-pre-line" value={tool.description} />}
       {schema && (
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger asChild>
@@ -113,9 +115,9 @@ function NamedList({ items }: { items: { name: string; title?: string; descripti
     <ul role="list" className="space-y-2">
       {items.map((it, i) => (
         <li key={`${it.name}-${i}`} className="rounded-md border p-3">
-          <code className="font-mono text-sm font-medium">{it.name}</code>
-          {(it.uri ?? it.uriTemplate) && <span className="ml-2 font-mono text-xs text-muted-foreground">{it.uri ?? it.uriTemplate}</span>}
-          {it.description && <p className="text-sm text-muted-foreground whitespace-pre-line">{it.description}</p>}
+          <SafeText as="code" max={NAME_MAX_LENGTH} className="font-mono text-sm font-medium break-all" value={it.name} />
+          {(it.uri ?? it.uriTemplate) && <SafeText className="ml-2 font-mono text-xs text-muted-foreground break-all" value={it.uri ?? it.uriTemplate} />}
+          {it.description && <SafeText as="p" className="text-sm text-muted-foreground whitespace-pre-line" value={it.description} />}
         </li>
       ))}
     </ul>
@@ -127,7 +129,7 @@ function SnapshotHeader({ snap }: { snap: McpCapabilitySnapshot }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <StatusBadge status={prov.label} color={prov.color} className="normal-case" />
-      {snap.provenance && <span>{snap.provenance}</span>}
+      {snap.provenance && <SafeText max={NAME_MAX_LENGTH} value={snap.provenance} />}
       {snap.observedAt && (
         <time dateTime={snap.observedAt} title={snap.observedAt}>
           {relativeTime(snap.observedAt)}
