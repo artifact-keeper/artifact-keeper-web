@@ -2166,6 +2166,22 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
   );
 });
 
+/**
+ * The Select mock renders a bare native <select>, so the proxy scan action
+ * control is found by its options rather than by an accessible name.
+ */
+function proxyActionSelect(): HTMLSelectElement {
+  const select = screen
+    .getAllByTestId("mock-select")
+    .find((el) =>
+      Array.from((el as HTMLSelectElement).options).some(
+        (o) => o.value === "record_only"
+      )
+    );
+  if (!select) throw new Error("proxy scan action select not rendered");
+  return select as HTMLSelectElement;
+}
+
 describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -2221,9 +2237,6 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
       "disabled",
       true
     );
-    expect(
-      screen.getByLabelText("Fail closed on proxy downloads")
-    ).toHaveProperty("disabled", true);
   });
 
   it("reflects a fail_closed config and enabled toggles from the backend", async () => {
@@ -2243,9 +2256,7 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
         screen.getByLabelText("Enable scanning").getAttribute("aria-checked")
       ).toBe("true");
     });
-    const failClosed = screen.getByLabelText("Fail closed on proxy downloads");
-    expect(failClosed.getAttribute("aria-checked")).toBe("true");
-    expect(failClosed).toHaveProperty("disabled", false);
+    expect(proxyActionSelect().value).toBe("fail_closed");
     // Security-first caption is shown when fail-closed is active.
     expect(screen.getByText(/Security first/)).toBeTruthy();
   });
@@ -2281,7 +2292,7 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     expect(saveBtn).toHaveProperty("disabled", true);
   });
 
-  it("PUTs the full config with proxy_scan_action=fail_closed on save", async () => {
+  it("PUTs only the changed fields, with proxy_scan_action=fail_closed on save", async () => {
     mockGetScanConfig.mockResolvedValue({
       scan_enabled: true,
       scan_on_upload: false,
@@ -2304,13 +2315,11 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
       wrapper: createWrapper(),
     });
     await waitFor(() => {
-      expect(
-        screen.getByLabelText("Fail closed on proxy downloads")
-      ).toHaveProperty("disabled", false);
+      expect(proxyActionSelect().value).toBe("fail_open");
     });
 
     // Flip to fail-closed and turn on active blocking.
-    await user.click(screen.getByLabelText("Fail closed on proxy downloads"));
+    await user.selectOptions(proxyActionSelect(), "fail_closed");
     await user.click(screen.getByLabelText("Block on policy violation"));
 
     const saveBtn = screen.getByRole("button", {
@@ -2320,18 +2329,138 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     await user.click(saveBtn);
 
     await waitFor(() => {
-      expect(mockUpdateScanConfig).toHaveBeenCalledWith(
-        "maven-releases",
-        expect.objectContaining({
-          scan_enabled: true,
-          scan_on_proxy: true,
-          block_on_policy_violation: true,
-          proxy_scan_action: "fail_closed",
-        })
-      );
+      expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+        block_on_policy_violation: true,
+        proxy_scan_action: "fail_closed",
+      });
     });
     expect(toast.success).toHaveBeenCalledWith(
       "Scanning & enforcement settings saved"
+    );
+  });
+
+  it("offers all three proxy scan actions (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+    expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toEqual([
+      "fail_open",
+      "fail_closed",
+      "record_only",
+    ]);
+  });
+
+  it("shows a stored record_only action as record only, with its own caption (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("record_only"));
+    expect(screen.getByText(/nothing is blocked/i)).toBeTruthy();
+    expect(screen.queryByText(/Availability first/)).toBeNull();
+  });
+
+  it("does not rewrite a record_only action when an unrelated field is saved (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("record_only"));
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    const patch = mockUpdateScanConfig.mock.calls[0][1];
+    expect(patch).toEqual({ block_on_policy_violation: true });
+    expect(patch).not.toHaveProperty("proxy_scan_action");
+  });
+
+  it("keeps a mode it does not know, shows it as unknown and does not send it (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "quarantine",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+      proxy_scan_action: "quarantine",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("quarantine"));
+
+    const unknown = Array.from(proxyActionSelect().options).find((o) => o.value === "quarantine");
+    expect(unknown?.textContent).toBe("Unknown (quarantine)");
+    expect(screen.getByText(/does not recognise the stored mode/)).toBeTruthy();
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({ block_on_policy_violation: true });
+  });
+
+  it("sends only proxy_scan_action when only the action is changed", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "critical",
+      proxy_scan_action: "fail_open",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "critical",
+      proxy_scan_action: "record_only",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+
+    await user.selectOptions(proxyActionSelect(), "record_only");
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+        proxy_scan_action: "record_only",
+      })
     );
   });
 
