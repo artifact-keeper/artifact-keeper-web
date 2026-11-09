@@ -733,6 +733,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const [ageGateDaysOverride, setAgeGateDaysOverride] = useState<
     string | undefined
   >(undefined);
+  // The instance-admin lock (#1038). `undefined` on a backend that does not
+  // report it, in which case the control is hidden and nothing is sent.
+  const [ageGateLockedOverride, setAgeGateLockedOverride] = useState<
+    boolean | undefined
+  >(undefined);
+  const ageGateLockKnown = ageGateConfig?.instanceLocked !== undefined;
+  const ageGateLocked =
+    ageGateLockedOverride ?? ageGateConfig?.instanceLocked ?? false;
   const ageGateEnabled =
     ageGateEnabledOverride ?? ageGateConfig?.enabled ?? false;
   const ageGateDaysInput =
@@ -750,17 +758,23 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     ((ageGateEnabledOverride !== undefined &&
       ageGateEnabledOverride !== ageGateConfig.enabled) ||
       (ageGateDaysOverride !== undefined &&
-        parsedAgeGateDays !== ageGateConfig.minAgeDays));
+        parsedAgeGateDays !== ageGateConfig.minAgeDays) ||
+      (ageGateLockedOverride !== undefined &&
+        ageGateLockedOverride !== ageGateConfig.instanceLocked));
 
   const ageGateMutation = useMutation({
-    mutationFn: (cfg: { enabled: boolean; minAgeDays: number }) =>
-      ageGateApi.updateRepoConfig(repository.key, cfg),
+    mutationFn: (cfg: {
+      enabled: boolean;
+      minAgeDays: number;
+      instanceLocked?: boolean;
+    }) => ageGateApi.updateRepoConfig(repository.key, cfg),
     onSuccess: (updated) => {
       // Seed the query cache with the server's echoed config and clear the
       // local edits so the form re-baselines against what was persisted.
       queryClient.setQueryData(["age-gate-config", repository.key], updated);
       setAgeGateEnabledOverride(undefined);
       setAgeGateDaysOverride(undefined);
+      setAgeGateLockedOverride(undefined);
       toast.success(
         updated.enabled ? "Age gate enabled" : "Age gate settings saved"
       );
@@ -774,12 +788,19 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     ageGateMutation.mutate({
       enabled: ageGateEnabled,
       minAgeDays: parsedAgeGateDays,
+      // Always send the lock back when the backend reports one: leaving it out
+      // LOCKS the policy, so saving any other field would silently re-lock one
+      // that was handed back. Only an instance administrator may send it, and
+      // this section is only shown to one (#1038).
+      ...(ageGateLockKnown ? { instanceLocked: ageGateLocked } : {}),
     });
   }, [
     ageGateConfig,
     ageGateDaysValid,
     parsedAgeGateDays,
     ageGateEnabled,
+    ageGateLockKnown,
+    ageGateLocked,
     ageGateMutation,
   ]);
 
@@ -1377,6 +1398,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     onCheckedChange={setAgeGateEnabledOverride}
                   />
                 </div>
+
+                {ageGateLockKnown && (
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="settings-age-gate-locked">
+                        Lock this policy
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {ageGateLocked
+                          ? "Locked: a repository administrator can only tighten the policy (raise the minimum age). Only an instance administrator can disable it or lower the minimum age."
+                          : "Not locked: the repository's administrators can change the policy. Lock it to keep them from disabling it or lowering the minimum age."}
+                      </p>
+                    </div>
+                    <Switch
+                      id="settings-age-gate-locked"
+                      checked={ageGateLocked}
+                      onCheckedChange={setAgeGateLockedOverride}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="settings-age-gate-days">

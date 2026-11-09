@@ -2545,6 +2545,120 @@ describe("RepoSettingsTab - Age Gate (#701)", () => {
     expect(toast.success).toHaveBeenCalledWith("Age gate enabled");
   });
 
+  describe("instance-admin lock (#1038)", () => {
+    const lockedConfig = (instanceLocked: boolean) => ({
+      repositoryKey: "npm-remote",
+      enabled: true,
+      minAgeDays: 7,
+      instanceLocked,
+    });
+
+    async function renderLoaded() {
+      render(<RepoSettingsTab repository={remoteRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Lock this policy")).toBeTruthy());
+    }
+
+    async function setDays(user: ReturnType<typeof userEvent.setup>, value: string) {
+      const input = screen.getByLabelText("Minimum age (days)");
+      await user.clear(input);
+      await user.type(input, value);
+    }
+
+    it("shows a locked policy as locked, with what that means", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      await renderLoaded();
+      expect(screen.getByLabelText("Lock this policy").getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByText(/only tighten the policy/i)).toBeTruthy();
+    });
+
+    it("shows a handed-back policy as not locked", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      await renderLoaded();
+      expect(screen.getByLabelText("Lock this policy").getAttribute("aria-checked")).toBe("false");
+      expect(screen.getByText(/Not locked/)).toBeTruthy();
+    });
+
+    it("sends the handed-back state with an unrelated save, so it is not re-locked", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 30,
+          instanceLocked: false,
+        }),
+      );
+    });
+
+    it("keeps a locked policy locked on an unrelated save", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 30,
+          instanceLocked: true,
+        }),
+      );
+    });
+
+    it("hands a policy back when the lock is switched off", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      const save = screen.getByRole("button", { name: /save age gate settings/i });
+      expect(save).toHaveProperty("disabled", true);
+      await user.click(screen.getByLabelText("Lock this policy"));
+      expect(save).toHaveProperty("disabled", false);
+      await user.click(save);
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 7,
+          instanceLocked: false,
+        }),
+      );
+    });
+
+    it("shows no lock control and sends no lock when the backend does not report one", async () => {
+      mockGetAgeGateConfig.mockResolvedValue({
+        repositoryKey: "npm-remote",
+        enabled: true,
+        minAgeDays: 7,
+      });
+      mockUpdateAgeGateConfig.mockResolvedValue({
+        repositoryKey: "npm-remote",
+        enabled: true,
+        minAgeDays: 30,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={remoteRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Minimum age (days)")).toBeTruthy());
+      expect(screen.queryByLabelText("Lock this policy")).toBeNull();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() => expect(mockUpdateAgeGateConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateAgeGateConfig.mock.calls[0][1]).not.toHaveProperty("instanceLocked");
+    });
+  });
+
   it("saves a disabled gate while keeping the loaded minimum age", async () => {
     mockUpdateAgeGateConfig.mockResolvedValue({
       repositoryKey: "npm-remote",
