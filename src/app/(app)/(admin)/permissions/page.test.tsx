@@ -732,6 +732,124 @@ describe("PermissionsPage", () => {
     });
   });
 
+  // -- #1096: filter the list -----------------------------------------------
+
+  describe("filtering the list (#1096)", () => {
+    const PERM_GROUP = {
+      id: "perm-2",
+      principal_type: "group" as const,
+      principal_id: "grp-1",
+      principal_name: "Developers",
+      target_type: "artifact" as const,
+      target_id: "art-1",
+      target_name: "libs.tgz",
+      actions: ["read", "delete"] as ("read" | "write" | "delete" | "admin")[],
+      created_at: "2025-01-16T00:00:00Z",
+      updated_at: "2025-01-16T00:00:00Z",
+    };
+
+    beforeEach(() => {
+      window.history.replaceState(null, "", "/permissions");
+      mockPermissionsApi.list.mockResolvedValue({
+        items: [PERM_1, PERM_GROUP],
+        pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
+      });
+    });
+    afterEach(() => window.history.replaceState(null, "", "/"));
+
+    // Mock <select>s render in DOM order: principal type, target type, action.
+    const filterSelects = () => screen.getAllByRole("combobox") as HTMLSelectElement[];
+
+    it("narrows rows by principal name", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      expect(screen.getByText("Developers")).toBeTruthy();
+
+      await user.type(screen.getByRole("textbox", { name: "Search principal" }), "dev");
+
+      expect(screen.getByText("Developers")).toBeTruthy();
+      expect(screen.queryByText("Alice")).toBeNull();
+    });
+
+    it("narrows rows by target name", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+
+      await user.type(screen.getByRole("textbox", { name: "Search target" }), "npm-");
+
+      expect(screen.getByText("Alice")).toBeTruthy();
+      expect(screen.queryByText("Developers")).toBeNull();
+    });
+
+    it("narrows rows by action", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+
+      await user.selectOptions(filterSelects()[2], "delete");
+
+      expect(screen.getByText("Developers")).toBeTruthy();
+      expect(screen.queryByText("Alice")).toBeNull();
+    });
+
+    it("asks the server for the principal and target type, so the result is not capped to the first page", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+
+      await user.selectOptions(filterSelects()[0], "group");
+      await user.selectOptions(filterSelects()[1], "artifact");
+
+      await waitFor(() =>
+        expect(mockPermissionsApi.list).toHaveBeenCalledWith({
+          per_page: 1000,
+          principal_type: "group",
+          target_type: "artifact",
+        }),
+      );
+    });
+
+    it("keeps the filters in the URL and starts from them", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await user.type(screen.getByRole("textbox", { name: "Search principal" }), "dev");
+      expect(new URLSearchParams(window.location.search).get("principal")).toBe("dev");
+
+      cleanup();
+      renderPage();
+      await waitFor(() =>
+        expect((screen.getByRole("textbox", { name: "Search principal" }) as HTMLInputElement).value).toBe("dev"),
+      );
+      expect(screen.queryByText("Alice")).toBeNull();
+    });
+
+    it("says so when nothing matches, and Clear filters brings the rows back", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+
+      await user.type(screen.getByRole("textbox", { name: "Search principal" }), "nobody-here");
+      expect(screen.getByText("No permissions match these filters.")).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: /Clear filters/ }));
+      expect(screen.getByText("Alice")).toBeTruthy();
+      expect(screen.getByText("Developers")).toBeTruthy();
+      expect(window.location.search).toBe("");
+    });
+
+    it("shows how many rows match", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+
+      await user.selectOptions(filterSelects()[2], "delete");
+      expect(screen.getByText("1 of 2")).toBeTruthy();
+    });
+  });
+
   describe("principal picker state", () => {
     it("clears the principal search when the picker is closed", async () => {
       const user = userEvent.setup();

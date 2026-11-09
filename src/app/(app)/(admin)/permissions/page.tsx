@@ -69,6 +69,15 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { McpNamespaceGrants } from "./_components/mcp-namespace-grants";
+import { PermissionFilterBar } from "./_components/permission-filter-bar";
+import {
+  EMPTY_PERMISSION_FILTERS,
+  filterPermissions,
+  filtersFromSearch,
+  filtersToSearch,
+  hasActiveFilters,
+  type PermissionFilters,
+} from "@/lib/permission-filters";
 
 // -- constants --
 
@@ -123,14 +132,37 @@ export default function PermissionsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
 
+  // Filters live in the query string so a filtered view can be shared or
+  // bookmarked (#1096). Read once on mount; written with replaceState so
+  // typing does not fill the history.
+  const [filters, setFiltersState] = useState<PermissionFilters>(() =>
+    globalThis.window === undefined
+      ? EMPTY_PERMISSION_FILTERS
+      : filtersFromSearch(globalThis.window.location.search),
+  );
+  const setFilters = useCallback((next: PermissionFilters) => {
+    setFiltersState(next);
+    const url = new URL(globalThis.window.location.href);
+    url.search = filtersToSearch(next, url.search);
+    globalThis.window.history.replaceState(null, "", url);
+  }, []);
+
   const [form, setForm] = useState<PermissionForm>(EMPTY_FORM);
   const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
   const [principalSearch, setPrincipalSearch] = useState("");
 
   // -- queries --
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
-    queryKey: ["admin-permissions"],
-    queryFn: () => permissionsApi.list({ per_page: 1000 }),
+    // The type filters are answered by the server. Name and action have no
+    // API parameter, so those apply to the loaded rows below. The key stays
+    // under the "admin-permissions" prefix that mutations invalidate.
+    queryKey: ["admin-permissions", filters.principalType, filters.targetType],
+    queryFn: () =>
+      permissionsApi.list({
+        per_page: 1000,
+        principal_type: filters.principalType || undefined,
+        target_type: filters.targetType || undefined,
+      }),
     enabled: !!currentUser?.is_admin,
   });
 
@@ -165,7 +197,7 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
-  const permissions = permissionsData?.items ?? [];
+  const allPermissions = useMemo(() => permissionsData?.items ?? [], [permissionsData]);
   const users = usersData ?? [];
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
@@ -218,6 +250,16 @@ export default function PermissionsPage() {
       permission.principal_id,
     [serviceAccountNames]
   );
+
+  const permissions = useMemo(
+    () =>
+      filterPermissions(allPermissions, filters, {
+        principalLabel: getPrincipalLabel,
+        targetLabel: (p) => p.target_name ?? p.target_id,
+      }),
+    [allPermissions, filters, getPrincipalLabel],
+  );
+  const filtersActive = hasActiveFilters(filters);
 
   const filteredPrincipalOptions = useMemo(() => {
     const search = principalSearch.trim().toLowerCase();
@@ -660,7 +702,16 @@ export default function PermissionsPage() {
         }
       />
 
-      {!permissionsLoading && permissions.length === 0 ? (
+      {(allPermissions.length > 0 || filtersActive) && (
+        <PermissionFilterBar
+          filters={filters}
+          onChange={setFilters}
+          shown={permissions.length}
+          total={allPermissions.length}
+        />
+      )}
+
+      {!permissionsLoading && permissions.length === 0 && !filtersActive ? (
         <EmptyState
           icon={Shield}
           title="No permissions configured"
@@ -682,12 +733,12 @@ export default function PermissionsPage() {
           columns={columns}
           data={permissions}
           loading={permissionsLoading}
-          emptyMessage="No permissions found."
+          emptyMessage={filtersActive ? "No permissions match these filters." : "No permissions found."}
           rowKey={(p) => p.id}
         />
       )}
       <ListTruncationNotice
-        shown={permissions.length}
+        shown={allPermissions.length}
         total={permissionsData?.pagination?.total ?? 0}
       />
 
