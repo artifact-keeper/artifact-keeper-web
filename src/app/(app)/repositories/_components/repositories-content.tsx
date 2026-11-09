@@ -45,6 +45,8 @@ import { backendSupportsMcp } from "@/lib/mcp/format";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
+import { useActiveProject } from "@/providers/project-provider";
+import { canCreateRepository, canManageRepository } from "@/lib/repo-permissions";
 
 export function RepositoriesContent() {
   useDocumentTitle("Repositories");
@@ -53,9 +55,20 @@ export function RepositoriesContent() {
   const { isAuthenticated, user } = useAuth();
   const isMobile = useIsMobile();
 
+  const { projects, activeProject } = useActiveProject();
+  // `?new=1&project=<id>` (from a project page) opens the create dialog preselected.
+  const [urlProjectId] = useState<string | undefined>(() => {
+    if (globalThis.window === undefined) return undefined;
+    const params = new URL(globalThis.window.location.href).searchParams;
+    return params.get("new") === "1" ? (params.get("project") ?? undefined) : undefined;
+  });
+
   // filter state
   const [formatFilter, setFormatFilter] = useState("__all__");
   const [typeFilter, setTypeFilter] = useState("__all__");
+  // "__all__" follows the header project switcher; picking one here overrides it.
+  const [projectOverride, setProjectOverride] = useState<string | null>(null);
+  const projectFilter = projectOverride ?? activeProject?.id ?? "__all__";
   const [searchQuery, setSearchQuery] = useState("");
   // Defer the search value so the backend list query (`q`) and artifact search
   // don't refetch on every keystroke.
@@ -72,7 +85,11 @@ export function RepositoriesContent() {
   });
 
   // dialog state
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(
+    () =>
+      globalThis.window !== undefined &&
+      new URL(globalThis.window.location.href).searchParams.get("new") === "1",
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dialogRepo, setDialogRepo] = useState<Repository | null>(null);
@@ -93,6 +110,10 @@ export function RepositoriesContent() {
     // Server-side name/key search so matches on other pages are found, not just
     // the ones already loaded on the current page (#pagination-search).
     q: deferredSearch || undefined,
+    // The backend can only filter *to* a project, so "No project" loads one
+    // large page and drops assigned repositories client-side.
+    project: projectFilter === "__all__" || projectFilter === "__none__" ? undefined : projectFilter,
+    ...(projectFilter === "__none__" ? { page: 1, per_page: 1000 } : {}),
   });
 
   // Installed format handlers — drives the create dialog's custom WASM
@@ -224,7 +245,11 @@ export function RepositoriesContent() {
   }, [artifactSearchResults]);
 
   // Fetch full repo data for artifact-matched repos not on the current page
-  const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const items = useMemo(() => {
+    const all = data?.items ?? [];
+    return projectFilter === "__none__" ? all.filter((r) => !r.project_id) : all;
+  }, [data?.items, projectFilter]);
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const currentPageKeys = useMemo(() => new Set(items.map((r) => r.key)), [items]);
   const missingRepoKeys = useMemo(() => {
     if (!searchQuery) return [];
@@ -269,7 +294,13 @@ export function RepositoriesContent() {
     : null;
   const effectiveSelectedKey = selectedKey ?? autoSelectedKey;
 
-  const isAdmin = isAuthenticated && user?.is_admin;
+  // Project admins manage the repositories in their project; plain members
+  // cannot create or change any (#1043). The backend enforces the same rules.
+  const administeredProjectIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
+  const canCreate =
+    isAuthenticated && canCreateRepository(!!user?.is_admin, administeredProjectIds);
+  const canManage = (repo: Repository) =>
+    isAuthenticated && canManageRepository(!!user?.is_admin, repo.project_id, administeredProjectIds);
   const totalPages = data?.pagination?.total_pages ?? 1;
 
   // --- render ---
@@ -327,6 +358,25 @@ export function RepositoriesContent() {
             </SelectContent>
           </Select>
         </div>
+        {projects.length > 0 && (
+          <Select
+            value={projectFilter}
+            onValueChange={(v) => { setProjectOverride(v); setPage(1); }}
+          >
+            <SelectTrigger className="h-7 text-xs w-full" aria-label="Filter by project">
+              <SelectValue placeholder="Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All projects</SelectItem>
+              <SelectItem value="__none__">No project</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Repository list */}
@@ -380,10 +430,11 @@ export function RepositoriesContent() {
                 repo={repo}
                 isSelected={effectiveSelectedKey === repo.key}
                 onSelect={handleSelect}
-                onEdit={isAdmin ? handleEdit : undefined}
-                onDelete={isAdmin ? handleDelete : undefined}
+                onEdit={canManage(repo) ? handleEdit : undefined}
+                onDelete={canManage(repo) ? handleDelete : undefined}
                 artifactMatchCount={searchQuery ? artifactMatchMap.get(repo.key) : undefined}
                 formatLabel={repoFormatLabel(repo, formatHandlers)}
+                projectName={repo.project_id ? projectNames.get(repo.project_id) : undefined}
               />
             ))}
           </div>
@@ -450,7 +501,7 @@ export function RepositoriesContent() {
             </TooltipTrigger>
             <TooltipContent>Refresh</TooltipContent>
           </Tooltip>
-          {isAuthenticated && (
+          {canCreate && (
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
               Create Repository
@@ -491,7 +542,7 @@ export function RepositoriesContent() {
 
       {/* Dialogs */}
       <RepoDialogs
-        createOpen={createOpen}
+        createOpen={createOpen && canCreate}
         onCreateOpenChange={setCreateOpen}
         onCreateSubmit={(d) => createMutation.mutate(d)}
         createPending={createMutation.isPending}
@@ -519,6 +570,7 @@ export function RepositoriesContent() {
         deletePending={deleteMutation.isPending}
         availableRepos={items}
         pluginFormats={pluginFormats}
+        initialProjectId={urlProjectId}
       />
     </div>
   );

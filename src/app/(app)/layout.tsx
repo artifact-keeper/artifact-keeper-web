@@ -4,10 +4,12 @@ import { AppHeader } from "@/components/layout/app-header";
 import { DemoBanner } from "@/components/layout/demo-banner";
 import { PasswordExpiryBanner } from "@/components/layout/password-expiry-banner";
 import { EventStreamProvider } from "@/components/layout/event-stream-provider";
+import { ProjectProvider } from "@/providers/project-provider";
 import { SkipNavLink } from "@/components/layout/skip-nav-link";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
+    <ProjectProvider>
     <SidebarProvider>
       <SkipNavLink />
       <EventStreamProvider />
@@ -24,5 +26,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </SidebarProvider>
+    </ProjectProvider>
   );
 }

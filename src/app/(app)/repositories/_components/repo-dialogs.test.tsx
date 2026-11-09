@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RepoDialogs } from './repo-dialogs';
@@ -102,6 +102,15 @@ vi.mock('@/providers/auth-provider', () => ({
   useAuth: () => mockAuth,
 }));
 
+// Projects the caller can pick from. Empty by default so existing tests see no project field.
+const mockProjects = vi.hoisted(() => ({
+  projects: [] as { id: string; key: string; name: string }[],
+  activeProject: null as { id: string; key: string; name: string } | null,
+}));
+vi.mock('@/providers/project-provider', () => ({
+  useActiveProject: () => mockProjects,
+}));
+
 // Feature flags come from the system-config provider. Default to guest access
 // enabled (the provider's own permissive default); gating tests override this.
 const mockFlags = vi.hoisted(() => ({ guestAccessEnabled: true }));
@@ -114,6 +123,8 @@ vi.mock('@/providers/system-config-provider', () => ({
 beforeEach(() => {
   mockFlags.guestAccessEnabled = true;
   mockAuth.user = { is_admin: false };
+  mockProjects.projects = [];
+  mockProjects.activeProject = null;
   depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
   depthSupport.error = null;
   depthSupport.isLoading = false;
@@ -2703,5 +2714,56 @@ describe('RepoDialogs - MCP registry (create)', () => {
     fireEvent.change(selects()[0], { target: { value: 'mcp' } });
     fireEvent.change(selects()[1], { target: { value: 'virtual' } });
     expect(screen.getByText(/policies live on each member/)).toBeTruthy();
+  });
+});
+
+describe('RepoDialogs - project required for non-admins (#1043)', () => {
+  const projects = [
+    { id: 'p1', key: 'payments', name: 'Payments' },
+    { id: 'p2', key: 'platform', name: 'Platform' },
+  ];
+
+  afterEach(cleanup);
+
+  function projectSelect(): HTMLSelectElement {
+    const select = screen
+      .getAllByTestId('mock-select')
+      .find((el) => Array.from((el as HTMLSelectElement).options).some((o) => o.value === 'p1'));
+    if (!select) throw new Error('project select not rendered');
+    return select as HTMLSelectElement;
+  }
+
+  it('does not offer "No project" to a project admin, and preselects a project', () => {
+    mockAuth.user = { is_admin: false };
+    mockProjects.projects = projects;
+    render(<RepoDialogs {...defaultProps} />);
+
+    const values = Array.from(projectSelect().options).map((o) => o.value);
+    expect(values).not.toContain('__none__');
+    expect(projectSelect().value).toBe('p1');
+    expect(screen.getByText(/projects you administer/i)).toBeTruthy();
+  });
+
+  it('creates inside the chosen project', () => {
+    const onCreateSubmit = vi.fn();
+    mockAuth.user = { is_admin: false };
+    mockProjects.projects = projects;
+    render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+
+    fireEvent.change(projectSelect(), { target: { value: 'p2' } });
+    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'platform-libs' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Platform libs' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(onCreateSubmit).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'p2' }));
+  });
+
+  it('offers "No project" to a global admin', () => {
+    mockAuth.user = { is_admin: true };
+    mockProjects.projects = projects;
+    render(<RepoDialogs {...defaultProps} />);
+
+    expect(Array.from(projectSelect().options).map((o) => o.value)).toContain('__none__');
+    expect(screen.queryByText(/projects you administer/i)).toBeNull();
   });
 });

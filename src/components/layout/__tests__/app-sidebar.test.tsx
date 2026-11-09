@@ -37,6 +37,11 @@ vi.mock("@/providers/system-config-provider", () => ({
   useFeatureFlags: () => mockUseFeatureFlags(),
 }));
 
+const mockUseActiveProject = vi.fn();
+vi.mock("@/providers/project-provider", () => ({
+  useActiveProject: () => mockUseActiveProject(),
+}));
+
 const mockUseQuery = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
@@ -70,6 +75,9 @@ vi.mock("@/components/ui/sidebar", () => ({
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
+    FolderKanban: icon,
+    ChevronsUpDown: icon,
+    Check: icon,
     LayoutDashboard: icon,
     Database: icon,
     Boxes: icon,
@@ -169,6 +177,7 @@ describe("AppSidebar", () => {
     mockUseQuery.mockReturnValue({ data: undefined });
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
     mockFormatHandlers.mockReturnValue(undefined);
+    mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
   });
 
   it("shows MCP Servers only when the backend registers the mcp format", () => {
@@ -340,6 +349,46 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.getByText("Operations")).toBeDefined();
     expect(screen.getByText("Administration")).toBeDefined();
+  });
+
+  describe("Projects entry (#988)", () => {
+    const project = { id: "p1", key: "alpha", name: "Alpha" };
+
+    it("shows Projects to a global admin even with no projects, once", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.getAllByText("Projects")).toHaveLength(1);
+    });
+
+    it("lists Projects under Administration for a global admin, not Overview", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      const entry = screen.getByText("Projects");
+      const labels = screen.getAllByText(/^(Overview|Administration)$/);
+      const position = (el: Element) => el.compareDocumentPosition(entry);
+      const admin = labels.find((l) => l.textContent === "Administration")!;
+      const overview = labels.find((l) => l.textContent === "Overview")!;
+      // Projects comes after the Administration label, and not just after Overview's.
+      expect(position(admin) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(position(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByText("Groups").compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    });
+
+    it("shows Projects under Overview to a non-admin who has a project", () => {
+      authState({ isAuthenticated: true, isAdmin: false });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.getByText("Projects")).toBeDefined();
+    });
+
+    it("hides Projects from a non-admin without any project", () => {
+      authState({ isAuthenticated: true, isAdmin: false });
+      mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Projects")).toBeNull();
+    });
   });
 
   it("hides Scan Results and DT Projects when no scanner is configured (#271)", () => {

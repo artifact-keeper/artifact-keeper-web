@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useFeatureFlags } from "@/providers/system-config-provider";
+import { useActiveProject } from "@/providers/project-provider";
 import {
   RpmTrustedKeyField,
   RpmRepodataDepthField,
@@ -126,7 +127,7 @@ interface RepoDialogsProps {
   editOpen: boolean;
   onEditOpenChange: (open: boolean) => void;
   editRepo: Repository | null;
-  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; visibility?: RepositoryVisibility; quota_bytes?: number }) => void;
+  onEditSubmit: (key: string, data: { key?: string; name: string; description: string; visibility?: RepositoryVisibility; quota_bytes?: number; project_id?: string | null }) => void;
   editPending: boolean;
   onUpstreamAuthUpdate?: (key: string, payload: UpstreamAuthPayload) => void;
   upstreamAuthPending?: boolean;
@@ -151,6 +152,8 @@ interface RepoDialogsProps {
    * are installed — the plugin options are simply absent then.
    */
   pluginFormats?: FormatHandler[];
+  /** Project preselected in the create dialog; falls back to the active project. */
+  initialProjectId?: string;
 }
 
 export function RepoDialogs({
@@ -173,7 +176,15 @@ export function RepoDialogs({
   deletePending,
   availableRepos = [],
   pluginFormats = [],
+  initialProjectId,
 }: RepoDialogsProps) {
+  const { projects, activeProject } = useActiveProject();
+  const { user: currentUser } = useAuth();
+  // Only a global admin may create a repository outside a project; a project
+  // admin must pick one of the projects they administer (#1043).
+  const requireProject = !currentUser?.is_admin && projects.length > 0;
+  const defaultProjectId =
+    initialProjectId ?? activeProject?.id ?? (requireProject ? projects[0]?.id : undefined);
   // Create form state
   // Private by default: matches the backend default and keeps new
   // repositories from being exposed unintentionally.
@@ -184,6 +195,7 @@ export function RepoDialogs({
     format: "generic",
     repo_type: "local",
     visibility: "private" as RepositoryVisibility,
+    project_id: defaultProjectId,
     upstream_url: "",
     member_repos: [],
   });
@@ -350,12 +362,14 @@ export function RepoDialogs({
     name: editRepo?.name ?? "",
     description: editRepo?.description ?? "",
     visibility: editRepo ? resolveVisibility(editRepo) : ("private" as RepositoryVisibility),
+    project_id: editRepo?.project_id ?? null,
   }), [editRepo]);
   const [editFormOverrides, setEditFormOverrides] = useState<{
     key?: string;
     name?: string;
     description?: string;
     visibility?: RepositoryVisibility;
+    project_id?: string | null;
   }>({});
   const editForm = { ...editFormDefaults, ...editFormOverrides };
   const editKeyChanged = editRepo ? editForm.key !== editRepo.key : false;
@@ -368,6 +382,7 @@ export function RepoDialogs({
       format: "generic",
       repo_type: "local",
       visibility: "private" as RepositoryVisibility,
+      project_id: defaultProjectId,
       upstream_url: "",
       member_repos: [],
     });
@@ -430,6 +445,7 @@ export function RepoDialogs({
             onSubmit={(e) => {
               e.preventDefault();
               if (depthError) return;
+              if (requireProject && !createForm.project_id) return;
               // #591: a selected WASM plugin layout is submitted as
               // `format: "generic"` plus the plugin's `format_key` — the
               // backend binds plugin-backed repos that way (migration 065).
@@ -820,6 +836,51 @@ export function RepoDialogs({
               onChange={(v) => setCreateForm((f) => ({ ...f, visibility: v }))}
               guestAccessEnabled={guestAccessEnabled}
             />
+            {projects.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="create-project">Project</Label>
+                <Select
+                  value={createForm.project_id ?? "__none__"}
+                  onValueChange={(v) =>
+                    setCreateForm((f) => {
+                      const prefixes = projects.map((p) => `${p.key}-`);
+                      const next = projects.find((p) => p.id === v);
+                      // Suggest the project's key prefix, but never overwrite a key the user typed.
+                      const suggest = f.key === "" || prefixes.includes(f.key);
+                      return {
+                        ...f,
+                        project_id: next?.id,
+                        key: suggest ? (next ? `${next.key}-` : "") : f.key,
+                      };
+                    })
+                  }
+                >
+                  <SelectTrigger id="create-project">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!requireProject && <SelectItem value="__none__">No project</SelectItem>}
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.key})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {requireProject && (
+                  <p className="text-xs text-muted-foreground">
+                    You can create repositories in the projects you administer.
+                  </p>
+                )}
+                {createForm.project_id && (
+                  <p className="text-xs text-muted-foreground">
+                    Name it{" "}
+                    <code>{projects.find((p) => p.id === createForm.project_id)?.key}-...</code>{" "}
+                    by convention. Project members get access to this repository.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="create-quota">Storage Quota</Label>
               <div className="flex gap-2">
@@ -858,7 +919,10 @@ export function RepoDialogs({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createPending || keyTaken || !!depthError}>
+              <Button
+                type="submit"
+                disabled={createPending || keyTaken || !!depthError || (requireProject && !createForm.project_id)}
+              >
                 {createPending ? "Creating..." : "Create"}
               </Button>
             </DialogFooter>
@@ -891,7 +955,7 @@ export function RepoDialogs({
             onSubmit={(e) => {
               e.preventDefault();
               if (editRepo) {
-                const { key: formKey, visibility, ...rest } = editForm;
+                const { key: formKey, visibility, project_id: projectId, ...rest } = editForm;
                 onEditSubmit(editRepo.key, {
                   ...rest,
                   ...(editKeyChanged ? { key: formKey } : {}),
@@ -900,6 +964,9 @@ export function RepoDialogs({
                   // repository to `private` on an unrelated edit.
                   ...(visibility !== resolveVisibility(editRepo) ? { visibility } : {}),
                   quota_bytes: quotaToBytes(editQuotaValue, editQuotaUnit) ?? undefined,
+                  // Only when changed: null takes the repository out of its
+                  // project, and omitting leaves the assignment alone.
+                  ...(projectId !== (editRepo.project_id ?? null) ? { project_id: projectId } : {}),
                 });
               }
             }}
@@ -957,6 +1024,33 @@ export function RepoDialogs({
               }
               guestAccessEnabled={guestAccessEnabled}
             />
+            {projects.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-project">Project</Label>
+                <Select
+                  value={editForm.project_id ?? "__none__"}
+                  onValueChange={(v) =>
+                    setEditFormOverrides((f) => ({ ...f, project_id: v === "__none__" ? null : v }))
+                  }
+                >
+                  <SelectTrigger id="edit-project">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No project</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} ({p.key})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Moving a repository changes who can access it: project members gain or lose
+                  access. The key and package-client URLs stay the same.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="edit-quota">Storage Quota</Label>
               <div className="flex gap-2">

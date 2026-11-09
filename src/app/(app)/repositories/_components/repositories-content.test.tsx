@@ -78,6 +78,11 @@ vi.mock("@/lib/query-keys", () => ({
   QUERY_KEYS: { REPOSITORIES: ["repositories"] },
 }));
 
+const mockUseActiveProject = vi.fn();
+vi.mock("@/providers/project-provider", () => ({
+  useActiveProject: () => mockUseActiveProject(),
+}));
+
 const mockUseAuth = vi.fn();
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
@@ -247,6 +252,7 @@ describe("RepositoriesContent", () => {
     useQueryCallIndex = 0;
     useQueryCallKeys.length = 0;
     mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
     mockUseIsMobile.mockReturnValue(false);
 
     useQueryResponses = {
@@ -561,6 +567,60 @@ describe("RepositoriesContent", () => {
     render(<RepositoriesContent />);
     // The RefreshCw icon should be rendered (even if not spinning in mock)
     expect(screen.getByTestId("icon-RefreshCw")).toBeInTheDocument();
+  });
+
+  // ---- Who may create and manage (#1043) ----
+
+  describe("create and manage permissions (#1043)", () => {
+    const project = { id: "proj-1", key: "payments", name: "Payments" };
+
+    it("hides Create Repository from a plain user with no project", () => {
+      mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: false } });
+      render(<RepositoriesContent />);
+      expect(screen.queryByText("Create Repository")).not.toBeInTheDocument();
+    });
+
+    it("shows Create Repository to a project admin", () => {
+      mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: false } });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      render(<RepositoriesContent />);
+      expect(screen.getByText("Create Repository")).toBeInTheDocument();
+    });
+
+    it("shows Create Repository to a global admin with no projects", () => {
+      render(<RepositoriesContent />);
+      expect(screen.getByText("Create Repository")).toBeInTheDocument();
+    });
+
+    it("offers edit and delete only for repositories in a project the user administers", () => {
+      mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: false } });
+      mockUseActiveProject.mockReturnValue({ projects: [project], activeProject: null, setActiveProjectId: vi.fn() });
+      useQueryResponses.repositories = {
+        data: {
+          items: [
+            { ...sampleRepos[0], project_id: "proj-1" },
+            { ...sampleRepos[1], project_id: "someone-elses" },
+            { ...sampleRepos[2] },
+          ],
+          pagination: { total_pages: 1, total: 3 },
+        },
+        isLoading: false,
+        isFetching: false,
+      };
+      render(<RepositoriesContent />);
+
+      expect(screen.getByTestId(`edit-${sampleRepos[0].key}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`delete-${sampleRepos[0].key}`)).toBeInTheDocument();
+      expect(screen.queryByTestId(`edit-${sampleRepos[1].key}`)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(`delete-${sampleRepos[2].key}`)).not.toBeInTheDocument();
+    });
+
+    it("offers edit and delete on every repository to a global admin", () => {
+      render(<RepositoriesContent />);
+      for (const repo of sampleRepos) {
+        expect(screen.getByTestId(`edit-${repo.key}`)).toBeInTheDocument();
+      }
+    });
   });
 
   // ---- Non-admin user ----
