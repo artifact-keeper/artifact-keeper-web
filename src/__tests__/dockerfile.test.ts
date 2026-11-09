@@ -47,11 +47,42 @@ describe("Dockerfile OpenShift arbitrary-UID compatibility", () => {
   it("makes the Next.js runtime cache group-writable for an arbitrary UID", () => {
     // .next/cache is the only path the standalone server writes to at runtime.
     // Owning it 1001:0 is not enough — the default 0755 denies group write, so
-    // a random UID in GID 0 cannot write it. It must be chmod g=rwX.
-    expect(dockerfile).toMatch(/chmod\s+g=rwX\s+\.next\/cache/);
+    // a random UID in GID 0 cannot write it. It must be chmod g=rwX. It is
+    // created in the rootfs (the runtime image has no shell to RUN in), so
+    // the path may carry the /mnt/rootfs/app prefix.
+    expect(dockerfile).toMatch(/chmod\s+g=rwX\s+\S*\.next\/cache/);
   });
 
   it("builds on a Red Hat UBI base for certification", () => {
     expect(dockerfile).toMatch(/registry\.access\.redhat\.com\/ubi9\//);
+  });
+});
+
+/**
+ * Guards #1108: ca-certificates (required by openssl-libs) drags bash,
+ * coreutils, grep, sed, pcre2, ncurses and more into the runtime rootfs. They
+ * are erased after the dnf install and the CA bundle is restored as plain
+ * files, and the runtime is built FROM scratch because ubi-micro itself ships
+ * bash, coreutils-single and pcre2.
+ */
+describe("Dockerfile minimal runtime (#1108)", () => {
+  it("erases the ca-certificates userland chain from the rootfs", () => {
+    expect(dockerfile).toMatch(/rpm --root \/mnt\/rootfs -e --nodeps/);
+    for (const pkg of ["ca-certificates", "bash", "coreutils", "pcre2", "ncurses-libs"]) {
+      expect(dockerfile).toMatch(new RegExp(`\\s${pkg}\\s`));
+    }
+  });
+
+  it("restores the CA bundle at the OpenSSL default path", () => {
+    expect(dockerfile).toContain("/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem");
+    expect(dockerfile).toMatch(/ln -sf \S+tls-ca-bundle\.pem \/mnt\/rootfs\/etc\/pki\/tls\/cert\.pem/);
+  });
+
+  it("builds the runtime stage from scratch, not ubi-micro", () => {
+    const stages = dockerfile.match(/^FROM .*$/gm) ?? [];
+    expect(stages[stages.length - 1]).toBe("FROM scratch");
+    // With no shell in the runtime, a RUN after the last FROM would fail.
+    const runtime = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+    expect(runtime).not.toMatch(/^RUN /m);
   });
 });
