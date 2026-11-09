@@ -20,9 +20,14 @@ import {
   scanConfigApi,
   SEVERITY_THRESHOLDS,
   type RepoScanConfig,
-  type ProxyScanAction,
   type UpsertScanConfigRequest,
 } from "@/lib/api/scan-config";
+import {
+  PROXY_SCAN_ACTION_LABELS,
+  PROXY_SCAN_ACTION_VALUES,
+  describeProxyScanAction,
+  isKnownProxyScanAction,
+} from "@/lib/proxy-scan-action";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
 import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
@@ -702,18 +707,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   const handleSaveScanConfig = useCallback(() => {
-    if (!scanForm) return;
-    // Send the full set — the backend upsert merges, but sending everything
-    // keeps the persisted row unambiguous and avoids a stale-field surprise.
-    scanConfigMutation.mutate({
-      scan_enabled: scanForm.scan_enabled,
-      scan_on_upload: scanForm.scan_on_upload,
-      scan_on_proxy: scanForm.scan_on_proxy,
-      block_on_policy_violation: scanForm.block_on_policy_violation,
-      severity_threshold: scanForm.severity_threshold,
-      proxy_scan_action: scanForm.proxy_scan_action,
-    });
-  }, [scanForm, scanConfigMutation]);
+    if (!scanConfig) return;
+    // Send only what the operator changed. The backend upsert merges a patch
+    // over the stored row (every field is optional), so an untouched field
+    // keeps its stored value. Sending the whole form wrote back whatever this
+    // UI had parsed, which silently rewrote a `record_only` action (#1069).
+    const patch: Record<string, unknown> = {};
+    for (const key of Object.keys(scanOverrides) as (keyof RepoScanConfig)[]) {
+      const value = scanOverrides[key];
+      if (value !== undefined && value !== scanConfig[key]) patch[key] = value;
+    }
+    scanConfigMutation.mutate(patch as UpsertScanConfigRequest);
+  }, [scanConfig, scanOverrides, scanConfigMutation]);
 
   // -- Age Gate (#701). Remote repos only: the backend PUT rejects other repo
   // types with 400 (`require_remote_repo_for_age_gate`) and is admin-only, so
@@ -1690,37 +1695,43 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   </p>
                 </div>
 
-                {/* Proxy scan action: fail-open vs fail-closed */}
+                {/* Proxy scan action: fail open, fail closed or record only */}
                 <div className="rounded-md border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="settings-scan-fail-closed">
-                        Fail closed on proxy downloads
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {scanForm.proxy_scan_action === "fail_closed"
-                          ? "Fail closed: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is blocked. Security first — a proxy outage can interrupt availability."
-                          : "Fail open: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is served anyway. Availability first — an unscanned artifact can slip through."}
-                      </p>
-                    </div>
-                    <Switch
-                      id="settings-scan-fail-closed"
-                      checked={scanForm.proxy_scan_action === "fail_closed"}
-                      disabled={
-                        !scanForm.scan_enabled || !scanForm.scan_on_proxy
-                      }
-                      onCheckedChange={(v) =>
-                        setScanField(
-                          "proxy_scan_action",
-                          (v ? "fail_closed" : "fail_open") as ProxyScanAction
-                        )
-                      }
-                    />
-                  </div>
+                  <Label htmlFor="settings-scan-action">
+                    Proxy scan action
+                  </Label>
+                  <Select
+                    value={scanForm.proxy_scan_action}
+                    onValueChange={(v) => setScanField("proxy_scan_action", v)}
+                    disabled={!scanForm.scan_enabled || !scanForm.scan_on_proxy}
+                  >
+                    <SelectTrigger
+                      id="settings-scan-action"
+                      className="w-56"
+                      aria-label="Proxy scan action"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROXY_SCAN_ACTION_VALUES.map((action) => (
+                        <SelectItem key={action} value={action}>
+                          {PROXY_SCAN_ACTION_LABELS[action]}
+                        </SelectItem>
+                      ))}
+                      {!isKnownProxyScanAction(scanForm.proxy_scan_action) && (
+                        <SelectItem value={scanForm.proxy_scan_action} disabled>
+                          {`Unknown (${scanForm.proxy_scan_action})`}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {describeProxyScanAction(scanForm.proxy_scan_action)}
+                  </p>
                   {(!scanForm.scan_enabled || !scanForm.scan_on_proxy) && (
                     <p className="text-xs text-muted-foreground">
                       Enable scanning and &ldquo;Scan on proxy download&rdquo;
-                      to choose the fail-open / fail-closed behavior.
+                      to choose what happens to proxied downloads.
                     </p>
                   )}
                 </div>
