@@ -46,6 +46,11 @@ vi.mock("@/lib/api/service-accounts", () => ({
   serviceAccountsApi: mockServiceAccountsApi,
 }));
 
+const mockProjectsApi = { list: vi.fn() };
+vi.mock("@/lib/api/projects", () => ({
+  projectsApi: mockProjectsApi,
+}));
+
 const mockToast = { success: vi.fn(), error: vi.fn() };
 vi.mock("sonner", () => ({ toast: mockToast }));
 
@@ -365,6 +370,15 @@ function getFormSelects(): HTMLSelectElement[] {
   return Array.from(dialog.querySelectorAll("select"));
 }
 
+async function pickRepositories(
+  user: ReturnType<typeof userEvent.setup>,
+  ...names: string[]
+) {
+  for (const name of names) {
+    await user.click(screen.getByRole("checkbox", { name: new RegExp(name) }));
+  }
+}
+
 async function selectPrincipal(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
@@ -407,6 +421,9 @@ beforeEach(async () => {
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
   });
   mockServiceAccountsApi.list.mockResolvedValue(MOCK_SERVICE_ACCOUNTS);
+  mockProjectsApi.list.mockResolvedValue([
+    { id: "proj-1", key: "payments", name: "Payments", created_at: "", updated_at: "" },
+  ]);
   mockRepositoriesApi.list.mockResolvedValue({
     items: MOCK_REPOS,
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
@@ -486,10 +503,12 @@ describe("PermissionsPage", () => {
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      // The label for the target field should be "Repository" (a <label> element)
-      const labels = screen.getAllByText("Repository");
+      // Create mode grants to several repositories, so the field is plural
+      // and is a checkbox list rather than a single select (#959).
+      const labels = screen.getAllByText("Repositories");
       const labelEl = labels.find((el) => el.tagName === "LABEL");
       expect(labelEl).toBeTruthy();
+      expect(screen.getByRole("checkbox", { name: /npm-local/ })).toBeTruthy();
 
       // The target_type select should have value "repository"
       const selects = getFormSelects();
@@ -540,17 +559,17 @@ describe("PermissionsPage", () => {
 
       const selects = getFormSelects();
       const targetTypeSelect = selects[1];
-      const targetIdSelect = selects[2];
 
-      // Pick a repository
-      await user.selectOptions(targetIdSelect, "repo-1");
-      expect(targetIdSelect.value).toBe("repo-1");
-
-      // Switch target type to group -- should reset target_id to ""
+      // Pick a group target
       await user.selectOptions(targetTypeSelect, "group");
+      const targetIdSelect = getFormSelects()[2];
+      await user.selectOptions(targetIdSelect, MOCK_GROUPS[0].id);
+      expect(getFormSelects()[2].value).toBe(MOCK_GROUPS[0].id);
 
-      const refreshed = getFormSelects();
-      expect(refreshed[2].value).toBe("");
+      // Switch target type to project -- should reset target_id to ""
+      await user.selectOptions(targetTypeSelect, "project");
+
+      expect(getFormSelects()[2].value).toBe("");
     });
 
     // #4653: a group-target rule is about the group object (read to see it,
@@ -612,7 +631,7 @@ describe("PermissionsPage", () => {
       expect(screen.queryByRole("button", { name: "Developers" })).toBeNull();
 
       await user.click(screen.getByRole("button", { name: "Release Bot" }));
-      await user.selectOptions(getFormSelects()[2], "repo-1");
+      await pickRepositories(user, "npm-local");
       const submitButtons = screen.getAllByText(/Create Permission/);
       await user.click(submitButtons[submitButtons.length - 1]);
 
@@ -792,17 +811,15 @@ describe("PermissionsPage", () => {
   // -- repository options loading (PR #186) ---------------------------------
 
   describe("repository options", () => {
-    it("renders repository entries as option elements in the target select", async () => {
+    it("renders every repository as a checkbox in the create dialog", async () => {
       const user = userEvent.setup();
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      const selects = getFormSelects();
-      const targetIdSelect = selects[2];
-      const options = Array.from(targetIdSelect.querySelectorAll("option"));
-      expect(options.some((o) => o.value === "repo-1")).toBe(true);
-      expect(options.some((o) => o.value === "repo-2")).toBe(true);
+      expect(screen.getAllByRole("checkbox").filter((c) => c.id.startsWith("repo-"))).toHaveLength(
+        MOCK_REPOS.length,
+      );
     });
 
     it("formats label as key + name when the repo has a name", async () => {
@@ -811,12 +828,104 @@ describe("PermissionsPage", () => {
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      const selects = getFormSelects();
-      const targetIdSelect = selects[2];
-      const options = Array.from(targetIdSelect.querySelectorAll("option"));
-      const npmOpt = options.find((o) => o.value === "repo-1");
-      expect(npmOpt?.textContent).toContain("npm-local");
-      expect(npmOpt?.textContent).toContain("NPM Local");
+      const npm = screen.getByRole("checkbox", { name: /npm-local/ });
+      const label = document.querySelector(`label[for="${npm.id}"]`);
+      expect(label?.textContent).toContain("npm-local");
+      expect(label?.textContent).toContain("NPM Local");
+    });
+  });
+
+  // -- #959: several repositories at once, and a project target ---------------
+
+  describe("bulk repository grants and project target (#959)", () => {
+    async function openWithAlice(user: ReturnType<typeof userEvent.setup>) {
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+      await selectPrincipal(user, "Alice");
+    }
+
+    async function submit(user: ReturnType<typeof userEvent.setup>) {
+      const buttons = screen.getAllByText(/Create (\d+ )?Permissions?/);
+      await user.click(buttons[buttons.length - 1]);
+    }
+
+    it("creates one grant per selected repository with the same principal and actions", async () => {
+      const user = userEvent.setup();
+      mockPermissionsApi.create.mockResolvedValue(PERM_1);
+      await openWithAlice(user);
+
+      await pickRepositories(user, "npm-local", "maven-remote");
+      await user.click(screen.getByLabelText("write"));
+      await submit(user);
+
+      await waitFor(() => expect(mockPermissionsApi.create).toHaveBeenCalledTimes(2));
+      const base = { principal_type: "user", principal_id: "user-2", target_type: "repository", actions: ["read", "write"] };
+      expect(mockPermissionsApi.create).toHaveBeenNthCalledWith(1, { ...base, target_id: "repo-1" });
+      expect(mockPermissionsApi.create).toHaveBeenNthCalledWith(2, { ...base, target_id: "repo-2" });
+      await waitFor(() => expect(mockToast.success).toHaveBeenCalledWith("2 permissions created"));
+    });
+
+    it("keeps the grants that worked and lists only the failures", async () => {
+      const user = userEvent.setup();
+      mockPermissionsApi.create
+        .mockResolvedValueOnce(PERM_1)
+        .mockRejectedValueOnce(new Error("Permission already exists"));
+      await openWithAlice(user);
+
+      await pickRepositories(user, "npm-local", "maven-remote");
+      await submit(user);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("maven-remote");
+      expect(alert.textContent).toContain("Permission already exists");
+      expect(alert.textContent).not.toContain("npm-local");
+      expect(mockToast.success).toHaveBeenCalledWith("1 of 2 permissions created");
+
+      // Only the failed repository stays selected, so a retry cannot hit
+      // "already exists" on the one that succeeded.
+      expect((screen.getByRole("checkbox", { name: /npm-local/ }) as HTMLElement).getAttribute("aria-checked") ?? "false").not.toBe("true");
+      expect(screen.getByText("1 selected")).toBeTruthy();
+    });
+
+    it("offers a project target that applies to every repository in it", async () => {
+      const user = userEvent.setup();
+      await openWithAlice(user);
+
+      await user.selectOptions(getFormSelects()[1], "project");
+
+      const options = Array.from(getFormSelects()[2].querySelectorAll("option"));
+      expect(options.some((o) => o.value === "proj-1")).toBe(true);
+      expect(screen.getByText(/including repositories added later/)).toBeTruthy();
+    });
+
+    it("sends a single grant with target_type project", async () => {
+      const user = userEvent.setup();
+      mockPermissionsApi.create.mockResolvedValue(PERM_1);
+      await openWithAlice(user);
+
+      await user.selectOptions(getFormSelects()[1], "project");
+      await user.selectOptions(getFormSelects()[2], "proj-1");
+      await submit(user);
+
+      await waitFor(() =>
+        expect(mockPermissionsApi.create).toHaveBeenCalledWith({
+          principal_type: "user",
+          principal_id: "user-2",
+          target_type: "project",
+          target_id: "proj-1",
+          actions: ["read"],
+        }),
+      );
+      expect(mockPermissionsApi.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("requires at least one repository", async () => {
+      const user = userEvent.setup();
+      await openWithAlice(user);
+      await submit(user);
+      expect(mockToast.error).toHaveBeenCalledWith("Please fill in all required fields");
+      expect(mockPermissionsApi.create).not.toHaveBeenCalled();
     });
   });
 
@@ -862,19 +971,20 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       // Pick the default user principal and target repository.
-      const selects = getFormSelects();
       await selectPrincipal(user, "Alice");
-      await user.selectOptions(selects[2], "repo-1");
+      await pickRepositories(user, "npm-local");
 
       // Click submit -- the last "Create Permission" match is the form button
       const submitBtns = screen.getAllByText(/Create Permission/);
       await user.click(submitBtns[submitBtns.length - 1]);
 
+      // Each repository's failure is listed in the dialog with its reason (#959).
       await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith(
+        expect(screen.getByRole("alert").textContent).toContain(
           "Principal already has this permission",
         );
       });
+      expect(mockToast.error).toHaveBeenCalled();
     });
 
     it("surfaces raw string errors directly via toUserMessage", async () => {
@@ -884,15 +994,14 @@ describe("PermissionsPage", () => {
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      const selects = getFormSelects();
       await selectPrincipal(user, "Alice");
-      await user.selectOptions(selects[2], "repo-1");
+      await pickRepositories(user, "npm-local");
 
       const submitBtns = screen.getAllByText(/Create Permission/);
       await user.click(submitBtns[submitBtns.length - 1]);
 
       await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith("raw string error");
+        expect(screen.getByRole("alert").textContent).toContain("raw string error");
       });
     });
 
@@ -903,15 +1012,14 @@ describe("PermissionsPage", () => {
       await waitForTableLoaded();
       await openCreateDialog(user);
 
-      const selects = getFormSelects();
       await selectPrincipal(user, "Alice");
-      await user.selectOptions(selects[2], "repo-1");
+      await pickRepositories(user, "npm-local");
 
       const submitBtns = screen.getAllByText(/Create Permission/);
       await user.click(submitBtns[submitBtns.length - 1]);
 
       await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith(
+        expect(screen.getByRole("alert").textContent).toContain(
           "Failed to create permission",
         );
       });
