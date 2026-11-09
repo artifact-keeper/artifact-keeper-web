@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, Users, Settings, Pencil, Trash2, Package, Search } from "lucide-react";
+import { Lock, Users, Settings, Pencil, Trash2, Package, Search, FolderKanban } from "lucide-react";
 import type { Repository, RepositoryVisibility } from "@/types";
 import { resolveVisibility } from "./visibility-select";
 import { REPO_TYPE_COLORS, cn } from "@/lib/utils";
@@ -63,9 +63,11 @@ interface RepoListItemProps {
    * (unknown, older backend) shows nothing.
    */
   upstreamMode?: UpstreamModeInfo | null;
+  /** Name of the project the repository belongs to, shown as a badge. */
+  projectName?: string;
 }
 
-export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel, upstreamMode }: RepoListItemProps) {
+export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel, upstreamMode, projectName }: RepoListItemProps) {
   // #672: the row's primary action is a real <button> that is a SIBLING of the
   // actions dropdown trigger — never an ancestor — so no interactive element
   // nests inside another and the row's accessible name stays clean (it no
@@ -117,6 +119,12 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
                 {repoSizeLabel(repo).text}
               </span>
             </div>
+            {projectName && (
+              <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                <FolderKanban className="size-2.5" aria-hidden="true" />
+                <span className="truncate" title={`Project: ${projectName}`}>{projectName}</span>
+              </div>
+            )}
             {artifactMatchCount && (
               <div className="flex items-center gap-1 mt-0.5">
                 <Search className="size-2.5 text-blue-500" />
