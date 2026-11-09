@@ -170,6 +170,39 @@ async function attemptRefresh(): Promise<boolean> {
   }
 }
 
+let inflightRefresh: Promise<boolean> | null = null;
+
+/**
+ * Refresh the session from the httpOnly refresh cookie, at most one request at
+ * a time: a caller that arrives while a refresh is running gets that refresh's
+ * result instead of sending a second one. Two parallel refreshes can invalidate
+ * each other when the backend rotates refresh tokens, which would turn a
+ * recoverable expiry into a sign-out. Used by the 401 interceptor and by the
+ * auth provider's initial load (#1084).
+ */
+export function refreshSession(): Promise<boolean> {
+  if (inflightRefresh) return inflightRefresh;
+  inflightRefresh = (async () => {
+    let refreshed = await attemptRefresh();
+
+    // #558: Chromium can fire the first request(s) after a frozen tab
+    // reactivates before the cookie store reattaches, so the request -- and
+    // the refresh it triggers -- goes out without cookies and fails
+    // spuriously. When the tab only just became visible, wait a beat and try
+    // the refresh once more before concluding the session is really gone.
+    if (!refreshed && recentlyBecameVisible()) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, UNFREEZE_REFRESH_RETRY_DELAY_MS)
+      );
+      refreshed = await attemptRefresh();
+    }
+    return refreshed;
+  })().finally(() => {
+    inflightRefresh = null;
+  });
+  return inflightRefresh;
+}
+
 function retryOriginalRequest(request: Request): Promise<Response> {
   return fetch(new Request(request.url, {
     method: request.method,
@@ -228,19 +261,8 @@ client.interceptors.response.use(async (response, request) => {
 
   isRefreshing = true;
 
-  let refreshed = await attemptRefresh();
-
-  // #558: Chromium can fire the first request(s) after a frozen tab
-  // reactivates before the cookie store reattaches, so the request -- and
-  // the refresh it triggers -- goes out without cookies and fails
-  // spuriously. When the tab only just became visible, wait a beat and try
-  // the refresh once more before concluding the session is really gone.
-  if (!refreshed && recentlyBecameVisible()) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, UNFREEZE_REFRESH_RETRY_DELAY_MS)
-    );
-    refreshed = await attemptRefresh();
-  }
+  // The #558 unfreeze retry lives inside `refreshSession`.
+  const refreshed = await refreshSession();
 
   if (!refreshed) {
     isRefreshing = false;
