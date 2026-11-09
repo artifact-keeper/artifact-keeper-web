@@ -420,6 +420,28 @@ describe("SetupPage - conda client variants (#908)", () => {
     },
   );
 
+  it("lists agentplugins repos under the AI agents category filter (artifact-keeper#5251)", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([
+      makeRepo({ id: "r1", key: "team-plugins", name: "Team Plugins", format: "agentplugins" }),
+      makeRepo({ id: "r2", key: "java-libs", name: "Java Libs", format: "maven" }),
+    ]);
+    await user.click(screen.getByRole("button", { name: "AI agents" }));
+    expect(screen.getByText("team-plugins")).toBeTruthy();
+    expect(screen.queryByText("java-libs")).toBeNull();
+  });
+
+  it("lists mcp repos under the AI agents category filter (artifact-keeper#5253)", async () => {
+    const user = userEvent.setup();
+    await renderPageWithRepos([
+      makeRepo({ id: "r1", key: "mcp-servers", name: "MCP Servers", format: "mcp" }),
+      makeRepo({ id: "r2", key: "java-libs", name: "Java Libs", format: "maven" }),
+    ]);
+    await user.click(screen.getByRole("button", { name: "AI agents" }));
+    expect(screen.getByText("mcp-servers")).toBeTruthy();
+    expect(screen.queryByText("java-libs")).toBeNull();
+  });
+
   it("keeps conda_native repos under the Ecosystem category filter", async () => {
     const user = userEvent.setup();
     await renderPageWithRepos([

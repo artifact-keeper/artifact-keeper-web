@@ -42,6 +42,12 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
 }));
 
+// The MCP catalog entry is gated on the backend advertising the `mcp` format.
+const mockFormatHandlers = vi.fn();
+vi.mock("@/hooks/use-format-handlers", () => ({
+  useFormatHandlers: () => ({ data: mockFormatHandlers() }),
+}));
+
 vi.mock("@/lib/api/admin", () => ({
   adminApi: { getHealth: vi.fn() },
 }));
@@ -83,6 +89,8 @@ vi.mock("lucide-react", () => {
     FileSignature: icon,
     Shield: icon,
     ShieldCheck: icon,
+    ShieldBan: icon,
+    BadgeCheck: icon,
     ListChecks: icon,
     Search: icon,
     FileCheck: icon,
@@ -107,6 +115,7 @@ vi.mock("lucide-react", () => {
     Crosshair: icon,
     GitBranch: icon,
     Hourglass: icon,
+    Plug: icon,
   };
 });
 
@@ -159,6 +168,23 @@ describe("AppSidebar", () => {
     delete process.env.NEXT_PUBLIC_BUILD_REF;
     mockUseQuery.mockReturnValue({ data: undefined });
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
+    mockFormatHandlers.mockReturnValue(undefined);
+  });
+
+  it("shows MCP Servers only when the backend registers the mcp format", () => {
+    authState({ isAuthenticated: true });
+    render(<AppSidebar />);
+    expect(screen.queryByText("MCP Servers")).toBeNull();
+    cleanup();
+
+    mockFormatHandlers.mockReturnValue([{ format_key: "npm", is_enabled: true }]);
+    render(<AppSidebar />);
+    expect(screen.queryByText("MCP Servers")).toBeNull();
+    cleanup();
+
+    mockFormatHandlers.mockReturnValue([{ format_key: "mcp", is_enabled: true }]);
+    render(<AppSidebar />);
+    expect(screen.getByText("MCP Servers").closest("a")?.getAttribute("href")).toBe("/mcp-servers");
   });
 
   it("shows the commit hash instead of the version for a build that is not a release tag", () => {

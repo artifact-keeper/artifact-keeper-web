@@ -30,11 +30,16 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/api/admin", () => ({
   adminApi: { getHealth: vi.fn(), getStats: vi.fn() },
 }));
+const mockRepositoriesList = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
-  repositoriesApi: { list: vi.fn() },
+  repositoriesApi: { list: (...a: unknown[]) => mockRepositoriesList(...a) },
 }));
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
+}));
+const mockPendingSummary = vi.fn();
+vi.mock("@/lib/api/mcp", () => ({
+  mcpApi: { pendingSummary: (...a: unknown[]) => mockPendingSummary(...a) },
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -63,6 +68,7 @@ vi.mock("lucide-react", () => {
     ShieldAlert: stub("ShieldAlert"),
     ShieldX: stub("ShieldX"),
     ShieldCheck: stub("ShieldCheck"),
+    Plug: stub("Plug"),
   };
 });
 
@@ -148,6 +154,8 @@ describe("DashboardContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRepositoriesList.mockResolvedValue({ items: [] });
+    mockPendingSummary.mockResolvedValue(null);
     setupUseQuery({
       "recent-repositories": {
         data: { items: [] },
@@ -463,5 +471,55 @@ describe("DashboardContent", () => {
     expect(screen.queryByText("Open CVEs by Severity")).not.toBeInTheDocument();
     // But Security Overview stats should still render
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
+  });
+
+  describe("MCP servers awaiting approval tile", () => {
+    const ADMIN = { user: { username: "admin", is_admin: true }, isAuthenticated: true };
+    const TILE = "stat-MCP servers awaiting approval";
+
+    it("shows the pending count to admins and links to curation", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const tile = screen.getByTestId(TILE);
+      expect(tile).toHaveTextContent("MCP servers awaiting approval: 4");
+      expect(tile).toHaveAttribute("data-href", "/curation");
+    });
+
+    it("reads the total of GET /api/v1/mcp/pending-summary", async () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      mockPendingSummary.mockResolvedValue({ pending: 1, review: 1, drifted: 1, total: 3, repositories: [] });
+      setupUseQuery({ "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const opts = mockUseQuery.mock.calls.map((c) => c[0]).find((o) => o.queryKey[1] === "pending-count");
+      expect(opts.queryKey).toEqual(["mcp", "pending-count"]);
+      expect(opts.enabled).toBe(true);
+      await expect(opts.queryFn()).resolves.toBe(3);
+      expect(mockRepositoriesList).not.toHaveBeenCalledWith(expect.objectContaining({ format: "mcp" }));
+      mockPendingSummary.mockResolvedValue(null);
+      await expect(opts.queryFn()).resolves.toBeNull();
+    });
+
+    it("hides the tile when nothing is queued", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 0 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+    });
+
+    it("hides the tile when the backend does not report MCP reviews", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: null }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+    });
+
+    it("never asks for or shows the count to non-admins", () => {
+      mockUseAuth.mockReturnValue({ user: { username: "dev", is_admin: false }, isAuthenticated: true });
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+      expect(mockPendingSummary).not.toHaveBeenCalled();
+    });
   });
 });

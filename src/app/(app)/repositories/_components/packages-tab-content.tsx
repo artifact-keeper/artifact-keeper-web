@@ -16,7 +16,8 @@ import {
 
 import { packagesApi } from "@/lib/api/packages";
 import { getInstallCommand, currentRegistryHost } from "@/lib/package-utils";
-import { formatBytes, formatDate, formatNumber } from "@/lib/utils";
+import { formatPackageDownloads, formatVersionLabel } from "@/lib/package-display";
+import { formatBytes, formatDate } from "@/lib/utils";
 import type { Package, PackageVersion } from "@/types/packages";
 
 import { Button } from "@/components/ui/button";
@@ -45,13 +46,26 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TreeNode } from "@/types/tree";
 import { PackageDependencies } from "./package-dependencies";
 import { PackageMetadataViewer } from "./package-metadata-viewer";
+import { McpServerGallery } from "./mcp-server-gallery";
+import { isMcpFormat } from "@/lib/mcp/format";
 
 interface PackagesTabContentProps {
   repositoryKey: string;
   repositoryFormat: string;
+  /** Repository type; the MCP gallery picks its empty state from it. */
+  repositoryType?: string;
 }
 
-export function PackagesTabContent({
+export function PackagesTabContent(props: PackagesTabContentProps) {
+  // An MCP repository's catalog is its servers: the package rows carry no
+  // server.json, so the gallery reads the registry API instead.
+  if (isMcpFormat(props.repositoryFormat)) {
+    return <McpServerGallery repositoryKey={props.repositoryKey} repositoryType={props.repositoryType} />;
+  }
+  return <CatalogPackagesTab {...props} />;
+}
+
+function CatalogPackagesTab({
   repositoryKey,
   repositoryFormat,
 }: PackagesTabContentProps) {
@@ -158,7 +172,7 @@ export function PackagesTabContent({
       cell: (p) => (
         <span className="text-sm text-muted-foreground flex items-center gap-1">
           <ArrowDownToLine className="size-3" />
-          {formatNumber(p.download_count)}
+          {formatPackageDownloads(p.download_count) ?? "--"}
         </span>
       ),
     },
@@ -248,6 +262,8 @@ function PackageDetailView({
     repositoryFormat,
     installLocation
   );
+  // Hidden when the backend has no observed count (#1085).
+  const downloads = formatPackageDownloads(pkg.download_count);
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
   const meta = pkg.metadata as Record<string, unknown> | undefined;
@@ -269,7 +285,7 @@ function PackageDetailView({
           </div>
           {pkg.version && (
             <p className="text-sm text-muted-foreground mt-0.5">
-              Latest: v{pkg.version}
+              Latest: {formatVersionLabel(pkg.version, repositoryFormat)}
             </p>
           )}
         </div>
@@ -325,10 +341,12 @@ function PackageDetailView({
                 label="Size"
                 value={pkg.size_bytes ? formatBytes(pkg.size_bytes) : "--"}
               />
-              <MetadataItem
-                label="Downloads"
-                value={formatNumber(pkg.download_count)}
-              />
+              {downloads && (
+                <MetadataItem
+                  label="Downloads"
+                  value={downloads}
+                />
+              )}
               {license && <MetadataItem label="License" value={license} />}
               {author && <MetadataItem label="Author" value={author} />}
               <MetadataItem label="Created" value={formatDate(pkg.created_at)} />
@@ -373,7 +391,7 @@ function PackageDetailView({
                       {v.size_bytes ? formatBytes(v.size_bytes) : "--"}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {formatNumber(v.download_count)}
+                      {formatPackageDownloads(v.download_count) ?? "--"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(v.created_at)}

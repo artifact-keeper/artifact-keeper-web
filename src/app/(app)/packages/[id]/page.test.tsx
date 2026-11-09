@@ -31,12 +31,20 @@ vi.mock("@/lib/api/packages", () => ({
   },
 }));
 
+vi.mock("./_components/mcp-server-detail", () => ({
+  McpServerDetail: ({ pkg }: { pkg: { name: string } }) => <div data-testid="mcp-detail">{pkg.name}</div>,
+}));
+
 const queryKeys: unknown[][] = [];
+let detailData: unknown = undefined;
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: { queryKey: unknown[]; queryFn: () => unknown; enabled?: boolean }) => {
     queryKeys.push(opts.queryKey);
     if (opts.enabled !== false) opts.queryFn();
-    return { data: undefined, isLoading: true, error: undefined };
+    if (detailData && opts.queryKey[0] === "package-detail") {
+      return { data: detailData, isLoading: false, error: undefined };
+    }
+    return { data: undefined, isLoading: !detailData, error: undefined };
   },
 }));
 
@@ -46,6 +54,7 @@ describe("PackageDetailPage virtual-repo context", () => {
   beforeEach(() => {
     cleanup();
     queryKeys.length = 0;
+    detailData = undefined;
     vi.clearAllMocks();
   });
 
@@ -74,5 +83,29 @@ describe("PackageDetailPage virtual-repo context", () => {
     render(<PackageDetailPage />);
 
     expect(mockGet).toHaveBeenCalledWith("pkg-1", { repository_key: undefined });
+  });
+});
+
+describe("PackageDetailPage MCP branch", () => {
+  beforeEach(() => {
+    cleanup();
+    searchParams = new URLSearchParams();
+  });
+
+  it("renders the MCP server detail for an mcp package", () => {
+    detailData = {
+      id: "pkg-1",
+      repository_key: "mcp-local",
+      name: "com.acme/weather",
+      version: "1.0.0",
+      format: "mcp",
+      size_bytes: 0,
+      download_count: 0,
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-01T00:00:00Z",
+    };
+    const { getByTestId, queryByText } = render(<PackageDetailPage />);
+    expect(getByTestId("mcp-detail")).toHaveTextContent("com.acme/weather");
+    expect(queryByText("Files")).toBeNull();
   });
 });

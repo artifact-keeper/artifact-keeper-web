@@ -37,14 +37,16 @@ import {
 } from "@/components/ui/breadcrumb";
 import { packagesApi } from "@/lib/api/packages";
 import { getInstallCommand, currentRegistryHost } from "@/lib/package-utils";
+import { formatPackageDownloads, formatVersionLabel } from "@/lib/package-display";
 import {
   formatBytes as formatBytesUtil,
   formatDate,
-  formatNumber,
   isSafeUrl,
 } from "@/lib/utils";
 import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
+import { isMcpFormat } from "@/lib/mcp/format";
+import { McpServerDetail } from "./_components/mcp-server-detail";
 
 // ---- Helpers ----
 
@@ -201,6 +203,10 @@ function PackageDetailContent() {
     );
   }
 
+  // An MCP server version is a registry document, not an installable file:
+  // it gets its own detail body (artifact-keeper#5253).
+  if (isMcpFormat(pkg.format)) return <McpServerDetail pkg={pkg} />;
+
   const installLocation = { host: currentRegistryHost(), repoKey: pkg.repository_key };
   const installCmd = getInstallCommand(
     pkg.name,
@@ -208,6 +214,8 @@ function PackageDetailContent() {
     pkg.format,
     installLocation
   );
+  // Hidden when the backend has no observed count (#1085).
+  const downloads = formatPackageDownloads(pkg.download_count);
   const license = (pkg.metadata as Record<string, unknown> | undefined)
     ?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)
@@ -263,7 +271,7 @@ function PackageDetailContent() {
           </div>
           {pkg.version && (
             <p className="text-sm text-muted-foreground mt-1">
-              Latest: v{pkg.version}
+              Latest: {formatVersionLabel(pkg.version, pkg.format)}
             </p>
           )}
           {pkg.description && (
@@ -320,10 +328,12 @@ function PackageDetailContent() {
                 label="Size"
                 value={formatBytes(pkg.size_bytes)}
               />
-              <MetadataItem
-                label="Downloads"
-                value={formatNumber(pkg.download_count)}
-              />
+              {downloads && (
+                <MetadataItem
+                  label="Downloads"
+                  value={downloads}
+                />
+              )}
               <MetadataItem
                 label="Created"
                 value={formatDate(pkg.created_at)}
@@ -402,7 +412,7 @@ function PackageDetailContent() {
                         {formatBytes(v.size_bytes)}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatNumber(v.download_count)}
+                        {formatPackageDownloads(v.download_count) ?? "-"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(v.created_at)}

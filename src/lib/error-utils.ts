@@ -187,6 +187,20 @@ const UPSTREAM_ORIGIN_CHANGE: readonly [RegExp, string] = [
 ];
 
 /**
+ * Backend 1.12.0 (artifact-keeper#5224): a decision about a finding whose scan
+ * has copies in other repositories has to name one. The acknowledge and revoke
+ * calls name the repository being viewed, so reaching this means the page could
+ * not tell which that was. Matched on the message alone, as above: those calls go
+ * through the SDK, which throws the bare `{ code, message }` body with no status.
+ */
+const ACKNOWLEDGEMENT_REPOSITORY_NEEDED: readonly [RegExp, string] = [
+  /scan has copies in other repositories/i,
+  'This scan was copied into other repositories, so the decision has to say which ' +
+    'one it applies to, and this page could not tell. Open the scan from the ' +
+    'repository you mean, using its artifact or the scan list, and try again.',
+];
+
+/**
  * Friendly replacement copy for an error whose status (or conflict wording)
  * the UI knows how to explain. Returns undefined for everything else, which
  * leaves `toUserMessage` behaving exactly as before.
@@ -194,6 +208,9 @@ const UPSTREAM_ORIGIN_CHANGE: readonly [RegExp, string] = [
 export function apiErrorHint(error: unknown): string | undefined {
   if (UPSTREAM_ORIGIN_CHANGE[0].test(extractDetail(error) ?? '')) {
     return UPSTREAM_ORIGIN_CHANGE[1];
+  }
+  if (ACKNOWLEDGEMENT_REPOSITORY_NEEDED[0].test(extractDetail(error) ?? '')) {
+    return ACKNOWLEDGEMENT_REPOSITORY_NEEDED[1];
   }
 
   const status = isPlainObject(error) ? extractHttpStatus(error) : undefined;

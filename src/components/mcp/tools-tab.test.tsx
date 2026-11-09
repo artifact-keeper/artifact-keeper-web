@@ -1,0 +1,240 @@
+// @vitest-environment jsdom
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import { capsOf, renderWithClient, snapshot } from "./test-utils";
+
+const api = vi.hoisted(() => ({ capabilities: vi.fn(), probe: vi.fn() }));
+vi.mock("@/lib/api/mcp", () => ({ mcpApi: api, mcpProblemMessage: () => "refused" }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
+const auth = vi.hoisted(() => ({ user: { is_admin: true } as { is_admin: boolean } | null }));
+vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
+
+import { McpToolsTab, provenanceOf, relativeTime, sourcePicks } from "./tools-tab";
+
+afterEach(() => cleanup());
+beforeEach(() => {
+  vi.clearAllMocks();
+  auth.user = { is_admin: true };
+});
+
+const OBSERVED_AT = new Date(Date.now() - 2 * 3600_000).toISOString();
+
+/** `current` of a remote probe: a full snapshot with its lists. */
+const PROBED = snapshot({
+  id: "snap-probe",
+  source: "remote_probe",
+  provenance: "observed by remote probe",
+  protocolVersion: "2026-07-28",
+  observedAt: OBSERVED_AT,
+  authState: "auth_required",
+  counts: { tools: 2, resources: 1, prompts: 0 },
+  tools: [
+    {
+      name: "get_forecast",
+      description: "Forecast for a lat/lon",
+      inputSchema: { type: "object" },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    { name: "set_home", description: "Persists a location", annotations: { destructiveHint: true } },
+  ],
+  resources: [{ name: "alerts", uri: "weather://alerts" }],
+  prompts: [],
+  instructions: null,
+});
+
+/** The summary of the same snapshot in `snapshots[]` (no lists). */
+const PROBED_SUMMARY = snapshot({ ...PROBED, tools: undefined, resources: undefined, prompts: undefined, instructions: undefined });
+
+const DECLARED_SUMMARY = snapshot({
+  id: "snap-declared",
+  source: "publisher_declared",
+  provenance: "declared by the publisher",
+  observed: false,
+  authState: null,
+  observedAt: null,
+  counts: { tools: 1, resources: 0, prompts: 0 },
+});
+
+const NOTICE = "Tool lists and annotations are asserted by the server and are untrusted.";
+
+function caps(over: Parameters<typeof capsOf>[2] = {}, current = PROBED, snapshots = [PROBED_SUMMARY]) {
+  return capsOf(current, snapshots, { notice: NOTICE, ...over });
+}
+
+function renderTab() {
+  return renderWithClient(<McpToolsTab repoKey="k" name="a/b" version="1" />);
+}
+
+describe("McpToolsTab", () => {
+  it("shows provenance, time, protocol, notice and the auth banner of the current snapshot", async () => {
+    api.capabilities.mockResolvedValue(caps());
+    renderTab();
+    expect(await screen.findByText("observed (remote)")).toBeInTheDocument();
+    expect(api.capabilities).toHaveBeenCalledWith("k", "a/b", "1");
+    expect(screen.getByText("observed by remote probe")).toBeInTheDocument();
+    expect(screen.getByText("2h ago")).toHaveAttribute("dateTime", OBSERVED_AT);
+    expect(screen.getByText("protocol 2026-07-28")).toBeInTheDocument();
+    expect(screen.getByText(/Unauthenticated view: signed-in users may see different tools/)).toBeInTheDocument();
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Tools (2)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Resources (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Prompts (0)" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^destructive: Server-asserted/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^read-only/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^open-world/)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Snapshot source" })).toBeNull();
+    // Probing is off for this repository.
+    expect(screen.queryByRole("button", { name: /Re-probe/ })).toBeNull();
+  });
+
+  it("warns that a caller-specific list may differ per user", async () => {
+    api.capabilities.mockResolvedValue(caps({}, { ...PROBED, authState: "caller_specific" }));
+    renderTab();
+    expect(await screen.findByText(/may differ per user: the server marked it private/)).toBeInTheDocument();
+  });
+
+  it("expands the input schema", async () => {
+    api.capabilities.mockResolvedValue(caps({}, { ...PROBED, authState: "none" }));
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "inputSchema" }));
+    expect(screen.getByLabelText("get_forecast input schema")).toHaveTextContent('"type": "object"');
+    expect(screen.getByRole("button", { name: "Copy JSON" })).toBeInTheDocument();
+    expect(screen.queryByText(/Unauthenticated view/)).toBeNull();
+  });
+
+  it("picks another source's snapshot through ?snapshot=<id>", async () => {
+    const failed = snapshot({ id: "snap-failed", source: "sandbox_run", outcome: "timeout" });
+    const olderProbe = snapshot({ id: "snap-old", source: "remote_probe" });
+    api.capabilities.mockImplementation((_k: string, _n: string, _v: string, params?: { snapshot?: string }) =>
+      Promise.resolve(
+        params?.snapshot === "snap-declared"
+          ? caps({}, { ...DECLARED_SUMMARY, tools: [{ name: "declared_tool" }], resources: [], prompts: [] })
+          : caps({}, PROBED, [failed, PROBED_SUMMARY, olderProbe, DECLARED_SUMMARY]),
+      ),
+    );
+    renderTab();
+    const group = await screen.findByRole("group", { name: "Snapshot source" });
+    // One button per source with a successful snapshot, best source first.
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["observed (remote)", "declared"]);
+    expect(within(group).getByRole("button", { name: "observed (remote)" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(group).getByRole("button", { name: "declared" }));
+    expect(await screen.findByText("declared_tool")).toBeInTheDocument();
+    expect(api.capabilities).toHaveBeenCalledWith("k", "a/b", "1", { snapshot: "snap-declared" });
+    expect(screen.getByText("declared by the publisher")).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "declared" })).toHaveAttribute("aria-pressed", "true");
+    // Back to the current snapshot: no extra read.
+    const reads = api.capabilities.mock.calls.length;
+    fireEvent.click(within(group).getByRole("button", { name: "observed (remote)" }));
+    expect(await screen.findByText("get_forecast")).toBeInTheDocument();
+    expect(api.capabilities.mock.calls.length).toBe(reads);
+  });
+
+  it("is hidden on a server without capabilities", async () => {
+    api.capabilities.mockResolvedValue(null);
+    renderTab();
+    expect(await screen.findByText("Capabilities are not available on this server")).toBeInTheDocument();
+  });
+
+  it("explains how to declare tools and lets an admin probe", async () => {
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [], {
+        introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false },
+      }),
+    );
+    api.probe.mockResolvedValue({ queued: ["job-1"] });
+    renderTab();
+    expect(await screen.findByText("Capabilities not declared or observed")).toBeInTheDocument();
+    expect(screen.getByText(/com.artifactkeeper\/capabilities/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Re-probe/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Probe queued"));
+    expect(api.probe).toHaveBeenCalledWith("k", "a/b", "1");
+  });
+
+  it("says when a probe was already queued and counts open jobs", async () => {
+    const job = { id: "j1", kind: "sandbox_run", target: "package:0", status: "pending" };
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [], {
+        introspection: {
+          remoteProbe: "off",
+          probeEnabled: false,
+          sandbox: "on",
+          sandboxEnabled: true,
+          jobs: [job, { ...job, id: "j2", status: "claimed" }, { ...job, id: "j3", status: "failed" }],
+        },
+      }),
+    );
+    api.probe.mockResolvedValue({ queued: [] });
+    renderTab();
+    expect(await screen.findByText("2 introspection jobs are queued for this version.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Re-probe/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("A probe is already queued"));
+  });
+
+  it("counts open jobs next to a current snapshot", async () => {
+    const job = { id: "j1", kind: "remote_probe", target: "remote:0", status: "pending" };
+    api.capabilities.mockResolvedValue(
+      caps({ introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false, jobs: [job] } }),
+    );
+    renderTab();
+    expect(await screen.findByText("1 introspection job queued.")).toBeInTheDocument();
+  });
+
+  it("reports a refused probe", async () => {
+    api.capabilities.mockResolvedValue(
+      caps({ introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "off", sandboxEnabled: false } }),
+    );
+    api.probe.mockRejectedValue(new Error("no"));
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: /Re-probe/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("refused"));
+  });
+
+  it("hides the probe from non-admins", async () => {
+    auth.user = { is_admin: false };
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [], {
+        introspection: { remoteProbe: "all", probeEnabled: true, sandbox: "on", sandboxEnabled: true },
+      }),
+    );
+    renderTab();
+    await screen.findByText("Capabilities not declared or observed");
+    expect(screen.queryByRole("button", { name: /Re-probe/ })).toBeNull();
+  });
+
+  it("explains a server that needs configuration", async () => {
+    api.capabilities.mockResolvedValue(
+      capsOf(null, [snapshot({ source: "sandbox_run", outcome: "needs_config", observed: false })]),
+    );
+    renderTab();
+    expect(await screen.findByText("Server could not be started without configuration")).toBeInTheDocument();
+  });
+
+  it("orders source picks with an unknown source last", () => {
+    const picks = sourcePicks(
+      capsOf(PROBED, [
+        snapshot({ id: "x", source: "future_source" }),
+        snapshot({ id: "c", source: "ci_reported" }),
+        snapshot({ id: "s", source: "sandbox_run" }),
+      ]),
+    );
+    expect(picks.map((p) => p.id)).toEqual(["s", "c", "x"]);
+  });
+
+  it("labels every provenance", () => {
+    expect(provenanceOf("ci_reported")).toEqual({ label: "CI-reported", color: "blue" });
+    expect(provenanceOf("gateway_reported").label).toBe("gateway-reported");
+    expect(provenanceOf("sandbox_run")).toEqual({ label: "observed (sandbox)", color: "green" });
+    expect(provenanceOf("publisher_declared").color).toBe("default");
+    expect(provenanceOf("future").label).toBe("future");
+  });
+
+  it("formats relative times", () => {
+    const now = Date.parse("2026-11-03T12:00:00Z");
+    expect(relativeTime("2026-11-03T11:59:30Z", now)).toBe("just now");
+    expect(relativeTime("2026-11-03T11:30:00Z", now)).toBe("30m ago");
+    expect(relativeTime("2026-10-30T12:00:00Z", now)).toBe("4d ago");
+    expect(relativeTime("garbage", now)).toBe("garbage");
+  });
+});

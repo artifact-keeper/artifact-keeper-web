@@ -104,6 +104,7 @@ vi.mock("lucide-react", () => {
     AlertCircle: stub("AlertCircle"),
     Award: stub("Award"),
     ShieldBan: stub("ShieldBan"),
+    ShieldQuestion: stub("ShieldQuestion"),
     RefreshCw: stub("RefreshCw"),
     Zap: stub("Zap"),
     FolderSearch: stub("FolderSearch"),
@@ -584,6 +585,48 @@ describe("SecurityDashboardPage", () => {
       expect(screen.getByTestId("stat-Grade A Repos")).toHaveTextContent("2");
       expect(screen.getByTestId("stat-Grade F Repos")).toHaveTextContent("1");
       expect(screen.getByTestId("stat-Policy Blocks")).toHaveTextContent("4");
+    });
+
+    it("shows the proxy tiles, leading to the list and to the preview", () => {
+      setupQueries({
+        dashboard: {
+          repos_with_scanning: 5,
+          total_scans: 42,
+          critical_findings: 3,
+          high_findings: 7,
+          total_findings: 15,
+          repos_grade_a: 2,
+          repos_grade_f: 1,
+          policy_violations_blocked: 4,
+          proxy_blocked: 1,
+          proxy_would_block: 6,
+        },
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(screen.getByTestId("stat-Proxy Blocked")).toHaveTextContent("1");
+      expect(screen.getByTestId("stat-Proxy Would Block")).toHaveTextContent("6");
+    });
+
+    it("leaves the proxy tiles out on a backend that does not send them", () => {
+      setupQueries({
+        dashboard: {
+          repos_with_scanning: 5,
+          total_scans: 42,
+          critical_findings: 3,
+          high_findings: 7,
+          total_findings: 15,
+          repos_grade_a: 2,
+          repos_grade_f: 1,
+          policy_violations_blocked: 4,
+        },
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(screen.queryByTestId("stat-Proxy Blocked")).toBeNull();
+      expect(screen.queryByTestId("stat-Proxy Would Block")).toBeNull();
     });
 
     it("shows loading skeleton when dashboard is loading", () => {

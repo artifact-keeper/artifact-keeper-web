@@ -6,6 +6,17 @@ export interface DashboardSummary {
   critical_findings: number;
   high_findings: number;
   policy_violations_blocked: number;
+  /**
+   * Distinct proxied digests a repository's scan gate refuses now. Part of
+   * `policy_violations_blocked`. Absent on older backends.
+   */
+  proxy_blocked?: number;
+  /**
+   * Distinct proxied digests with a stored verdict the gate would refuse if the
+   * repository enforced (artifact-keeper#5232). Includes `proxy_blocked`, and is
+   * not part of `policy_violations_blocked`. Absent on older backends.
+   */
+  proxy_would_block?: number;
   repos_grade_a: number;
   repos_grade_f: number;
 }
@@ -59,6 +70,12 @@ export interface ScanResult {
   scan_completeness?: string | null;
   /** Why the scan is not complete, when known. */
   scan_completeness_reason?: string | null;
+  /**
+   * The row reuses another scan's results. Its `id` is then the SOURCE's id
+   * (backend #1373), while `artifact_id` and `repository_id` are the copy's.
+   */
+  is_reused?: boolean;
+  source_scan_id?: string | null;
 }
 
 export interface ScanFinding {
@@ -78,7 +95,84 @@ export interface ScanFinding {
   acknowledged_by: string | null;
   acknowledged_reason: string | null;
   acknowledged_at: string | null;
+  /** The decision covering this finding (artifact-keeper#5224). */
+  acknowledgement_id?: string | null;
+  /** When that decision lapses; null means until revoked. */
+  acknowledgement_expires_at?: string | null;
+  /**
+   * Only on the answer to a revoke: copies of the decision that stay in force,
+   * in repositories this credential has no authority over.
+   */
+  acknowledgements_left_effective?: number | null;
   created_at: string;
+}
+
+/** `all_repositories` needs an unrestricted credential and no repository-only grants. */
+export type AcknowledgementScope = "repository" | "all_repositories";
+
+export interface AcknowledgeOptions {
+  /** The repository the decision applies in. It must hold these bytes. */
+  repository_id?: string;
+  /** RFC 3339 instant, in the future. Omitted: until revoked. */
+  expires_at?: string;
+  /** Omitted: `repository`. */
+  scope?: AcknowledgementScope;
+}
+
+export interface RevokeAcknowledgmentOptions {
+  /** The repository whose decision is meant. */
+  repository_id?: string;
+}
+
+/** One acknowledgement decision (`AcknowledgementResponse`, artifact-keeper#5224). */
+export interface AcknowledgementDecision {
+  id: string;
+  lineage_id: string;
+  /** Null: every repository holding these bytes. */
+  repository_id: string | null;
+  checksum_sha256: string;
+  finding_class: string;
+  /** The CVE id, or the finding title when the scanner reported none. */
+  advisory: string;
+  /** Empty when the finding named no component. */
+  component: string;
+  /** Empty when the finding named no version. */
+  component_version: string;
+  /** The highest severity accepted. A finding graded above it stays open. */
+  max_severity: string;
+  reason: string | null;
+  acknowledged_by: string | null;
+  acknowledged_at: string;
+  expires_at: string | null;
+  /** `api`, `promotion` or `migration`. */
+  created_via: string;
+  carried_by: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  /** `revoked`, or `superseded` when a newer decision replaced it. */
+  revoked_reason: string | null;
+  /** `active`, `expired` or `revoked`. */
+  state: string;
+}
+
+export interface AcknowledgementListResponse {
+  items: AcknowledgementDecision[];
+  total: number;
+}
+
+export interface ListAcknowledgementsParams {
+  repository_id?: string;
+  checksum_sha256?: string;
+  advisory?: string;
+  /** Include expired and revoked decisions. */
+  include_inactive?: boolean;
+  page?: number;
+  per_page?: number;
+}
+
+export interface RevokeDecisionResponse {
+  revoked: number;
+  left_effective: number;
 }
 
 export interface ScanPolicy {

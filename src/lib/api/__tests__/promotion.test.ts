@@ -380,3 +380,29 @@ describe("promotionApi", () => {
     vi.restoreAllMocks();
   });
 });
+
+describe("adaptScanState", () => {
+  it("keeps a well-formed scan_state", async () => {
+    const { adaptScanState } = await import("../promotion");
+    expect(
+      adaptScanState({
+        verdict_carried: false,
+        verdict_not_carried_reason: "a later scan crashed",
+        acknowledgements_carried: 1,
+        acknowledgements_left_behind: 2,
+      }),
+    ).toEqual({
+      verdict_carried: false,
+      verdict_not_carried_reason: "a later scan crashed",
+      acknowledgements_carried: 1,
+      acknowledgements_left_behind: 2,
+    });
+  });
+
+  it("leaves a missing, null or malformed one undefined", async () => {
+    const { adaptScanState } = await import("../promotion");
+    expect(adaptScanState(undefined)).toBeUndefined();
+    expect(adaptScanState(null)).toBeUndefined();
+    expect(adaptScanState({ verdict_carried: "yes" })).toBeUndefined();
+  });
+});

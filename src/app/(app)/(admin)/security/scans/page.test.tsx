@@ -17,8 +17,9 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
+const mockPush = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -250,6 +251,35 @@ describe("SecurityScansPage scan-type filter (#858)", () => {
     fireEvent.change(scanTypeSelect(), { target: { value: "grype" } });
     fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
     expect(scanTypeSelect().value).toBe("__all__");
+  });
+
+  it("opens a reused row at its own copy, since it reports its source's id", () => {
+    setScansResult({
+      data: {
+        items: [
+          scan({
+            id: "source-scan",
+            is_reused: true,
+            source_scan_id: "source-scan",
+            artifact_id: "copy-artifact",
+            repository_id: "prod",
+          }),
+        ],
+        total: 1,
+      },
+    });
+    render(<SecurityScansPage />);
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(mockPush).toHaveBeenCalledWith(
+      "/security/scans/source-scan?artifact_id=copy-artifact&repository_id=prod",
+    );
+  });
+
+  it("opens a scan that is its own row at a plain link", () => {
+    setScansResult({ data: { items: [scan()], total: 1 } });
+    render(<SecurityScansPage />);
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(mockPush).toHaveBeenCalledWith("/security/scans/scan-1");
   });
 
   it("labels an external scan row instead of printing scan_type raw", () => {

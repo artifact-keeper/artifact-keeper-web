@@ -6,17 +6,28 @@ import { ListChecks } from "lucide-react";
 import {
   allowlistQueryKey,
   condaAllowlistApi,
+  filtersHostedMembers,
   supportsCondaAllowlist,
   type CondaAllowlist,
 } from "@/lib/api/conda-allowlist";
 import { allowlistStateLabel } from "@/lib/conda-allowlist";
 import type { Repository } from "@/types";
 
-/** The summary text for an allowlist response, e.g. "on, 43 entries". */
+/**
+ * The summary text for an allowlist response, e.g. "on, 43 entries". The
+ * `remote_only` opt-out is named, since it lets hosted packages outside the
+ * list through; the default (and an older backend's implicit remote-only
+ * filtering) is not.
+ */
 export function allowlistSummaryText(list: CondaAllowlist): string {
-  if (list.error) return "unreadable, nothing from remote members is admitted";
+  if (list.error) {
+    return filtersHostedMembers(list)
+      ? "unreadable, nothing is admitted"
+      : "unreadable, nothing from remote members is admitted";
+  }
   if (!list.enabled && list.entry_count === 0) return "off";
-  return allowlistStateLabel(list.enabled, list.entry_count);
+  const state = allowlistStateLabel(list.enabled, list.entry_count);
+  return list.scope === "remote_only" ? `${state}, remote members only` : state;
 }
 
 interface CondaAllowlistSummaryProps {

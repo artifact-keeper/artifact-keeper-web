@@ -1,3 +1,4 @@
+import type { McpRepositorySettings } from './mcp';
 export * from './groups';
 export * from './migration';
 export * from './permissions';
@@ -52,7 +53,7 @@ export interface CreateUserResponse {
   generated_password?: string;
 }
 
-export interface Repository {
+export interface Repository extends McpRepositorySettings {
   id: string;
   key: string;
   name: string;
@@ -222,6 +223,8 @@ export type RepositoryFormat =
   | 'gitlfs'
   | 'vscode'
   | 'jetbrains'
+  | 'agentplugins'
+  | 'mcp'
   | 'huggingface'
   | 'mlmodel'
   | 'cran'
@@ -243,7 +246,7 @@ export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
  */
 export type RepositoryVisibility = "public" | "internal" | "private";
 
-export interface CreateRepositoryRequest {
+export interface CreateRepositoryRequest extends McpRepositorySettings {
   key: string;
   name: string;
   description?: string;

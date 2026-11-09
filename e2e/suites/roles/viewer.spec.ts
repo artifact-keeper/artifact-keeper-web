@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/test-fixtures';
+import { expectMcpCurationDenied } from '../../fixtures/mcp-curation-mocks';
 
 test.describe('Viewer role access', () => {
   test('can view repositories', async ({ page }) => {
@@ -34,5 +35,9 @@ test.describe('Viewer role access', () => {
     await expect(sidebar.getByText('Security')).not.toBeVisible();
     await expect(sidebar.getByText('Operations')).not.toBeVisible();
     await expect(sidebar.getByText('Administration')).not.toBeVisible();
+  });
+
+  test('cannot reach the MCP approval queue on /curation', async ({ page }) => {
+    await expectMcpCurationDenied(page);
   });
 });

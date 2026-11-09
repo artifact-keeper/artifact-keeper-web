@@ -21,7 +21,9 @@ import {
   Key,
   PackageCheck,
   FileSignature,
+  BadgeCheck,
   Shield,
+  ShieldBan,
   ShieldCheck,
   ListChecks,
   Search,
@@ -47,11 +49,14 @@ import {
   Network,
   Crosshair,
   Hourglass,
+  Plug,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { backendSupportsMcp } from "@/lib/mcp/format";
 import {
   Sidebar,
   SidebarContent,
@@ -81,6 +86,7 @@ const artifactItems: NavItem[] = [
   { title: "Packages", href: "/packages", icon: Boxes },
   { title: "Builds", href: "/builds", icon: Hammer },
   { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
+  { title: "MCP Servers", href: "/mcp-servers", icon: Plug },
   { title: "Setup Guide", href: "/setup", icon: BookOpen },
 ];
 
@@ -98,6 +104,8 @@ const integrationItems: NavItem[] = [
 const securityItems: NavItem[] = [
   { title: "Dashboard", href: "/security", icon: Shield },
   { title: "Scan Results", href: "/security/scans", icon: Search },
+  { title: "Acknowledgements", href: "/security/acknowledgements", icon: BadgeCheck },
+  { title: "Proxy Blocked", href: "/security/proxy-blocked", icon: ShieldBan },
   { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
@@ -178,6 +186,14 @@ export function AppSidebar() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // The MCP catalog only exists on a backend that registers the `mcp`
+  // format (artifact-keeper#5253); an older one would show an empty page.
+  const { data: formatHandlers } = useFormatHandlers();
+  const mcpSupported = backendSupportsMcp(Array.isArray(formatHandlers) ? formatHandlers : undefined);
+  const visibleArtifactItems = mcpSupported
+    ? artifactItems
+    : artifactItems.filter((item) => item.href !== "/mcp-servers");
+
   // For integration items, non-admin authenticated users don't see Migration
   const visibleIntegrationItems = isAdmin
     ? integrationItems
@@ -207,11 +223,10 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
                 <Image
-                  src="/logo-48.png"
+                  src="/logo-96.png"
                   alt="Artifact Keeper"
                   width={32}
                   height={32}
-                  className="rounded-md"
                 />
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Artifact Keeper</span>
@@ -234,7 +249,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="pb-4">
         <NavGroup label="Overview" items={overviewItems} pathname={pathname} />
-        <NavGroup label="Artifacts" items={artifactItems} pathname={pathname} />
+        <NavGroup label="Artifacts" items={visibleArtifactItems} pathname={pathname} />
         {isAuthenticated && (
           <NavGroup
             label="Integration"

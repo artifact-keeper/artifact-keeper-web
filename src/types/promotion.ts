@@ -55,6 +55,18 @@ export interface PromotionGateResult {
   reason?: string;
 }
 
+/**
+ * What followed the bytes into the target (backend 1.12.0, artifact-keeper#5224).
+ * The backend sends null when nothing was copied.
+ */
+export interface PromotionScanState {
+  verdict_carried: boolean;
+  verdict_not_carried_reason: string | null;
+  acknowledgements_carried: number;
+  /** Decisions the promoter could not carry: the finding is open in the target. */
+  acknowledgements_left_behind: number;
+}
+
 export interface PromotionResponse {
   promoted: boolean;
   source: string;
@@ -63,6 +75,7 @@ export interface PromotionResponse {
   policy_violations: PolicyViolation[];
   message?: string;
   gate_results?: PromotionGateResult[];
+  scan_state?: PromotionScanState;
 }
 
 export interface BulkPromotionResponse {

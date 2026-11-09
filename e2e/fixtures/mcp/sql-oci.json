@@ -1,0 +1,42 @@
+{
+  "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "com.acme/sql",
+    "description": "Read-only SQL access for agents.",
+    "version": "2.0.0",
+    "packages": [
+      {
+        "registryType": "oci",
+        "identifier": "localhost:8080/e2e-docker-local/acme/sql-mcp:2.0.0@sha256:5f2b1a8c4e7d9f0a3b6c1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a",
+        "transport": { "type": "stdio" },
+        "environmentVariables": [
+          { "name": "DATABASE_URL", "description": "Connection string", "isRequired": true, "isSecret": true }
+        ],
+        "_meta": {
+          "com.artifactkeeper/resolved": {
+            "submittedIdentifier": "ghcr.io/acme/sql-mcp:2.0.0",
+            "digest": "sha256:5f2b1a8c4e7d9f0a3b6c1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a",
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "backingRepository": "e2e-docker-local",
+            "resolvedAt": "2026-10-02T10:00:00Z"
+          }
+        }
+      }
+    ]
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+      "status": "active",
+      "isLatest": true,
+      "publishedAt": "2026-10-02T10:00:00Z",
+      "updatedAt": "2026-10-02T10:00:00Z"
+    },
+    "com.artifactkeeper.registry/source": {
+      "repository": "e2e-mcp-local",
+      "artifactId": "00000000-0000-4000-8000-00000000a002",
+      "packagePolicy": "own-repos",
+      "origin": "hosted",
+      "upstreamVerified": false
+    }
+  }
+}

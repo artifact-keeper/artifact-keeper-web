@@ -69,11 +69,13 @@ const FORMAT_EXPECTATIONS: [string, string, "exact" | "contains"][] = [
   // IDE extensions
   ["vscode", "code --install-extension my-package@1.2.3", "exact"],
   ["jetbrains", "Download my-package v1.2.3", "exact"],
+  // AI agent plugins (artifact-keeper#5251)
+  ["agentplugins", "ak agent plugins install my-package --repo <repo> --harness claude --version 1.2.3", "exact"],
   // Windows
   ["chocolatey", "choco install my-package --version 1.2.3", "exact"],
   ["powershell", "Install-Module my-package -RequiredVersion 1.2.3", "exact"],
   // ML/AI
-  ["huggingface", "huggingface-cli download my-package", "exact"],
+  ["huggingface", "HF_ENDPOINT=https://<registry>/huggingface/<repo> hf download my-package --revision 1.2.3", "contains"],
   // Build systems
   ["bazel", 'bazel_dep(name = "my-package", version = "1.2.3")', "exact"],
   // OCI/WASM
@@ -150,6 +152,43 @@ describe("getInstallCommand", () => {
       expect(getInstallCommand(pkg, ver, "docker", { repoKey: "images" })).toBe(
         "docker pull my-package:1.2.3"
       );
+    });
+
+    it("agentplugins installs from the repository through the ak CLI", () => {
+      expect(getInstallCommand(pkg, ver, "agentplugins", location)).toBe(
+        "ak agent plugins install my-package --repo images --harness claude --version 1.2.3"
+      );
+      expect(getInstallCommand(pkg, undefined, "agentplugins", location)).toBe(
+        "ak agent plugins install my-package --repo images --harness claude"
+      );
+    });
+
+    it("mcp reads the exact version from the repository's registry API", () => {
+      expect(getInstallCommand("com.acme/weather", ver, "mcp", location)).toBe(
+        "curl https://registry.example.com/mcp/images/v0.1/servers/com.acme%2Fweather/versions/1.2.3"
+      );
+      expect(getInstallCommand("com.acme/weather", undefined, "mcp", { repoKey: "images" })).toBe(
+        "curl <registry>/mcp/images/v0.1/servers/com.acme%2Fweather/versions/latest"
+      );
+    });
+
+    it("huggingface points hf at this repository through HF_ENDPOINT", () => {
+      // artifact-keeper#5290: without HF_ENDPOINT the command downloads from
+      // huggingface.co and bypasses the registry.
+      const [command, note] = getInstallCommand(pkg, ver, "huggingface", location).split("\n");
+      expect(command).toBe(
+        "HF_ENDPOINT=https://registry.example.com/huggingface/images hf download my-package --revision 1.2.3"
+      );
+      expect(note).toContain("HF_HUB_DISABLE_XET=1");
+      expect(getInstallCommand(pkg, undefined, "huggingface", location)).toMatch(
+        /^HF_ENDPOINT=https:\/\/registry\.example\.com\/huggingface\/images hf download my-package\n/
+      );
+    });
+
+    it("huggingface uses placeholders, never huggingface.co, when the location is unknown", () => {
+      const command = getInstallCommand(pkg, ver, "huggingface", { repoKey: "images" });
+      expect(command).toContain("HF_ENDPOINT=https://<registry>/huggingface/<repo> hf download");
+      expect(command).not.toContain("huggingface-cli");
     });
 
     it("leaves formats that resolve through client config unchanged", () => {

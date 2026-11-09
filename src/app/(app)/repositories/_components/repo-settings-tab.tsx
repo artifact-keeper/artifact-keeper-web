@@ -37,6 +37,8 @@ import type {
   CreateRepositoryRequest,
   RepositoryVisibility,
 } from "@/types";
+import type { McpRepositorySettings } from "@/types/mcp";
+import { hasMcpConfig } from "@/lib/mcp/format";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { VisibilitySelect, resolveVisibility } from "./visibility-select";
 import { quotaToBytes, bytesToQuota } from "./repo-dialogs";
@@ -57,6 +59,8 @@ import {
   RpmRepodataDepthField,
   DebianConfigFields,
   NpmScopePolicyFields,
+  McpSettingsSection,
+  useMcpSettingsForm,
   buildDebianConfigFields,
   buildNpmScopePolicyFields,
   formatList,
@@ -145,7 +149,7 @@ function formatTtlHint(seconds: number): string {
   return parts.join(" ");
 }
 
-export interface UpdateRepositoryFields {
+export interface UpdateRepositoryFields extends Partial<McpRepositorySettings> {
   key?: string;
   name?: string;
   description?: string;
@@ -322,6 +326,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       (k) => npmScopePolicy[k] !== npmDefaults[k]
     );
 
+  const { user } = useAuth();
+  const isRepoAdmin = !!user?.is_admin;
+
+  // MCP registry settings (artifact-keeper#5253): only changed keys are sent.
+  // Only an instance administrator may set or clear the `*_locked` settings;
+  // the repository response says so (`mcp_caller_can_lock`), older backends
+  // do not, and then `is_admin` stands in.
+  const mcpForm = useMcpSettingsForm(repository, repository.mcp_caller_can_lock ?? isRepoAdmin);
+  const mcpChanged = mcpForm.changed;
+  const mcpChangedFields = mcpForm.changedFields;
+  const resetMcp = mcpForm.reset;
+
   // -- Proxy cache TTL state (#448) --
   // Only meaningful for Remote (proxy) repos; the section is hidden for
   // Local / Virtual / Staging because writes against those types are
@@ -393,6 +409,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (currentQuotaBytes !== originalQuotaBytes) return true;
     if (cacheTtlChanged) return true;
     if (rpmChanged || debianChanged || npmChanged || depthChanged) return true;
+    if (mcpChanged) return true;
     return false;
   }, [
     form,
@@ -405,6 +422,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     depthChanged,
     debianChanged,
     npmChanged,
+    mcpChanged,
   ]);
 
   // -- Save mutation --
@@ -427,9 +445,15 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       setRpmClear(false);
       setDebianOverrides({});
       setNpmOverrides({});
+      resetMcp();
       toast.success("Repository settings saved");
     },
-    onError: mutationErrorToast("Failed to save repository settings"),
+    onError: (err: unknown) => {
+      // A refused deny / auto-approve glob (422 bare namespace, 400 other
+      // syntax) is also shown on its field.
+      mcpForm.setSaveFailure(err);
+      mutationErrorToast("Failed to save repository settings")(err);
+    },
   });
 
   // -- Cache TTL mutation (#448, separate endpoint from `update`) --
@@ -492,6 +516,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     if (isNpmScoped && npmChanged) {
       Object.assign(fields, buildNpmScopePolicyFields(npmScopePolicy));
     }
+    if (mcpChanged) Object.assign(fields, mcpChangedFields);
 
     const promises: Promise<unknown>[] = [];
     if (Object.keys(fields).length > 0) {
@@ -525,6 +550,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     isNpmScoped,
     npmChanged,
     npmScopePolicy,
+    mcpChanged,
+    mcpChangedFields,
     depthInvalid,
     depthChanged,
     parsedDepth,
@@ -539,7 +566,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     setRpmClear(false);
     setDebianOverrides({});
     setNpmOverrides({});
-  }, []);
+    resetMcp();
+  }, [resetMcp]);
 
   // -- Package age policy (#265). Quarantine-on-release for remote repos. --
   // Seeded from the persisted `quarantine_enabled` / `quarantine_duration_minutes`
@@ -628,9 +656,8 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // Repo-admin gated: the backend PUT is admin-only, so we only render the
   // section (and only run the GET) for admins — mirroring how the quarantine
   // decisions and other admin-only controls are gated on `user?.is_admin`
-  // elsewhere in the repository views.
-  const { user } = useAuth();
-  const isRepoAdmin = !!user?.is_admin;
+  // elsewhere in the repository views. (`user` / `isRepoAdmin` are read
+  // above, where the MCP form needs them.)
 
   const { data: scanConfig, isLoading: scanConfigLoading } = useQuery({
     queryKey: ["scan-config", repository.key],
@@ -1128,6 +1155,19 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
               onChange={(v) => setNpmOverrides(v)}
             />
           </section>
+          <Separator />
+        </>
+      )}
+
+      {/* -- MCP Registry Section (artifact-keeper#5253; admin-only editing) -- */}
+      {hasMcpConfig(repository.format) && (
+        <>
+          <McpSettingsSection
+            repository={repository}
+            form={mcpForm}
+            readOnly={!(isRepoAdmin || repository.mcp_caller_is_repo_admin === true)}
+            canLock={repository.mcp_caller_can_lock ?? isRepoAdmin}
+          />
           <Separator />
         </>
       )}

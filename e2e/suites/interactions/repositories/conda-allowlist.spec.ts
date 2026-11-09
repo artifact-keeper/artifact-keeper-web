@@ -11,6 +11,10 @@ import { test, expect } from '@playwright/test';
  * The list is repository-admin only and exists on virtual conda repositories
  * only. The UI flow enables a two-entry list from the Settings tab, checks the
  * overview summary line, then disables it again.
+ *
+ * Backend 1.11.9 (artifact-keeper#5055) adds `scope` (`all_members`, the
+ * default, or `remote_only`); the scope tests skip on a backend that does not
+ * report it.
  */
 test.describe.serial('Conda virtual allowlist', () => {
   const REPO_KEY = 'e2e-conda-allowlist-virtual';
@@ -132,6 +136,56 @@ test.describe.serial('Conda virtual allowlist', () => {
 
     await page.reload();
     await expect(page.getByTestId('allowlist-summary')).toHaveText(/Allowlist: off, 2 entries/, {
+      timeout: 10000,
+    });
+  });
+
+  test('scope: stored, kept when omitted, and switched back from the UI', async ({ page, request }) => {
+    const probe = await request.get(api);
+    if (probe.status() === 404 || !('scope' in (await probe.json()))) {
+      test.skip(true, 'Backend predates the allowlist scope (artifact-keeper#5055, 1.11.9)');
+      return;
+    }
+    await request.delete(api).catch(() => {});
+
+    const entries = [{ name: 'tzdata' }];
+    const optOut = await request.put(api, { data: { enabled: true, scope: 'remote_only', entries } });
+    expect(optOut.ok(), `PUT failed: ${optOut.status()}`).toBeTruthy();
+    expect(await optOut.json()).toMatchObject({ scope: 'remote_only' });
+
+    // A PUT without `scope` (an older client) keeps the stored scope.
+    const kept = await request.put(api, { data: { enabled: true, entries } });
+    expect(kept.ok()).toBeTruthy();
+    expect(await kept.json()).toMatchObject({ scope: 'remote_only', entry_count: 1 });
+
+    await page.goto(`/repositories/${REPO_KEY}`);
+    await page.waitForLoadState('domcontentloaded');
+    const summary = page.getByTestId('allowlist-summary');
+    const shown = await summary
+      .waitFor({ state: 'visible', timeout: 20000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!shown) {
+      test.skip(true, 'Allowlist summary not shown (requires admin)');
+      return;
+    }
+    await expect(summary).toHaveText(/Allowlist: on, 1 entry, remote members only/);
+
+    await summary.getByRole('button').click();
+    const remoteOnly = page.getByRole('radio', { name: /remote members only/i });
+    const all = page.getByRole('radio', { name: /all members \(default\)/i });
+    await expect(remoteOnly).toBeChecked({ timeout: 8000 });
+    await all.check();
+    await page.getByRole('button', { name: /save allowlist/i }).click();
+
+    await expect(async () => {
+      const body = await (await request.get(api)).json();
+      expect(body.scope).toBe('all_members');
+      expect(body.entries).toEqual(entries);
+    }).toPass({ timeout: 10000 });
+
+    await page.reload();
+    await expect(page.getByTestId('allowlist-summary')).toHaveText(/Allowlist: on, 1 entry$/, {
       timeout: 10000,
     });
   });

@@ -33,6 +33,7 @@ import {
   Rocket,
   Hammer,
   FileCode2,
+  PackageCheck,
 } from "lucide-react";
 
 import { repositoriesApi } from "@/lib/api/repositories";
@@ -44,6 +45,7 @@ import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import {
   isActivelyQuarantined,
+  quarantineBadgeKind,
   isQuarantineRejected,
   quarantineKnowledge,
   quarantineDownloadBlockedReason,
@@ -88,6 +90,13 @@ import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ArtifactOriginSection } from "./artifact-origin-section";
 import { artifactDetailKey } from "@/lib/query-keys";
 import { PackagesTabContent } from "./packages-tab-content";
+import {
+  isMcpFormat,
+  isRemoteMcpRepo,
+  MCP_GENERIC_DELETE_REASON,
+  mcpServerVersionFromArtifactPath,
+} from "@/lib/mcp/format";
+import { McpCurationQueue } from "@/app/(app)/(admin)/curation/_components/mcp-curation-queue";
 import {
   ArtifactBrowserToggle,
   DOCKER_FAMILY_FORMATS,
@@ -291,6 +300,15 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // container repositories do not get the tab (it would only say so, and
   // the tab strip is full enough already).
   const showBuildTab = isContainerRepo && repository?.repo_type === "local";
+  // A Remote MCP registry's approval queue (artifact-keeper#5253). The
+  // backend lets the repository's administrators decide its catalog rows
+  // (`/api/v1/repositories/{key}/mcp/catalog`), not only instance admins, so
+  // the queue is a tab here for anyone the single-repository response reports
+  // `mcp_caller_is_repo_admin` for. `/curation` stays the instance-wide view.
+  const canCurateMcp =
+    !!repository &&
+    isRemoteMcpRepo(repository) &&
+    (!!user?.is_admin || repository.mcp_caller_is_repo_admin === true);
   // Folder-tree view for RAW/Generic repos (#2791): folders load one level
   // at a time from /api/v1/tree (#850), not from the flat artifact list.
   const isTreeView =
@@ -318,6 +336,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       // `scroll: false` keeps the user anchored on the artifacts tab.
       router.replace(`?${params.toString()}`, { scroll: false });
       setPage(1);
+    },
+    [router, searchParams],
+  );
+
+  // An MCP repository refuses the generic artifact delete (400, admins
+  // included: artifact-keeper#5257); a server version is soft-deleted through
+  // the registry from its server page. So MCP artifacts get no Delete here,
+  // only a way to that server in the Servers tab (`?server=` filters the
+  // gallery to it, the card opens the page with the Delete version action).
+  const isMcpRepo = isMcpFormat(repoFormat);
+  // Remote and Virtual MCP registries take no version writes at all
+  // (`405 mcp_read_only`), so there is no delete to send the caller to.
+  const mcpDeletable =
+    isMcpRepo && (repository?.repo_type === "local" || repository?.repo_type === "staging");
+  const openMcpServer = useCallback(
+    (path: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "packages");
+      const sv = mcpServerVersionFromArtifactPath(path);
+      if (sv) params.set("server", sv.name);
+      else params.delete("server");
+      setDetailOpen(false);
+      setSelectedArtifact(null);
+      setRepoTab("packages");
+      router.replace(`?${params.toString()}`, { scroll: false });
     },
     [router, searchParams],
   );
@@ -486,7 +529,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   // --- mutations ---
   const deleteMutation = useMutation({
-    mutationFn: (path: string) => artifactsApi.delete(repoKey, path),
+    mutationFn: (path: string) =>
+      isMcpRepo
+        ? Promise.reject(new Error(MCP_GENERIC_DELETE_REASON))
+        : artifactsApi.delete(repoKey, path),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
@@ -733,21 +779,28 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             <FileIcon className="size-4 shrink-0 text-muted-foreground" />
             <MiddleEllipsis text={a.name} />
           </button>
-          {isActivelyQuarantined(a) && (
-            // The listing carries no reason (#2966); the badge tooltip falls
-            // back to the hold expiry. `shrink-0` keeps the badge legible when
-            // the name beside it is being truncated.
-            <QuarantineBadge
-              quarantineUntil={a.quarantine_until}
-              className="shrink-0"
-              withdrawn={isCondaWithdrawal(
+          {(() => {
+            // Held, policy-refused, withdrawn and rejected each get their own
+            // badge; a rejected file is not "Quarantined" (#1085). The listing
+            // carries no reason (#2966); the badge tooltip falls back to the
+            // hold expiry. `shrink-0` keeps the badge legible when the name
+            // beside it is being truncated.
+            const kind = quarantineBadgeKind(a, {
+              withdrawn: isCondaWithdrawal(
                 repoFormat,
-                true,
+                isActivelyQuarantined(a),
                 condaFilename(a.path),
                 noticedFiles,
-              )}
-            />
-          )}
+              ),
+            });
+            return kind ? (
+              <QuarantineBadge
+                kind={kind}
+                quarantineUntil={a.quarantine_until}
+                className="shrink-0"
+              />
+            ) : null;
+          })()}
         </div>
       ),
     },
@@ -965,7 +1018,24 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               </TooltipContent>
             </Tooltip>
           )}
-          {isAuthenticated && (
+          {isAuthenticated && mcpDeletable && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Delete through the MCP registry (open the server page)"
+                  onClick={() => openMcpServer(a.path)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm">
+                {MCP_GENERIC_DELETE_REASON}
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isAuthenticated && !isMcpRepo && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1171,11 +1241,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       <Tabs
         value={
           repoTab ??
-          resolveInitialRepoTab(
-            searchParams.get("tab"),
-            searchParams.get("view"),
-            repoFormat,
-          )
+          (canCurateMcp && searchParams.get("tab") === "curation"
+            ? "curation"
+            : resolveInitialRepoTab(
+                searchParams.get("tab"),
+                searchParams.get("view"),
+                repoFormat,
+              ))
         }
         onValueChange={setRepoTab}
       >
@@ -1190,7 +1262,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </TabsTrigger>
           <TabsTrigger value="packages">
             <PackageIcon className="size-3.5 mr-1" />
-            Packages
+            {isMcpFormat(repository.format) ? "Servers" : "Packages"}
           </TabsTrigger>
           <TabsTrigger value="setup">
             <Rocket className="size-3.5 mr-1" />
@@ -1229,6 +1301,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 Notices
               </TabsTrigger>
             )}
+          {canCurateMcp && (
+            <TabsTrigger value="curation">
+              <PackageCheck className="size-3.5 mr-1" />
+              Curation
+            </TabsTrigger>
+          )}
           {isAuthenticated && (
             <TabsTrigger value="environments">
               <Boxes className="size-3.5 mr-1" />
@@ -1417,6 +1495,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           <PackagesTabContent
             repositoryKey={repoKey}
             repositoryFormat={repository.format}
+            repositoryType={repository.repo_type}
           />
         </TabsContent>
 
@@ -1627,6 +1706,13 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
         {user?.is_admin && (
           <TabsContent value="notifications" className="mt-4">
             <NotificationsTabContent repositoryId={repository.id} />
+          </TabsContent>
+        )}
+
+        {/* --- Curation Tab (Remote MCP registries) --- */}
+        {canCurateMcp && (
+          <TabsContent value="curation" className="mt-4">
+            <McpCurationQueue key={repository.key} repoKey={repository.key} />
           </TabsContent>
         )}
 
@@ -1968,16 +2054,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   !selectedWithdrawn && (
                     <CondaWithdrawButton repoKey={repoKey} path={selectedArtifact.path} />
                   )}
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </Button>
+                {isMcpRepo ? (
+                  mcpDeletable && (
+                    <Button
+                      variant="outline"
+                      title={MCP_GENERIC_DELETE_REASON}
+                      onClick={() => {
+                        if (selectedArtifact) openMcpServer(selectedArtifact.path);
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete in the MCP registry
+                    </Button>
+                  )
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
+                    }}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
+                )}
                 {repository.repo_type === "remote" && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
