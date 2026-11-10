@@ -251,6 +251,18 @@ describe("RepoSetupGuide", () => {
     expect(hostedPanel.textContent).toContain("npm config set @pkgs:registry");
   });
 
+  // #1129: cargo fetches `{index}/config.json`, which the
+  // backend serves only at the registry root, and needs the `sparse+` prefix
+  // to use the sparse protocol instead of treating the URL as a git index.
+  it("points the cargo index at the sparse registry root", () => {
+    const { container } = render(
+      <RepoSetupGuide repo={makeRepo({ format: "cargo", key: "crates", repo_type: "remote" })} />,
+    );
+    const text = container.textContent ?? "";
+    expect(text).toMatch(/index = "sparse\+\S+\/cargo\/crates\/"/);
+    expect(text).not.toContain("/cargo/crates/index");
+  });
+
   // Agent Plugins (artifact-keeper#5251): Claude Code reads the marketplace
   // document directly; other agents install through the ak CLI.
   describe("agentplugins", () => {
