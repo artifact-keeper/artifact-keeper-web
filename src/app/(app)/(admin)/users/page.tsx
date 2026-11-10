@@ -58,6 +58,7 @@ import { AuthSourceBadge, getAuthProviderLabel } from "@/components/common/auth-
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { PasswordPolicyHint } from "@/components/common/password-policy-hint";
+import { useSecurityReviewerColumn } from "@/components/common/security-reviewer-switch";
 import { unwrap } from "@/lib/sdk-utils";
 
 // -- helpers --
@@ -146,6 +147,12 @@ export default function UsersPage() {
 
   const users = usersData?.items;
   const totalUsers = usersData?.total ?? 0;
+
+  const reviewerColumn = useSecurityReviewerColumn<User>(
+    "users",
+    !!currentUser?.is_admin,
+    (u) => u.username,
+  );
 
   // -- mutations --
   const createMutation = useMutation({
@@ -389,6 +396,7 @@ export default function UsersPage() {
       sortable: true,
       cell: (u) => <AuthSourceBadge provider={u.auth_provider} />,
     },
+    ...reviewerColumn,
     {
       id: "actions",
       header: "",

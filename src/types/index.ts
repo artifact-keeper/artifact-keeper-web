@@ -36,6 +36,13 @@ export interface User {
   password_expires_at?: string | null;
   totp_enabled?: boolean;
   auth_provider?: string;
+  /**
+   * Global capabilities this user holds, e.g. `security_review`. Optional
+   * because a backend older than the exception queue does not send it; treat
+   * an absent list as "no capabilities" rather than as unknown, since admins
+   * are authorised through `is_admin` regardless.
+   */
+  capabilities?: string[];
 }
 
 export interface LoginResponse {
