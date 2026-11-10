@@ -258,7 +258,7 @@ export function packageCommand(
         args: pkgArgs,
         env,
         note: base
-          ? `Install the binary first: cargo install ${pkg.identifier}${pkg.version ? ` --version ${pkg.version}` : ""} --index sparse+${base}/index/`
+          ? `Install the binary first: cargo install ${pkg.identifier}${pkg.version ? ` --version ${pkg.version}` : ""} --index sparse+${base}/`
           : `Install the binary first: cargo install ${pkg.identifier}${pkg.version ? ` --version ${pkg.version}` : ""}`,
       };
     }
