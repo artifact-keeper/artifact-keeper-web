@@ -26,6 +26,8 @@ import {
   Shield,
   ShieldBan,
   ShieldCheck,
+  ShieldAlert,
+  HelpCircle,
   ListChecks,
   Search,
   Bug,
@@ -56,6 +58,10 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
+import {
+  hasCapability,
+  CAP_SECURITY_REVIEW,
+} from "@/components/auth/require-capability";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
@@ -91,6 +97,7 @@ const artifactItems: NavItem[] = [
   { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
   { title: "MCP Servers", href: "/mcp-servers", icon: Plug },
   { title: "Setup Guide", href: "/setup", icon: BookOpen },
+  { title: "Request Exception", href: "/exceptions/request", icon: HelpCircle },
 ];
 
 const integrationItems: NavItem[] = [
@@ -119,8 +126,14 @@ const securityItems: NavItem[] = [
   { title: "License Policies", href: "/license-policies", icon: Scale },
   { title: "Curation", href: "/curation", icon: PackageCheck },
   { title: "Age Gate", href: "/age-gate", icon: Hourglass },
+  { title: "Exceptions", href: "/exceptions", icon: ShieldAlert },
   { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
+];
+
+/** The one page a security reviewer who is not an admin can reach. */
+const reviewerItems: NavItem[] = [
+  { title: "Exceptions", href: "/exceptions", icon: ShieldAlert },
 ];
 
 const operationsItems: NavItem[] = [
@@ -182,6 +195,10 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
+  // A security reviewer is not an admin, so the admin-only Security group
+  // below would hide the one page they exist to use. `hasCapability` is true
+  // for admins too, hence the explicit `&& !isAdmin` on the standalone group.
+  const isReviewer = hasCapability(user, CAP_SECURITY_REVIEW);
   const flags = useFeatureFlags();
   // The drill-down answers only an unscoped instance admin (artifact-keeper#5865):
   // a repository-scoped admin token gets 403 and an older backend 404.
@@ -265,6 +282,13 @@ export function AppSidebar() {
           <NavGroup
             label="Integration"
             items={visibleIntegrationItems}
+            pathname={pathname}
+          />
+        )}
+        {isReviewer && !isAdmin && (
+          <NavGroup
+            label="Security"
+            items={reviewerItems}
             pathname={pathname}
           />
         )}
