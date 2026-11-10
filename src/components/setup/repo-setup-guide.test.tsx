@@ -36,6 +36,28 @@ describe("RepoSetupGuide", () => {
     expect(container.textContent).not.toContain("Push artifacts");
   });
 
+  // artifact-keeper#5066 / web#1064: buf push has no --registry flag and a buf
+  // module name is exactly registry/owner/name, so the guide must not hand out
+  // either; it points at the JSON Connect API instead.
+  it("gives a local protobuf repo the JSON Connect API, not buf CLI steps", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local" })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("/proto/proto-local/buf.registry.module.v1beta1.UploadService/Upload");
+    expect(text).toContain("/proto/proto-local/buf.registry.module.v1beta1.DownloadService/Download");
+    expect(text).toContain("artifact-keeper/artifact-keeper#5066");
+    expect(text).not.toContain("--registry");
+    expect(text).not.toContain("buf.yaml");
+    expect(text).not.toContain("/proto/proto-local/myorg");
+  });
+
+  it.each(["remote", "virtual"] as const)("gives a %s protobuf repo no JSON upload step", (repo_type) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", repo_type })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("artifact-keeper/artifact-keeper#5066");
+    expect(text).not.toContain("UploadService");
+    expect(text).not.toContain("--registry");
+  });
+
   it("does not advertise pull-through installation for a local mirror format", () => {
     const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "github", repo_type: "local" })} />);
     expect(container.textContent).toContain("Create a remote GitHub mirror");
