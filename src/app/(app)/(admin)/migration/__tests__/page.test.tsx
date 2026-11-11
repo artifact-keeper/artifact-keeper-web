@@ -388,6 +388,7 @@ function classifyMutation(opts: MutationOpts): string {
     return "testConn";
   if (src.includes("Migration job created")) return "createMig";
   if (src.includes("Migration started")) return "startMig";
+  if (src.includes("Started ")) return "startAll";
   if (src.includes("Migration paused")) return "pauseMig";
   if (src.includes("Migration resumed")) return "resumeMig";
   if (src.includes("Migration cancelled")) return "cancelMig";
@@ -930,8 +931,8 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     // failed_items annotation
     expect(screen.getByText(/\(2 failed\)/)).toBeInTheDocument();
     // 50% progress label rendered in cell. A running job is still enumerating,
-    // so the figure is marked provisional (artifact-keeper#3590).
-    const progress = screen.getByText("~50%");
+    // so the figure gets a provisional hint (artifact-keeper#3590).
+    const progress = screen.getByText("50%");
     expect(progress).toBeInTheDocument();
     expect(progress).toHaveAttribute(
       "title",
@@ -939,7 +940,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     );
   });
 
-  it("drops the provisional marker once the job reaches a terminal state", async () => {
+  it("drops the provisional hint once the job reaches a terminal state", async () => {
     // `total_items` only stops moving when enumeration ends, so a finished job
     // is the one case where the percentage is a measured figure (#3590).
     const job = makeJob({
@@ -959,7 +960,6 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     const progress = screen.getByText("100%");
     expect(progress).toBeInTheDocument();
     expect(progress).not.toHaveAttribute("title");
-    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
   });
 
   it("falls back to the source-id slice when the connection is unknown", async () => {
@@ -987,7 +987,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     await switchToJobsTab();
     expect(screen.getByTestId("icon-Pause")).toBeInTheDocument();
     expect(screen.getByTestId("icon-Square")).toBeInTheDocument();
-    expect(screen.queryByTestId("icon-Play")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("table")).queryByTestId("icon-Play")).not.toBeInTheDocument();
     expect(screen.queryByTestId("icon-RotateCcw")).not.toBeInTheDocument();
   });
 
@@ -1005,7 +1005,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     await renderPage();
     await switchToJobsTab();
     // Play renders for ready + pending → 2 occurrences.
-    expect(screen.getAllByTestId("icon-Play")).toHaveLength(2);
+    expect(within(screen.getByRole("table")).getAllByTestId("icon-Play")).toHaveLength(2);
     // Resume (RotateCcw) renders only for the paused job.
     expect(screen.getAllByTestId("icon-RotateCcw")).toHaveLength(1);
   });
@@ -1018,9 +1018,63 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     });
     await renderPage();
     await switchToJobsTab();
-    const play = screen.getByTestId("icon-Play").closest("button");
+    const play = within(screen.getByRole("table")).getByTestId("icon-Play").closest("button");
     await act(async () => fireEvent.click(play!));
     expect(capturedMutations.startMig.mutate).toHaveBeenCalledWith("ready-1");
+  });
+
+  it("Start All fires only the pending and ready jobs", async () => {
+    configureQueries({
+      connections: { data: [makeConnection()], isLoading: false },
+      migrations: {
+        data: {
+          items: [
+            makeJob({ id: "j1", status: "ready" }),
+            makeJob({ id: "j2", status: "running" }),
+            makeJob({ id: "j3", status: "pending" }),
+            makeJob({ id: "j4", status: "completed" }),
+          ],
+          pagination: {},
+        },
+        isLoading: false,
+      },
+    });
+    await renderPage();
+    await switchToJobsTab();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: /Start All \(2\)/ }))
+    );
+    expect(capturedMutations.startAll.mutate).toHaveBeenCalledWith(["j1", "j3"]);
+  });
+
+  it("alerts once when every job from Start All has finished", async () => {
+    const jobs = (a: MigrationJob["status"], b: MigrationJob["status"]) => ({
+      connections: { data: [makeConnection()], isLoading: false },
+      migrations: {
+        data: {
+          items: [makeJob({ id: "j1", status: a }), makeJob({ id: "j2", status: b })],
+          pagination: {},
+        },
+        isLoading: false,
+      },
+    });
+    configureQueries(jobs("running", "running"));
+    const Page = (await import("../page")).default;
+    const { rerender } = render(<Page />);
+    act(() => capturedMutations.startAll.opts.onSuccess?.(["j1", "j2"], ["j1", "j2"]));
+
+    configureQueries(jobs("completed", "running"));
+    rerender(<Page />);
+    expect(toast.warning).not.toHaveBeenCalled();
+
+    configureQueries(jobs("completed", "failed"));
+    rerender(<Page />);
+    rerender(<Page />);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.warning).toHaveBeenCalledWith(
+      "All 2 migrations finished: 1 completed, 1 with problems",
+      expect.objectContaining({ duration: Infinity }),
+    );
   });
 
   it("clicking Pause fires pauseMigration", async () => {
@@ -1655,7 +1709,6 @@ describe("MigrationPage — feature parity (#520)", () => {
     expect(screen.getAllByText("completed with errors").length).toBeGreaterThan(0);
     expect(screen.queryByText("pending")).not.toBeInTheDocument();
     expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
-    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
 
     await act(async () => fireEvent.click(screen.getByText("job-cwe-...")));
     const reportQuery = mockUseQuery.mock.calls
