@@ -90,6 +90,12 @@ test.describe('System config feature flags', () => {
     } else {
       await expect(dtProjects).toHaveCount(0);
     }
+
+    // "Vulnerabilities" is ungated: findings outlive the scanner that found
+    // them, so it is there whatever the config says.
+    await expect(
+      nav.getByRole('link', { name: /vulnerabilities/i }).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('upload dialog advertises the configured max upload size', async ({ page, request }) => {
