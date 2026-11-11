@@ -456,7 +456,7 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
   async function fillAndSubmitForm(name: string): Promise<Record<string, unknown>> {
     const nameInput = screen.getByPlaceholderText(/Production Artifactory/i);
     const urlInput = screen.getByPlaceholderText(/artifactory\.example\.com/i);
-    const tokenInput = screen.getByPlaceholderText(/Enter API token/i);
+    const tokenInput = screen.getByPlaceholderText(/Enter (API token|password)/i);
     await act(async () => {
       fireEvent.change(nameInput, { target: { value: name } });
       fireEvent.change(urlInput, { target: { value: "https://nexus.example.com" } });
@@ -512,6 +512,50 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
     });
     const submitted = await fillAndSubmitForm("Nexus Prod");
     expect(submitted.source_type).toBe("nexus");
+  });
+
+  function getAuthTypeWrapper(): HTMLElement {
+    return screen.getByText("Authentication Type").parentElement!;
+  }
+
+  async function pickSource(value: "nexus" | "artifactory") {
+    const item = getSourceTypeWrapper().querySelector(
+      `[data-testid="select-item-${value}"]`,
+    ) as HTMLElement;
+    await act(async () => {
+      fireEvent.click(item);
+    });
+  }
+
+  it("offers no API Token for a Nexus source and submits basic auth (artifact-keeper#5479)", async () => {
+    await openAddConnectionDialog();
+    await pickSource("nexus");
+
+    const auth = getAuthTypeWrapper();
+    expect(auth.querySelector('[data-testid="select-item-api_token"]')).toBeNull();
+    expect(auth.querySelector('[data-testid="select-root"]')!.getAttribute("data-value")).toBe(
+      "basic_auth",
+    );
+    expect(screen.getByText(/user token goes in as its name code and pass code/i)).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Username"), { target: { value: "migrator" } });
+    });
+    const submitted = await fillAndSubmitForm("Nexus Prod");
+    expect(submitted).toMatchObject({
+      source_type: "nexus",
+      auth_type: "basic_auth",
+      credentials: { username: "migrator", password: "tok" },
+    });
+  });
+
+  it("offers API Token again after switching back to Artifactory", async () => {
+    await openAddConnectionDialog();
+    await pickSource("nexus");
+    await pickSource("artifactory");
+    expect(
+      getAuthTypeWrapper().querySelector('[data-testid="select-item-api_token"]'),
+    ).not.toBeNull();
   });
 });
 
