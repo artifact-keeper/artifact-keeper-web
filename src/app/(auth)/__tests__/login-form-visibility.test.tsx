@@ -112,7 +112,7 @@ vi.mock("@/providers/system-config-provider", () => ({
 
 const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
-  mockLdapLogin: vi.fn().mockResolvedValue(undefined),
+  mockLdapLogin: vi.fn().mockResolvedValue({ kind: "session" }),
 }));
 
 vi.mock("@/lib/api/sso", () => ({

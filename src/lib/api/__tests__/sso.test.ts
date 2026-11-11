@@ -455,14 +455,14 @@ describe("ssoApi", () => {
     });
   });
 
-  it("ldapLogin returns token pair and forwards body", async () => {
+  it("ldapLogin returns a session result and forwards body", async () => {
     mockLdapLogin.mockResolvedValue({
       data: { access_token: "AT", refresh_token: "RT", token_type: "Bearer" },
       error: undefined,
     });
     const { ssoApi } = await import("../sso");
     const out = await ssoApi.ldapLogin("l1", "alice", "secret");
-    expect(out).toEqual({ access_token: "AT", refresh_token: "RT" });
+    expect(out).toEqual({ kind: "session" });
     expect(mockLdapLogin).toHaveBeenCalledWith({
       path: { id: "l1" },
       body: { username: "alice", password: "secret" },
@@ -475,6 +475,53 @@ describe("ssoApi", () => {
     await expect(
       ssoApi.ldapLogin("l1", "alice", "secret"),
     ).rejects.toBe("fail");
+  });
+
+  it("ldapLogin returns the TOTP challenge for a TOTP-enrolled account (artifact-keeper#5484)", async () => {
+    // The backend answers with the `POST /auth/login` challenge shape: empty
+    // tokens, no cookies, a pending token to redeem at /auth/totp/verify.
+    mockLdapLogin.mockResolvedValue({
+      data: {
+        access_token: "",
+        refresh_token: "",
+        token_type: "Bearer",
+        expires_in: 1800,
+        must_change_password: false,
+        totp_required: true,
+        totp_token: "pending.jwt",
+      },
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    const out = await ssoApi.ldapLogin("l1", "alice", "secret");
+    expect(out).toEqual({ kind: "totp", totpToken: "pending.jwt" });
+  });
+
+  it("ldapLogin treats totp_required: false as a session", async () => {
+    mockLdapLogin.mockResolvedValue({
+      data: {
+        access_token: "AT",
+        refresh_token: "RT",
+        totp_required: false,
+        totp_token: "ignored",
+      },
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    await expect(ssoApi.ldapLogin("l1", "alice", "secret")).resolves.toEqual({
+      kind: "session",
+    });
+  });
+
+  it("ldapLogin throws on a TOTP challenge without a token instead of reporting a session", async () => {
+    mockLdapLogin.mockResolvedValue({
+      data: { access_token: "", refresh_token: "", totp_required: true },
+      error: undefined,
+    });
+    const { ssoApi } = await import("../sso");
+    await expect(
+      ssoApi.ldapLogin("l1", "alice", "secret"),
+    ).rejects.toThrow(/TOTP challenge without totp_token/);
   });
 
   it("ldapLogin throws on missing token fields (#359)", async () => {

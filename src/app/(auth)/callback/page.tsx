@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/lib/sdk-client";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { totpChallengeToken } from "@/lib/totp-challenge";
 import {
   clearSilentSsoAttempt,
   consumeSilentSsoReturnTo,
@@ -32,7 +33,7 @@ function CallbackHandler() {
   useDocumentTitle("Signing In");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refreshUser } = useAuth();
+  const { refreshUser, beginTotpChallenge } = useAuth();
 
   const code = searchParams.get("code");
   const urlError = searchParams.get("error");
@@ -95,6 +96,31 @@ function CallbackHandler() {
           return;
         }
 
+        // A stored return path marks a silent (`prompt=none`) round trip;
+        // explicit sign-ins clear it before leaving for the IdP.
+        const silentReturnTo = consumeSilentSsoReturnTo();
+
+        // artifact-keeper#5484: an account with TOTP enrolled gets no session
+        // from the exchange (no cookies, empty tokens), only a TOTP token.
+        const body: unknown = await Promise.resolve()
+          .then(() => response.json())
+          .catch(() => null);
+        const totpToken = totpChallengeToken(body);
+        if (totpToken !== null) {
+          if (silentReturnTo !== null) {
+            // A background probe must never prompt: stay anonymous as for
+            // silent_denied. An explicit sign-in runs the TOTP step.
+            markSilentSsoAttempted();
+            router.replace(silentReturnTo);
+            return;
+          }
+          // The login page renders the TOTP form from this state and
+          // `verifyTotp` redeems the token, which sets the session cookies.
+          beginTotpChallenge(totpToken);
+          router.replace("/login");
+          return;
+        }
+
         // Tokens are now set as httpOnly cookies by the backend.
         // No need to store them in localStorage.
         // Signed in: reset the silent-SSO once-per-session guard so the next
@@ -102,16 +128,15 @@ function CallbackHandler() {
         // silent attempt started from (explicit logins have no stored return
         // path and land on "/" as before).
         clearSilentSsoAttempt();
-        const returnTo = consumeSilentSsoReturnTo() ?? "/";
         await refreshUser();
-        router.replace(returnTo);
+        router.replace(silentReturnTo ?? "/");
       } catch {
         setError("Failed to complete sign-in. Please try again.");
       }
     };
 
     exchangeCode();
-  }, [code, immediateError, silentDenied, refreshUser, router]);
+  }, [code, immediateError, silentDenied, refreshUser, beginTotpChallenge, router]);
 
   if (error) {
     return (
