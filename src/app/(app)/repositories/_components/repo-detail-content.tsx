@@ -193,6 +193,9 @@ import { EnvironmentsTabContent } from "./environments-tab-content";
 import { CondaWithdrawButton } from "./conda-withdraw-dialog";
 import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
+import { useInstanceQuota } from "@/hooks/use-instance-quota";
+import { effectiveMaxUpload, QuotaRefusalError } from "@/lib/quota";
+import { quotaKeys } from "@/lib/api/quota";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 import { repodataRootExample, validateRepodataUploadPath } from "@/lib/rpm-repodata";
 
@@ -214,6 +217,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
   const { config: systemConfig } = useSystemConfig();
+  const instanceQuota = useInstanceQuota();
 
   // artifact search / pagination
   const [searchQuery, setSearchQuery] = useState("");
@@ -693,7 +697,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   const handleUpload = useCallback(
     async (file: File, path?: string) => {
-      await artifactsApi.upload(repoKey, file, path);
+      try {
+        await artifactsApi.upload(repoKey, file, path);
+      } catch (err) {
+        // A quota refusal means the quota banner is out of date; refresh it.
+        if (err instanceof QuotaRefusalError) {
+          queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+          queryClient.invalidateQueries({ queryKey: quotaKeys.system });
+        }
+        throw err;
+      }
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
@@ -1535,7 +1548,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 showPathInput
                 repositoryKey={repoKey}
                 onChunkedComplete={handleChunkedComplete}
-                maxUploadSizeBytes={systemConfig.max_upload_size_bytes}
+                maxUploadSizeBytes={effectiveMaxUpload(
+                  systemConfig.max_upload_size_bytes,
+                  instanceQuota?.maxUploadBytes
+                )}
                 {...(repository.format === "rpm" && (repository.repodata_depth ?? 0) > 0
                   ? {
                       pathLabel: "Artifact path (required)",
