@@ -751,7 +751,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // one), so every file in a mirrored Maven repo showed a dash. Fall back to
   // the coordinates, which prefer backend metadata and parse the path second.
   const artifactVersion = (a: Artifact) =>
-    a.version ?? (isMavenFamily ? artifactGavc(a)?.version : undefined);
+    a.version || (isMavenFamily ? artifactGavc(a)?.version : undefined);
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
