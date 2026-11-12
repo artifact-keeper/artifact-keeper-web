@@ -14,7 +14,7 @@ import {
   type ExceptionGate,
 } from "@/lib/api/exceptions";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { ApiError } from "@/lib/api/fetch";
+import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,10 +75,13 @@ function RequestExceptionForm() {
       setDone(true);
       toast.success("Request sent to the security team");
     },
-    // A backend without the exception queue 404s this route. "API error 404"
-    // tells the asker nothing they can act on, so name the cause instead.
+    // A backend without the exception queue 404s this route with no body.
+    // "API error 404" tells the asker nothing they can act on, so name the
+    // cause instead. A 404 that carries the backend's own message ("Repository
+    // not found" for a key they mistyped or cannot see) is about the request,
+    // not the server, so that message is shown as is.
     onError: (err: unknown) =>
-      err instanceof ApiError && err.status === 404
+      err instanceof ApiError && err.status === 404 && apiErrorMessage(err) === null
         ? toast.error(
             "This server does not accept exception requests yet. Ask an administrator to review the package directly.",
           )
@@ -167,8 +170,8 @@ function RequestExceptionForm() {
           </Select>
           <p className="text-xs text-muted-foreground">
             If you are not sure, check the error your package manager printed.
-            Picking the wrong one only means the request lands in the wrong
-            queue, and a reviewer can refile it.
+            Each reason is excepted separately, so a grant for the wrong one
+            does not unblock the package.
           </p>
         </div>
 
