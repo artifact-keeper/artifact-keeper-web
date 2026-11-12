@@ -24,6 +24,7 @@ import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-car
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
 import { BuildRetentionCard } from "@/components/settings/build-retention-card";
+import { ExceptionRequestLinkCard } from "@/components/settings/exception-request-link-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
 import { formatBytes } from "@/lib/utils";
@@ -417,8 +418,9 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="mt-4">
+        <TabsContent value="security" className="mt-4 space-y-4">
           <TokenExpiryPolicyCard />
+          <ExceptionRequestLinkCard />
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">
