@@ -191,7 +191,7 @@ describe("RepoStoragePanel", () => {
     render(<RepoStoragePanel repository={REPO} isAdmin={true} />);
 
     const value = screen.getByTestId("storage-reclaimable-value");
-    expect(value).toHaveTextContent("2 KB");
+    expect(value).toHaveTextContent("2 KiB");
     expect(value).toHaveTextContent("7");
 
     // The estimate button is clickable (drives the on-demand fetch).
