@@ -931,8 +931,8 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     // failed_items annotation
     expect(screen.getByText(/\(2 failed\)/)).toBeInTheDocument();
     // 50% progress label rendered in cell. A running job is still enumerating,
-    // so the figure gets a provisional hint (artifact-keeper#3590).
-    const progress = screen.getByText("50%");
+    // so the figure is marked provisional (artifact-keeper#3590).
+    const progress = screen.getByText("~50%");
     expect(progress).toBeInTheDocument();
     expect(progress).toHaveAttribute(
       "title",
@@ -940,7 +940,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     );
   });
 
-  it("drops the provisional hint once the job reaches a terminal state", async () => {
+  it("drops the provisional marker once the job reaches a terminal state", async () => {
     // `total_items` only stops moving when enumeration ends, so a finished job
     // is the one case where the percentage is a measured figure (#3590).
     const job = makeJob({
@@ -960,6 +960,7 @@ describe("MigrationPage — migrations tab and status mutations", () => {
     const progress = screen.getByText("100%");
     expect(progress).toBeInTheDocument();
     expect(progress).not.toHaveAttribute("title");
+    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
   });
 
   it("falls back to the source-id slice when the connection is unknown", async () => {
@@ -1709,6 +1710,7 @@ describe("MigrationPage — feature parity (#520)", () => {
     expect(screen.getAllByText("completed with errors").length).toBeGreaterThan(0);
     expect(screen.queryByText("pending")).not.toBeInTheDocument();
     expect(screen.getAllByText("100%").length).toBeGreaterThan(0);
+    expect(screen.queryByText("~100%")).not.toBeInTheDocument();
 
     await act(async () => fireEvent.click(screen.getByText("job-cwe-...")));
     const reportQuery = mockUseQuery.mock.calls

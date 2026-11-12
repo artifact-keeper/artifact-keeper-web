@@ -171,8 +171,8 @@ function jobProgress(job: MigrationJob): number {
 // Statuses in which the backend is still enumerating work, so `total_items` is
 // "how many items have been found so far", not a known total (artifact-keeper
 // #3590). The percentage computed against it is provisional and can move
-// *down* as enumeration finds more, so it is explained on hover rather than
-// presented as a measured figure. `effectiveTotal` below
+// *down* as enumeration finds more, so it is labelled "~" and explained on
+// hover rather than presented as a measured figure. `effectiveTotal` below
 // already keeps the items ratio sane while that is happening.
 const ENUMERATING_STATUSES: ReadonlySet<MigrationJobStatus> = new Set([
   "pending",
@@ -187,7 +187,8 @@ const PROVISIONAL_PROGRESS_HINT =
   "and can go down as more items are found.";
 
 function jobProgressLabel(job: MigrationJob): string {
-  return `${jobProgress(job)}%`;
+  const provisional = ENUMERATING_STATUSES.has(job.status);
+  return `${provisional ? "~" : ""}${jobProgress(job)}%`;
 }
 
 function jobProgressHint(job: MigrationJob): string | undefined {
@@ -609,8 +610,9 @@ export default function MigrationPage() {
       if (startedIds.length) watchedRef.current.push(startedIds);
       const started = startedIds.length;
       const failed = ids.length - started;
-      if (failed === 0) toast.success(`Started ${started} migrations`);
-      else toast.error(`Started ${started} migrations, ${failed} failed`);
+      const noun = started === 1 ? "migration" : "migrations";
+      if (failed === 0) toast.success(`Started ${started} ${noun}`);
+      else toast.error(`Started ${started} ${noun}, ${failed} failed`);
     },
   });
 
