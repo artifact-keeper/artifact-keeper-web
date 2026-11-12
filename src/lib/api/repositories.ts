@@ -38,6 +38,7 @@ import type {
 import { unwrap } from '@/lib/sdk-utils';
 import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '@/lib/backend-version';
 import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
+import { parseUpstreamMode, type UpstreamMode, type UpstreamModeInfo } from '@/lib/upstream-mode';
 
 const REPODATA_UPGRADE_MESSAGE =
   'This backend does not confirm RPM Repodata Depth support. Upgrade the backend before changing Repodata Depth.';
@@ -468,7 +469,7 @@ export const repositoriesApi = {
     // Default-zero creates retain their legacy wire shape on older backends.
     const depth = input.repodata_depth === 0 ? undefined : input.repodata_depth;
     await validateRepodataWrite(depth);
-    const body: SdkCreateRepositoryRequest & { repodata_depth?: number } = {
+    const body: SdkCreateRepositoryRequest & { repodata_depth?: number; upstream_mode?: UpstreamMode } = {
       key: input.key,
       name: input.name,
       description: input.description,
@@ -495,6 +496,13 @@ export const repositoriesApi = {
       // by JSON serialization, so a repo of another format sends none of them.
       trusted_gpg_key: input.trusted_gpg_key,
       ...(depth !== undefined ? { repodata_depth: depth } : {}),
+      // Upstream mode a Remote is born with (#1094, artifact-keeper#5406).
+      // Sent only for a Remote, which is the only type the backend accepts it
+      // on; `online` is the default and is omitted, so an ordinary create keeps
+      // its wire shape. Not on the SDK 1.7.0 request type.
+      ...(input.repo_type === 'remote' && input.upstream_mode === 'cache_only'
+        ? { upstream_mode: input.upstream_mode }
+        : {}),
       apt_origin: input.apt_origin,
       apt_label: input.apt_label,
       apt_release_version: input.apt_release_version,
@@ -717,4 +725,72 @@ export const repositoriesApi = {
     }));
     return assertData(data, 'repositoriesApi.setCacheTtl');
   },
+
+  /**
+   * Read a repository's upstream mode (#1094, artifact-keeper#5315).
+   *
+   * Resolves `null` when the backend cannot answer it: a backend that
+   * predates the route answers 404, and a body that is not a full
+   * `{ upstream_mode, effective_upstream_mode }` cannot say what the proxy
+   * enforces. Callers hide the mode then rather than show it wrong. The GET is
+   * permissive for every repository type (non-Remotes report `online`), so
+   * callers gate it on `repo_type === 'remote'`.
+   */
+  getUpstreamMode: async (repoKey: string): Promise<UpstreamModeInfo | null> => {
+    let raw: unknown;
+    try {
+      raw = await apiFetch<unknown>(
+        `/api/v1/repositories/${encodeURIComponent(repoKey)}/upstream-mode`,
+      );
+    } catch (err) {
+      const status = (err as { status?: unknown } | null)?.status;
+      if (status === 404 || status === 405 || status === 501) return null;
+      // A proxy's HTML page in place of JSON.
+      if (err instanceof SyntaxError) return null;
+      throw err;
+    }
+    return parseUpstreamMode(raw);
+  },
+
+  /**
+   * Set a Remote repository's upstream mode (#1094). The backend requires the
+   * `write:repositories` scope and repository administration, and refuses
+   * (400) any other repository type.
+   */
+  setUpstreamMode: async (repoKey: string, mode: UpstreamMode): Promise<UpstreamModeInfo> => {
+    const raw = await apiFetch<unknown>(
+      `/api/v1/repositories/${encodeURIComponent(repoKey)}/upstream-mode`,
+      { method: 'PUT', body: JSON.stringify({ upstream_mode: mode }) },
+    );
+    const info = parseUpstreamMode(raw);
+    if (!info) throw new Error('The backend did not confirm the upstream mode.');
+    return info;
+  },
 };
+
+/**
+ * Outcome of creating a Remote with a requested upstream mode: `applied` when
+ * the backend reports it stored, `unsupported` when the backend has no upstream
+ * mode at all (it ignored the field and the repository is online).
+ */
+export type CreatedUpstreamModeOutcome = 'applied' | 'unsupported';
+
+/**
+ * Confirm the upstream mode a Remote was created with (#1094).
+ *
+ * Create applies `upstream_mode` atomically from artifact-keeper#5406, and
+ * older backends drop the unknown field without a word. Read it back so the UI
+ * never claims a cache-only Remote that is online. A backend with the
+ * upstream-mode route that did not take the field on create gets it set with
+ * `PUT` instead.
+ */
+export async function confirmCreatedUpstreamMode(
+  repoKey: string,
+  mode: UpstreamMode,
+): Promise<CreatedUpstreamModeOutcome> {
+  const current = await repositoriesApi.getUpstreamMode(repoKey);
+  if (!current) return 'unsupported';
+  if (current.upstream_mode === mode) return 'applied';
+  await repositoriesApi.setUpstreamMode(repoKey, mode);
+  return 'applied';
+}

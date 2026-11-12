@@ -52,17 +52,23 @@ vi.mock("@tanstack/react-query", () => ({
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockToastWarning = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
+    warning: (...args: unknown[]) => mockToastWarning(...args),
   },
 }));
 
+const mockCreate = vi.fn();
+const mockConfirmUpstreamMode = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
+  confirmCreatedUpstreamMode: (...args: unknown[]) => mockConfirmUpstreamMode(...args),
   repositoriesApi: {
     list: vi.fn().mockResolvedValue({ items: [], pagination: { total_pages: 1 } }),
-    create: vi.fn(),
+    create: (...args: unknown[]) => mockCreate(...args),
+    getUpstreamMode: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
     get: vi.fn(),
@@ -184,6 +190,11 @@ vi.mock("./repo-list-item", () => ({
       )}
       {props.artifactMatchCount != null && (
         <span data-testid="artifact-match-count">{props.artifactMatchCount}</span>
+      )}
+      {props.upstreamMode && (
+        <span data-testid={`upstream-mode-${props.repo.key}`}>
+          {props.upstreamMode.effective_upstream_mode}
+        </span>
       )}
     </div>
   ),
@@ -906,5 +917,91 @@ describe("RepositoriesContent", () => {
     // Click the action
     opts.action.onClick();
     expect(mockPush).toHaveBeenCalledWith("/staging");
+  });
+});
+
+describe("RepositoriesContent - upstream mode (#1094)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useMutationConfigs.length = 0;
+    useQueryResponses = {};
+    useQueryCallIndex = 0;
+    useQueryCallKeys.length = 0;
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    mockUseIsMobile.mockReturnValue(false);
+  });
+
+  afterEach(() => cleanup());
+
+  const remote = { key: "npm-remote", format: "npm", repo_type: "remote", name: "NPM" };
+
+  it("hands each Remote row its upstream mode", () => {
+    useQueryResponses = {
+      repositories: {
+        data: {
+          items: [
+            { id: "1", key: "npm-remote", name: "NPM", format: "npm", repo_type: "remote" },
+          ],
+          pagination: { total_pages: 1 },
+        },
+        isLoading: false,
+      },
+      "upstream-mode": {
+        data: { repository_key: "npm-remote", upstream_mode: "online", effective_upstream_mode: "cache_only" },
+      },
+    };
+    render(<RepositoriesContent />);
+    expect(screen.getByTestId("upstream-mode-npm-remote")).toHaveTextContent("cache_only");
+    expect(useQueryCallKeys).toContainEqual(["upstream-mode", "npm-remote"]);
+  });
+
+  it("confirms a cache-only Remote after create", async () => {
+    render(<RepositoriesContent />);
+    mockCreate.mockResolvedValue({ key: "npm-remote" });
+    mockConfirmUpstreamMode.mockResolvedValue("applied");
+    const result = await useMutationConfigs[0].mutationFn({ ...remote, upstream_mode: "cache_only" });
+    expect(mockConfirmUpstreamMode).toHaveBeenCalledWith("npm-remote", "cache_only");
+    expect(result).toMatchObject({ upstreamMode: "applied" });
+  });
+
+  it("does not confirm an online Remote or another type", async () => {
+    render(<RepositoriesContent />);
+    mockCreate.mockResolvedValue({ key: "x" });
+    await useMutationConfigs[0].mutationFn(remote);
+    await useMutationConfigs[0].mutationFn({ ...remote, repo_type: "local", upstream_mode: "cache_only" });
+    expect(mockConfirmUpstreamMode).not.toHaveBeenCalled();
+  });
+
+  it("does not fail a create whose mode could not be confirmed", async () => {
+    render(<RepositoriesContent />);
+    mockCreate.mockResolvedValue({ key: "npm-remote" });
+    mockConfirmUpstreamMode.mockRejectedValue(new Error("API error 403: "));
+    const result = await useMutationConfigs[0].mutationFn({ ...remote, upstream_mode: "cache_only" });
+    expect(result).toMatchObject({ upstreamMode: "unverified" });
+  });
+
+  it("warns that the Remote is online when the backend has no upstream mode", () => {
+    render(<RepositoriesContent />);
+    useMutationConfigs[0].onSuccess?.(
+      { repository: { key: "npm-remote" }, upstreamMode: "unsupported" },
+      { ...remote, upstream_mode: "cache_only" },
+    );
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      "Repository created online",
+      expect.objectContaining({ description: expect.stringMatching(/does not support cache-only/) }),
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("warns when the cache-only mode could not be confirmed", () => {
+    render(<RepositoriesContent />);
+    useMutationConfigs[0].onSuccess?.(
+      { repository: { key: "npm-remote" }, upstreamMode: "unverified" },
+      { ...remote, upstream_mode: "cache_only" },
+    );
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      "Repository created",
+      expect.objectContaining({ description: expect.stringMatching(/could not be confirmed/) }),
+    );
   });
 });
