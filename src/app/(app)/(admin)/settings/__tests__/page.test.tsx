@@ -376,7 +376,7 @@ describe("SettingsPage", () => {
     expect(inputs.find((i) => i.value === "S3")).toBeDefined();
     expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
     const uploadLimit = screen.getByTestId("max-upload-size") as HTMLInputElement;
-    expect(uploadLimit.value).toBe("1 GB");
+    expect(uploadLimit.value).toBe("1 GiB");
   });
 
   it("shows the upload limit read-only and points at MAX_UPLOAD_SIZE (artifact-keeper#5751)", () => {
@@ -431,7 +431,7 @@ describe("SettingsPage", () => {
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "minio")).toBeDefined();
-    expect(inputs.find((i) => i.value === "5 GB")).toBeDefined();
+    expect(inputs.find((i) => i.value === "5 GiB")).toBeDefined();
   });
 
   // ---------------------------------------------------------------------------

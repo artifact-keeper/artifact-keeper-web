@@ -25,6 +25,7 @@ import { repositoriesApi } from "@/lib/api/repositories";
 import { sbomApi } from "@/lib/api/sbom";
 import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
+import { quotaKeys } from "@/lib/api/quota";
 import { formatBytes } from "@/lib/utils";
 import { repoSizeLabel } from "@/lib/repo-size";
 import type { Repository } from "@/types";
@@ -32,6 +33,7 @@ import type { CveTrends } from "@/types/sbom";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatBreakdown } from "@/components/common/stat-breakdown";
+import { QuotaUsageSection } from "@/components/common/quota-usage-cards";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -306,6 +308,7 @@ export function DashboardContent() {
     queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
     queryClient.invalidateQueries({ queryKey: ["cve-trends"] });
     queryClient.invalidateQueries({ queryKey: mcpKeys.pendingCount });
+    queryClient.invalidateQueries({ queryKey: quotaKeys.system });
   }
 
   const greeting = user?.display_name || user?.username;
@@ -371,6 +374,10 @@ export function DashboardContent() {
           )}
         </section>
       )}
+
+      {/* Instance storage and transfer quotas (any signed-in user; hidden
+          when none is configured or the backend does not report them) */}
+      {isAuthenticated && <QuotaUsageSection />}
 
       {/* Admin Stats */}
       {user?.is_admin && (
