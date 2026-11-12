@@ -390,6 +390,12 @@ describe("SettingsPage", () => {
     expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
     expect(screen.queryByLabelText("Upload size unit")).toBeNull();
     expect(screen.getByText(/MAX_UPLOAD_SIZE environment variable/)).toBeDefined();
+    // The row's label and note are wired to the field for assistive tech.
+    expect(screen.getByLabelText("Max Upload Size")).toBe(uploadLimit);
+    expect(uploadLimit.getAttribute("aria-describedby")).toBeTruthy();
+    expect(
+      document.getElementById(uploadLimit.getAttribute("aria-describedby")!)?.textContent,
+    ).toMatch(/MAX_UPLOAD_SIZE/);
   });
 
   it("renders friendly storage backend labels", () => {

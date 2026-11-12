@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -40,12 +40,21 @@ function SettingRow({
   description?: string;
   testId?: string;
 }) {
+  const id = useId();
+  const descriptionId = `${id}-description`;
   return (
     <div className="space-y-2">
-      <Label className="text-sm">{label}</Label>
-      <Input value={value} disabled className="bg-muted/50" data-testid={testId} />
+      <Label htmlFor={id} className="text-sm">{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        disabled
+        className="bg-muted/50"
+        data-testid={testId}
+        aria-describedby={description ? descriptionId : undefined}
+      />
       {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p id={descriptionId} className="text-xs text-muted-foreground">{description}</p>
       )}
     </div>
   );
@@ -354,7 +363,7 @@ export default function SettingsPage() {
               <SettingRow
                 label="Max Upload Size"
                 value={storageValue((s) => formatUploadLimit(s.max_upload_size_bytes))}
-                description="Maximum allowed size for a single artifact upload, for every repository. Set on the backend with the MAX_UPLOAD_SIZE environment variable (bytes, 0 for no limit), a restart applies it."
+                description="Maximum allowed size for a single artifact upload, for every repository. Set on the backend with the MAX_UPLOAD_SIZE environment variable (bytes, 0 for no limit); a restart applies it."
                 testId="max-upload-size"
               />
               <Separator />
