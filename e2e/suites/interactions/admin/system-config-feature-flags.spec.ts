@@ -91,6 +91,18 @@ test.describe('System config feature flags', () => {
       await expect(dtProjects).toHaveCount(0);
     }
 
+    // "Vulnerabilities" is not scanner-gated: findings outlive the scanner
+    // that found them. It is shown exactly when the drill-down endpoint
+    // answers this admin (an older backend 404s, a scoped token 403s).
+    const findingsProbe = await request.get(
+      '/api/v1/admin/security/findings?per_page=1'
+    );
+    const vulnerabilities = nav.getByRole('link', { name: /vulnerabilities/i });
+    if (findingsProbe.ok()) {
+      await expect(vulnerabilities.first()).toBeVisible({ timeout: 10000 });
+    } else {
+      await expect(vulnerabilities).toHaveCount(0);
+    }
     // "Scan Queue" is ungated: the page itself says when the backend runs
     // scans in-process.
     await expect(
