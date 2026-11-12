@@ -90,6 +90,12 @@ test.describe('System config feature flags', () => {
     } else {
       await expect(dtProjects).toHaveCount(0);
     }
+
+    // "Scan Queue" is ungated: the page itself says when the backend runs
+    // scans in-process.
+    await expect(
+      nav.getByRole('link', { name: /scan queue/i }).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('upload dialog advertises the configured max upload size', async ({ page, request }) => {
