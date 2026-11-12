@@ -13,7 +13,7 @@ import {
   EXCEPTION_GATES,
   type ExceptionGate,
 } from "@/lib/api/exceptions";
-import { mutationErrorToast } from "@/lib/error-utils";
+import { toUserMessage } from "@/lib/error-utils";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,36 @@ const GATE_LABEL: Record<ExceptionGate, string> = {
   scan: "It has vulnerabilities",
   curation: "A rule blocks it",
 };
+
+/** Each open request a user may hold at once, per the backend. */
+const MAX_OPEN_REQUESTS = 50;
+
+/** What to tell the asker when the backend refuses the request. */
+function requestErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const said = apiErrorMessage(err);
+    // A backend without the exception queue 404s this route with no body.
+    // "API error 404" tells the asker nothing they can act on, so name the
+    // cause instead. A 404 that carries the backend's own message ("Repository
+    // not found" for a key they mistyped or cannot see) is about the request,
+    // not the server, so that message is shown as is.
+    if (err.status === 404 && said === null) {
+      return "This server does not accept exception requests yet. Ask an administrator to review the package directly.";
+    }
+    if (err.status === 404) {
+      return `${said} Check the repository key, and that you can see the repository.`;
+    }
+    // The backend caps how many undecided requests one person may hold.
+    if (err.status === 409) {
+      return `You already have ${MAX_OPEN_REQUESTS} open exception requests. Wait for a reviewer to decide some of them, then ask again.`;
+    }
+    // An unknown gate or a missing or oversized field; the backend names it.
+    if (err.status === 400 && said) {
+      return `The request was not accepted: ${said}`;
+    }
+  }
+  return toUserMessage(err, "Could not send the request");
+}
 
 /**
  * Ask the security team to unblock a package.
@@ -75,17 +105,7 @@ function RequestExceptionForm() {
       setDone(true);
       toast.success("Request sent to the security team");
     },
-    // A backend without the exception queue 404s this route with no body.
-    // "API error 404" tells the asker nothing they can act on, so name the
-    // cause instead. A 404 that carries the backend's own message ("Repository
-    // not found" for a key they mistyped or cannot see) is about the request,
-    // not the server, so that message is shown as is.
-    onError: (err: unknown) =>
-      err instanceof ApiError && err.status === 404 && apiErrorMessage(err) === null
-        ? toast.error(
-            "This server does not accept exception requests yet. Ask an administrator to review the package directly.",
-          )
-        : mutationErrorToast("Could not send the request")(err),
+    onError: (err: unknown) => toast.error(requestErrorMessage(err)),
   });
 
   const incomplete =

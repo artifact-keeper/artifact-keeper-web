@@ -266,6 +266,29 @@ describe("submitting", () => {
     );
   });
 
+  it("says the asker has hit the open-request cap on a 409", () => {
+    render(<RequestExceptionPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(
+        409,
+        JSON.stringify({ code: "CONFLICT", message: "You already have 50 open exception requests" }),
+      ),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.stringMatching(/already have 50 open exception requests\. Wait for a reviewer/),
+    );
+  });
+
+  it("names the field the backend refused on a 400", () => {
+    render(<RequestExceptionPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(400, JSON.stringify({ code: "VALIDATION_ERROR", message: "Unknown gate: quarantine" })),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      "The request was not accepted: Unknown gate: quarantine",
+    );
+  });
+
   it("treats a 404 from anything other than apiFetch as an ordinary error", () => {
     render(<RequestExceptionPage />);
     mutationConfigs[0].onError?.({ status: 404, message: "Not Found" });
