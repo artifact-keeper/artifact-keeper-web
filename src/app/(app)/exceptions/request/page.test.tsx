@@ -251,6 +251,21 @@ describe("submitting", () => {
     );
   });
 
+  it("shows the backend's own 404 message, e.g. an unknown repository", () => {
+    // `request_exception` answers 404 "Repository not found" for a key the
+    // asker mistyped or cannot see. That is not a missing feature.
+    render(<RequestExceptionPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(404, JSON.stringify({ code: "NOT_FOUND", message: "Repository not found" })),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.not.stringMatching(/does not accept exception requests yet/i),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.stringMatching(/Repository not found/),
+    );
+  });
+
   it("treats a 404 from anything other than apiFetch as an ordinary error", () => {
     render(<RequestExceptionPage />);
     mutationConfigs[0].onError?.({ status: 404, message: "Not Found" });
