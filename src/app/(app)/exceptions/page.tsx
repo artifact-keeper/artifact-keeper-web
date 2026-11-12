@@ -27,7 +27,7 @@ import {
   CAP_SECURITY_REVIEW,
 } from "@/components/auth/require-capability";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import { ApiError } from "@/lib/api/fetch";
+import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 import { useAuth } from "@/providers/auth-provider";
 import { formatDate } from "@/lib/utils";
 
@@ -348,11 +348,10 @@ function ExceptionsQueue() {
       why: string;
     }) => {
       if (target === "approved") {
-        const days = Number.parseInt(expiryDays, 10);
         return exceptionsApi.approve(row.id, {
           reason: why,
           neverExpires,
-          expiresInDays: neverExpires ? undefined : days,
+          expiresInDays: neverExpires ? undefined : parsedDays,
         });
       }
       if (target === "rejected") return exceptionsApi.reject(row.id, why);
@@ -381,18 +380,23 @@ function ExceptionsQueue() {
     (decision.target === "approved" || decision.row.status !== "pending");
   const reasonMissing = reasonRequired && reason.trim() === "";
 
-  const parsedDays = Number.parseInt(expiryDays, 10);
+  // `Number`, not `parseInt`: "1.5" or "30x" must read as invalid, not be
+  // silently truncated to a window the reviewer did not type.
+  const parsedDays = expiryDays.trim() === "" ? Number.NaN : Number(expiryDays);
   const expiryInvalid =
     decision?.target === "approved" &&
     !neverExpires &&
-    (!Number.isFinite(parsedDays) ||
+    (!Number.isInteger(parsedDays) ||
       parsedDays < 1 ||
       parsedDays > MAX_EXPIRY_DAYS);
 
   // A backend without the exception queue 404s the list route. That is not a
   // broken page, so it gets its own copy rather than a retry button that can
   // never succeed.
-  const queueUnavailable = error instanceof ApiError && error.status === 404;
+  const queueUnavailable =
+    error instanceof ApiError &&
+    error.status === 404 &&
+    apiErrorMessage(error) === null;
 
   return (
     <div className="space-y-6 p-6">
@@ -543,7 +547,14 @@ function ExceptionsQueue() {
 
       {!isLoading && !isError && rows.length > 0 && (
         <>
-          <ListTruncationNotice shown={rows.length} total={data?.total ?? 0} />
+          {/* Compared with what the server returned, not with `rows`: the
+              "Gate attempted only" filter narrows client-side, and counting
+              its rows against the server total would claim truncation that
+              did not happen. */}
+          <ListTruncationNotice
+            shown={data?.items.length ?? 0}
+            total={data?.total ?? 0}
+          />
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
               <caption className="sr-only">
@@ -565,6 +576,10 @@ function ExceptionsQueue() {
                 {rows.map((r) => {
                   const age = publishedAge(r.upstreamPublishedAt, r.requestedAt);
                   const alsoBlocked = stillBlockedBy(r);
+                  // The backend lets only an administrator relax a row an
+                  // administrator decided. Say so here rather than let a
+                  // reviewer type a reason and collect a 403.
+                  const adminOnly = r.instanceLocked && !isAdmin;
                   return (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
@@ -722,6 +737,12 @@ function ExceptionsQueue() {
                             size="sm"
                             variant={a.variant}
                             className="w-[4.75rem]"
+                            disabled={adminOnly && a.target !== "rejected"}
+                            aria-describedby={
+                              adminOnly && a.target !== "rejected"
+                                ? `exc-locked-${r.id}`
+                                : undefined
+                            }
                             // Every row repeats these two words, so the
                             // accessible name carries the coordinate.
                             aria-label={`${a.label} ${r.packageName}@${r.packageVersion}`}
@@ -733,6 +754,15 @@ function ExceptionsQueue() {
                           </Button>
                         ))}
                       </div>
+                      {adminOnly && (
+                        <p
+                          id={`exc-locked-${r.id}`}
+                          className="mt-1 max-w-[10rem] text-right text-xs text-muted-foreground"
+                        >
+                          Decided by an administrator, so only an
+                          administrator can grant or reopen it.
+                        </p>
+                      )}
                     </td>
                   </tr>
                   );
