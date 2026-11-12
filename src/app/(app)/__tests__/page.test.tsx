@@ -18,6 +18,11 @@ vi.mock("next/link", () => ({
 
 // Controllable useAuth
 const mockUseAuth = vi.fn();
+// The drill-down probe has its own tests; here it would fetch for real.
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => true,
+}));
+
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));

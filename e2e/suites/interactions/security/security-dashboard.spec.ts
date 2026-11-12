@@ -52,6 +52,38 @@ test.describe('Security Dashboard', () => {
     await expect(page.getByText(/security|vulnerabilit/i).first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('a non-zero finding tile leads to the list it counts', async ({ page }) => {
+    await page.goto('/security');
+    await page.waitForLoadState('domcontentloaded');
+
+    // The tiles count OPEN findings, so every link carries state=open. A zero
+    // tile is deliberately not a link, so skip when the instance is clean.
+    const tile = page.locator('a[href^="/security/findings"]').first();
+    const linked = await tile.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!linked, 'No non-zero finding tile on this instance');
+
+    await expect(tile).toHaveAttribute('href', /state=open/);
+    await tile.click();
+    await expect(page).toHaveURL(/\/security\/findings\?.*state=open/);
+    await expect(
+      page.getByRole('heading', { name: 'Vulnerabilities' })
+    ).toBeVisible({ timeout: 15000 });
+  });
+
+  test('a finding tile is reachable with the keyboard', async ({ page }) => {
+    await page.goto('/security');
+    await page.waitForLoadState('domcontentloaded');
+
+    const tile = page.locator('a[href^="/security/findings"]').first();
+    const linked = await tile.isVisible({ timeout: 10000 }).catch(() => false);
+    test.skip(!linked, 'No non-zero finding tile on this instance');
+
+    // It is a real <a>, not a div with onClick, so focus + Enter navigates.
+    await tile.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/security\/findings/);
+  });
+
   test('no console errors on security dashboard', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => {
