@@ -18,6 +18,7 @@ import type { AdminStats, User, HealthResponse } from '@/types';
 import type { ApiKey } from '@/lib/api/profile';
 import { assertData } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
+import { parseInstanceQuota } from '@/lib/quota';
 
 // SystemStats has a strict superset of AdminStats fields; pass through directly.
 // proxy_* are newer than the installed SDK types, so read them via cast and
@@ -34,6 +35,9 @@ function adaptStats(sdk: SystemStats): AdminStats {
     total_users: sdk.total_users,
     proxy_artifact_count: s.proxy_artifact_count ?? 0,
     proxy_storage_bytes: s.proxy_storage_bytes ?? 0,
+    // Instance quotas (storage_quota, transfer_quota, max_upload_bytes,
+    // quota_help_url) are newer than the SDK types too; null on older backends.
+    quota: parseInstanceQuota(sdk),
   };
 }
 
