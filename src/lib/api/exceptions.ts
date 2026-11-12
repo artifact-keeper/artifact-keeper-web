@@ -45,6 +45,12 @@ export interface PackageException {
   reviewReason: string | null;
   /** Who filed the justification. Null on an auto-filed row. */
   requestedBy: string | null;
+  /**
+   * The requester's username, sent by the backend so a non-admin reviewer can
+   * see it too. Null on an auto-filed row, a deleted account, or a backend
+   * older than the field.
+   */
+  requestedByUsername: string | null;
   /** When a granted exception lapses. Null means it never expires. */
   expiresAt: string | null;
   upstreamPublishedAt: string | null;
@@ -89,6 +95,7 @@ interface ExceptionWire {
   reviewed_by_username?: string | null;
   review_reason?: string | null;
   requested_by?: string | null;
+  requested_by_username?: string | null;
   expires_at?: string | null;
   upstream_published_at?: string | null;
   instance_locked?: boolean;
@@ -120,6 +127,7 @@ function adapt(w: ExceptionWire): PackageException {
     requestedAt: w.requested_at,
     lastRequestedAt: w.last_requested_at,
     requestedBy: w.requested_by ?? null,
+    requestedByUsername: w.requested_by_username ?? null,
     reviewedAt: w.reviewed_at ?? null,
     reviewedBy: w.reviewed_by ?? null,
     reviewedByUsername: w.reviewed_by_username ?? null,

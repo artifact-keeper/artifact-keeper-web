@@ -26,7 +26,7 @@ import {
   RequireCapability,
   CAP_SECURITY_REVIEW,
 } from "@/components/auth/require-capability";
-import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
+import { toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 import { useAuth } from "@/providers/auth-provider";
 import { formatDate } from "@/lib/utils";
@@ -103,6 +103,30 @@ const STATUS_VARIANT: Record<
   approved: "secondary",
   rejected: "destructive",
 };
+
+/**
+ * The user-facing reason a decision was refused. The backend's own words are
+ * kept where they already speak to a reviewer; the two 403s whose wording is
+ * written for a repository administrator are restated.
+ */
+function decisionErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const said = apiErrorMessage(err);
+    if (err.status === 403) {
+      if (said && /separation of duties/i.test(said)) {
+        return "You asked for this exception, so a different reviewer has to grant it.";
+      }
+      if (said && /instance administrator/i.test(said)) {
+        return "An administrator decided this one, so only an administrator can grant or reopen it.";
+      }
+      return said ?? "You are not allowed to make this decision.";
+    }
+    if (err.status === 409) {
+      return "Someone else changed this row while you were deciding. The queue has been refreshed; check it and try again.";
+    }
+  }
+  return toUserMessage(err, "Could not record the decision");
+}
 
 /** What an approval will actually grant, said before the reviewer commits. */
 function describeGrant(neverExpires: boolean, days: number): string {
@@ -221,7 +245,8 @@ function ExceptionsQueue() {
   // Both lookups below are admin-only endpoints. A security reviewer who is
   // not an admin is entitled to the queue but not to them, so they are
   // skipped rather than fired to collect a 403 each.
-  const isAdmin = useAuth().user?.is_admin ?? false;
+  const me = useAuth().user;
+  const isAdmin = me?.is_admin ?? false;
 
   const [gates, setGates] = useState<ExceptionGate[]>([...EXCEPTION_GATES]);
   const [statuses, setStatuses] = useState<ExceptionStatus[]>(["pending"]);
@@ -272,10 +297,14 @@ function ExceptionsQueue() {
   });
 
   // A decided row has to say WHO released the package, not an opaque uuid.
-  // Only the first page of users is fetched; anyone past it degrades to a
-  // shortened id, as does every row for a non-admin reviewer.
+  // The backend sends both usernames; the user lookup only fills in for a
+  // backend that does not. Only the first page of users is fetched; anyone
+  // past it degrades to a shortened id, as does every row for a non-admin
+  // reviewer on such a backend.
   const hasNamedUsers = (data?.items ?? []).some(
-    (r) => r.reviewedBy || r.requestedBy,
+    (r) =>
+      (r.reviewedBy && !r.reviewedByUsername) ||
+      (r.requestedBy && !r.requestedByUsername),
   );
   const { data: users } = useQuery({
     queryKey: ["exception-users"],
@@ -330,6 +359,39 @@ function ExceptionsQueue() {
       .filter((o) => o.id !== r.id && o.gate !== null && o.status !== "approved")
       .map((o) => o.gate as ExceptionGate);
 
+  /**
+   * Decisions the backend would refuse this caller on `r`, and why.
+   *
+   * - An administrator decided it (`instance_locked`): someone who is not an
+   *   administrator may still refuse it, but not grant or reopen it.
+   * - The caller filed the request on a scan or curation row: separation of
+   *   duties, admins included. The age gate keeps its old contract.
+   */
+  const blockedActions = (
+    r: PackageException,
+  ): {
+    targets: ReadonlySet<"approved" | "rejected" | "pending">;
+    why: string | null;
+  } => {
+    // Refusing is never blocked: it only tightens.
+    const targets = new Set<"approved" | "rejected" | "pending">();
+    const why: string[] = [];
+    if (r.instanceLocked && !isAdmin) {
+      targets.add("approved");
+      targets.add("pending");
+      why.push("Decided by an administrator, so only an administrator can grant or reopen it.");
+    }
+    const ownRequest =
+      !!me?.id &&
+      r.requestedBy === me.id &&
+      (r.gate === "scan" || r.gate === "curation");
+    if (ownRequest) {
+      targets.add("approved");
+      why.push("You asked for this, so a different reviewer has to grant it.");
+    }
+    return { targets, why: why.length ? why.join(" ") : null };
+  };
+
   const closeDialog = () => {
     setDecision(null);
     setReason("");
@@ -368,7 +430,13 @@ function ExceptionsQueue() {
             : "Returned to pending";
       toast.success(`${verb} ${row.packageName}@${row.packageVersion}`);
     },
-    onError: mutationErrorToast("Could not record the decision"),
+    onError: (err: unknown) => {
+      toast.error(decisionErrorMessage(err));
+      // A 409 means the row moved under the reviewer; show them where it is.
+      if (err instanceof ApiError && err.status === 409) {
+        queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+      }
+    },
   });
 
   // A GRANT always needs a reason: it is the one action that widens what the
@@ -397,6 +465,9 @@ function ExceptionsQueue() {
     error instanceof ApiError &&
     error.status === 404 &&
     apiErrorMessage(error) === null;
+  // A repository-scoped token is refused the whole queue, admin or not.
+  // Retrying cannot help; signing in without the narrowed token can.
+  const queueForbidden = !queueUnavailable && isForbiddenError(error);
 
   return (
     <div className="space-y-6 p-6">
@@ -506,7 +577,17 @@ function ExceptionsQueue() {
         </Alert>
       )}
 
-      {!isLoading && isError && !queueUnavailable && (
+      {!isLoading && isError && queueForbidden && (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>
+            You cannot open the exception queue with this sign-in.{" "}
+            {toUserMessage(error, "")}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!isLoading && isError && !queueUnavailable && !queueForbidden && (
         <div
           className="flex flex-col items-center justify-center py-12 text-center"
           role="alert"
@@ -576,10 +657,9 @@ function ExceptionsQueue() {
                 {rows.map((r) => {
                   const age = publishedAge(r.upstreamPublishedAt, r.requestedAt);
                   const alsoBlocked = stillBlockedBy(r);
-                  // The backend lets only an administrator relax a row an
-                  // administrator decided. Say so here rather than let a
-                  // reviewer type a reason and collect a 403.
-                  const adminOnly = r.instanceLocked && !isAdmin;
+                  // Say up front what the backend would refuse with a 403,
+                  // rather than let a reviewer type a reason and collect it.
+                  const blocked = blockedActions(r);
                   return (
                   <tr key={r.id}>
                     <td className="px-3 py-2">
@@ -655,7 +735,7 @@ function ExceptionsQueue() {
                       </Badge>
                       {r.requestedBy && (
                         <div className="mt-1 text-xs text-muted-foreground">
-                          by {userName(r.requestedBy)}
+                          by {r.requestedByUsername ?? userName(r.requestedBy)}
                         </div>
                       )}
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -737,10 +817,10 @@ function ExceptionsQueue() {
                             size="sm"
                             variant={a.variant}
                             className="w-[4.75rem]"
-                            disabled={adminOnly && a.target !== "rejected"}
+                            disabled={blocked.targets.has(a.target)}
                             aria-describedby={
-                              adminOnly && a.target !== "rejected"
-                                ? `exc-locked-${r.id}`
+                              blocked.targets.has(a.target)
+                                ? `exc-blocked-${r.id}`
                                 : undefined
                             }
                             // Every row repeats these two words, so the
@@ -754,13 +834,12 @@ function ExceptionsQueue() {
                           </Button>
                         ))}
                       </div>
-                      {adminOnly && (
+                      {blocked.why && (
                         <p
-                          id={`exc-locked-${r.id}`}
-                          className="mt-1 max-w-[10rem] text-right text-xs text-muted-foreground"
+                          id={`exc-blocked-${r.id}`}
+                          className="mt-1 ml-auto max-w-[10rem] text-right text-xs text-muted-foreground"
                         >
-                          Decided by an administrator, so only an
-                          administrator can grant or reopen it.
+                          {blocked.why}
                         </p>
                       )}
                     </td>
