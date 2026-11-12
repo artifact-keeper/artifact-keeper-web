@@ -1310,7 +1310,12 @@ export default function MigrationPage() {
               <Select
                 value={connForm.source_type}
                 onValueChange={(v) =>
-                  setConnForm((f) => ({ ...f, source_type: v as SourceType }))
+                  setConnForm((f) => ({
+                    ...f,
+                    source_type: v as SourceType,
+                    // The backend has no token auth for Nexus (artifact-keeper#5479)
+                    auth_type: v === "nexus" ? "basic_auth" : f.auth_type,
+                  }))
                 }
               >
                 <SelectTrigger id="conn-source-type" className="w-full">
@@ -1323,21 +1328,35 @@ export default function MigrationPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Authentication Type</Label>
+              <Label htmlFor="conn-auth-type">Authentication Type</Label>
               <Select
                 value={connForm.auth_type}
                 onValueChange={(v) =>
                   setConnForm((f) => ({ ...f, auth_type: v as AuthType }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  id="conn-auth-type"
+                  className="w-full"
+                  aria-describedby={
+                    connForm.source_type === "nexus" ? "conn-auth-type-hint" : undefined
+                  }
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="api_token">API Token</SelectItem>
+                  {connForm.source_type !== "nexus" && (
+                    <SelectItem value="api_token">API Token</SelectItem>
+                  )}
                   <SelectItem value="basic_auth">Basic Auth</SelectItem>
                 </SelectContent>
               </Select>
+              {connForm.source_type === "nexus" && (
+                <p id="conn-auth-type-hint" className="text-xs text-muted-foreground">
+                  Nexus signs in with a username and password. A Nexus user
+                  token goes in as its name code and pass code.
+                </p>
+              )}
             </div>
             {connForm.auth_type === "basic_auth" && (
               <div className="space-y-2">

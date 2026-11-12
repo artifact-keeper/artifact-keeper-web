@@ -77,6 +77,25 @@ test.describe('Migration Page', () => {
     await page.getByRole('button', { name: /cancel/i }).click();
   });
 
+  test('a Nexus source offers Basic Auth only (artifact-keeper#5479)', async ({ page }) => {
+    await page.getByRole('tablist').getByRole('tab', { name: /source connections/i }).click();
+    await page.getByRole('button', { name: /add connection/i }).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    await dialog.locator('#conn-source-type').click();
+    await page.getByRole('option', { name: 'Nexus', exact: true }).click();
+
+    await expect(dialog.getByLabel('Username')).toBeVisible();
+    const authType = dialog.locator('[role="combobox"]').filter({ hasText: /basic auth/i });
+    await authType.click();
+    await expect(page.getByRole('option', { name: 'Basic Auth' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'API Token' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+  });
+
   test('Cancel button closes the Create Connection dialog', async ({ page }) => {
     await page.getByRole('tablist').getByRole('tab', { name: /source connections/i }).click();
     await page.getByRole('button', { name: /add connection/i }).first().click();
