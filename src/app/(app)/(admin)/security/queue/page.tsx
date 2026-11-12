@@ -75,9 +75,9 @@ export default function ScanQueuePage() {
   });
 
   // Jobs are deleted as they finish, so a later page can empty out between
-  // polls. The backend then reports a total of 0, which leaves the pager with
-  // nothing to go back to, so return to the first page. Adjusted during
-  // render, React's pattern for state derived from a previous render.
+  // polls and leave an empty table. Return to the first page rather than show
+  // it. Adjusted during render, React's pattern for state derived from a
+  // previous render.
   if (page > 1 && data && data.items.length === 0) setPage(1);
 
   const notice =
