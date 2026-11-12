@@ -22,19 +22,14 @@ vi.mock("lucide-react", () => {
   };
 });
 
-const { mockUseQuery, mockPush, mockList } = vi.hoisted(() => ({
+const { mockUseQuery, mockList } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
-  mockPush: vi.fn(),
   mockList: vi.fn(),
 }));
 
 vi.mock("@/lib/api/scan-queue", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   scanQueueApi: { list: mockList },
-}));
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock("@/components/common/data-table", () => ({
@@ -277,9 +272,11 @@ describe("ScanQueuePage", () => {
       total: 1,
     });
     render(<ScanQueuePage />);
-    // The id is a button that navigates to the artifact page.
-    fireEvent.click(screen.getByRole("button", { name: "art-7" }));
-    expect(mockPush).toHaveBeenCalledWith("/artifacts/art-7");
+    // Text, not a link: there is no artifact page keyed by id to open.
+    expect(
+      screen.getByTestId("dt-row-0").querySelector('[data-column="target"]'),
+    ).toHaveTextContent("art-7");
+    expect(screen.queryByRole("button", { name: "art-7" })).toBeNull();
   });
 
   it("shows the last error of a failed job", () => {
@@ -487,6 +484,18 @@ describe("ScanQueuePage", () => {
     fireEvent.change(screen.getByLabelText("State filter"), {
       target: { value: "running" },
     });
+    expect(queryOpts().queryKey.at(-1)).toMatchObject({ page: 1 });
+  });
+
+  it("returns to page one when the page it is on drains", () => {
+    loaded({ items: [JOB], depth: [], total: 120 });
+    const { rerender } = render(<ScanQueuePage />);
+    fireEvent.click(screen.getByTestId("dt-next"));
+    expect(queryOpts().queryKey.at(-1)).toMatchObject({ page: 2 });
+
+    // Every job on page 2 finished before the next poll.
+    loaded({ items: [], depth: [], total: 0 });
+    rerender(<ScanQueuePage />);
     expect(queryOpts().queryKey.at(-1)).toMatchObject({ page: 1 });
   });
 

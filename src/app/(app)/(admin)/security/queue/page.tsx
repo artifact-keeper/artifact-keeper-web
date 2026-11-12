@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -58,7 +57,6 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export default function ScanQueuePage() {
-  const router = useRouter();
   const [state, setState] = useState<QueueState | undefined>();
   const [kind, setKind] = useState<QueueKind | undefined>();
   const [page, setPage] = useState(1);
@@ -76,7 +74,12 @@ export default function ScanQueuePage() {
       query.state.data === null ? false : REFRESH_MS,
   });
 
-  const goToArtifact = (id: string) => router.push(`/artifacts/${id}`);
+  // Jobs are deleted as they finish, so a later page can empty out between
+  // polls. The backend then reports a total of 0, which leaves the pager with
+  // nothing to go back to, so return to the first page. Adjusted during
+  // render, React's pattern for state derived from a previous render.
+  if (page > 1 && data && data.items.length === 0) setPage(1);
+
   const notice =
     data === null
       ? "This backend has no scan queue. It needs a release with the durable scan queue (artifact-keeper#5775)."
@@ -156,7 +159,7 @@ export default function ScanQueuePage() {
       )}
 
       <DataTable
-        columns={jobColumns(goToArtifact)}
+        columns={JOB_COLUMNS}
         data={data?.items ?? []}
         total={data?.total}
         page={page}
@@ -238,126 +241,117 @@ function DepthTile({
     </Card>
   );
 }
-function jobColumns(
-  onArtifact: (id: string) => void,
-): DataTableColumn<ScanQueueJob>[] {
-  return [
-    {
-      id: "state",
-      header: "State",
-      accessor: (r) => r.state,
-      sortable: true,
-      cell: (r) => (
-        <Badge
-          variant="outline"
-          className={`border font-medium capitalize text-xs ${STATE_BADGE[r.state] ?? ""}`}
-        >
-          {r.state}
-        </Badge>
+/**
+ * There is no artifact page keyed by id, so a hosted-artifact job shows its id
+ * as text, the way Scan Results does, rather than a link that would 404.
+ */
+const JOB_COLUMNS: DataTableColumn<ScanQueueJob>[] = [
+  {
+    id: "state",
+    header: "State",
+    accessor: (r) => r.state,
+    sortable: true,
+    cell: (r) => (
+      <Badge
+        variant="outline"
+        className={`border font-medium capitalize text-xs ${STATE_BADGE[r.state] ?? ""}`}
+      >
+        {r.state}
+      </Badge>
+    ),
+  },
+  {
+    id: "kind",
+    header: "Kind",
+    accessor: (r) => r.kind,
+    sortable: true,
+    cell: (r) => (
+      <Badge variant="secondary" className="text-xs font-normal">
+        {KIND_LABEL[r.kind] ?? r.kind}
+      </Badge>
+    ),
+  },
+  {
+    id: "target",
+    header: "Target",
+    accessor: (r) => r.target ?? r.artifact_id ?? "",
+    sortable: true,
+    cell: (r) =>
+      r.target ? (
+        <span className="text-sm break-all">{r.target}</span>
+      ) : r.artifact_id ? (
+        <code className="text-xs break-all">{r.artifact_id}</code>
+      ) : (
+        <span className="text-xs text-muted-foreground">-</span>
       ),
-    },
-    {
-      id: "kind",
-      header: "Kind",
-      accessor: (r) => r.kind,
-      sortable: true,
-      cell: (r) => (
-        <Badge variant="secondary" className="text-xs font-normal">
-          {KIND_LABEL[r.kind] ?? r.kind}
-        </Badge>
+  },
+  {
+    id: "priority",
+    header: "Priority",
+    accessor: (r) => r.priority,
+    sortable: true,
+    className: "text-right",
+    headerClassName: "text-right",
+    cell: (r) => <span className="tabular-nums text-sm">{r.priority}</span>,
+  },
+  {
+    id: "attempts",
+    header: "Attempts",
+    accessor: (r) => r.attempts,
+    sortable: true,
+    className: "text-right",
+    headerClassName: "text-right",
+    cell: (r) => (
+      <span className="tabular-nums text-sm">
+        {r.attempts}/{r.max_attempts}
+      </span>
+    ),
+  },
+  {
+    id: "queued",
+    header: "Queued",
+    accessor: (r) => r.created_at,
+    sortable: true,
+    cell: (r) => (
+      <span
+        className="text-sm text-muted-foreground whitespace-nowrap"
+        title={new Date(r.created_at).toLocaleString()}
+      >
+        {formatRelativeTimestamp(r.created_at)}
+      </span>
+    ),
+  },
+  {
+    id: "worker",
+    header: "Worker",
+    accessor: (r) => workerHost(r.claimed_by),
+    sortable: true,
+    cell: (r) =>
+      r.claimed_by ? (
+        <code className="text-xs" title={r.claimed_by}>
+          {workerHost(r.claimed_by)}
+        </code>
+      ) : (
+        <span className="text-xs text-muted-foreground">-</span>
       ),
-    },
-    {
-      id: "target",
-      header: "Target",
-      accessor: (r) => r.target ?? r.artifact_id ?? "",
-      sortable: true,
-      cell: (r) =>
-        r.target ? (
-          <span className="text-sm break-all">{r.target}</span>
-        ) : r.artifact_id ? (
-          <button
-            type="button"
-            className="text-left text-sm font-medium hover:underline"
-            onClick={(e) => {
-              e.stopPropagation();
-              onArtifact(r.artifact_id!);
-            }}
-          >
-            {r.artifact_id}
-          </button>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        ),
-    },
-    {
-      id: "priority",
-      header: "Priority",
-      accessor: (r) => r.priority,
-      sortable: true,
-      className: "text-right",
-      headerClassName: "text-right",
-      cell: (r) => <span className="tabular-nums text-sm">{r.priority}</span>,
-    },
-    {
-      id: "attempts",
-      header: "Attempts",
-      accessor: (r) => r.attempts,
-      sortable: true,
-      className: "text-right",
-      headerClassName: "text-right",
-      cell: (r) => (
-        <span className="tabular-nums text-sm">
-          {r.attempts}/{r.max_attempts}
-        </span>
-      ),
-    },
-    {
-      id: "queued",
-      header: "Queued",
-      accessor: (r) => r.created_at,
-      sortable: true,
-      cell: (r) => (
+  },
+  {
+    id: "last_error",
+    header: "Last error",
+    accessor: (r) => r.last_error ?? "",
+    cell: (r) =>
+      r.last_error ? (
         <span
-          className="text-sm text-muted-foreground whitespace-nowrap"
-          title={new Date(r.created_at).toLocaleString()}
+          className="block max-w-xs truncate text-xs text-muted-foreground"
+          title={r.last_error}
         >
-          {formatRelativeTimestamp(r.created_at)}
+          {r.last_error}
         </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">-</span>
       ),
-    },
-    {
-      id: "worker",
-      header: "Worker",
-      accessor: (r) => workerHost(r.claimed_by),
-      sortable: true,
-      cell: (r) =>
-        r.claimed_by ? (
-          <code className="text-xs" title={r.claimed_by}>
-            {workerHost(r.claimed_by)}
-          </code>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        ),
-    },
-    {
-      id: "last_error",
-      header: "Last error",
-      accessor: (r) => r.last_error ?? "",
-      cell: (r) =>
-        r.last_error ? (
-          <span
-            className="block max-w-xs truncate text-xs text-muted-foreground"
-            title={r.last_error}
-          >
-            {r.last_error}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        ),
-    },
-  ];
-}
+  },
+];
 
 function formatAge(secs: number): string {
   if (secs < 60) return `${Math.round(secs)}s`;
