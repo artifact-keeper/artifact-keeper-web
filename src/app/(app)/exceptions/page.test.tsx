@@ -228,6 +228,7 @@ const ROW = {
   requestedBy: "11111111-2222-3333-4444-555555555555",
   expiresAt: null,
   upstreamPublishedAt: "2026-07-10T00:00:00Z",
+  instanceLocked: false,
 };
 
 const APPROVED = {
@@ -371,6 +372,18 @@ describe("queue states", () => {
     expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
   });
 
+  it("reports a 404 that carries the backend's own message as an error, not a missing queue", () => {
+    queueData = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new ApiError(404, JSON.stringify({ code: "NOT_FOUND", message: "Review not found" })),
+    };
+    render(<ExceptionsPage />);
+    expect(screen.queryByText(/does not have the package exception queue/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
   it("explains the default filter in the empty state and offers the request form", () => {
     render(<ExceptionsPage />);
     expect(screen.getByText(/No user-requested exceptions match these filters/i)).toBeInTheDocument();
@@ -444,6 +457,21 @@ describe("filters", () => {
     await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
     expect(screen.getByText("nobody-asked")).toBeInTheDocument();
     expect(screen.queryByText("leftpad-clone")).not.toBeInTheDocument();
+  });
+
+  it("does not claim truncation when attempted-only narrows a page the server sent whole", async () => {
+    const user = userEvent.setup();
+    queueData = {
+      data: {
+        items: [ROW, { ...ROW, id: "ex9", packageName: "nobody-asked", origin: "attempted" }],
+        total: 2,
+      },
+      isLoading: false,
+    };
+    render(<ExceptionsPage />);
+    await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
+    expect(screen.getByText("nobody-asked")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing first/)).not.toBeInTheDocument();
   });
 
   it("says which filter emptied the list when attempted-only matches nothing", async () => {
@@ -671,6 +699,31 @@ describe("decision actions", () => {
     expect(screen.queryByRole("button", { name: /^Grant/ })).not.toBeInTheDocument();
   });
 
+  it("leaves only refuse to a non-admin reviewer on a row an administrator decided", () => {
+    // The backend refuses a non-admin's grant or reopen of an instance-locked
+    // row with 403, so the UI says so up front.
+    authUser = { is_admin: false, capabilities: ["security_review"] };
+    withRows({ ...ROW, status: "rejected", instanceLocked: true });
+    render(<ExceptionsPage />);
+    const grant = screen.getByRole("button", { name: /^Grant/ });
+    expect(grant).toBeDisabled();
+    expect(grant).toHaveAccessibleDescription(/only an administrator can grant or reopen it/i);
+    expect(screen.getByRole("button", { name: /^Reopen/ })).toBeDisabled();
+    withRows({ ...APPROVED, instanceLocked: true });
+    cleanup();
+    render(<ExceptionsPage />);
+    expect(screen.getByRole("button", { name: /^Refuse/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Reopen/ })).toBeDisabled();
+  });
+
+  it("keeps every action open to an admin on an instance-locked row", () => {
+    withRows({ ...ROW, status: "rejected", instanceLocked: true });
+    render(<ExceptionsPage />);
+    expect(screen.getByRole("button", { name: /^Grant/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Reopen/ })).toBeEnabled();
+    expect(screen.queryByText(/only an administrator can grant/i)).not.toBeInTheDocument();
+  });
+
   it("offers grant and reopen on a refused row", () => {
     withRows({ ...ROW, status: "rejected" });
     render(<ExceptionsPage />);
@@ -757,6 +810,11 @@ describe("grant dialog", () => {
     expect(confirm).toBeDisabled();
 
     await user.type(days, "4000");
+    expect(confirm).toBeDisabled();
+
+    // A fraction is not silently truncated to a window nobody typed.
+    await user.clear(days);
+    await user.type(days, "1.5");
     expect(confirm).toBeDisabled();
 
     await user.clear(days);

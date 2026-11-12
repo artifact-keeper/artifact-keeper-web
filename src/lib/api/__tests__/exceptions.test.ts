@@ -134,7 +134,13 @@ describe("adapting a wire row", () => {
       reviewReason: null,
       expiresAt: null,
       upstreamPublishedAt: "2026-07-10T00:00:00Z",
+      instanceLocked: false,
     });
+  });
+
+  it("carries instance_locked, and reads its absence as unlocked", async () => {
+    expect((await adapted({ instance_locked: true })).instanceLocked).toBe(true);
+    expect((await adapted({ instance_locked: undefined })).instanceLocked).toBe(false);
   });
 
   it("leaves an unknown or absent gate null rather than guessing age", async () => {

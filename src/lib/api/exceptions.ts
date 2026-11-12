@@ -48,6 +48,11 @@ export interface PackageException {
   /** When a granted exception lapses. Null means it never expires. */
   expiresAt: string | null;
   upstreamPublishedAt: string | null;
+  /**
+   * An administrator decided this row. Only an administrator may then grant
+   * or reopen it; anyone who can review may still refuse it.
+   */
+  instanceLocked: boolean;
 }
 
 export interface ExceptionPage {
@@ -86,6 +91,7 @@ interface ExceptionWire {
   requested_by?: string | null;
   expires_at?: string | null;
   upstream_published_at?: string | null;
+  instance_locked?: boolean;
 }
 
 interface ExceptionListWire {
@@ -120,6 +126,7 @@ function adapt(w: ExceptionWire): PackageException {
     reviewReason: w.review_reason ?? null,
     expiresAt: w.expires_at ?? null,
     upstreamPublishedAt: w.upstream_published_at ?? null,
+    instanceLocked: w.instance_locked ?? false,
   };
 }
 
