@@ -445,7 +445,11 @@ export default function SecurityScansPage() {
           setPage(1);
         }}
         loading={isLoading}
-        emptyMessage="No scan results found."
+        emptyMessage={
+          hiddenCount > 0
+            ? "Every scan on this page is not applicable, so none is listed. Try the next page, or pick the \"Not applicable\" status."
+            : "No scan results found."
+        }
         rowKey={(r) => r.id}
         onRowClick={(r) => router.push(scanDetailHref(r))}
       />

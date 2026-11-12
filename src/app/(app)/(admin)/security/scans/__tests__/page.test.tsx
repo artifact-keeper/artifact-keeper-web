@@ -239,6 +239,21 @@ describe("SecurityScansPage not_applicable rows", () => {
     );
   });
 
+  it("does not say there are no scans when it hid every row on the page", () => {
+    setup(
+      [
+        scan({ id: "na1", status: "not_applicable" }),
+        scan({ id: "na2", status: "not_applicable" }),
+      ],
+      40,
+    );
+    render(<SecurityScansPage />);
+    expect(screen.getByTestId("empty")).toHaveTextContent(
+      /every scan on this page is not applicable/i,
+    );
+    expect(screen.getByTestId("empty")).not.toHaveTextContent(/no scan results found/i);
+  });
+
   it("stays quiet when there is nothing to hide", () => {
     setup([scan({ id: "real" })]);
     render(<SecurityScansPage />);
