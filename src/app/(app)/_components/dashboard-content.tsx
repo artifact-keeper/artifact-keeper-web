@@ -409,13 +409,13 @@ export function DashboardContent() {
               <StatCard
                 icon={HardDrive}
                 label="Storage Used"
-                value={formatBytes(
-                  stats.total_storage_bytes + stats.proxy_storage_bytes
-                )}
+                value={formatBytes(stats.total_storage_bytes)}
                 color="yellow"
                 tooltip={
                   <StatBreakdown
-                    local={formatBytes(stats.total_storage_bytes)}
+                    local={formatBytes(
+                      stats.total_storage_bytes - stats.proxy_storage_bytes,
+                    )}
                     remote={formatBytes(stats.proxy_storage_bytes)}
                   />
                 }
