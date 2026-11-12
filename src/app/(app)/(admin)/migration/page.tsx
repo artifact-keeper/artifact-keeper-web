@@ -1259,14 +1259,20 @@ export default function MigrationPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Authentication Type</Label>
+              <Label htmlFor="conn-auth-type">Authentication Type</Label>
               <Select
                 value={connForm.auth_type}
                 onValueChange={(v) =>
                   setConnForm((f) => ({ ...f, auth_type: v as AuthType }))
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  id="conn-auth-type"
+                  className="w-full"
+                  aria-describedby={
+                    connForm.source_type === "nexus" ? "conn-auth-type-hint" : undefined
+                  }
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1277,7 +1283,7 @@ export default function MigrationPage() {
                 </SelectContent>
               </Select>
               {connForm.source_type === "nexus" && (
-                <p className="text-xs text-muted-foreground">
+                <p id="conn-auth-type-hint" className="text-xs text-muted-foreground">
                   Nexus signs in with a username and password. A Nexus user
                   token goes in as its name code and pass code.
                 </p>

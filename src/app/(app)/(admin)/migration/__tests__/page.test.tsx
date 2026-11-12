@@ -226,8 +226,20 @@ vi.mock("@/components/ui/select", () => {
         </div>
       </SelectCtx.Provider>
     ),
-    SelectTrigger: ({ children, id }: { children?: React.ReactNode; id?: string }) => (
-      <button data-testid={id ? `select-trigger-${id}` : "select-trigger"}>
+    SelectTrigger: ({
+      children,
+      id,
+      "aria-describedby": describedBy,
+    }: {
+      children?: React.ReactNode;
+      id?: string;
+      "aria-describedby"?: string;
+    }) => (
+      <button
+        id={id}
+        aria-describedby={describedBy}
+        data-testid={id ? `select-trigger-${id}` : "select-trigger"}
+      >
         {children}
       </button>
     ),
@@ -536,7 +548,11 @@ describe("MigrationPage Add Connection — source_type selector (issue #319)", (
     expect(auth.querySelector('[data-testid="select-root"]')!.getAttribute("data-value")).toBe(
       "basic_auth",
     );
-    expect(screen.getByText(/user token goes in as its name code and pass code/i)).toBeInTheDocument();
+    const hint = screen.getByText(/user token goes in as its name code and pass code/i);
+    expect(hint).toBeInTheDocument();
+    expect(document.getElementById("conn-auth-type")?.getAttribute("aria-describedby")).toBe(
+      hint.id,
+    );
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText("Username"), { target: { value: "migrator" } });
