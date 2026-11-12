@@ -45,6 +45,9 @@ vi.mock("@/lib/api/repositories", () => ({
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
+vi.mock("@/components/common/quota-usage-cards", () => ({
+  QuotaUsageSection: () => null,
+}));
 vi.mock("@/lib/api/mcp", () => ({
   mcpApi: { pendingSummary: vi.fn().mockResolvedValue(null) },
 }));

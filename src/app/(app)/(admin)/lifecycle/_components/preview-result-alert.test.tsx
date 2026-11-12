@@ -27,7 +27,7 @@ describe("PreviewResultAlert", () => {
 
     expect(screen.getByText(/Preview: Drop old snapshots/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
+      screen.getByText(/Would delete 12 artifacts and reclaim 1\.5 MiB/)
     ).toBeInTheDocument();
   });
 
@@ -55,7 +55,7 @@ describe("PreviewResultAlert", () => {
     );
 
     expect(
-      screen.getByText(/Would delete 1 artifact and reclaim 1 KB/)
+      screen.getByText(/Would delete 1 artifact and reclaim 1 KiB/)
     ).toBeInTheDocument();
   });
 
