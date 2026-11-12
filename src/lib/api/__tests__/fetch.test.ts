@@ -9,7 +9,13 @@ vi.mock("@/lib/sdk-client", () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-import { ApiError, apiErrorMessage, apiFetch, assertData } from "../fetch";
+import {
+  ApiError,
+  apiErrorMessage,
+  apiFetch,
+  assertData,
+  queryString,
+} from "../fetch";
 
 function mockResponse(options: {
   ok?: boolean;
@@ -367,5 +373,22 @@ describe("apiErrorMessage", () => {
     const err = new ApiError(400, '{"code":"X","message":"boom"}');
     expect(err.message).toBe('API error 400: {"code":"X","message":"boom"}');
     expect(apiErrorMessage(err)).toBe("boom");
+  });
+});
+
+describe("queryString", () => {
+  it("returns an empty string when nothing is set", () => {
+    expect(queryString({})).toBe("");
+    expect(queryString({ page: undefined, state: "" })).toBe("");
+  });
+
+  it("drops unset params and keeps the rest, including zero", () => {
+    expect(queryString({ state: "failed", kind: undefined, page: 0 })).toBe(
+      "?state=failed&page=0",
+    );
+  });
+
+  it("encodes values rather than pasting them into the path", () => {
+    expect(queryString({ q: "a b&c=d" })).toBe("?q=a+b%26c%3Dd");
   });
 });

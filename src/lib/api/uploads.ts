@@ -14,6 +14,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import { getActiveInstanceBaseUrl, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from '@/lib/sdk-client';
 import { assertData } from '@/lib/api/fetch';
+import { quotaRefusalFrom } from '@/lib/quota';
 
 // --- Re-export SDK types under the names the rest of the codebase expects ---
 
@@ -85,8 +86,10 @@ function isChecksumMismatch(error: unknown): boolean {
 export async function createUploadSession(
   params: CreateSessionParams
 ): Promise<CreateSessionResponse> {
-  const { data, error } = await sdkCreateSession({ body: params });
+  const { data, error, response } = await sdkCreateSession({ body: params });
   if (error) {
+    const refusal = response ? quotaRefusalFrom(response.status, error) : null;
+    if (refusal) throw refusal;
     throw new Error(`Failed to create upload session: ${errorMessage(error)}`);
   }
   return assertData(data, 'createUploadSession');
@@ -120,6 +123,8 @@ export async function uploadChunk(
       throw new UploadSessionExpiredError(sessionId);
     }
     const body = await response.text().catch(() => '');
+    const refusal = quotaRefusalFrom(response.status, body);
+    if (refusal) throw refusal;
     throw new Error(`Chunk upload failed (${response.status}): ${body}`);
   }
   return response.json() as Promise<ChunkResult>;
@@ -149,6 +154,8 @@ export async function completeUploadSession(
     path: { session_id: sessionId },
   });
   if (error) {
+    const refusal = response ? quotaRefusalFrom(response.status, error) : null;
+    if (refusal) throw refusal;
     if (response?.status === 409) {
       if (isChecksumMismatch(error)) {
         throw new ChecksumMismatchError();

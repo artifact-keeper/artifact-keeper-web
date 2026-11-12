@@ -121,3 +121,60 @@ test.describe('Download URL and version display', () => {
     }
   });
 });
+
+/**
+ * The Version column falls back to the Maven coordinates (#1097).
+ *
+ * A Maven file whose record carries no `version` (every proxy-cached row, and
+ * any upload the backend did not parse) used to render a dash. The column now
+ * reads the version out of the GAV path, so a row for
+ * `com/example/.../9.9.9/...jar` shows `9.9.9` whichever source supplied it.
+ */
+test.describe('Maven version column fallback', () => {
+  const REPO_KEY = 'e2e-maven-local';
+  const VERSION = '9.9.9';
+
+  test('a GAV-shaped path shows its version, not a dash', async ({
+    page,
+    request,
+  }) => {
+    const artifactId = `fallback-${Date.now()}`;
+    const path = `com/example/${artifactId}/${VERSION}/${artifactId}-${VERSION}.jar`;
+    const upload = await request.put(
+      `/api/v1/repositories/${REPO_KEY}/artifacts/${path}`,
+      {
+        data: 'not really a jar',
+        headers: { 'Content-Type': 'application/java-archive' },
+      }
+    );
+    test.skip(!upload.ok(), `Upload failed: ${upload.status()}`);
+
+    await page.goto(`/repositories/${REPO_KEY}?view=flat`);
+    await page.waitForLoadState('domcontentloaded');
+
+    const table = page.getByRole('table').first();
+    await expect(table).toBeVisible({ timeout: 15000 });
+
+    const search = page.getByPlaceholder(/search/i).first();
+    if (await search.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await search.fill(artifactId);
+      await page.waitForTimeout(2000);
+    }
+
+    const row = table.getByRole('row').filter({ hasText: artifactId }).first();
+    const rowVisible = await row.isVisible({ timeout: 10000 }).catch(() => false);
+    if (!rowVisible) {
+      await request
+        .delete(`/api/v1/repositories/${REPO_KEY}/artifacts/${path}`)
+        .catch(() => {});
+      test.skip(true, 'Uploaded artifact not visible in the flat table');
+      return;
+    }
+
+    await expect(row).toContainText(VERSION);
+
+    await request
+      .delete(`/api/v1/repositories/${REPO_KEY}/artifacts/${path}`)
+      .catch(() => {});
+  });
+});
