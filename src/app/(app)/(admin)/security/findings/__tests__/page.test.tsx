@@ -117,6 +117,14 @@ vi.mock("@/components/common/data-table", () => ({
                 key={rowKey ? rowKey(row) : i}
                 data-testid={`dt-row-${i}`}
                 onClick={() => onRowClick?.(row)}
+                // Mirrors the real DataTable's row: Enter/Space open the row
+                // and cancel the key's default action.
+                onKeyDown={(e) => {
+                  if (onRowClick && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    onRowClick(row);
+                  }
+                }}
               >
                 {columns.map((c: any) => (
                   <td key={c.id} data-column={c.id}>
@@ -290,6 +298,48 @@ describe("FindingsPage", () => {
     expect(mockPush).toHaveBeenCalledWith(`/artifacts/${FINDING.artifact_id}`);
     // The row click must not also fire, or we would navigate twice.
     expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Enter on the artifact cell to the cell, not the row", () => {
+    loaded({ items: [FINDING], artifacts: [], total: 1 });
+    render(<FindingsPage />);
+    const button = screen.getByRole("button", { name: FINDING.artifact_path });
+    // Unhandled, the row would preventDefault the key, cancelling the
+    // button's own activation, and open the blast radius instead.
+    const notCancelled = fireEvent.keyDown(button, { key: "Enter" });
+    expect(notCancelled).toBe(true);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("leaves Enter on the advisory link to the link, not the row", () => {
+    loaded({ items: [FINDING], artifacts: [], total: 1 });
+    render(<FindingsPage />);
+    const link = screen.getByRole("link", { name: FINDING.cve_id });
+    expect(fireEvent.keyDown(link, { key: "Enter" })).toBe(true);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("still opens the blast radius with Enter on the row itself", () => {
+    loaded({ items: [FINDING], artifacts: [], total: 1 });
+    render(<FindingsPage />);
+    fireEvent.keyDown(screen.getByTestId("dt-row-0"), { key: "Enter" });
+    expect(mockPush).toHaveBeenCalledWith(
+      "/security/blast-radius?cve=CVE-2021-44228",
+    );
+  });
+
+  it("does not filter the grouped view by a severity it shows as all", async () => {
+    searchParamsState.value = "group_by=artifact&severity=critical";
+    mockList.mockResolvedValue({ items: [], artifacts: [], total: 0 });
+    render(<FindingsPage />);
+    expect(queryOpts().queryKey.at(-1)).toMatchObject({
+      severity: undefined,
+      byArtifact: true,
+    });
+    await queryOpts().queryFn();
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: undefined, groupBy: "artifact" }),
+    );
   });
 
   it("labels an acknowledged finding", () => {

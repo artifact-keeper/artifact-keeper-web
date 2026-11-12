@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Package, RefreshCw, X } from "lucide-react";
@@ -96,11 +96,20 @@ function FindingsPageContent() {
     queryKey: [
       ...QUERY_KEYS.SECURITY,
       "findings",
-      { severity, state, byArtifact, repositoryId, page, perPage },
+      {
+        severity: byArtifact ? undefined : severity,
+        state,
+        byArtifact,
+        repositoryId,
+        page,
+        perPage,
+      },
     ],
     queryFn: () =>
       cveFindingsApi.list({
-        severity,
+        // The grouped view shows the severity filter as "All severities", so a
+        // hand-made `?group_by=artifact&severity=...` must not filter silently.
+        severity: byArtifact ? undefined : severity,
         state,
         repositoryId,
         groupBy: byArtifact ? "artifact" : undefined,
@@ -127,7 +136,7 @@ function FindingsPageContent() {
     emptyMessage: "Nothing matches these filters.",
   };
 
-  const scope = [severity ?? "All", state && state !== "all" ? state : null]
+  const scope = [(byArtifact ? undefined : severity) ?? "All", state && state !== "all" ? state : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -257,6 +266,13 @@ function ackDetails(r: CveFinding): string | undefined {
   return [who, r.acknowledged_reason].filter(Boolean).join(": ") || undefined;
 }
 
+/**
+ * DataTable's clickable row handles Enter and Space itself and calls
+ * preventDefault, which would cancel a nested button's or link's own keyboard
+ * activation and open the row's target instead. Keep the key on the control.
+ */
+const keepKeyOnControl = (e: ReactKeyboardEvent) => e.stopPropagation();
+
 /** The artifact path, as a button so it can open the artifact from inside a clickable row. */
 function artifactCell(path: string, onClick: () => void) {
   return (
@@ -267,6 +283,7 @@ function artifactCell(path: string, onClick: () => void) {
         e.stopPropagation();
         onClick();
       }}
+      onKeyDown={keepKeyOnControl}
     >
       {path}
     </button>
@@ -290,7 +307,7 @@ function findingColumns(
       accessor: (r) => r.cve_id,
       sortable: true,
       cell: (r) => (
-        <div className="space-y-0.5">
+        <div className="space-y-0.5" onKeyDown={keepKeyOnControl}>
           {/* The advisory link is derived from the id, never from a URL the API sent. */}
           <VulnIdLink id={r.cve_id} />
           {r.title && r.title !== r.cve_id && (
