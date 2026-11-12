@@ -128,6 +128,7 @@ describe("adapting a wire row", () => {
       requestedAt: "2026-07-15T00:00:00Z",
       lastRequestedAt: "2026-07-20T00:00:00Z",
       requestedBy: "u-1",
+      requestedByUsername: null,
       reviewedAt: null,
       reviewedBy: null,
       reviewedByUsername: null,
@@ -136,6 +137,11 @@ describe("adapting a wire row", () => {
       upstreamPublishedAt: "2026-07-10T00:00:00Z",
       instanceLocked: false,
     });
+  });
+
+  it("carries the requester's username, null when the backend sends none", async () => {
+    expect((await adapted({ requested_by_username: "alice" })).requestedByUsername).toBe("alice");
+    expect((await adapted({ requested_by_username: undefined })).requestedByUsername).toBeNull();
   });
 
   it("carries instance_locked, and reads its absence as unlocked", async () => {

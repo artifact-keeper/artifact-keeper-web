@@ -113,7 +113,7 @@ vi.mock("@/lib/api/security-reviewers", () => ({
   securityReviewersApi: { list: (...a: unknown[]) => mockListReviewers(...a) },
 }));
 
-let authUser: { is_admin: boolean; capabilities?: string[] } | null = {
+let authUser: { id?: string; is_admin: boolean; capabilities?: string[] } | null = {
   is_admin: true,
 };
 vi.mock("@/providers/auth-provider", () => ({
@@ -229,6 +229,7 @@ const ROW = {
   expiresAt: null,
   upstreamPublishedAt: "2026-07-10T00:00:00Z",
   instanceLocked: false,
+  requestedByUsername: null,
 };
 
 const APPROVED = {
@@ -382,6 +383,24 @@ describe("queue states", () => {
     render(<ExceptionsPage />);
     expect(screen.queryByText(/does not have the package exception queue/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("says a narrowed sign-in cannot open the queue on a 403, with no retry", () => {
+    queueData = {
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new ApiError(
+        403,
+        JSON.stringify({
+          code: "FORBIDDEN",
+          message: "Repository-scoped tokens cannot read or decide package exceptions",
+        }),
+      ),
+    };
+    render(<ExceptionsPage />);
+    expect(screen.getByText(/cannot open the exception queue with this sign-in/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
   });
 
   it("explains the default filter in the empty state and offers the request form", () => {
@@ -608,6 +627,19 @@ describe("row rendering", () => {
     expect(screen.getByTitle("2026-07-21T00:00:00Z")).toHaveTextContent(/on Jul \d+, 2026/);
   });
 
+  it("prefers the requester username the backend sends, and skips the user lookup", () => {
+    authUser = { is_admin: false, capabilities: ["security_review"] };
+    withRows({ ...ROW, requestedByUsername: "alice" });
+    render(<ExceptionsPage />);
+    expect(screen.getByText("by alice")).toBeInTheDocument();
+  });
+
+  it("asks for the user list only to fill in names the backend did not send", () => {
+    withRows({ ...APPROVED, requestedByUsername: "alice", reviewedByUsername: "sam" });
+    render(<ExceptionsPage />);
+    expect(mockListUsers).not.toHaveBeenCalled();
+  });
+
   it("prefers the reviewer username the backend sends, so a non-admin sees it too", () => {
     authUser = { is_admin: false, capabilities: ["security_review"] };
     withRows({ ...APPROVED, reviewedByUsername: "sam" });
@@ -714,6 +746,23 @@ describe("decision actions", () => {
     render(<ExceptionsPage />);
     expect(screen.getByRole("button", { name: /^Refuse/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /^Reopen/ })).toBeDisabled();
+  });
+
+  it("does not let a requester grant their own scan or curation request", () => {
+    authUser = { id: ROW.requestedBy, is_admin: true };
+    withRows(ROW);
+    render(<ExceptionsPage />);
+    const grant = screen.getByRole("button", { name: /^Grant/ });
+    expect(grant).toBeDisabled();
+    expect(grant).toHaveAccessibleDescription(/a different reviewer has to grant it/i);
+    expect(screen.getByRole("button", { name: /^Refuse/ })).toBeEnabled();
+  });
+
+  it("still lets a requester grant their own age-gate request, as the backend does", () => {
+    authUser = { id: ROW.requestedBy, is_admin: true };
+    withRows({ ...ROW, gate: "age" });
+    render(<ExceptionsPage />);
+    expect(screen.getByRole("button", { name: /^Grant/ })).toBeEnabled();
   });
 
   it("keeps every action open to an admin on an instance-locked row", () => {
@@ -960,6 +1009,57 @@ describe("mutation callbacks", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith("Refused leftpad-clone@0.0.1");
     decide.onSuccess?.(ROW, { row: ROW, target: "pending" });
     expect(mockToastSuccess).toHaveBeenCalledWith("Returned to pending leftpad-clone@0.0.1");
+  });
+
+  it("restates a self-grant refusal in plain words", () => {
+    render(<ExceptionsPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(
+        403,
+        JSON.stringify({
+          code: "FORBIDDEN",
+          message: "Separation of duties: you cannot grant an exception you requested.",
+        }),
+      ),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      "You asked for this exception, so a different reviewer has to grant it.",
+    );
+  });
+
+  it("restates the instance-lock refusal for a reviewer, who is not a repository admin", () => {
+    render(<ExceptionsPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(
+        403,
+        JSON.stringify({
+          code: "FORBIDDEN",
+          message: "This review was decided by an instance administrator. A repository administrator can reject it",
+        }),
+      ),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(
+      "An administrator decided this one, so only an administrator can grant or reopen it.",
+    );
+  });
+
+  it("keeps any other 403 in the backend's words, with a fallback for an empty body", () => {
+    render(<ExceptionsPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(403, JSON.stringify({ code: "FORBIDDEN", message: "Security reviewer access required" })),
+    );
+    expect(mockToastError).toHaveBeenLastCalledWith("Security reviewer access required");
+    mutationConfigs[0].onError?.(new ApiError(403, ""));
+    expect(mockToastError).toHaveBeenLastCalledWith("You are not allowed to make this decision.");
+  });
+
+  it("refreshes the queue when the row changed under the reviewer (409)", () => {
+    render(<ExceptionsPage />);
+    mutationConfigs[0].onError?.(
+      new ApiError(409, JSON.stringify({ code: "CONFLICT", message: "changed concurrently; retry" })),
+    );
+    expect(mockToastError).toHaveBeenCalledWith(expect.stringMatching(/Someone else changed this row/));
+    expect(mockInvalidate).toHaveBeenCalledWith({ queryKey: ["exceptions"] });
   });
 
   it("leaves the queue alone when the decision is refused by the server", () => {
