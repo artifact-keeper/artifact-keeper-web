@@ -1303,6 +1303,39 @@ describe("SecurityDashboardPage", () => {
       expect(screen.getAllByText("0")[0].closest("a")).toBeNull();
     });
 
+    it("names the repository in a pill's label when it is known", () => {
+      setupQueries({
+        scores: [
+          makeScore({
+            repository_id: REPO_UUID,
+            critical_count: 1,
+            high_count: 0,
+            medium_count: 0,
+            low_count: 0,
+            acknowledged_count: 4,
+          }),
+        ],
+        repos: [{ id: REPO_UUID, name: REPO_NAME, key: REPO_KEY }],
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(
+        screen.getByLabelText(
+          `View 1 open critical vulnerabilities in ${REPO_NAME}`
+        )
+      ).toHaveAttribute(
+        "href",
+        `/security/findings?severity=critical&state=open&repository_id=${REPO_UUID}`
+      );
+      expect(
+        screen.getByLabelText(`View 4 acknowledged vulnerabilities in ${REPO_NAME}`)
+      ).toHaveAttribute(
+        "href",
+        `/security/findings?state=acknowledged&repository_id=${REPO_UUID}`
+      );
+    });
+
     it("leaves a zero acknowledged count inert", () => {
       setupQueries({
         scores: [

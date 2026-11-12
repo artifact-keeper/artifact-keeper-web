@@ -89,10 +89,13 @@ function SeverityPill({
   count,
   level,
   repositoryId,
+  repositoryName,
 }: {
   count: number;
   level: "critical" | "high" | "medium" | "low";
   repositoryId: string;
+  /** Named in the link's label: a screen reader's links list has no row context. */
+  repositoryName?: string;
 }) {
   if (count === 0) {
     return <span className="text-sm text-muted-foreground">0</span>;
@@ -112,7 +115,7 @@ function SeverityPill({
     <Link
       href={`/security/findings?severity=${level}&state=open&repository_id=${repositoryId}`}
       className={`${className} hover:ring-2 hover:ring-offset-1 hover:ring-current focus-visible:ring-2 focus-visible:ring-ring outline-none`}
-      aria-label={`View ${count} open ${level} vulnerabilities in this repository`}
+      aria-label={`View ${count} open ${level} vulnerabilities in ${repositoryName ?? "this repository"}`}
     >
       {count}
     </Link>
@@ -290,6 +293,7 @@ export default function SecurityDashboardPage() {
           count={r.critical_count}
           level="critical"
           repositoryId={r.repository_id}
+          repositoryName={repoNameMap.get(r.repository_id)}
         />
       ),
     },
@@ -303,6 +307,7 @@ export default function SecurityDashboardPage() {
           count={r.high_count}
           level="high"
           repositoryId={r.repository_id}
+          repositoryName={repoNameMap.get(r.repository_id)}
         />
       ),
     },
@@ -316,6 +321,7 @@ export default function SecurityDashboardPage() {
           count={r.medium_count}
           level="medium"
           repositoryId={r.repository_id}
+          repositoryName={repoNameMap.get(r.repository_id)}
         />
       ),
     },
@@ -329,6 +335,7 @@ export default function SecurityDashboardPage() {
           count={r.low_count}
           level="low"
           repositoryId={r.repository_id}
+          repositoryName={repoNameMap.get(r.repository_id)}
         />
       ),
     },
@@ -342,7 +349,7 @@ export default function SecurityDashboardPage() {
           <Link
             href={`/security/findings?state=acknowledged&repository_id=${r.repository_id}`}
             className="text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring outline-none rounded"
-            aria-label={`View ${r.acknowledged_count} acknowledged vulnerabilities in this repository`}
+            aria-label={`View ${r.acknowledged_count} acknowledged vulnerabilities in ${repoNameMap.get(r.repository_id) ?? "this repository"}`}
           >
             {r.acknowledged_count}
           </Link>
