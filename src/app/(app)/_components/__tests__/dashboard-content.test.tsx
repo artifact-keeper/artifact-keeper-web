@@ -88,6 +88,9 @@ vi.mock("@/components/common/stat-card", () => ({
     </div>
   ),
 }));
+vi.mock("@/components/common/quota-usage-cards", () => ({
+  QuotaUsageSection: () => <div data-testid="quota-usage-section" />,
+}));
 vi.mock("@/components/common/status-badge", () => ({
   StatusBadge: ({ status }: any) => <span>{status}</span>,
 }));
@@ -169,6 +172,15 @@ describe("DashboardContent", () => {
     mockUseAuth.mockReturnValue({ user: null, isAuthenticated: false });
     render(<DashboardContent />);
     expect(screen.queryByText("System Health")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quota-usage-section")).not.toBeInTheDocument();
+  });
+
+  it("shows the quota section to any signed-in user and refreshes it", () => {
+    mockUseAuth.mockReturnValue({ user: { username: "user1" }, isAuthenticated: true });
+    render(<DashboardContent />);
+    expect(screen.getByTestId("quota-usage-section")).toBeInTheDocument();
+    screen.getByText("Refresh").click();
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["system-quota"] });
   });
 
   it("renders System Health section for authenticated users", () => {
