@@ -30,6 +30,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
+import { ExceptionRequestLinkCard } from "@/components/settings/exception-request-link-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
 
@@ -539,8 +540,9 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="mt-4">
+        <TabsContent value="security" className="mt-4 space-y-4">
           <TokenExpiryPolicyCard />
+          <ExceptionRequestLinkCard />
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">
