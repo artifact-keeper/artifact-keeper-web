@@ -99,6 +99,7 @@ vi.mock("lucide-react", () => {
     ListChecks: icon,
     Search: icon,
     Bug: icon,
+    Inbox: icon,
     FileCheck: icon,
     Lock: icon,
     Users: icon,
@@ -369,6 +370,8 @@ describe("AppSidebar", () => {
     // Findings outlive the scanner that found them, so the list is ungated,
     // like the Security dashboard entry next to it.
     expect(screen.getByText("Vulnerabilities")).toBeDefined();
+    // The page says when the queue is off, so the entry is not scanner-gated.
+    expect(screen.getByText("Scan Queue")).toBeDefined();
     expect(screen.getByText("Quality Gates")).toBeDefined();
   });
 
@@ -390,6 +393,14 @@ describe("AppSidebar", () => {
     render(<AppSidebar />);
 
     expect(screen.queryByText("Vulnerabilities")).toBeNull();
+  });
+
+  it("keeps Scan Queue out of a non-admin sidebar", () => {
+    authState({ isAuthenticated: true, isAdmin: false });
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Scan Queue")).toBeNull();
   });
 
   it("shows DT Projects only when Dependency-Track is enabled (#271)", () => {
