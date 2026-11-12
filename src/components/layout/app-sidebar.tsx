@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import {
   LayoutDashboard,
   Database,
@@ -180,6 +181,9 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
   const flags = useFeatureFlags();
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865):
+  // a repository-scoped admin token gets 403 and an older backend 404.
+  const canListFindings = useCanListFindings();
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -212,6 +216,9 @@ export function AppSidebar() {
     }
     if (item.href === "/security/dt-projects") {
       return flags.dependencyTrackEnabled;
+    }
+    if (item.href === "/security/findings") {
+      return canListFindings;
     }
     return true;
   });

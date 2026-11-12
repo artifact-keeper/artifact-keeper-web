@@ -91,11 +91,18 @@ test.describe('System config feature flags', () => {
       await expect(dtProjects).toHaveCount(0);
     }
 
-    // "Vulnerabilities" is ungated: findings outlive the scanner that found
-    // them, so it is there whatever the config says.
-    await expect(
-      nav.getByRole('link', { name: /vulnerabilities/i }).first()
-    ).toBeVisible({ timeout: 10000 });
+    // "Vulnerabilities" is not scanner-gated: findings outlive the scanner
+    // that found them. It is shown exactly when the drill-down endpoint
+    // answers this admin (an older backend 404s, a scoped token 403s).
+    const findingsProbe = await request.get(
+      '/api/v1/admin/security/findings?per_page=1'
+    );
+    const vulnerabilities = nav.getByRole('link', { name: /vulnerabilities/i });
+    if (findingsProbe.ok()) {
+      await expect(vulnerabilities.first()).toBeVisible({ timeout: 10000 });
+    } else {
+      await expect(vulnerabilities).toHaveCount(0);
+    }
   });
 
   test('upload dialog advertises the configured max upload size', async ({ page, request }) => {

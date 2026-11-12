@@ -133,7 +133,8 @@ function FindingsPageContent() {
       setPage(1);
     },
     loading: isLoading,
-    emptyMessage: "Nothing matches these filters.",
+    // On an error the alert above says why; "nothing matches" would be wrong.
+    emptyMessage: error ? "No vulnerabilities to show." : "Nothing matches these filters.",
   };
 
   const scope = [(byArtifact ? undefined : severity) ?? "All", state && state !== "all" ? state : null]

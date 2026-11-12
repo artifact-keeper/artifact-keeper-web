@@ -625,6 +625,10 @@ describe("FindingsPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       /unscoped administrator account/i,
     );
+    // The empty table must not claim the filters matched nothing.
+    expect(screen.getByTestId("dt-empty")).not.toHaveTextContent(
+      /nothing matches/i,
+    );
   });
 
   it("says an older backend cannot list findings instead of a raw 404", () => {
