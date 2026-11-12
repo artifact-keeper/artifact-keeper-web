@@ -274,7 +274,11 @@ vi.mock("@/components/common/data-table", () => ({
     rowKey,
   }: {
     data?: Array<{ id: string; name: string }>;
-    columns?: Array<{ id: string; cell?: (row: unknown) => React.ReactNode }>;
+    columns?: Array<{
+      id: string;
+      accessor?: (row: unknown) => unknown;
+      cell?: (row: unknown) => React.ReactNode;
+    }>;
     onRowClick?: (row: unknown) => void;
     onPageSizeChange?: (size: number) => void;
     rowKey?: (row: { id: string; name: string }) => string;
@@ -292,13 +296,33 @@ vi.mock("@/components/common/data-table", () => ({
           {row.name}
         </button>
       ))}
-      {/* The real `name` column cell, so the column definition is covered
-          rather than stubbed away (#768). Only this column is rendered: the
-          `actions` cell mounts Radix tooltips, which need a provider that this
-          suite deliberately does not set up. */}
+      {/* Every column's accessor value, which is what the real table sorts
+          and filters on. */}
+      {(data ?? []).map((row) =>
+        (columns ?? []).map((c) => (
+          <span
+            key={`acc-${c.id}-${row.id}`}
+            data-testid={`stub-cell-${c.id}-${row.id}`}
+          >
+            {String(c.accessor?.(row) ?? "")}
+          </span>
+        )),
+      )}
+      {/* The real `name` and `version` column cells, so those column
+          definitions are covered rather than stubbed away (#768). Only these
+          are rendered: the `actions` cell mounts Radix tooltips, which need a
+          provider that this suite deliberately does not set up. */}
       {(data ?? []).map((row) => (
         <div key={`name-cell-${row.id}`} data-testid={`stub-name-cell-${row.id}`}>
           {columns?.find((c) => c.id === "name")?.cell?.(row)}
+        </div>
+      ))}
+      {(data ?? []).map((row) => (
+        <div
+          key={`version-cell-${row.id}`}
+          data-testid={`stub-version-cell-${row.id}`}
+        >
+          {columns?.find((c) => c.id === "version")?.cell?.(row)}
         </div>
       ))}
       <button
@@ -950,5 +974,80 @@ describe("RepoDetailContent allowlist summary (#971)", () => {
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "false");
     await userEvent.click(screen.getByRole("button", { name: "Allowlist: on, 2 entries" }));
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+/**
+ * A proxy-cached Maven row carries no `version`: the cache catalog has no
+ * column for one, so every file in a mirrored Maven repository showed a dash
+ * where the version belongs. The column falls back to the GAV coordinates,
+ * which prefer the backend-parsed metadata (#482) and parse the path second.
+ */
+describe("RepoDetailContent flat Maven version column", () => {
+  beforeEach(() => {
+    cleanup();
+    h.searchParams = new URLSearchParams("view=flat");
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    artifactFixture.path = "team/config.yaml";
+    delete (artifactFixture as { version?: string }).version;
+    delete (artifactFixture as { metadata?: Record<string, unknown> }).metadata;
+    h.searchParams = new URLSearchParams();
+  });
+
+  async function renderFlat() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+  }
+
+  it("falls back to the Maven path version when the row carries none", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("1.0");
+    // The cell renders the fallback too, not just the sort key.
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("1.0");
+  });
+
+  it("prefers the backend-parsed metadata over the path", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    (artifactFixture as { metadata?: Record<string, unknown> }).metadata = {
+      groupId: "com.example",
+      artifactId: "lib",
+      version: "2.0",
+    };
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("2.0");
+  });
+
+  it("keeps the row's own version when the backend sent one", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    (artifactFixture as { version?: string }).version = "9.9";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("9.9");
+  });
+
+  it("leaves a non-Maven repository's version empty", async () => {
+    repository.format = "generic";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("-");
+  });
+
+  it("shows a dash for a Maven path with no parseable version", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "notes.txt";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("-");
   });
 });
