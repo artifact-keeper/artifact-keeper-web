@@ -27,6 +27,7 @@ import type {
 } from '@/types';
 import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
+import { quotaRefusalFrom } from '@/lib/quota';
 
 export interface ListArtifactsParams {
   page?: number;
@@ -384,6 +385,14 @@ export const artifactsApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve(JSON.parse(xhr.responseText) as Artifact);
         } else {
+          // Quota and size refusals (403 STORAGE_QUOTA_EXCEEDED / QUOTA_EXCEEDED,
+          // 413 PAYLOAD_TOO_LARGE, 429 TRANSFER_QUOTA_EXCEEDED) carry the
+          // server's own explanation; show it rather than a generic failure.
+          const refusal = quotaRefusalFrom(xhr.status, xhr.responseText);
+          if (refusal) {
+            reject(refusal);
+            return;
+          }
           let detail = '';
           try {
             const body = JSON.parse(xhr.responseText);
@@ -391,11 +400,7 @@ export const artifactsApi = {
           } catch {
             // response is not JSON
           }
-          if (xhr.status === 413) {
-            reject(new Error('File exceeds the maximum upload size allowed by the server.'));
-          } else {
-            reject(new Error(detail || `Upload failed with status ${xhr.status}`));
-          }
+          reject(new Error(detail || `Upload failed with status ${xhr.status}`));
         }
       };
 

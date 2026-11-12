@@ -61,6 +61,7 @@ vi.mock("@/lib/utils", () => ({
 
 import { FileUpload } from "../file-upload";
 import { validateRepodataUploadPath } from "@/lib/rpm-repodata";
+import { QuotaRefusalError } from "@/lib/quota";
 import {
   useChunkedUpload,
   type UseChunkedUploadReturn,
@@ -164,6 +165,51 @@ describe("FileUpload", () => {
         "File exceeds the maximum upload size allowed by the server."
       );
     });
+  });
+
+  it("shows the server's quota refusal and its help link", async () => {
+    const onUpload = vi
+      .fn()
+      .mockRejectedValue(
+        new QuotaRefusalError(
+          "storage",
+          403,
+          "Storage quota reached: new uploads are refused; downloads still work.",
+          "https://example.com/quota"
+        )
+      );
+    render(<FileUpload onUpload={onUpload} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [createMockFile("a.bin", 10)] } });
+    fireEvent.click(screen.getByText("Upload"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Storage quota reached: new uploads are refused; downloads still work."
+    );
+    expect(alert).not.toHaveTextContent("Upload failed");
+    expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+      "href",
+      "https://example.com/quota"
+    );
+
+    // Picking another file clears both.
+    fireEvent.change(input, { target: { files: [createMockFile("b.bin", 10)] } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("refuses a file above the advertised limit before uploading", () => {
+    const onUpload = vi.fn();
+    render(<FileUpload onUpload={onUpload} maxUploadSizeBytes={100} />);
+    expect(screen.getByText(/max 100 bytes/)).toBeInTheDocument();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [createMockFile("big.bin", 101)] } });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "File is 101 bytes, which exceeds the maximum upload size of 100 bytes."
+    );
+    expect(screen.queryByText("Upload")).toBeNull();
+    expect(onUpload).not.toHaveBeenCalled();
   });
 
   it("displays a generic error when the upload callback rejects with a non-Error", async () => {
@@ -597,6 +643,30 @@ describe("FileUpload chunked mode", () => {
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Upload failed: Session expired");
+  });
+
+  it("shows a chunked quota refusal in the server's words, with its link", () => {
+    mockedUseChunkedUpload.mockReturnValue(
+      makeHookState({
+        status: "error",
+        error: new QuotaRefusalError(
+          "upload_size",
+          413,
+          "Upload of 3 GiB exceeds the 2 GiB limit",
+          "https://example.com/limits"
+        ),
+      })
+    );
+    render(<FileUpload onUpload={vi.fn()} repositoryKey="repo-1" />);
+    selectFile(LARGE);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Upload of 3 GiB exceeds the 2 GiB limit");
+    expect(alert).not.toHaveTextContent("Upload failed");
+    expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
+      "href",
+      "https://example.com/limits"
+    );
   });
 
   // ---- ChunkedProgressDisplay status variants ----

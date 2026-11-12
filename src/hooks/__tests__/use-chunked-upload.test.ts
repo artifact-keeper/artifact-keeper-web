@@ -683,6 +683,23 @@ describe("useChunkedUpload", () => {
 
   // ---- Error handling ----
 
+  it("does not retry a chunk the server refused for a quota", async () => {
+    const { QuotaRefusalError } = await import("@/lib/quota");
+    mockCreateUploadSession.mockResolvedValue({
+      session_id: "sess-q",
+      chunk_count: 2,
+      chunk_size: 1000,
+      expires_at: "2026-03-25T00:00:00Z",
+    });
+    const refusal = new QuotaRefusalError("storage", 403, "Storage quota reached");
+    mockUploadChunk.mockRejectedValue(refusal);
+
+    const hook = await loadHook({ threshold: 500, chunkSize: 1000 });
+    await expect(hook.upload(createFile(2000))).rejects.toBe(refusal);
+    expect(mockUploadChunk).toHaveBeenCalledTimes(1);
+    expect(mockCompleteUploadSession).not.toHaveBeenCalled();
+  });
+
   it("sets error status when createUploadSession fails", async () => {
     mockCreateUploadSession.mockRejectedValue(new Error("server down"));
 
