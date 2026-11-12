@@ -20,6 +20,11 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockCanListFindings = vi.fn();
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => mockCanListFindings(),
+}));
+
 const mockUseQuery = vi.fn();
 const mockInvalidateQueries = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
@@ -154,6 +159,7 @@ describe("DashboardContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCanListFindings.mockReturnValue(true);
     mockRepositoriesList.mockResolvedValue({ items: [] });
     mockPendingSummary.mockResolvedValue(null);
     setupUseQuery({
@@ -483,6 +489,44 @@ describe("DashboardContent", () => {
       "href",
       "/security/findings?state=open"
     );
+  });
+
+  it("links no count for an admin the drill-down refuses", () => {
+    // A repository-scoped admin token (403) or an older backend (404).
+    mockCanListFindings.mockReturnValue(false);
+    mockUseAuth.mockReturnValue({
+      user: { username: "admin", is_admin: true },
+      isAuthenticated: true,
+    });
+    setupUseQuery({
+      health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
+      "admin-stats": {
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
+        isLoading: false,
+        isFetching: false,
+      },
+      "cve-trends": {
+        data: {
+          total_cves: 3,
+          open_cves: 2,
+          fixed_cves: 0,
+          acknowledged_cves: 1,
+          critical_count: 1,
+          high_count: 1,
+          medium_count: 0,
+          low_count: 0,
+          avg_days_to_fix: null,
+        },
+        isLoading: false,
+        isFetching: false,
+      },
+      "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
+    });
+    const { container } = render(<DashboardContent />);
+
+    expect(screen.getByText("critical")).toBeInTheDocument();
+    expect(screen.getByText("Open:")).toBeInTheDocument();
+    expect(container.querySelector('a[href^="/security/findings"]')).toBeNull();
   });
 
   it("shows no CVE data message when trends are undefined", () => {

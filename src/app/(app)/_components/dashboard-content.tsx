@@ -20,6 +20,7 @@ import {
   Plug,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { sbomApi } from "@/lib/api/sbom";
@@ -200,13 +201,13 @@ function CountLink({
   count,
   href,
   children,
-}: Readonly<{ count: number; href: string; children: string }>) {
+}: Readonly<{ count: number; href?: string; children: string }>) {
   const body = (
     <>
       {children}: <strong className="text-foreground">{count}</strong>
     </>
   );
-  if (count === 0) return <span>{body}</span>;
+  if (count === 0 || !href) return <span>{body}</span>;
   return (
     <Link
       href={href}
@@ -218,7 +219,14 @@ function CountLink({
   );
 }
 
-function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
+function SeverityBreakdown({
+  trends,
+  linked,
+}: Readonly<{
+  trends: CveTrends;
+  /** False when the drill-down would refuse this user: the counts stay plain text. */
+  linked: boolean;
+}>) {
   const counts = {
     critical: trends.critical_count,
     high: trends.high_count,
@@ -249,7 +257,7 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
             </>
           );
           // A zero bar stays inert: there is no list to show.
-          if (count === 0) {
+          if (count === 0 || !linked) {
             return (
               <div key={sev} className="flex items-center gap-3">
                 {bar}
@@ -273,10 +281,10 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 
       {/* Status summary row */}
       <div className="flex items-center gap-6 pt-2 border-t text-xs text-muted-foreground">
-        <CountLink count={trends.open_cves} href="/security/findings?state=open">Open</CountLink>
+        <CountLink count={trends.open_cves} href={linked ? "/security/findings?state=open" : undefined}>Open</CountLink>
         {/* Fixed is derived by diffing scans, so there is no row list to link to. */}
         <span>Fixed: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
-        <CountLink count={trends.acknowledged_cves} href="/security/findings?state=acknowledged">Acknowledged</CountLink>
+        <CountLink count={trends.acknowledged_cves} href={linked ? "/security/findings?state=acknowledged" : undefined}>Acknowledged</CountLink>
         {trends.avg_days_to_fix != null && (
           <span>Avg fix time: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
         )}
@@ -291,6 +299,8 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 
 export function DashboardContent() {
   const { user, isAuthenticated } = useAuth();
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865).
+  const canListFindings = useCanListFindings();
   const queryClient = useQueryClient();
 
   const {
@@ -533,7 +543,7 @@ export function DashboardContent() {
                     <p className="text-xs text-muted-foreground">{OPEN_SEVERITY_COUNTS_HINT}</p>
                   </CardHeader>
                   <CardContent>
-                    <SeverityBreakdown trends={cveTrends} />
+                    <SeverityBreakdown trends={cveTrends} linked={canListFindings} />
                   </CardContent>
                 </Card>
               )}

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -90,12 +91,15 @@ function SeverityPill({
   level,
   repositoryId,
   repositoryName,
+  linked,
 }: {
   count: number;
   level: "critical" | "high" | "medium" | "low";
   repositoryId: string;
   /** Named in the link's label: a screen reader's links list has no row context. */
   repositoryName?: string;
+  /** False when the drill-down would refuse this user: then the pill is plain text. */
+  linked: boolean;
 }) {
   if (count === 0) {
     return <span className="text-sm text-muted-foreground">0</span>;
@@ -109,6 +113,7 @@ function SeverityPill({
     low: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   };
   const className = `inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[level]}`;
+  if (!linked) return <span className={className}>{count}</span>;
   // `state=open`: these counts exclude acknowledged findings, so the list has
   // to as well, or it returns more rows than the number that was clicked.
   return (
@@ -129,6 +134,9 @@ const VIOLATION_STATE_BADGE: Record<string, string> = {
 };
 
 export default function SecurityDashboardPage() {
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865),
+  // so a count links to it only when it would answer this user.
+  const canListFindings = useCanListFindings();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -294,6 +302,7 @@ export default function SecurityDashboardPage() {
           level="critical"
           repositoryId={r.repository_id}
           repositoryName={repoNameMap.get(r.repository_id)}
+          linked={canListFindings}
         />
       ),
     },
@@ -308,6 +317,7 @@ export default function SecurityDashboardPage() {
           level="high"
           repositoryId={r.repository_id}
           repositoryName={repoNameMap.get(r.repository_id)}
+          linked={canListFindings}
         />
       ),
     },
@@ -322,6 +332,7 @@ export default function SecurityDashboardPage() {
           level="medium"
           repositoryId={r.repository_id}
           repositoryName={repoNameMap.get(r.repository_id)}
+          linked={canListFindings}
         />
       ),
     },
@@ -336,6 +347,7 @@ export default function SecurityDashboardPage() {
           level="low"
           repositoryId={r.repository_id}
           repositoryName={repoNameMap.get(r.repository_id)}
+          linked={canListFindings}
         />
       ),
     },
@@ -345,7 +357,7 @@ export default function SecurityDashboardPage() {
       accessor: (r) => r.acknowledged_count,
       sortable: true,
       cell: (r) =>
-        r.acknowledged_count > 0 ? (
+        canListFindings && r.acknowledged_count > 0 ? (
           <Link
             href={`/security/findings?state=acknowledged&repository_id=${r.repository_id}`}
             className="text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring outline-none rounded"
@@ -354,7 +366,9 @@ export default function SecurityDashboardPage() {
             {r.acknowledged_count}
           </Link>
         ) : (
-          <span className="text-sm text-muted-foreground">0</span>
+          <span className="text-sm text-muted-foreground">
+            {r.acknowledged_count}
+          </span>
         ),
     },
     {
@@ -429,7 +443,7 @@ export default function SecurityDashboardPage() {
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.critical_findings > 0 ? "red" : "green"}
             href={
-              dashboard.critical_findings > 0
+              canListFindings && dashboard.critical_findings > 0
                 ? "/security/findings?severity=critical&state=open"
                 : undefined
             }
@@ -441,7 +455,7 @@ export default function SecurityDashboardPage() {
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.high_findings > 0 ? "yellow" : "green"}
             href={
-              dashboard.high_findings > 0
+              canListFindings && dashboard.high_findings > 0
                 ? "/security/findings?severity=high&state=open"
                 : undefined
             }
@@ -453,7 +467,7 @@ export default function SecurityDashboardPage() {
             tooltip={OPEN_SEVERITY_COUNTS_HINT}
             color={dashboard.total_findings > 0 ? "yellow" : "green"}
             href={
-              dashboard.total_findings > 0
+              canListFindings && dashboard.total_findings > 0
                 ? "/security/findings?state=open"
                 : undefined
             }

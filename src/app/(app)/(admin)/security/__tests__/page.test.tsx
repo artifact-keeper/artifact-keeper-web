@@ -335,8 +335,14 @@ function setupQueries(overrides: {
 // Tests
 // ---------------------------------------------------------------------------
 
+const mockCanListFindings = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => mockCanListFindings(),
+}));
+
 describe("SecurityDashboardPage", () => {
   beforeEach(() => {
+    mockCanListFindings.mockReturnValue(true);
     vi.clearAllMocks();
     mockSelectChangeHandlers.length = 0;
     mockUseMutation.mockReturnValue({
@@ -1334,6 +1340,35 @@ describe("SecurityDashboardPage", () => {
         "href",
         `/security/findings?state=acknowledged&repository_id=${REPO_UUID}`
       );
+    });
+
+    it("links nothing for an admin the drill-down refuses", () => {
+      // A repository-scoped admin token (403) or an older backend (404).
+      mockCanListFindings.mockReturnValue(false);
+      setupQueries({
+        dashboard: DASHBOARD,
+        scores: [
+          makeScore({
+            repository_id: REPO_UUID,
+            critical_count: 1,
+            high_count: 3,
+            medium_count: 0,
+            low_count: 0,
+            acknowledged_count: 2,
+          }),
+        ],
+        repos: [{ id: REPO_UUID, name: REPO_NAME, key: REPO_KEY }],
+      });
+
+      const { container } = render(<SecurityDashboardPage />);
+
+      for (const label of ["Open Critical", "Open High", "Open Findings"]) {
+        expect(screen.getByTestId(`stat-${label}`)).not.toHaveAttribute("href");
+      }
+      expect(container.querySelector('a[href^="/security/findings"]')).toBeNull();
+      // The counts themselves are still shown, as plain text.
+      expect(screen.getAllByText("3").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("2").length).toBeGreaterThan(0);
     });
 
     it("leaves a zero acknowledged count inert", () => {
