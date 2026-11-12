@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api/admin";
 import { settingsApi } from "@/lib/api/settings";
-import { ADMIN_SETTINGS_QUERY_KEY, useAdminSettings } from "@/hooks/use-admin-settings";
+import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { Server, HardDrive, Lock, Info, Mail, Rss, Shield, Loader2 } from "lucide-react";
 
@@ -18,13 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
@@ -33,6 +26,7 @@ import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy
 import { ExceptionRequestLinkCard } from "@/components/settings/exception-request-link-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
+import { formatBytes } from "@/lib/utils";
 
 // -- helpers --
 
@@ -47,12 +41,21 @@ function SettingRow({
   description?: string;
   testId?: string;
 }) {
+  const id = useId();
+  const descriptionId = `${id}-description`;
   return (
     <div className="space-y-2">
-      <Label className="text-sm">{label}</Label>
-      <Input value={value} disabled className="bg-muted/50" data-testid={testId} />
+      <Label htmlFor={id} className="text-sm">{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        disabled
+        className="bg-muted/50"
+        data-testid={testId}
+        aria-describedby={description ? descriptionId : undefined}
+      />
       {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p id={descriptionId} className="text-xs text-muted-foreground">{description}</p>
       )}
     </div>
   );
@@ -86,136 +89,8 @@ function formatStorageBackend(backend: string): string {
   return STORAGE_BACKEND_LABELS[backend] ?? backend;
 }
 
-// -- Upload size limit editor (#189) --
-
-type UploadSizeUnit = "MB" | "GB";
-
-const BYTES_PER_MB = 1024 * 1024;
-const BYTES_PER_GB = 1024 * 1024 * 1024;
-
-/** Convert bytes to a friendly value + unit. 0 means "no limit". */
-export function bytesToUploadSize(bytes: number): { value: string; unit: UploadSizeUnit } {
-  if (!bytes || bytes <= 0) return { value: "", unit: "MB" };
-  if (bytes >= BYTES_PER_GB && bytes % BYTES_PER_GB === 0) {
-    return { value: String(bytes / BYTES_PER_GB), unit: "GB" };
-  }
-  return { value: String(Math.round(bytes / BYTES_PER_MB)), unit: "MB" };
-}
-
-/** Convert a value + unit to bytes. Empty/zero/invalid means "no limit" (0). */
-export function uploadSizeToBytes(value: string, unit: UploadSizeUnit): number {
-  const num = Number(value);
-  if (!num || num <= 0 || !Number.isFinite(num)) return 0;
-  return Math.round(num * (unit === "GB" ? BYTES_PER_GB : BYTES_PER_MB));
-}
-
-function UploadSizeSetting({
-  currentBytes,
-  loading,
-  unavailable,
-}: {
-  currentBytes: number | undefined;
-  loading: boolean;
-  unavailable: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const initial = bytesToUploadSize(currentBytes ?? 0);
-  const [value, setValue] = useState(initial.value);
-  const [unit, setUnit] = useState<UploadSizeUnit>(initial.unit);
-  const [dirty, setDirty] = useState(false);
-  // The persisted value arrives asynchronously, so a useState initializer would
-  // seed from `undefined` (rendering an empty "No limit") and never refresh once
-  // the query resolves. Sync local state during render whenever the persisted
-  // bytes change, but only while there are no unsaved edits so we never clobber
-  // what the operator is typing. (review fix #464)
-  const [seededBytes, setSeededBytes] = useState(currentBytes);
-  if (currentBytes !== seededBytes && !dirty) {
-    const next = bytesToUploadSize(currentBytes ?? 0);
-    setSeededBytes(currentBytes);
-    setValue(next.value);
-    setUnit(next.unit);
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: (bytes: number) => settingsApi.updateMaxUploadSize(bytes),
-    onSuccess: () => {
-      toast.success("Upload size limit saved");
-      queryClient.invalidateQueries({ queryKey: ADMIN_SETTINGS_QUERY_KEY });
-      setDirty(false);
-    },
-    onError: mutationErrorToast("Failed to save upload size limit"),
-  });
-
-  if (loading) {
-    return (
-      <SettingRow
-        label="Max Upload Size"
-        value="Loading..."
-        description="Maximum allowed size for a single artifact upload."
-      />
-    );
-  }
-
-  if (unavailable) {
-    return (
-      <SettingRow
-        label="Max Upload Size"
-        value="Unavailable"
-        description="Maximum allowed size for a single artifact upload."
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label htmlFor="max-upload-size" className="text-sm">
-        Max Upload Size
-      </Label>
-      <div className="flex gap-2">
-        <Input
-          id="max-upload-size"
-          type="number"
-          min={0}
-          step="any"
-          placeholder="No limit"
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setDirty(true);
-          }}
-          className="flex-1"
-        />
-        <Select
-          value={unit}
-          onValueChange={(v) => {
-            setUnit(v as UploadSizeUnit);
-            setDirty(true);
-          }}
-        >
-          <SelectTrigger className="w-20" aria-label="Upload size unit">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="MB">MB</SelectItem>
-            <SelectItem value="GB">GB</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button
-          onClick={() => saveMutation.mutate(uploadSizeToBytes(value, unit))}
-          disabled={saveMutation.isPending || !dirty}
-        >
-          {saveMutation.isPending && (
-            <Loader2 className="size-4 mr-2 animate-spin" />
-          )}
-          Save
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Maximum allowed size for a single artifact upload. Leave empty for no
-        limit. Applies to every repository.
-      </p>
-    </div>
-  );
+function formatUploadLimit(bytes: number): string {
+  return bytes > 0 ? formatBytes(bytes) : "No limit";
 }
 
 // -- SMTP settings tab --
@@ -486,10 +361,11 @@ export default function SettingsPage() {
                 description="The filesystem path where artifact files are stored (when storage backend is local)."
               />
               <Separator />
-              <UploadSizeSetting
-                currentBytes={storageSettings?.max_upload_size_bytes}
-                loading={settingsLoading}
-                unavailable={settingsError || !storageSettings}
+              <SettingRow
+                label="Max Upload Size"
+                value={storageValue((s) => formatUploadLimit(s.max_upload_size_bytes))}
+                description="Maximum allowed size for a single artifact upload, for every repository. Set on the backend with the MAX_UPLOAD_SIZE environment variable (bytes, 0 for no limit); a restart applies it."
+                testId="max-upload-size"
               />
               <Separator />
               {/* TODO(#334): swap for storageSettings.deduplication once the backend
