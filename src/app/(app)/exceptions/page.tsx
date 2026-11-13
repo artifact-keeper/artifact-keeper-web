@@ -121,6 +121,10 @@ function decisionErrorMessage(err: unknown): string {
       }
       return said ?? "You are not allowed to make this decision.";
     }
+    // A scan request no download was refused for yet has no bytes to bind
+    if (err.status === 409 && said && /no refused download/i.test(said)) {
+      return said;
+    }
     if (err.status === 409) {
       return "Someone else changed this row while you were deciding. The queue has been refreshed; check it and try again.";
     }
