@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **LDAP, OIDC and SAML sign-in asks for the TOTP code on accounts that enrolled one** (artifact-keeper#5484) - Backend 1.11.14 and 1.12.0 stop treating a directory password or an IdP assertion as a complete sign-in for an account with TOTP enrolled: LDAP login and the OIDC/SAML code exchange now answer with the same TOTP challenge as the local login, and set no session. This UI did not know that answer, so such a user who signed in through LDAP or SSO was sent back to the login page with no session and no message. The LDAP form and the `/callback` page now show the existing two-factor form and finish the sign-in at `POST /auth/totp/verify`; accounts without TOTP sign in as before. A background silent-SSO check (`prompt=none`) that meets a TOTP account stays signed out instead of prompting; the user signs in with the SSO button and enters the code then. Run this UI with backend 1.11.14 / 1.12.0 or later for TOTP accounts that use LDAP or SSO; against an older backend nothing changes.
+
 ## [1.11.2] - 2026-10-29
 
 ### Sponsors
