@@ -273,14 +273,15 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
   // Non-groupable formats — toggle hidden
   // -------------------------------------------------------------------------
 
-  test('Non-groupable repos (npm, helm, pypi) do NOT show the grouping toggle', async ({
+  test('Non-groupable repos (npm, pypi) do NOT show the grouping toggle', async ({
     page,
   }) => {
     // `generic` is intentionally excluded: RAW/Generic repos now render the
     // browser toggle for the Flat/Tree folder view (#2791), so they are no
-    // longer toggle-free. npm/helm/pypi remain neither groupable nor
-    // tree-capable, so the toggle must still be absent for them.
-    const key = await findRepoByFormat(page, ['npm', 'helm', 'pypi']);
+    // longer toggle-free, and neither are helm and the other folder-layout
+    // formats (#439). npm/pypi remain neither groupable nor tree-capable, so
+    // the toggle must still be absent for them.
+    const key = await findRepoByFormat(page, ['npm', 'pypi']);
     test.skip(!key, 'No non-groupable repository available');
     await gotoArtifactsTab(page, key!);
 
@@ -306,5 +307,31 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     });
     await expect(page.getByTestId('toggle-flat')).toBeVisible();
     await expect(page.getByTestId('toggle-tree')).toBeVisible();
+  });
+
+  test('Folder-layout repos (rpm, debian, alpine, helm, conda) open in the folder tree (#439)', async ({
+    page,
+  }) => {
+    const key = await findRepoByFormat(page, [
+      'rpm',
+      'debian',
+      'alpine',
+      'helm',
+      'conda',
+    ]);
+    test.skip(!key, 'No rpm/debian/alpine/helm/conda repository available');
+
+    const treeRequest = page.waitForRequest((req) =>
+      req.url().includes('/api/v1/tree'),
+    );
+    await page.goto(`/repositories/${key}?view=tree`);
+    await treeRequest;
+
+    await expect(page.getByTestId('toggle-tree')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+      { timeout: 10000 },
+    );
+    await expect(page.getByTestId('toggle-flat')).toBeVisible();
   });
 });
