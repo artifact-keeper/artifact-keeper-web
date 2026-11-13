@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import {
   LayoutDashboard,
   Database,
@@ -27,6 +28,8 @@ import {
   ShieldCheck,
   ListChecks,
   Search,
+  Bug,
+  Inbox,
   FileCheck,
   Lock,
   Users,
@@ -106,6 +109,8 @@ const securityItems: NavItem[] = [
   { title: "Scan Results", href: "/security/scans", icon: Search },
   { title: "Acknowledgements", href: "/security/acknowledgements", icon: BadgeCheck },
   { title: "Proxy Blocked", href: "/security/proxy-blocked", icon: ShieldBan },
+  { title: "Vulnerabilities", href: "/security/findings", icon: Bug },
+  { title: "Scan Queue", href: "/security/queue", icon: Inbox },
   { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
   { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
   { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },
@@ -178,6 +183,9 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
   const flags = useFeatureFlags();
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865):
+  // a repository-scoped admin token gets 403 and an older backend 404.
+  const canListFindings = useCanListFindings();
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -210,6 +218,9 @@ export function AppSidebar() {
     }
     if (item.href === "/security/dt-projects") {
       return flags.dependencyTrackEnabled;
+    }
+    if (item.href === "/security/findings") {
+      return canListFindings;
     }
     return true;
   });

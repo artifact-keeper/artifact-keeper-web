@@ -75,7 +75,7 @@ test.describe('Acknowledging a finding on a copy of a scan', () => {
       body = route.request().postDataJSON();
       await json(route, finding({ is_acknowledged: true }));
     });
-    const list = page.waitForRequest((r) => r.url().includes('/findings?') || r.url().endsWith('/findings'));
+    const list = page.waitForRequest((r) => r.url().includes(`/scans/${SOURCE_SCAN}/findings`));
 
     await page.goto(COPY_LINK);
     expect(new URL((await list).url()).searchParams.get('artifact_id')).toBe(PROD_ARTIFACT);

@@ -43,6 +43,37 @@ describe("adminApi", () => {
       total_users: 3,
       proxy_artifact_count: 2,
       proxy_storage_bytes: 2048,
+      // An older backend reports no quotas.
+      quota: null,
+    });
+  });
+
+  it("getStats reads the instance quotas when the backend reports them", async () => {
+    const stats = {
+      total_repositories: 1,
+      total_artifacts: 1,
+      total_storage_bytes: 1,
+      total_users: 1,
+      storage_quota: {
+        enabled: true,
+        quota_bytes: 100,
+        used_bytes: 82,
+        percent: 82,
+        warn_percent: 80,
+        state: "warning",
+      },
+      transfer_quota: { enabled: false, quota_bytes: null, used_bytes: 5 },
+      max_upload_bytes: 50,
+      quota_help_url: "https://example.com/quotas",
+    };
+    mockGetSystemStats.mockResolvedValue({ data: stats, error: undefined });
+    const { adminApi } = await import("../admin");
+    const result = await adminApi.getStats();
+    expect(result.quota).toEqual({
+      storage: { quotaBytes: 100, usedBytes: 82, percent: 82, warnPercent: 80, state: "warning" },
+      transfer: null,
+      maxUploadBytes: 50,
+      helpUrl: "https://example.com/quotas",
     });
   });
 

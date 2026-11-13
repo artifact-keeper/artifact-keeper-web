@@ -150,7 +150,7 @@ vi.mock("@/components/common/page-header", () => ({
 // Component under test
 // ---------------------------------------------------------------------------
 
-import SettingsPage, { bytesToUploadSize, uploadSizeToBytes } from "../page";
+import SettingsPage from "../page";
 import type { AdminSettings, SmtpConfig } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY } from "@/hooks/use-admin-settings";
 
@@ -375,10 +375,27 @@ describe("SettingsPage", () => {
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "S3")).toBeDefined();
     expect(inputs.find((i) => i.value === "/data/storage")).toBeDefined();
-    // Max Upload Size is now an editable number input (#189). 1 GiB shows
-    // as the value "1" with the unit selector set to GB.
-    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    expect(numberInputs.find((i) => i.value === "1")).toBeDefined();
+    const uploadLimit = screen.getByTestId("max-upload-size") as HTMLInputElement;
+    expect(uploadLimit.value).toBe("1 GiB");
+  });
+
+  it("shows the upload limit read-only and points at MAX_UPLOAD_SIZE (artifact-keeper#5751)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings();
+
+    render(<SettingsPage />);
+
+    const uploadLimit = screen.getByTestId("max-upload-size") as HTMLInputElement;
+    expect(uploadLimit.disabled).toBe(true);
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(screen.queryByLabelText("Upload size unit")).toBeNull();
+    expect(screen.getByText(/MAX_UPLOAD_SIZE environment variable/)).toBeDefined();
+    // The row's label and note are wired to the field for assistive tech.
+    expect(screen.getByLabelText("Max Upload Size")).toBe(uploadLimit);
+    expect(uploadLimit.getAttribute("aria-describedby")).toBeTruthy();
+    expect(
+      document.getElementById(uploadLimit.getAttribute("aria-describedby")!)?.textContent,
+    ).toMatch(/MAX_UPLOAD_SIZE/);
   });
 
   it("renders friendly storage backend labels", () => {
@@ -396,10 +413,7 @@ describe("SettingsPage", () => {
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "Local Filesystem")).toBeDefined();
-    // 0 bytes means "no limit" (#189): the editable number input is empty
-    // with the "No limit" placeholder.
-    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    expect(numberInputs.find((i) => i.value === "")).toBeDefined();
+    expect(inputs.find((i) => i.value === "No limit")).toBeDefined();
   });
 
   it("falls back to raw storage backend value when label is unknown", () => {
@@ -417,9 +431,7 @@ describe("SettingsPage", () => {
 
     const inputs = screen.getAllByRole("textbox") as HTMLInputElement[];
     expect(inputs.find((i) => i.value === "minio")).toBeDefined();
-    // 5 GiB shows as the value "5" in the editable number input (#189).
-    const numberInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    expect(numberInputs.find((i) => i.value === "5")).toBeDefined();
+    expect(inputs.find((i) => i.value === "5 GiB")).toBeDefined();
   });
 
   // ---------------------------------------------------------------------------
@@ -627,17 +639,7 @@ describe("SettingsPage", () => {
   });
 
   it("disables Send Test Email button when test mutation is pending", () => {
-    // useMutation call order is: [1] upload-size save (storage tab, #189),
-    // [2] send-test-email (Email tab). The test-email mutation is the second
-    // call, so mark only that one pending.
-    let mutationCallIndex = 0;
-    mockUseMutation.mockImplementation(() => {
-      mutationCallIndex++;
-      if (mutationCallIndex === 2) {
-        return createMutationMock({ isPending: true });
-      }
-      return createMutationMock();
-    });
+    mockUseMutation.mockImplementation(() => createMutationMock({ isPending: true }));
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockAdminSettings();
 
@@ -646,42 +648,5 @@ describe("SettingsPage", () => {
     const sendButtons = screen.getAllByText("Send Test Email");
     const sendButton = sendButtons.find((el) => el.closest("button"));
     expect(sendButton?.closest("button")?.disabled).toBe(true);
-  });
-});
-
-describe("upload size helpers (#189)", () => {
-  it("converts whole GB to value + GB unit", () => {
-    expect(bytesToUploadSize(5 * 1024 * 1024 * 1024)).toEqual({
-      value: "5",
-      unit: "GB",
-    });
-  });
-
-  it("falls back to MB for non-GB-aligned sizes", () => {
-    expect(bytesToUploadSize(100 * 1024 * 1024)).toEqual({
-      value: "100",
-      unit: "MB",
-    });
-  });
-
-  it("treats 0 bytes as no limit (empty value)", () => {
-    expect(bytesToUploadSize(0)).toEqual({ value: "", unit: "MB" });
-  });
-
-  it("converts a value + unit back to bytes", () => {
-    expect(uploadSizeToBytes("2", "GB")).toBe(2 * 1024 * 1024 * 1024);
-    expect(uploadSizeToBytes("250", "MB")).toBe(250 * 1024 * 1024);
-  });
-
-  it("returns 0 (no limit) for empty or invalid input", () => {
-    expect(uploadSizeToBytes("", "GB")).toBe(0);
-    expect(uploadSizeToBytes("-1", "MB")).toBe(0);
-    expect(uploadSizeToBytes("abc", "GB")).toBe(0);
-  });
-
-  it("round-trips through bytes -> size -> bytes", () => {
-    const original = 3 * 1024 * 1024 * 1024;
-    const { value, unit } = bytesToUploadSize(original);
-    expect(uploadSizeToBytes(value, unit)).toBe(original);
   });
 });
