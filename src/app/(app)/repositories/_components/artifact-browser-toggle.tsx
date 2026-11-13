@@ -38,9 +38,19 @@ const GROUPABLE_FORMATS: ReadonlySet<RepositoryFormat> = new Set([
  * Repository formats for which a folder-tree view is meaningful (issue #2791).
  * RAW/Generic repos have no package/version semantics — just files at arbitrary
  * paths — so a directory tree built client-side from the flat artifact list is
- * the natural way to browse them.
+ * the natural way to browse them. The system package and chart formats keep
+ * their files in a folder layout too (#439): the upload or upstream mirror
+ * path for RPM, `pool/<component>/...` for Debian, `<branch>/<repo>/<arch>/`
+ * for Alpine, `<chart>/<version>/` for Helm and `<subdir>/` for Conda.
  */
-const TREE_FORMATS = new Set<RepositoryFormat>(["generic"]);
+const TREE_FORMATS = new Set<RepositoryFormat>([
+  "generic",
+  "rpm",
+  "debian",
+  "alpine",
+  "helm",
+  "conda",
+]);
 
 export function supportsGrouping(format: RepositoryFormat): boolean {
   return GROUPABLE_FORMATS.has(format);
@@ -62,7 +72,8 @@ interface ArtifactBrowserToggleProps {
 /**
  * Two-state toggle between the flat artifact list and an alternate view. The
  * alternate is format-dependent: groupable formats (Maven/Gradle/Docker) toggle
- * to a grouped view; RAW/Generic formats toggle to a folder tree (#2791).
+ * to a grouped view; RAW/Generic and the folder-layout formats toggle to a
+ * folder tree (#2791, #439).
  * Renders nothing for formats that offer neither.
  *
  * Behaves as a single-select radio group for screen readers: each button

@@ -38,10 +38,17 @@ describe("supportsGrouping", () => {
 describe("supportsTree", () => {
   it.each<[RepositoryFormat, boolean]>([
     ["generic", true],
+    // Folder-layout system package and chart formats (#439).
+    ["rpm", true],
+    ["debian", true],
+    ["alpine", true],
+    ["helm", true],
+    ["conda", true],
     ["maven", false],
     ["docker", false],
+    ["helm_oci", false],
     ["npm", false],
-    ["helm", false],
+    ["pypi", false],
   ])("returns %s for %s repos", (format, expected) => {
     expect(supportsTree(format)).toBe(expected);
   });
@@ -82,6 +89,20 @@ describe("ArtifactBrowserToggle — tree (RAW/Generic)", () => {
     await userEvent.click(screen.getByTestId("toggle-tree"));
     expect(onChange).toHaveBeenCalledWith("tree");
   });
+
+  it.each<RepositoryFormat>(["rpm", "debian", "alpine", "helm", "conda"])(
+    "renders a Flat/Tree toggle for %s repositories (#439)",
+    (format) => {
+      render(
+        <ArtifactBrowserToggle value="flat" onChange={NOOP} format={format} />,
+      );
+      expect(screen.getByTestId("toggle-flat")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Folder tree view" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("toggle-grouped")).not.toBeInTheDocument();
+    },
+  );
 
   it("renders nothing for formats with neither grouping nor tree (npm)", () => {
     const { container } = render(
@@ -141,9 +162,9 @@ describe("ArtifactBrowserToggle", () => {
       expect(container).toBeEmptyDOMElement();
     });
 
-    it("renders nothing for non-groupable formats (helm)", () => {
+    it("renders nothing for non-groupable formats (pypi)", () => {
       const { container } = render(
-        <ArtifactBrowserToggle value="flat" onChange={NOOP} format="helm" />,
+        <ArtifactBrowserToggle value="flat" onChange={NOOP} format="pypi" />,
       );
       expect(container).toBeEmptyDOMElement();
     });
