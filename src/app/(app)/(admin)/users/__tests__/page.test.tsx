@@ -101,6 +101,14 @@ vi.mock("@/lib/api/admin", () => ({
   },
 }));
 
+const mockSetReviewer = vi.fn();
+vi.mock("@/lib/api/security-reviewers", () => ({
+  securityReviewersApi: {
+    list: vi.fn(),
+    set: (...args: any[]) => mockSetReviewer(...args),
+  },
+}));
+
 vi.mock("@/lib/api/profile", () => ({}));
 vi.mock("@/lib/api/settings", () => ({
   settingsApi: {
@@ -2044,5 +2052,47 @@ describe("UsersPage", () => {
       const adminBtn = resetIcons[0].closest("button");
       expect(adminBtn).toHaveAttribute("disabled");
     });
+  });
+});
+
+describe("UsersPage security reviewer toggle", () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function withReviewers(data: unknown) {
+    setupMocks();
+    const base = mockUseQuery.getMockImplementation()!;
+    mockUseQuery.mockImplementation((opts: any) =>
+      opts.queryKey[0] === "security-reviewers" ? { data } : base(opts)
+    );
+    mockUseMutation.mockImplementation((opts: any) => ({
+      mutate: (v: unknown) => opts.mutationFn(v),
+      isPending: false,
+    }));
+  }
+
+  it("shows who reviews and flips it through the reviewer API", () => {
+    withReviewers({
+      users: [{ id: regularUser.id, username: "jdoe", display_name: null, is_active: true }],
+      groups: [],
+    });
+    render(<UsersPage />);
+
+    expect(screen.getByText("Security reviewer")).toBeInTheDocument();
+    expect(screen.getByLabelText("Security reviewer: admin")).not.toBeChecked();
+    const jdoe = screen.getByLabelText("Security reviewer: jdoe");
+    expect(jdoe).toBeChecked();
+
+    fireEvent.click(jdoe);
+    expect(mockSetReviewer).toHaveBeenCalledWith("users", regularUser.id, false);
+  });
+
+  it("has no reviewer column on a backend without the API", () => {
+    withReviewers(null);
+    render(<UsersPage />);
+    expect(screen.queryByText("Security reviewer")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Security reviewer:/)).not.toBeInTheDocument();
   });
 });

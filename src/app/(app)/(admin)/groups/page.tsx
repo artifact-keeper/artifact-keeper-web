@@ -54,6 +54,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/data-table"
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
+import { useSecurityReviewerColumn } from "@/components/common/security-reviewer-switch";
 
 // -- types --
 
@@ -94,6 +95,12 @@ export default function GroupsPage() {
   });
 
   const groups = groupsData?.items ?? [];
+
+  const reviewerColumn = useSecurityReviewerColumn<Group>(
+    "groups",
+    !!currentUser?.is_admin,
+    (g) => g.name,
+  );
 
   // fetch group detail (with members) when members modal is open
   const { data: groupDetail, isLoading: membersLoading } = useQuery({
@@ -264,6 +271,7 @@ export default function GroupsPage() {
         </span>
       ),
     },
+    ...reviewerColumn,
     {
       id: "actions",
       header: "",

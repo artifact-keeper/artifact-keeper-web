@@ -95,6 +95,25 @@ vi.mock("@/lib/query-keys", () => ({
   invalidateGroup: vi.fn(),
 }));
 
+const mockSetReviewer = vi.fn();
+vi.mock("@/lib/api/security-reviewers", () => ({
+  securityReviewersApi: {
+    list: vi.fn(),
+    set: (...args: any[]) => mockSetReviewer(...args),
+  },
+}));
+
+vi.mock("@/components/ui/switch", () => ({
+  Switch: ({ onCheckedChange, checked, ...props }: any) => (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e: any) => onCheckedChange?.(e.target.checked)}
+      {...props}
+    />
+  ),
+}));
+
 // UI components
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: any) => (
@@ -435,5 +454,54 @@ describe("GroupsPage", () => {
 
       expect(screen.queryByText(/Showing first/)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("GroupsPage security reviewer toggle", () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const ssoGroup = {
+    ...mockGroup,
+    id: "grp-sso",
+    name: "sec-team",
+    is_external: true,
+    external_source: "oidc",
+  };
+
+  function withReviewers(data: unknown) {
+    setupMocks({ groups: [mockGroup, ssoGroup] });
+    const base = mockUseQuery.getMockImplementation()!;
+    mockUseQuery.mockImplementation((q: any) =>
+      q.queryKey[0] === "security-reviewers" ? { data } : base(q)
+    );
+    mockUseMutation.mockImplementation((opts: any) => ({
+      mutate: (v: unknown) => opts.mutationFn(v),
+      isPending: false,
+    }));
+  }
+
+  it("makes an SSO group a reviewer through the reviewer API", () => {
+    withReviewers({
+      users: [],
+      groups: [{ id: mockGroup.id, name: "engineering", external_source: null, member_count: 1 }],
+    });
+    render(<GroupsPage />);
+
+    expect(screen.getByLabelText("Security reviewer: engineering")).toBeChecked();
+    const sso = screen.getByLabelText("Security reviewer: sec-team");
+    expect(sso).not.toBeChecked();
+
+    fireEvent.click(sso);
+    expect(mockSetReviewer).toHaveBeenCalledWith("groups", "grp-sso", true);
+  });
+
+  it("has no reviewer toggle on a backend without the API", () => {
+    withReviewers(null);
+    render(<GroupsPage />);
+    expect(screen.getByText("engineering")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Security reviewer:/)).not.toBeInTheDocument();
   });
 });

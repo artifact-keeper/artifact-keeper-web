@@ -126,6 +126,13 @@ export interface AdminSettings {
    * into a display fallback rather than treating it as an error.
    */
   environment: string;
+  /**
+   * Template for the "request an exception" link every gate refusal carries
+   * (artifact-keeper#5782). `null` when unset, so refusals use the built-in
+   * `/exceptions/request` link; `undefined` on a backend without the setting,
+   * which hides the control.
+   */
+  exceptionRequestUrl?: string | null;
 }
 
 // ---- Pure parsers (#349 — extracted so getAllSettings can reuse them) ----
@@ -174,6 +181,16 @@ function parseEnvironment(data: unknown): string {
     return data.environment.trim();
   }
   return "";
+}
+
+/**
+ * Read `exception_request_url`, keeping "absent" (older backend) apart from
+ * "unset" (null or empty). Soft, like parseEnvironment.
+ */
+function parseExceptionRequestUrl(data: unknown): string | null | undefined {
+  if (!isPlainObject(data) || !("exception_request_url" in data)) return undefined;
+  const v = data.exception_request_url;
+  return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
 function parsePasswordPolicy(data: unknown): PasswordPolicy {
@@ -264,7 +281,22 @@ export const settingsApi = {
       storageSettings: parseStorageSettings(data),
       smtpConfig: parseSmtpConfig(data),
       environment: parseEnvironment(data),
+      exceptionRequestUrl: parseExceptionRequestUrl(data),
     };
+  },
+
+  /**
+   * Set the exception request link template. An empty string clears it.
+   *
+   * Sends only this field: every field of the settings update is optional on
+   * a backend new enough to have this one. The backend refuses (400) anything
+   * but an absolute http(s) URL without whitespace or control characters.
+   */
+  updateExceptionRequestUrl: async (template: string): Promise<void> => {
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ exception_request_url: template.trim() }),
+    });
   },
 
   /**

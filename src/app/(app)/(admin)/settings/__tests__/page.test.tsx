@@ -141,6 +141,9 @@ vi.mock("@/components/ui/select", () => ({
 vi.mock("@/components/settings/token-expiry-policy-card", () => ({
   TokenExpiryPolicyCard: () => <div>API token expiry policy</div>,
 }));
+vi.mock("@/components/settings/exception-request-link-card", () => ({
+  ExceptionRequestLinkCard: () => <div>Exception request link</div>,
+}));
 
 vi.mock("@/components/common/page-header", () => ({
   PageHeader: ({ title }: any) => <h1>{title}</h1>,
