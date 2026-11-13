@@ -29,8 +29,12 @@ vi.mock("@/components/ui/button", () => ({
 }));
 
 const mockRefreshUser = vi.fn();
+const mockBeginTotpChallenge = vi.fn();
 vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ refreshUser: mockRefreshUser }),
+  useAuth: () => ({
+    refreshUser: mockRefreshUser,
+    beginTotpChallenge: mockBeginTotpChallenge,
+  }),
 }));
 
 vi.mock("@/lib/sdk-client", () => ({
@@ -133,5 +137,88 @@ describe("callback page — IdP error param", () => {
       screen.getByText("Access was denied by the identity provider."),
     ).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
+
+describe("callback page — TOTP-enrolled account (artifact-keeper#5484)", () => {
+  // What POST /auth/sso/exchange answers for an OIDC or SAML sign-in by an
+  // account with TOTP enrolled: no cookies, empty tokens, a pending token.
+  const challenge = {
+    access_token: "",
+    refresh_token: "",
+    token_type: "Bearer",
+    expires_in: 0,
+    totp_required: true,
+    totp_token: "pending.jwt",
+  };
+
+  it("explicit sign-in: starts the TOTP step on /login and does not refresh the user", async () => {
+    mockSearch = new URLSearchParams("code=xyz");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => challenge,
+    });
+    render(<SsoCallbackPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+    expect(mockBeginTotpChallenge).toHaveBeenCalledWith("pending.jwt");
+    expect(mockRefreshUser).not.toHaveBeenCalled();
+    // Not signed in yet: the silent-SSO guard is left alone until the TOTP
+    // step succeeds (loadUser clears it then).
+    expect(mockClearAttempt).not.toHaveBeenCalled();
+    expect(screen.queryByText("SSO Login Failed")).not.toBeInTheDocument();
+  });
+
+  it("silent probe: stays anonymous and returns to the page, without prompting", async () => {
+    mockConsumeReturnTo.mockReturnValue("/packages/pypi/requests");
+    mockSearch = new URLSearchParams("code=xyz");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => challenge,
+    });
+    render(<SsoCallbackPage />);
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/packages/pypi/requests"),
+    );
+    expect(mockMarkAttempted).toHaveBeenCalled();
+    expect(mockBeginTotpChallenge).not.toHaveBeenCalled();
+    expect(mockRefreshUser).not.toHaveBeenCalled();
+    expect(mockClearAttempt).not.toHaveBeenCalled();
+    expect(screen.queryByText("SSO Login Failed")).not.toBeInTheDocument();
+  });
+
+  it("no TOTP: a session body signs in as before", async () => {
+    mockSearch = new URLSearchParams("code=xyz");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "AT",
+        refresh_token: "RT",
+        token_type: "Bearer",
+        expires_in: 1800,
+      }),
+    });
+    render(<SsoCallbackPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
+    expect(mockRefreshUser).toHaveBeenCalled();
+    expect(mockClearAttempt).toHaveBeenCalled();
+    expect(mockBeginTotpChallenge).not.toHaveBeenCalled();
+  });
+
+  it("an unreadable 200 body keeps the session path", async () => {
+    mockSearch = new URLSearchParams("code=xyz");
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => {
+        throw new SyntaxError("Unexpected end of JSON input");
+      },
+    });
+    render(<SsoCallbackPage />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
+    expect(mockRefreshUser).toHaveBeenCalled();
+    expect(mockBeginTotpChallenge).not.toHaveBeenCalled();
   });
 });

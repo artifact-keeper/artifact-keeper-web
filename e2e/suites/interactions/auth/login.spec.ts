@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { LoginPage } from '../../../fixtures/page-objects/LoginPage';
+import { TEST_ROLES } from '../../../setup/auth-states';
 
 test.describe('Authentication', () => {
   test.use({ storageState: { cookies: [], origins: [] } }); // No pre-auth
@@ -99,5 +100,90 @@ test.describe('Authentication', () => {
       await expect(page.getByRole('tab', { name: 'Corp LDAP' })).toBeVisible();
     });
   });
-});
 
+  // artifact-keeper#5484: LDAP login and the OIDC/SAML code exchange answer a
+  // TOTP-enrolled account with a challenge (`totp_required` + `totp_token`, no
+  // cookies) instead of a session. The stack under test has no directory or
+  // IdP, so the challenge is stubbed; `POST /auth/totp/verify` is answered
+  // with a REAL session (the viewer's password login, relayed with its
+  // Set-Cookie) so the run ends signed in for real, not against a stub.
+  test.describe('TOTP step after LDAP / OIDC / SAML sign-in (artifact-keeper#5484)', () => {
+    const challenge = {
+      access_token: '',
+      refresh_token: '',
+      token_type: 'Bearer',
+      expires_in: 0,
+      totp_required: true,
+      totp_token: 'e2e-pending-totp-token',
+    };
+
+    /** Answer TOTP verify with a real session; returns the bodies the UI sent. */
+    async function stubTotpVerify(page: import('@playwright/test').Page) {
+      const sent: unknown[] = [];
+      await page.route('**/api/v1/auth/totp/verify', async (route) => {
+        sent.push(route.request().postDataJSON());
+        const viewer = TEST_ROLES.viewer;
+        const response = await route.fetch({
+          url: new URL('/api/v1/auth/login', route.request().url()).toString(),
+          postData: JSON.stringify({ username: viewer.username, password: viewer.password }),
+        });
+        await route.fulfill({ response });
+      });
+      return sent;
+    }
+
+    async function enterTotpCode(page: import('@playwright/test').Page) {
+      await expect(page.getByText('Two-Factor Authentication')).toBeVisible({ timeout: 10000 });
+      await page.getByPlaceholder('000000').fill('123456');
+      await page.getByRole('button', { name: 'Verify' }).click();
+    }
+
+    async function expectSignedInAsViewer(page: import('@playwright/test').Page) {
+      await expect(page).toHaveURL(/\/$|\/dashboard|\/change-password/, { timeout: 10000 });
+      const me = await page.request.get('/api/v1/auth/me');
+      expect(me.status()).toBe(200);
+      expect((await me.json()).username).toBe(TEST_ROLES.viewer.username);
+    }
+
+    test('LDAP sign-in for a TOTP account asks for the code, then signs in', async ({ page }) => {
+      await page.route('**/api/v1/auth/sso/providers', (route) =>
+        route.fulfill({
+          json: [{ id: 'ldap-1', name: 'Corp LDAP', provider_type: 'ldap', login_url: '' }],
+        }),
+      );
+      await page.route('**/api/v1/auth/sso/ldap/ldap-1/login', (route) =>
+        route.fulfill({ json: { ...challenge, expires_in: 1800, must_change_password: false } }),
+      );
+      const sent = await stubTotpVerify(page);
+
+      const loginPage = new LoginPage(page);
+      await loginPage.goto();
+      await page.getByRole('tab', { name: 'Corp LDAP' }).click();
+      await loginPage.login('alice', 'directory-password');
+      await enterTotpCode(page);
+
+      await expectSignedInAsViewer(page);
+      expect(sent).toEqual([{ totp_token: challenge.totp_token, code: '123456' }]);
+    });
+
+    test('OIDC/SAML callback for a TOTP account asks for the code, then signs in', async ({ page }) => {
+      const exchanged: unknown[] = [];
+      await page.route('**/api/v1/auth/sso/exchange', (route) => {
+        exchanged.push(route.request().postDataJSON());
+        return route.fulfill({ json: challenge });
+      });
+      const sent = await stubTotpVerify(page);
+
+      // Where the backend's OIDC callback / SAML ACS redirect lands.
+      await page.goto('/callback?code=e2e-exchange-code');
+      await expect(page).toHaveURL(/\/login$/, { timeout: 10000 });
+      await enterTotpCode(page);
+
+      await expectSignedInAsViewer(page);
+      // `toContainEqual`, not an exact list: `next dev` runs effects twice
+      // (React Strict Mode), so a local dev-server run exchanges twice.
+      expect(exchanged).toContainEqual({ code: 'e2e-exchange-code' });
+      expect(sent).toEqual([{ totp_token: challenge.totp_token, code: '123456' }]);
+    });
+  });
+});
