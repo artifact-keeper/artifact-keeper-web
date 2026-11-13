@@ -52,6 +52,7 @@ import type {
 } from '@/types/sso';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
+import { totpChallengeToken } from '@/lib/totp-challenge';
 
 type SsoProviderType = 'oidc' | 'ldap' | 'saml';
 const SSO_PROVIDER_TYPES = new Set<SsoProviderType>(['oidc', 'ldap', 'saml']);
@@ -195,6 +196,14 @@ function adaptTokenPair(
   };
 }
 
+/**
+ * Outcome of an LDAP sign-in: a session (cookies set by the backend), or a
+ * TOTP challenge to finish with `verifyTotp` (artifact-keeper#5484).
+ */
+export type LdapLoginResult =
+  | { kind: 'session' }
+  | { kind: 'totp'; totpToken: string };
+
 // Write requests: the local CreateXConfigRequest / UpdateXConfigRequest
 // types are structurally compatible with the SDK's variants (the SDK uses
 // `?: T | null` where the local uses `?: T`; `string | undefined` is a
@@ -320,14 +329,21 @@ export const ssoApi = {
     providerId: string,
     username: string,
     password: string,
-  ): Promise<{ access_token: string; refresh_token: string }> => {
+  ): Promise<LdapLoginResult> => {
     const data = await unwrap(sdkLdapLogin({
       path: { id: providerId },
       body: { username, password },
     }));
-    // SDK types ldapLogin's 200 response as `unknown` — runtime narrow
-    // and forward the token pair fields explicitly.
+    // SDK types ldapLogin's 200 response as `unknown` — runtime narrow.
     const body = assertData(data, 'ssoApi.ldapLogin');
+    // artifact-keeper#5484: an account with TOTP enrolled gets the
+    // `POST /auth/login` challenge (empty tokens, no cookies) instead of a
+    // session. Check it before the token fields, which are empty strings then.
+    const totpToken = totpChallengeToken(body);
+    if (totpToken !== null) return { kind: 'totp', totpToken };
+    if ((body as { totp_required?: unknown } | null)?.totp_required === true) {
+      throw new Error('ssoApi.ldapLogin: TOTP challenge without totp_token');
+    }
     if (
       typeof body !== 'object' ||
       body === null ||
@@ -336,11 +352,9 @@ export const ssoApi = {
     ) {
       throw new Error('ssoApi.ldapLogin: response missing access_token or refresh_token');
     }
-    const obj = body as Record<string, unknown>;
-    return {
-      access_token: obj.access_token as string,
-      refresh_token: obj.refresh_token as string,
-    };
+    // The session cookies came with the response; the tokens themselves
+    // are not needed by the caller.
+    return { kind: 'session' };
   },
 
   testLdap: async (id: string): Promise<LdapTestResult> => {

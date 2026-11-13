@@ -1,3 +1,4 @@
+import type { InstanceQuota } from '@/lib/quota';
 import type { McpRepositorySettings } from './mcp';
 export * from './groups';
 export * from './migration';
@@ -522,6 +523,9 @@ export interface AdminStats {
   // no `artifacts` row). 0 on older backends.
   proxy_artifact_count: number;
   proxy_storage_bytes: number;
+  // Instance-wide storage and transfer quotas; null when the backend does not
+  // report them (older backend). Optional so hand-built fixtures stay valid.
+  quota?: InstanceQuota | null;
 }
 
 export interface ApiError {

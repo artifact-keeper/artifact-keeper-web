@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
 import { DemoBanner } from "@/components/layout/demo-banner";
 import { PasswordExpiryBanner } from "@/components/layout/password-expiry-banner";
+import { QuotaBanner } from "@/components/layout/quota-banner";
 import { EventStreamProvider } from "@/components/layout/event-stream-provider";
 import { SkipNavLink } from "@/components/layout/skip-nav-link";
 
@@ -18,6 +19,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <DemoBanner />
         <PasswordExpiryBanner />
+        <QuotaBanner />
         <AppHeader />
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 p-6">
           {children}

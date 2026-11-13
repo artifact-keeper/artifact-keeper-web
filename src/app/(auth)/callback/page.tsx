@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { CSRF_HEADER_NAME, CSRF_HEADER_VALUE } from "@/lib/sdk-client";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { totpChallengeToken } from "@/lib/totp-challenge";
 import {
   clearSilentSsoAttempt,
   consumeSilentSsoReturnTo,
@@ -28,11 +29,26 @@ function getSsoErrorMessage(errorCode: string | null): string {
   return messages[errorCode] || "Authentication failed. Please try again.";
 }
 
+/**
+ * artifact-keeper#5486: the backend redeems an exchange code only in the
+ * browser that started the sign-in (an HttpOnly `ak_sso_bind_*` cookie scoped
+ * to `/api/v1/auth/sso`, which `credentials: "include"` sends). A code opened
+ * anywhere else is refused with 401 `AUTH_ERROR` and this message prefix; the
+ * backend has no dedicated error code for it.
+ */
+const SSO_BROWSER_MISMATCH_PREFIX = "This sign-in was not started in this browser";
+
+function isSsoBrowserMismatch(status: number, body: unknown): boolean {
+  if (status !== 401 || typeof body !== "object" || body === null) return false;
+  const message = (body as { message?: unknown }).message;
+  return typeof message === "string" && message.startsWith(SSO_BROWSER_MISMATCH_PREFIX);
+}
+
 function CallbackHandler() {
   useDocumentTitle("Signing In");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refreshUser } = useAuth();
+  const { refreshUser, beginTotpChallenge } = useAuth();
 
   const code = searchParams.get("code");
   const urlError = searchParams.get("error");
@@ -81,6 +97,14 @@ function CallbackHandler() {
 
         if (!response.ok) {
           const body = await response.json().catch(() => null);
+          if (isSsoBrowserMismatch(response.status, body)) {
+            // The code belongs to another browser and will never work here,
+            // so the only way on is a new sign-in from this browser.
+            setError(
+              "This sign-in was finished in a different browser than the one that started it, or it expired. Start the sign-in again from this browser."
+            );
+            return;
+          }
           const ERROR_MESSAGES: Record<string, string> = {
             invalid_state: "SSO session expired. Please try again.",
             invalid_code: "Authorization failed. Please try again.",
@@ -95,6 +119,31 @@ function CallbackHandler() {
           return;
         }
 
+        // A stored return path marks a silent (`prompt=none`) round trip;
+        // explicit sign-ins clear it before leaving for the IdP.
+        const silentReturnTo = consumeSilentSsoReturnTo();
+
+        // artifact-keeper#5484: an account with TOTP enrolled gets no session
+        // from the exchange (no cookies, empty tokens), only a TOTP token.
+        const body: unknown = await Promise.resolve()
+          .then(() => response.json())
+          .catch(() => null);
+        const totpToken = totpChallengeToken(body);
+        if (totpToken !== null) {
+          if (silentReturnTo !== null) {
+            // A background probe must never prompt: stay anonymous as for
+            // silent_denied. An explicit sign-in runs the TOTP step.
+            markSilentSsoAttempted();
+            router.replace(silentReturnTo);
+            return;
+          }
+          // The login page renders the TOTP form from this state and
+          // `verifyTotp` redeems the token, which sets the session cookies.
+          beginTotpChallenge(totpToken);
+          router.replace("/login");
+          return;
+        }
+
         // Tokens are now set as httpOnly cookies by the backend.
         // No need to store them in localStorage.
         // Signed in: reset the silent-SSO once-per-session guard so the next
@@ -102,16 +151,15 @@ function CallbackHandler() {
         // silent attempt started from (explicit logins have no stored return
         // path and land on "/" as before).
         clearSilentSsoAttempt();
-        const returnTo = consumeSilentSsoReturnTo() ?? "/";
         await refreshUser();
-        router.replace(returnTo);
+        router.replace(silentReturnTo ?? "/");
       } catch {
         setError("Failed to complete sign-in. Please try again.");
       }
     };
 
     exchangeCode();
-  }, [code, immediateError, silentDenied, refreshUser, router]);
+  }, [code, immediateError, silentDenied, refreshUser, beginTotpChallenge, router]);
 
   if (error) {
     return (

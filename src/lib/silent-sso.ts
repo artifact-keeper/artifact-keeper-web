@@ -127,6 +127,19 @@ export function consumeSilentSsoReturnTo(): string | null {
 }
 
 /**
+ * Forget a stored return path without reading it. Explicit "Sign in with …"
+ * clicks call this, so the callback can treat a stored path as the mark of a
+ * silent round trip.
+ */
+export function clearSilentSsoReturnTo(): void {
+  try {
+    sessionStorage.removeItem(SILENT_SSO_RETURN_KEY);
+  } catch {
+    // Ignore: nothing stored means nothing to clear.
+  }
+}
+
+/**
  * The fail-open gate: verify — cheaply, with a hard timeout, and without
  * navigating anywhere — that the silent login round trip has somewhere to
  * go. Fetches the provider's `prompt=none` login URL with redirects
