@@ -16,6 +16,7 @@ import {
 import { toUserMessage } from "@/lib/error-utils";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 
+import { MyExceptionRequests } from "@/components/exceptions/my-exception-requests";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -126,6 +127,9 @@ function RequestExceptionForm() {
         <Button variant="outline" onClick={() => setDone(false)}>
           Request another
         </Button>
+        <div className="text-left">
+          <MyExceptionRequests />
+        </div>
       </div>
     );
   }
@@ -222,6 +226,8 @@ function RequestExceptionForm() {
           Send request
         </Button>
       </div>
+
+      <MyExceptionRequests />
     </div>
   );
 }

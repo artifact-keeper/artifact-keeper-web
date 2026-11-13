@@ -261,6 +261,22 @@ describe("exceptionsApi.reopen", () => {
   });
 });
 
+describe("exceptionsApi.mine", () => {
+  it("lists the caller's own requests from the requester route", async () => {
+    mockApiFetch.mockResolvedValueOnce({ items: [WIRE], pagination: { total: 1 } });
+    const page = await exceptionsApi.mine({ perPage: 20 });
+    expect(lastPath()).toBe("/api/v1/exceptions/requests?per_page=20");
+    expect(page.total).toBe(1);
+    expect(page.items[0].packageName).toBe("leftpad-clone");
+  });
+
+  it("tolerates a body with no items", async () => {
+    mockApiFetch.mockResolvedValueOnce({});
+    expect(await exceptionsApi.mine()).toEqual({ items: [], total: 0 });
+    expect(lastPath()).toBe("/api/v1/exceptions/requests");
+  });
+});
+
 describe("exceptionsApi.request", () => {
   const input = {
     repositoryKey: "npm-remote",

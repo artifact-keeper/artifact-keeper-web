@@ -178,6 +178,23 @@ export const exceptionsApi = {
     };
   },
 
+  /**
+   * The caller's own requests, for any signed-in user, so an asker can see
+   * what became of a request without the reviewer capability
+   */
+  mine: async (params: { page?: number; perPage?: number } = {}): Promise<ExceptionPage> => {
+    const data = await apiFetch<ExceptionListWire>(
+      `/api/v1/exceptions/requests${qs({
+        page: params.page?.toString(),
+        per_page: params.perPage?.toString(),
+      })}`,
+    );
+    return {
+      items: (data.items ?? []).map(adapt),
+      total: data.pagination?.total ?? 0,
+    };
+  },
+
   approve: async (id: string, opts: ApproveOptions = {}): Promise<PackageException> => {
     const body: Record<string, unknown> = { reason: opts.reason?.trim() || null };
     if (opts.neverExpires) {
