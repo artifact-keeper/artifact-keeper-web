@@ -48,6 +48,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => search,
 }));
 
+vi.mock("@/components/exceptions/my-exception-requests", () => ({
+  MyExceptionRequests: () => <div data-testid="my-requests" />,
+}));
+
 const mockRequest = vi.fn();
 vi.mock("@/lib/api/exceptions", () => ({
   EXCEPTION_GATES: ["age", "scan", "curation"],
