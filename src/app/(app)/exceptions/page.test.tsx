@@ -1062,6 +1062,14 @@ describe("mutation callbacks", () => {
     expect(mockInvalidate).toHaveBeenCalledWith({ queryKey: ["exceptions"] });
   });
 
+  it("says why a scan request with no refused download cannot be granted yet (409)", () => {
+    render(<ExceptionsPage />);
+    const said =
+      "No refused download of this package has been recorded yet, so there are no bytes to grant this scan exception for.";
+    mutationConfigs[0].onError?.(new ApiError(409, JSON.stringify({ code: "CONFLICT", message: said })));
+    expect(mockToastError).toHaveBeenCalledWith(said);
+  });
+
   it("leaves the queue alone when the decision is refused by the server", () => {
     render(<ExceptionsPage />);
     mutationConfigs[0].onError?.(new Error("API error 403: forbidden"));
