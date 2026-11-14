@@ -184,17 +184,25 @@ jobs:
 
       - name: Inspect image
         id: inspect
+        env:
+          IMAGE_VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect "${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}"
           DIGEST=$(docker buildx imagetools inspect --format '{{json .Manifest}}' \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} | jq -r '.digest')
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+            "${REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}" | jq -r '.digest')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Copy to Docker Hub
+        env:
+          DOCKERHUB_METADATA_JSON: ${{ steps.meta-dockerhub.outputs.json }}
+          IMAGE_DIGEST: ${{ steps.inspect.outputs.digest }}
         run: |
+          # The tag list is word-split on purpose: each "-t <tag>" pair becomes
+          # two arguments, exactly as when the JSON was interpolated inline.
+          # shellcheck disable=SC2046
           docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ steps.meta-dockerhub.outputs.json }}') \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.inspect.outputs.digest }}
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKERHUB_METADATA_JSON") \
+            "${REGISTRY}/${IMAGE_NAME}@${IMAGE_DIGEST}"
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -216,9 +224,18 @@ jobs:
     name: Release Gate (Compatibility)
     needs: [merge]
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch'
+    # The gate's jobs request at most contents: read and packages: read (ghcr
+    # pulls); a called workflow can never hold more than its calling job grants.
+    permissions:
+      contents: read
+      packages: read
+    # Still @main: SHA-pinning waits on branch protection for
+    # artifact-keeper-test, and on the 1.12.0 gate wiring landing there.
     uses: artifact-keeper/artifact-keeper-test/.github/workflows/release-gate.yml@main
     with:
       backend_tag: latest
       web_tag: ${{ needs.merge.outputs.version }}
       test_suite: compatibility
-    secrets: inherit
+    # Only the one secret the gate declares, not every secret this repo holds.
+    secrets:
+      GHCR_DOCKER_CONFIG: ${{ secrets.GHCR_DOCKER_CONFIG }}

@@ -36,8 +36,9 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -52,12 +53,15 @@ jobs:
         # The Release object names a version; package.json is what the built UI
         # actually reports. If they disagree, stop rather than publish a Release
         # for a build that will misreport itself (#784).
-        run: ./scripts/assert-version-matches-tag.sh "${{ steps.version.outputs.tag }}"
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: ./scripts/assert-version-matches-tag.sh "$TAG"
 
       - name: Extract changelog section
         id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           NOTES_FILE="$(mktemp)"
           # Pull the "## [<version>]" section out of CHANGELOG.md (Keep a Changelog
           # format) up to the next "## [" header. Missing section is non-fatal —
