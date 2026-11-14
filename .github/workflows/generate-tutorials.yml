@@ -68,28 +68,33 @@ jobs:
 
       - name: Record tutorials
         run: |
-          if [ "${{ inputs.tutorials }}" = "all" ]; then
+          if [ "$TUTORIALS" = "all" ]; then
             npx playwright test --config playwright-tutorials.config.ts
           else
-            IFS=',' read -ra IDS <<< "${{ inputs.tutorials }}"
+            IFS=',' read -ra IDS <<< "$TUTORIALS"
             for id in "${IDS[@]}"; do
               npx playwright test --config playwright-tutorials.config.ts -g "$(echo "$id" | sed 's/^[0-9]*-//')"
             done
           fi
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3100
+          TUTORIALS: ${{ inputs.tutorials }}
 
       - name: Generate videos
+        env:
+          TUTORIALS: ${{ inputs.tutorials }}
+          FORCE: ${{ inputs.force }}
+          VOICE: ${{ inputs.voice }}
         run: |
-          ARGS=""
-          if [ "${{ inputs.tutorials }}" != "all" ]; then
-            ARGS="$ARGS --tutorials ${{ inputs.tutorials }}"
+          ARGS=()
+          if [ "$TUTORIALS" != "all" ]; then
+            ARGS+=(--tutorials "$TUTORIALS")
           fi
-          if [ "${{ inputs.force }}" = "true" ]; then
-            ARGS="$ARGS --force"
+          if [ "$FORCE" = "true" ]; then
+            ARGS+=(--force)
           fi
-          ARGS="$ARGS --voice ${{ inputs.voice }}"
-          npx tsx e2e/tutorials/scripts/generate-videos.ts $ARGS
+          ARGS+=(--voice "$VOICE")
+          npx tsx e2e/tutorials/scripts/generate-videos.ts "${ARGS[@]}"
 
       - name: Upload tutorial videos
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
