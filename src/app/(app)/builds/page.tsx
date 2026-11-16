@@ -3,7 +3,8 @@
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   SearchIcon,
   Loader2,
@@ -24,7 +25,10 @@ import {
   CircleDashed,
   Ban,
   CalendarDays,
+  Trash2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +56,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildsApi } from "@/lib/api/builds";
+import { apiErrorMessage } from "@/lib/api/fetch";
 import { formatBytes } from "@/lib/utils";
 import type {
   Build,
@@ -60,6 +65,7 @@ import type {
   BuildModule,
 } from "@/types/builds";
 import { BuildMetadata, BuildUrl } from "./_components/build-links";
+import { deleteSummary } from "./_components/delete-summary";
 
 // ---- Helpers ----
 
@@ -507,6 +513,33 @@ export default function BuildsPage() {
   const [compareBuildB, setCompareBuildB] = useState<string | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
 
+  // Rows checked for delete
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (ids: string[]) => buildsApi.deleteMany(ids),
+    onSuccess: (result) => {
+      toast.success(deleteSummary(result));
+      setChecked(new Set());
+      setConfirmDeleteOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["builds"] });
+      queryClient.invalidateQueries({ queryKey: ["build-detail"] });
+    },
+    onError: (error) => {
+      toast.error(apiErrorMessage(error) ?? "Failed to delete builds");
+    },
+  });
+
+  const toggleChecked = useCallback((id: string, on: boolean) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
   // Fetch builds
   const { data: buildsData, isLoading } = useQuery({
     queryKey: ["builds", search, statusFilter, sortBy, page, pageSize],
@@ -522,6 +555,8 @@ export default function BuildsPage() {
   });
 
   const builds = buildsData?.items ?? [];
+  const allOnPageChecked =
+    builds.length > 0 && builds.every((b) => checked.has(b.id));
   const totalPages = buildsData?.pagination?.total_pages ?? 0;
   const totalBuilds = buildsData?.pagination?.total ?? 0;
 
@@ -592,6 +627,17 @@ export default function BuildsPage() {
           >
             <X className="size-3.5" />
             Exit comparison
+          </Button>
+        )}
+        {!comparisonMode && checked.size > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="gap-1.5"
+          >
+            <Trash2 className="size-3.5" />
+            Delete selected ({checked.size})
           </Button>
         )}
       </div>
@@ -696,6 +742,17 @@ export default function BuildsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {!comparisonMode && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        aria-label="Select all builds on this page"
+                        checked={allOnPageChecked}
+                        onCheckedChange={(on) =>
+                          builds.forEach((b) => toggleChecked(b.id, on === true))
+                        }
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="w-10" />
                   <TableHead>Build</TableHead>
                   <TableHead>Status</TableHead>
@@ -723,6 +780,17 @@ export default function BuildsPage() {
                       }`}
                       onClick={() => handleRowClick(build)}
                     >
+                      {!comparisonMode && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            aria-label={`Select ${build.name} #${build.number}`}
+                            checked={checked.has(build.id)}
+                            onCheckedChange={(on) =>
+                              toggleChecked(build.id, on === true)
+                            }
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>{statusIcon(build.status)}</TableCell>
                       <TableCell>
                         <div>
@@ -813,6 +881,17 @@ export default function BuildsPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onCompare={handleStartComparison}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title={`Delete ${checked.size} ${checked.size === 1 ? "build" : "builds"}?`}
+        description="The build records and their artifact lists are deleted. The artifacts in repositories are not touched."
+        confirmText="Delete"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate([...checked])}
       />
 
       {/* Build Diff Dialog */}

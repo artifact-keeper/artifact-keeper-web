@@ -8,6 +8,12 @@ const mockCreateBuild = vi.fn();
 const mockUpdateBuild = vi.fn();
 const mockGetBuildDiff = vi.fn();
 
+const mockApiFetch = vi.fn();
+vi.mock("@/lib/api/fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/fetch")>()),
+  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+}));
+
 vi.mock("@artifact-keeper/sdk", () => ({
   listBuilds: (...args: unknown[]) => mockListBuilds(...args),
   getBuild: (...args: unknown[]) => mockGetBuild(...args),
@@ -55,6 +61,29 @@ function adaptedBuildFixture(overrides: Record<string, unknown> = {}) {
 
 describe("buildsApi", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("deleteMany posts the ids and returns the per-id result", async () => {
+    const result = { deleted: ["a"], failed: [{ id: "b", reason: "forbidden" }] };
+    mockApiFetch.mockResolvedValue(result);
+    const { buildsApi } = await import("../builds");
+    await expect(buildsApi.deleteMany(["a", "b"])).resolves.toEqual(result);
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/builds/delete", {
+      method: "POST",
+      body: JSON.stringify({ ids: ["a", "b"] }),
+    });
+  });
+
+  it("deleteMany splits more than 100 ids over several requests", async () => {
+    mockApiFetch.mockImplementation((_path: string, init: RequestInit) => {
+      const { ids } = JSON.parse(init.body as string) as { ids: string[] };
+      return Promise.resolve({ deleted: ids, failed: [] });
+    });
+    const { buildsApi } = await import("../builds");
+    const ids = Array.from({ length: 205 }, (_, i) => `b${i}`);
+    const result = await buildsApi.deleteMany(ids);
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
+    expect(result.deleted).toEqual(ids);
+  });
 
   it("list returns paginated builds", async () => {
     const response = { items: [buildFixture()], pagination: { total: 1 } };
