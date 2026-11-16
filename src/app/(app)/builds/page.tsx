@@ -69,7 +69,11 @@ import type {
 import { BuildMetadata, BuildUrl } from "./_components/build-links";
 import { deleteSummary } from "./_components/delete-summary";
 import { BuildArtifactName } from "./_components/build-artifact-name";
-import { PAGE_SIZES } from "./_components/build-filters";
+import {
+  PAGE_SIZES,
+  buildFilterParams,
+  type BuildFilterValues,
+} from "./_components/build-filters";
 
 // ---- Helpers ----
 
@@ -512,6 +516,16 @@ export default function BuildsPage() {
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
+  const [filters, setFilters] = useState<BuildFilterValues>({
+    branch: "",
+    agent: "",
+    from: "",
+    to: "",
+  });
+  const setFilter = (key: keyof BuildFilterValues, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
+  };
 
   // Selection
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
@@ -565,7 +579,7 @@ export default function BuildsPage() {
 
   // Fetch builds
   const { data: buildsData, isLoading } = useQuery({
-    queryKey: ["builds", search, statusFilter, sortBy, page, pageSize],
+    queryKey: ["builds", search, statusFilter, sortBy, page, pageSize, filters],
     queryFn: () =>
       buildsApi.list({
         page,
@@ -574,6 +588,7 @@ export default function BuildsPage() {
         status: statusFilter || undefined,
         sort_by: sortBy,
         sort_order: "desc",
+        ...buildFilterParams(filters),
       }),
   });
 
@@ -634,7 +649,8 @@ export default function BuildsPage() {
     setCompareBuildB(null);
   }, []);
 
-  const hasFilters = search || statusFilter;
+  const hasFilters =
+    search || statusFilter || Object.values(filters).some((v) => v !== "");
 
   return (
     <div className="space-y-6">
@@ -729,6 +745,35 @@ export default function BuildsPage() {
               </SelectContent>
             </Select>
 
+            <Input
+              aria-label="Branch"
+              placeholder="Branch"
+              value={filters.branch}
+              onChange={(e) => setFilter("branch", e.target.value)}
+              className="w-[140px]"
+            />
+            <Input
+              aria-label="Agent"
+              placeholder="Agent"
+              value={filters.agent}
+              onChange={(e) => setFilter("agent", e.target.value)}
+              className="w-[140px]"
+            />
+            <Input
+              type="date"
+              aria-label="Created from"
+              value={filters.from}
+              onChange={(e) => setFilter("from", e.target.value)}
+              className="w-[150px]"
+            />
+            <Input
+              type="date"
+              aria-label="Created to"
+              value={filters.to}
+              onChange={(e) => setFilter("to", e.target.value)}
+              className="w-[150px]"
+            />
+
             {hasFilters && (
               <Button
                 variant="ghost"
@@ -736,6 +781,7 @@ export default function BuildsPage() {
                 onClick={() => {
                   setSearch("");
                   setStatusFilter("");
+                  setFilters({ branch: "", agent: "", from: "", to: "" });
                   setPage(1);
                 }}
               >
