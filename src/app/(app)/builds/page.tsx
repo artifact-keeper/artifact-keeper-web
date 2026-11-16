@@ -68,6 +68,7 @@ import type {
 } from "@/types/builds";
 import { BuildMetadata, BuildUrl } from "./_components/build-links";
 import { deleteSummary } from "./_components/delete-summary";
+import { BuildArtifactName } from "./_components/build-artifact-name";
 
 // ---- Helpers ----
 
@@ -334,7 +335,9 @@ function ModuleCard({ module }: { module: BuildModule }) {
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="size-4 text-muted-foreground shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm truncate">{artifact.name}</p>
+                <p className="text-sm truncate">
+                  <BuildArtifactName artifact={artifact} />
+                </p>
                 <p className="text-xs text-muted-foreground truncate font-mono">
                   {artifact.path}
                 </p>
@@ -411,7 +414,9 @@ function BuildDiffDialog({
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-green-600 dark:text-green-400">+</span>
-                        <span className="font-mono text-xs">{art.name}</span>
+                        <span className="font-mono text-xs">
+                          <BuildArtifactName artifact={art} />
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(art.size_bytes)}
@@ -436,7 +441,9 @@ function BuildDiffDialog({
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-red-600 dark:text-red-400">-</span>
-                        <span className="font-mono text-xs">{art.name}</span>
+                        <span className="font-mono text-xs">
+                          <BuildArtifactName artifact={art} />
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(art.size_bytes)}
