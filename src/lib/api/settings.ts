@@ -32,6 +32,19 @@ export interface SendTestEmailResponse {
   message: string;
 }
 
+export interface BuildRetention {
+  days: number;
+  keep_last: number;
+}
+
+function parseBuildRetention(data: unknown): BuildRetention | null {
+  if (!isPlainObject(data)) return null;
+  const days = data.build_retention_days;
+  const keep = data.build_retention_keep_last;
+  if (typeof days !== "number" || typeof keep !== "number") return null;
+  return { days, keep_last: keep };
+}
+
 /**
  * Storage configuration surfaced on the admin Settings → Storage tab.
  *
@@ -310,6 +323,31 @@ export const settingsApi = {
       throw new Error(`Failed to load SMTP config: ${String(error)}`);
     }
     return parseSmtpConfig(data);
+  },
+
+  /**
+   * Build record retention (#618): `days` deletes builds
+   * older than that, `keep_last` keeps only the newest builds per name, 0
+   * turns a rule off, `null` when the backend does not report them (it has no
+   * build retention)
+   */
+  getBuildRetention: async (): Promise<BuildRetention | null> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load build retention: ${String(error)}`);
+    }
+    return parseBuildRetention(data);
+  },
+
+  /** Save both build retention values, the settings update is partial */
+  updateBuildRetention: async (retention: BuildRetention): Promise<void> => {
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({
+        build_retention_days: retention.days,
+        build_retention_keep_last: retention.keep_last,
+      }),
+    });
   },
 
   /**

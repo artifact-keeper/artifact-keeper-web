@@ -519,4 +519,40 @@ describe("settingsApi", () => {
     const mod = await import("../settings");
     expect(mod.settingsApi).not.toHaveProperty("updateMaxUploadSize");
   });
+
+  it("getBuildRetention reads both values, null on a backend without them", async () => {
+    const mod = await import("../settings");
+    mockGetSettings.mockResolvedValue({
+      data: { build_retention_days: 30, build_retention_keep_last: 5 },
+      error: undefined,
+    });
+    await expect(mod.settingsApi.getBuildRetention()).resolves.toEqual({
+      days: 30,
+      keep_last: 5,
+    });
+    mockGetSettings.mockResolvedValue({
+      data: { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 1 },
+      error: undefined,
+    });
+    await expect(mod.settingsApi.getBuildRetention()).resolves.toBeNull();
+  });
+
+  it("getBuildRetention throws when loading the settings fails", async () => {
+    mockGetSettings.mockResolvedValue({ data: undefined, error: "boom" });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getBuildRetention()).rejects.toThrow(
+      /Failed to load build retention: boom/
+    );
+  });
+
+  it("updateBuildRetention posts only the two values", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateBuildRetention({ days: 14, keep_last: 3 });
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ build_retention_days: 14, build_retention_keep_last: 3 }),
+    });
+    expect(mockGetSettings).not.toHaveBeenCalled();
+  });
 });

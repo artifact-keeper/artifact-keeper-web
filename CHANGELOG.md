@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Build retention on Settings, General** (#1165, #618) - A Build retention card with the two values from artifact-keeper#6132: days after which a finished build record is deleted, and how many builds per name to keep, 0 for off. It renders nothing against a backend that does not report them
+
 ### Fixed
 
 - **The build detail shows the repository link, the metadata and every artifact of a module** (#1163, #618) - The Builds page never showed `vcs_url` or `metadata`, and a module with several artifacts was cut to its first one (`artifacts[0]`). The detail now shows the repository URL and each metadata key and value, with a URL as a link only when it is http or https (a `javascript:` or `data:` value stays text), and the Modules tab lists every artifact with its path and size. The data comes from backend `GET /api/v1/builds` and `GET /api/v1/builds/{id}`, which return the VCS fields, metadata and modules from artifact-keeper#6048 on, and that change also makes the Date and Duration sort work. Against an older backend the dialog looks as before
