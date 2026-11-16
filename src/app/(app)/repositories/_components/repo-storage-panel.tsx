@@ -118,10 +118,11 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     );
   }
 
-  // Endpoint unavailable (e.g. a backend that predates #2056): fall back to the
-  // coarse logical figure already carried on the repository record so the panel
-  // still shows *something* meaningful rather than an error.
-  if (isError || !usage) {
+  // Endpoint unavailable (e.g. a backend that predates #2056), or the stats
+  // refresher has not run for this repository yet, which the backend answers
+  // with zeros and no `computed_at` (#1131): fall back to the coarse logical
+  // figure already carried on the repository record rather than show 0 B.
+  if (isError || !usage || usage.computed_at == null) {
     return (
       <Card data-testid="storage-panel-fallback">
         <CardHeader>
@@ -134,9 +135,10 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
             icon={<Database className="size-3.5" />}
             testId="storage-logical"
           />
-          <p className="text-xs text-muted-foreground">
-            Detailed deduplicated storage metrics are unavailable for this
-            repository.
+          <p className="text-xs text-muted-foreground" data-testid="storage-fallback-note">
+            {usage && !isError
+              ? "Storage breakdown not computed yet. It appears after the next storage stats refresh."
+              : "Detailed deduplicated storage metrics are unavailable for this repository."}
           </p>
         </CardContent>
       </Card>
