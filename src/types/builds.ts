@@ -22,13 +22,8 @@ export interface Build {
 
 export interface BuildModule {
   id: string;
-  build_id: string;
-  module_name: string;
   name: string;
-  path: string;
-  checksum_sha256: string;
-  size_bytes: number;
-  created_at: string;
+  artifacts: BuildArtifact[];
 }
 
 export interface BuildArtifact {

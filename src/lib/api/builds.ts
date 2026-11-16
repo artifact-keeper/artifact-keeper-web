@@ -39,47 +39,16 @@ const BUILD_STATUSES = new Set<BuildStatus>([
   'cancelled',
 ]);
 
-// SDK BuildModule: { id, name, artifacts: BuildArtifact[] }
-// Local BuildModule: { id, build_id, module_name, name, path, checksum_sha256,
-// size_bytes, created_at }. The SDK shape is a parent record holding its
-// artifacts; the local shape was modeled per-artifact-row.
-//
-// INTENTIONAL LOSS: this adapter collapses an N-artifact SDK module to a
-// single local BuildModule by keeping only `artifacts[0]`. Pages that need
-// per-artifact data should consume the SDK shape directly via
-// `BuildResponse.modules[i].artifacts`. Pending: rework the local BuildModule
-// type to carry an `artifacts` array so the collapse can be removed (#206
-// follow-up).
-//
-// While the local type still drops siblings, log a warning when a module
-// arrives with multiple artifacts so the regression is observable rather
-// than silent.
-function adaptBuildModule(
-  sdk: SdkBuildModule,
-  buildId: string,
-  buildCreatedAt: string,
-): BuildModule {
-  if (sdk.artifacts.length > 1) {
-    console.warn(
-      `buildsApi: collapsing SDK BuildModule "${sdk.name}" (${sdk.artifacts.length} artifacts) ` +
-        `to a single local BuildModule entry — extra artifacts are dropped. ` +
-        `Pages that need full per-artifact data must consume modules[i].artifacts directly.`
-    );
-  }
-  const first = sdk.artifacts[0];
+function adaptBuildModule(sdk: SdkBuildModule): BuildModule {
   return {
     id: sdk.id,
-    build_id: buildId,
-    module_name: sdk.name,
-    name: first?.name ?? sdk.name,
-    path: first?.path ?? '',
-    checksum_sha256: first?.checksum_sha256 ?? '',
-    size_bytes: first?.size_bytes ?? 0,
-    // SDK's BuildModule has no per-module timestamp. Falling back to the parent
-    // build's created_at gives the UI a valid date to render (vs '' which
-    // produces "Invalid Date"). Modules are scoped to a build so this is a
-    // reasonable approximation until the SDK exposes a real field.
-    created_at: buildCreatedAt,
+    name: sdk.name,
+    artifacts: sdk.artifacts.map((a) => ({
+      name: a.name,
+      path: a.path,
+      checksum_sha256: a.checksum_sha256,
+      size_bytes: a.size_bytes,
+    })),
   };
 }
 
@@ -97,7 +66,7 @@ function adaptBuild(sdk: BuildResponse): Build {
     updated_at: sdk.updated_at,
     artifact_count: sdk.artifact_count ?? undefined,
     modules: sdk.modules
-      ? sdk.modules.map((m) => adaptBuildModule(m, sdk.id, sdk.created_at))
+      ? sdk.modules.map(adaptBuildModule)
       : undefined,
     vcs_url: sdk.vcs_url ?? undefined,
     vcs_revision: sdk.vcs_revision ?? undefined,

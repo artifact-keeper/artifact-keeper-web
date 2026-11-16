@@ -138,8 +138,7 @@ describe("buildsApi", () => {
     await expect(buildsApi.diff("b1", "b2")).rejects.toBe("fail");
   });
 
-  it("warns when adaptBuildModule collapses a multi-artifact module", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("keeps every artifact of a module", async () => {
     const moduleWithTwoArtifacts = {
       id: "mod1",
       name: "mod-a",
@@ -154,8 +153,24 @@ describe("buildsApi", () => {
     });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.get("b1");
-    expect(result.modules?.[0].name).toBe("a1");
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/collapsing SDK BuildModule/));
-    warn.mockRestore();
+    expect(result.modules).toEqual([moduleWithTwoArtifacts]);
+  });
+
+  it("passes vcs fields and metadata through", async () => {
+    const vcs = {
+      vcs_url: "https://vcs.example.test/org/repo",
+      vcs_revision: "0123abcd",
+      vcs_branch: "main",
+      vcs_message: "fix things",
+      metadata: { pipeline_url: "https://ci.example.test/p/1" },
+    };
+    mockListBuilds.mockResolvedValue({
+      data: { items: [buildFixture(vcs)], pagination: { total: 1 } },
+      error: undefined,
+    });
+    const { buildsApi } = await import("../builds");
+    const result = await buildsApi.list({ sort_by: "created_at" });
+    expect(result.items[0]).toEqual(adaptedBuildFixture(vcs));
+    expect(mockListBuilds).toHaveBeenCalledWith({ query: { sort_by: "created_at" } });
   });
 });
