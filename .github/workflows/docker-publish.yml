@@ -142,6 +142,23 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Is this the newest stable tag
+        # A maintenance-line tag (e.g. v1.11.4 after v1.12.0) must not move
+        # `:latest` backwards. Only the highest stable v* tag gets `latest`.
+        id: newest
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          NEWEST="$(git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" 'v*' \
+            | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          if [[ "$REF" == refs/tags/v* && "$REF_NAME" == "$NEWEST" ]]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "newest stable tag: ${NEWEST}; this ref: ${REF_NAME}"
+
       - name: Extract metadata (ghcr.io)
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -155,7 +172,7 @@ jobs:
             type=sha
             type=raw,value=dev,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
             type=raw,value=1.1-dev,enable=${{ github.ref == format('refs/heads/{0}', 'release/1.1.x') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ steps.newest.outputs.latest == 'true' }}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Extract metadata (Docker Hub)
@@ -171,7 +188,7 @@ jobs:
             type=sha
             type=raw,value=dev,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
             type=raw,value=1.1-dev,enable=${{ github.ref == format('refs/heads/{0}', 'release/1.1.x') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ steps.newest.outputs.latest == 'true' }}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Create manifest list and push (ghcr.io)

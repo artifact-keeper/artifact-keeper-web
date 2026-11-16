@@ -77,6 +77,23 @@ jobs:
           fi
           echo "path=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
 
+      - name: Is this the newest stable tag
+        # A maintenance-line tag (e.g. v1.11.4 after v1.12.0) must not move
+        # the "Latest" Release backwards (the chart drift check reads it).
+        id: newest
+        env:
+          REF: refs/tags/${{ steps.version.outputs.tag }}
+          REF_NAME: ${{ steps.version.outputs.tag }}
+        run: |
+          NEWEST="$(git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" 'v*' \
+            | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+          if [[ "$REF" == refs/tags/v* && "$REF_NAME" == "$NEWEST" ]]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "newest stable tag: ${NEWEST}; this ref: ${REF_NAME}"
+
       - name: Create Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
@@ -85,3 +102,4 @@ jobs:
           body_path: ${{ steps.changelog.outputs.path }}
           generate_release_notes: true
           prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.newest.outputs.latest }}
