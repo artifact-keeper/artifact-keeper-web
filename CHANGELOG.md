@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.3] - 2026-11-15
+
+### Sponsors
+
+Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
+
+**Backers**
+
+- **Advailo, SIA** ([@advailo](https://github.com/advailo))
+- **Ash A.** ([@dragonpaw](https://github.com/dragonpaw))
+- **Mike** ([@huylv95](https://github.com/huylv95))
+- **Gabriel Rodriguez** ([@injectedfusion](https://github.com/injectedfusion))
+- **Narek Engibaryan** ([@narek01](https://github.com/narek01))
+- and one sponsor who chose to stay private
+
+[Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
+
 ### Fixed
 
 - **LDAP, OIDC and SAML sign-in asks for the TOTP code on accounts that enrolled one** (artifact-keeper#5484) - Backend 1.11.14 and 1.12.0 stop treating a directory password or an IdP assertion as a complete sign-in for an account with TOTP enrolled: LDAP login and the OIDC/SAML code exchange now answer with the same TOTP challenge as the local login, and set no session. This UI did not know that answer, so such a user who signed in through LDAP or SSO was sent back to the login page with no session and no message. The LDAP form and the `/callback` page now show the existing two-factor form and finish the sign-in at `POST /auth/totp/verify`; accounts without TOTP sign in as before. A background silent-SSO check (`prompt=none`) that meets a TOTP account stays signed out instead of prompting; the user signs in with the SSO button and enters the code then. Run this UI with backend 1.11.14 / 1.12.0 or later for TOTP accounts that use LDAP or SSO; against an older backend nothing changes.
+
+### Notes
+
+- **1.11.x maintenance line** (#1159) - Web 1.11.x patches now come from `release/1.11.x`, which runs the same required checks as `main` and runs E2E against backend 1.11. A tag gets the `latest` image tag and the Latest Release only when it is the highest stable version, so a 1.11.x patch published after 1.12.0 does not replace 1.12.0 as `latest`.
 
 ## [1.11.2] - 2026-10-29
 
