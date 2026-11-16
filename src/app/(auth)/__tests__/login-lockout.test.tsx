@@ -109,7 +109,7 @@ vi.mock("@/providers/system-config-provider", () => ({
 // SSO mock with mutable return value so individual tests can override it
 const { mockListProviders, mockLdapLogin } = vi.hoisted(() => ({
   mockListProviders: vi.fn().mockResolvedValue([]),
-  mockLdapLogin: vi.fn().mockResolvedValue(undefined),
+  mockLdapLogin: vi.fn().mockResolvedValue({ kind: "session" }),
 }));
 
 vi.mock("@/lib/api/sso", () => ({
@@ -137,7 +137,7 @@ describe("LoginPage lockout UI", () => {
     mockVerifyTotp.mockClear();
     mockClearTotpRequired.mockClear();
     mockListProviders.mockResolvedValue([]);
-    mockLdapLogin.mockResolvedValue(undefined);
+    mockLdapLogin.mockResolvedValue({ kind: "session" });
     localLoginEnabled = true;
     authState = {
       login: mockLogin,
@@ -505,7 +505,7 @@ describe("LoginPage lockout UI", () => {
     mockListProviders.mockResolvedValue([
       { id: "ldap-1", name: "Corp LDAP", provider_type: "ldap", login_url: "" },
     ]);
-    mockLdapLogin.mockResolvedValueOnce(undefined);
+    mockLdapLogin.mockResolvedValueOnce({ kind: "session" });
     mockRefreshUser.mockResolvedValueOnce(undefined);
 
     await act(async () => {
@@ -578,5 +578,62 @@ describe("LoginPage lockout UI", () => {
     await act(async () => {
       fireEvent.click(screen.getByText("Sign in with Azure AD"));
     });
+  });
+
+  it("an explicit SSO click drops a silent probe's leftover return path (artifact-keeper#5484)", async () => {
+    // The callback reads a stored return path as "this was a silent probe"
+    // and then never prompts for TOTP, so an explicit sign-in must not carry
+    // one left behind by a probe that ended on an IdP error.
+    sessionStorage.setItem("ak.silent-sso.return-to", "/stale");
+    mockListProviders.mockResolvedValue([
+      { id: "oidc-1", name: "Okta", provider_type: "oidc", login_url: "/api/v1/auth/sso/oidc/oidc-1/login" },
+    ]);
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Sign in with Okta")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign in with Okta"));
+    });
+
+    expect(sessionStorage.getItem("ak.silent-sso.return-to")).toBeNull();
+  });
+
+  it("LDAP sign-in for a TOTP account starts the TOTP step instead of signing in", async () => {
+    const mockBeginTotpChallenge = vi.fn();
+    (authState as Record<string, unknown>).beginTotpChallenge = mockBeginTotpChallenge;
+    mockListProviders.mockResolvedValue([
+      { id: "ldap-1", name: "Corp LDAP", provider_type: "ldap", login_url: "" },
+    ]);
+    mockLdapLogin.mockResolvedValueOnce({ kind: "totp", totpToken: "pending.jwt" });
+
+    await act(async () => {
+      render(<LoginPage />);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Corp LDAP")).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Corp LDAP"));
+    });
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "ldapuser" } });
+      fireEvent.change(screen.getByPlaceholderText("Enter your password"), {
+        target: { value: "ldappass" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign In"));
+    });
+
+    await waitFor(() => {
+      expect(mockBeginTotpChallenge).toHaveBeenCalledWith("pending.jwt");
+    });
+    expect(mockRefreshUser).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

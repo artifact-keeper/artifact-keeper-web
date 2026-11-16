@@ -47,6 +47,14 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
   verifyTotp: (code: string) => Promise<void>;
+  /**
+   * Show the TOTP step for a sign-in that stopped at the second factor
+   * outside `login()`: LDAP login and the OIDC/SAML code exchange
+   * (artifact-keeper#5484). Sets the same state `login()` sets for a "totp"
+   * result, so the login page renders its TOTP form and `verifyTotp` redeems
+   * the token.
+   */
+  beginTotpChallenge: (totpToken: string) => void;
   clearTotpRequired: () => void;
 }
 
@@ -140,6 +148,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await syncPrincipal(await loadUser());
   }, [loadUser, syncPrincipal]);
 
+  const beginTotpChallenge = useCallback((token: string) => {
+    setTotpRequired(true);
+    setTotpToken(token);
+  }, []);
+
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
       const body: LoginRequest = { username, password };
@@ -147,8 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const loginData = data as unknown as SdkLoginResponse;
 
       if (loginData.totp_required && loginData.totp_token) {
-        setTotpRequired(true);
-        setTotpToken(loginData.totp_token);
+        beginTotpChallenge(loginData.totp_token);
         return "totp"; // Don't redirect yet
       }
 
@@ -166,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [loadUser, syncPrincipal]
+    [beginTotpChallenge, loadUser, syncPrincipal]
   );
 
   const verifyTotp = useCallback(
@@ -336,6 +348,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         clearMustChangePassword,
         verifyTotp,
+        beginTotpChallenge,
         clearTotpRequired,
       }}
     >

@@ -368,6 +368,45 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("authenticated").textContent).toBe("true");
   });
 
+  it("beginTotpChallenge puts up the TOTP step and verifyTotp redeems that token (artifact-keeper#5484)", async () => {
+    renderWithQuery(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("loading").textContent).toBe("false");
+    });
+
+    // The LDAP login page and the SSO callback hand over the challenge token
+    // they got instead of a session.
+    act(() => {
+      capturedAuthRef.current!.beginTotpChallenge("sso-pending.jwt");
+    });
+    expect(capturedAuthRef.current!.totpRequired).toBe(true);
+    expect(capturedAuthRef.current!.totpToken).toBe("sso-pending.jwt");
+    expect(screen.getByTestId("authenticated").textContent).toBe("false");
+
+    mockSdkVerifyTotp.mockResolvedValueOnce({
+      data: { access_token: "tok", refresh_token: "rtok", must_change_password: false },
+      error: null,
+    });
+    mockSdkGetCurrentUser.mockResolvedValueOnce({
+      data: { id: "u2", username: "fed", email: "fed@test.com", is_admin: false },
+      error: null,
+    });
+    await act(async () => {
+      await capturedAuthRef.current!.verifyTotp("654321");
+    });
+
+    expect(mockSdkVerifyTotp).toHaveBeenCalledWith({
+      body: { totp_token: "sso-pending.jwt", code: "654321" },
+    });
+    expect(capturedAuthRef.current!.totpRequired).toBe(false);
+    expect(capturedAuthRef.current!.totpToken).toBeNull();
+    expect(screen.getByTestId("authenticated").textContent).toBe("true");
+  });
+
   it("throws error when useAuth is used outside AuthProvider", () => {
     function BareConsumer() {
       useAuth();
