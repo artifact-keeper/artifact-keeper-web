@@ -17,10 +17,14 @@ import {
   Key,
   PackageCheck,
   FileSignature,
+  BadgeCheck,
   Shield,
+  ShieldBan,
   ShieldCheck,
   ListChecks,
   Search,
+  Bug,
+  Inbox,
   FileCheck,
   Lock,
   Users,
@@ -43,6 +47,7 @@ import {
   Network,
   Crosshair,
   Hourglass,
+  Plug,
 } from "lucide-react";
 
 /**
@@ -86,6 +91,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { title: "Packages", href: "/packages", icon: Boxes },
       { title: "Builds", href: "/builds", icon: Hammer },
       { title: "Staging", href: "/staging", icon: GitPullRequestArrow },
+      { title: "MCP Servers", href: "/mcp-servers", icon: Plug },
       { title: "Setup Guide", href: "/setup", icon: BookOpen },
     ],
   },
@@ -114,6 +120,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { title: "Dashboard", href: "/security", icon: Shield },
       { title: "Scan Results", href: "/security/scans", icon: Search },
+      { title: "Acknowledgements", href: "/security/acknowledgements", icon: BadgeCheck },
+      { title: "Proxy Blocked", href: "/security/proxy-blocked", icon: ShieldBan },
+      { title: "Vulnerabilities", href: "/security/findings", icon: Bug },
+      { title: "Scan Queue", href: "/security/queue", icon: Inbox },
       { title: "Blast Radius", href: "/security/blast-radius", icon: Crosshair },
       { title: "DT Projects", href: "/security/dt-projects", icon: FolderSearch },
       { title: "Quality Gates", href: "/quality-gates", icon: ShieldCheck },

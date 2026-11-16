@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -10,6 +11,8 @@ import {
   useHiddenNavItems,
 } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { backendSupportsMcp } from "@/lib/mcp/format";
 import {
   Sidebar,
   SidebarContent,
@@ -67,6 +70,9 @@ export function AppSidebar() {
   const { isAuthenticated, user } = useAuth();
   const isAdmin = user?.is_admin ?? false;
   const flags = useFeatureFlags();
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865):
+  // a repository-scoped admin token gets 403 and an older backend 404.
+  const canListFindings = useCanListFindings();
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -74,6 +80,11 @@ export function AppSidebar() {
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
+
+  // The MCP catalog only exists on a backend that registers the `mcp`
+  // format (artifact-keeper#5253); an older one would show an empty page.
+  const { data: formatHandlers } = useFormatHandlers();
+  const mcpSupported = backendSupportsMcp(Array.isArray(formatHandlers) ? formatHandlers : undefined);
 
   const hiddenNavItems = useHiddenNavItems();
 
@@ -89,6 +100,8 @@ export function AppSidebar() {
     if (item.href === "/security/dt-projects") {
       return flags.dependencyTrackEnabled;
     }
+    if (item.href === "/mcp-servers") return mcpSupported;
+    if (item.href === "/security/findings") return canListFindings;
     return true;
   };
 
