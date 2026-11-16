@@ -487,6 +487,20 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Packages")).toBeDefined();
   });
 
+  it("hides gated entries an admin hid even while their gate is open (#968)", () => {
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockCanListFindings.mockReturnValue(true);
+    mockFormatHandlers.mockReturnValue([{ format_key: "mcp", is_enabled: true }]);
+    mockUseHiddenNavItems.mockReturnValue(["/security/findings", "/mcp-servers"]);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Vulnerabilities")).toBeNull();
+    expect(screen.queryByText("MCP Servers")).toBeNull();
+    expect(screen.getByText("Scan Queue")).toBeDefined();
+    expect(screen.getByText("Staging")).toBeDefined();
+  });
+
   it("drops a group whose entries are all hidden (#968)", () => {
     authState({ isAuthenticated: true, isAdmin: true });
     mockUseHiddenNavItems.mockReturnValue([
