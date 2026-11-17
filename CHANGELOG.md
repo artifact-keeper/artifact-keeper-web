@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.11.3] - 2026-11-15
+## [1.11.3] - 2026-11-17
 
 ### Sponsors
 
@@ -24,8 +24,13 @@ Thank you to our sponsors for supporting ongoing development of Artifact Keeper.
 
 [Become a sponsor](https://github.com/sponsors/artifact-keeper) to support the project and get your name listed here.
 
+### Compatibility
+
+- **Web 1.11.3 is the first 1.11.x web that runs against backend 1.12.0** (#1178, artifact-keeper/artifact-keeper#5663) - Backend 1.12.0 reports a package's `download_count` as `null` when it cannot tie the package to its downloads, which is the case for a Remote or Virtual Maven package cached through a streamed pull-through (artifact-keeper#5419). Web 1.11.2 and earlier format that count without a null check, so against backend 1.12.0 `/repositories`, `/packages` and every Remote or Virtual Maven repository page show "Something went wrong". Web 1.11.3 shows a dash for that count or leaves it out (see Fixed). For backend 1.12.0, web 1.12.0 is still the matching release: it carries the UI for the rest of the 1.12.0 changes. Backend 1.11.14 needs web 1.11.3 (or 1.12.0) for TOTP accounts that sign in through LDAP or SSO. On backend 1.12.0, the Security page shows an empty grade badge for a repository the backend reports as unrated (null `grade`); web 1.12.0 has the same gap (#1177).
+
 ### Fixed
 
+- **Package downloads and versions read as the backend reports them, and a rejected file is badged Rejected** (#1178, backport of #1085) - A package or version download count that is null, missing or zero shows as a dash, or is left out, instead of "0 downloads" or an error. That keeps the repository pages working against backend 1.12.0 (see Compatibility). A rejected file in a repository's file list was badged "Quarantined"; it is now badged "Rejected", a conda withdrawal "Withdrawn", and a released or expired hold shows no badge. Versions of revision- or tag-style formats (Hugging Face, ML models, Git LFS, generic, the OCI family and container images) show as stored, so a Hugging Face revision reads `main` instead of `vmain`, and a Go version that already starts with `v` is not doubled. Trade-off: since backend 1.12.0 a 0 is a real count, and it is still shown as a dash.
 - **LDAP, OIDC and SAML sign-in asks for the TOTP code on accounts that enrolled one** (artifact-keeper#5484) - Backend 1.11.14 and 1.12.0 stop treating a directory password or an IdP assertion as a complete sign-in for an account with TOTP enrolled: LDAP login and the OIDC/SAML code exchange now answer with the same TOTP challenge as the local login, and set no session. This UI did not know that answer, so such a user who signed in through LDAP or SSO was sent back to the login page with no session and no message. The LDAP form and the `/callback` page now show the existing two-factor form and finish the sign-in at `POST /auth/totp/verify`; accounts without TOTP sign in as before. A background silent-SSO check (`prompt=none`) that meets a TOTP account stays signed out instead of prompting; the user signs in with the SSO button and enters the code then. Run this UI with backend 1.11.14 / 1.12.0 or later for TOTP accounts that use LDAP or SSO; against an older backend nothing changes.
 
 ### Notes
