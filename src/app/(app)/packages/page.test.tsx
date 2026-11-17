@@ -28,6 +28,31 @@ const PACKAGE = {
   updated_at: "2026-01-02T00:00:00Z",
 };
 
+// Backend 1.12.0 reports `download_count: null` for a Remote or Virtual Maven
+// package it cannot tie to its downloads (artifact-keeper#5419); 1.11.2 threw
+// on it and the page showed "Something went wrong" (artifact-keeper#5663).
+const NULL_COUNT_PACKAGE = {
+  ...PACKAGE,
+  id: "pkg-null",
+  repository_key: "maven-remote",
+  name: "junit:junit",
+  version: "4.13.2",
+  format: "maven",
+  download_count: null,
+};
+const NULL_COUNT_VERSIONS = [
+  {
+    version: "4.13.2",
+    size_bytes: 2048,
+    download_count: null,
+    created_at: "2026-01-01T00:00:00Z",
+    checksum_sha256: "a".repeat(64),
+  },
+];
+let listed: Record<string, unknown> = PACKAGE;
+let detail: unknown = undefined;
+let versions: unknown = undefined;
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -61,10 +86,12 @@ vi.mock("@tanstack/react-query", () => ({
     if (opts.enabled !== false) opts.queryFn();
     if (opts.queryKey[0] === "packages") {
       return {
-        data: { items: [PACKAGE], pagination: { total: 1, total_pages: 1 } },
+        data: { items: [listed], pagination: { total: 1, total_pages: 1 } },
         isLoading: false,
       };
     }
+    if (opts.queryKey[0] === "package-detail") return { data: detail, isLoading: false };
+    if (opts.queryKey[0] === "package-versions") return { data: versions, isLoading: false };
     return { data: undefined, isLoading: false };
   },
 }));
@@ -74,6 +101,9 @@ import PackagesPage from "./page";
 describe("PackagesPage virtual-repo context", () => {
   beforeEach(() => {
     cleanup();
+    listed = PACKAGE;
+    detail = undefined;
+    versions = undefined;
     vi.clearAllMocks();
   });
 
@@ -97,5 +127,22 @@ describe("PackagesPage virtual-repo context", () => {
     expect(mockGet).toHaveBeenCalledWith("pkg-1", {
       repository_key: "npm-virtual",
     });
+  });
+});
+
+describe("PackagesPage with a null download count (artifact-keeper#5663)", () => {
+  beforeEach(() => {
+    cleanup();
+    listed = NULL_COUNT_PACKAGE;
+    detail = NULL_COUNT_PACKAGE;
+    versions = NULL_COUNT_VERSIONS;
+  });
+
+  it("renders the package and its versions instead of throwing", () => {
+    render(<PackagesPage />);
+    expect(screen.getAllByText("junit:junit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/4\.13\.2/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 downloads/)).not.toBeInTheDocument();
   });
 });
