@@ -24,12 +24,14 @@
  * - The bidi marks U+200E/F (LRM/RLM) and U+061C (ALM), which are routine in
  *   Hebrew and Arabic text and only nudge neutral characters; they cannot
  *   reverse a run the way an override does.
- * - A subdivision flag (U+1F3F4, tag characters, U+E007F cancel tag), such as
- *   the flags of England, Scotland and Wales.
+ * - A subdivision flag in its real shape (U+1F3F4, a lowercase tag region code
+ *   and subdivision of 3 to 6 tag letters or digits, U+E007F cancel tag), such
+ *   as the flags of England, Scotland and Wales. Any longer tag run is escaped,
+ *   so a flag cannot carry a hidden instruction.
  * The cost is that a hidden character built from those is not flagged.
  */
 const ESCAPED =
-  /(\u{1F3F4}[\u{E0020}-\u{E007E}]+\u{E007F})|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
+  /(\u{1F3F4}[\u{E0061}-\u{E007A}]{2}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{1,4}\u{E007F})|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
 
 export const DEFAULT_MAX_LENGTH = 1000;
 /** Names, keys and labels are short; anything much longer is not a name. */
