@@ -36,6 +36,29 @@ describe("RepoSetupGuide", () => {
     expect(container.textContent).not.toContain("Push artifacts");
   });
 
+  // #1064: a buf module name is exactly registry/owner/name and buf push has
+  // no --registry flag, so the guide names the module after a host whose root
+  // maps onto /proto/<repo>/ and lets buf push read buf.yaml.
+  it("gives a local protobuf repo buf steps buf can run", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local" })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("/proto/proto-local/;");
+    expect(text).toContain("name: bsr.example.com/myorg/mymodule");
+    expect(text).toContain("buf push --create");
+    expect(text).toContain("buf registry login bsr.example.com --token-stdin");
+    expect(text).not.toContain("--registry");
+    expect(text).not.toContain("--username");
+    expect(text).not.toMatch(/name: \S+\/proto\/proto-local\//);
+  });
+
+  it.each(["remote", "virtual"] as const)("gives a %s protobuf repo no buf push steps", (repo_type) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", repo_type })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("buf CLI needs a local repository");
+    expect(text).not.toContain("buf push");
+    expect(text).not.toContain("buf.yaml");
+  });
+
   it("does not advertise pull-through installation for a local mirror format", () => {
     const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "github", repo_type: "local" })} />);
     expect(container.textContent).toContain("Create a remote GitHub mirror");

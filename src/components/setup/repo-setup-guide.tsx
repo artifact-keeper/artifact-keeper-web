@@ -1274,6 +1274,17 @@ code-server`,
       ];
     }
     case "protobuf":
+      // The backend serves the buf CLI's binary Connect codec on local
+      // repositories only; a remote or virtual one answers it with Connect
+      // `unimplemented` (artifact-keeper#5066 / #5074).
+      if (repo.repo_type !== "local") {
+        return [
+          {
+            title: "buf CLI needs a local repository",
+            description: `The buf CLI can push to and resolve modules from a local protobuf repository only. This ${repo.repo_type} repository answers the buf CLI with "unimplemented", so point buf at a local protobuf repository, or at the upstream registry directly.`,
+          },
+        ];
+      }
       return [
         {
           title: "Point a hostname at this repository",
@@ -1300,7 +1311,7 @@ modules:
         },
         {
           title: "Authenticate with buf CLI",
-          code: `buf registry login bsr.example.com --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
+          code: `buf registry login bsr.example.com --token-stdin <<< "YOUR_TOKEN"`,
         },
         {
           title: "Push a module",
