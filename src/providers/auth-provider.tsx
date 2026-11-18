@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import '@/lib/sdk-client';
+import { refreshSession } from '@/lib/sdk-client';
 import {
   login as sdkLogin,
   logout as sdkLogout,
@@ -281,13 +281,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Try to authenticate via httpOnly cookies (sent automatically by browser).
       // refreshUser will set user state if a valid session cookie exists.
+      //
+      // The access cookie lives only as long as the access token, while the
+      // refresh cookie lasts longer and is scoped to the refresh endpoint, so
+      // it is never sent to `/auth/me`. A 401 here can therefore just mean the
+      // access token expired: refresh once and ask again before deciding the
+      // visitor is anonymous. Otherwise the shell stays signed out until a
+      // reload even though the data requests on the page recover on their own
+      // (#1084).
       try {
-        const { data, error } = await sdkGetCurrentUser();
+        const first = await sdkGetCurrentUser();
+        let { data, error } = first;
+        let refreshed = false;
+        // Not on /callback: the SSO code exchange there sets a new session,
+        // and a refresh of the old one racing it could overwrite it.
+        const onCallback =
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/callback");
+        if (
+          error &&
+          first.response?.status === 401 &&
+          !onCallback &&
+          (await refreshSession())
+        ) {
+          refreshed = true;
+          ({ data, error } = await sdkGetCurrentUser());
+        }
         if (!error && data) {
           const userData = data as unknown as User;
-          // The session cookie went out with the initial system-config
-          // request too, so the cache already matches this principal.
-          principalRef.current = userData.id;
+          if (refreshed) {
+            // The initial system-config request and any data queries went
+            // out before the refresh, so they were answered as anonymous:
+            // refetch them for this principal (#487, #844).
+            void syncPrincipal(userData.id, true);
+          } else {
+            // The session cookie went out with the initial system-config
+            // request too, so the cache already matches this principal.
+            principalRef.current = userData.id;
+          }
           setUser(userData);
           setPasswordExpiresAt(userData.password_expires_at ?? null);
           setMustChangePassword(!!userData.must_change_password);
@@ -328,7 +359,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     initAuth();
-  }, [refreshUser]);
+  }, [refreshUser, syncPrincipal]);
 
   return (
     <AuthContext.Provider
