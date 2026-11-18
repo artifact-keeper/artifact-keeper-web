@@ -722,7 +722,7 @@ mise install --locked`,
           title: "Configure Cargo",
           description: "Add to ~/.cargo/config.toml:",
           code: `[registries.${repoKey}]
-index = "${REGISTRY_URL}/cargo/${repoKey}/index"
+index = "sparse+${REGISTRY_URL}/cargo/${repoKey}/"
 token = "YOUR_TOKEN"`,
         },
         {
