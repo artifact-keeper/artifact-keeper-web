@@ -54,8 +54,17 @@ describe("scanConfigApi.get", () => {
     const mod = await import("../scan-config");
     const cfg = await mod.scanConfigApi.get("maven-releases");
     expect(cfg.proxy_scan_action).toBe("fail_open");
+    // Marked as not reported, so record_only is not offered (#1194).
+    expect(cfg.proxy_scan_action_reported).toBe(false);
     // Other fields still parse through.
     expect(cfg.scan_enabled).toBe(true);
+  });
+
+  it("does not mark a reported proxy_scan_action (#1194)", async () => {
+    mockApiFetch.mockResolvedValue({ config: fullConfig, score: null });
+    const mod = await import("../scan-config");
+    const cfg = await mod.scanConfigApi.get("maven-releases");
+    expect(cfg).not.toHaveProperty("proxy_scan_action_reported");
   });
 
   it("keeps record_only instead of showing it as fail_open (#1069)", async () => {

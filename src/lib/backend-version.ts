@@ -62,3 +62,9 @@ export const PERSONAL_TOKEN_REPO_SELECTOR_MIN = "1.11.0";
  * hold from artifact-keeper#4264 (#3912). Earlier backends answer 400.
  */
 export const PROXY_AGE_POLICY_MIN = "1.11.0";
+
+/**
+ * Backend release that accepts `proxy_scan_action = record_only`
+ * (artifact-keeper#3645). Earlier backends store it as `fail_open`.
+ */
+export const RECORD_ONLY_MIN = "1.11.0";

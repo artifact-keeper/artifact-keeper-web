@@ -69,6 +69,13 @@ export interface RepoScanConfig {
    */
   proxy_scan_action: string;
   /**
+   * `false` when the backend's config row did not carry `proxy_scan_action`
+   * (a backend that predates it): `proxy_scan_action` is then this UI's
+   * `fail_open` stand-in, and `record_only` is not offered (#1194). Absent
+   * otherwise.
+   */
+  proxy_scan_action_reported?: false;
+  /**
    * The instance-admin lock on this repository's proxy scan policy
    * (artifact-keeper#4363): while locked, a repository administrator may
    * tighten the policy but not weaken it. `undefined` when the backend did not
@@ -134,6 +141,9 @@ function normalize(raw: z.infer<typeof ScanConfigSchema>): RepoScanConfig {
     block_on_policy_violation: raw.block_on_policy_violation,
     severity_threshold: raw.severity_threshold,
     proxy_scan_action: raw.proxy_scan_action ?? "fail_open",
+    ...(raw.proxy_scan_action === undefined
+      ? { proxy_scan_action_reported: false as const }
+      : {}),
     ...(raw.instance_locked === undefined
       ? {}
       : { instance_locked: raw.instance_locked }),
