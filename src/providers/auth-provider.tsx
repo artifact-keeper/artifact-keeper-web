@@ -292,14 +292,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const first = await sdkGetCurrentUser();
         let { data, error } = first;
-        if (error && first.response?.status === 401 && (await refreshSession())) {
+        let refreshed = false;
+        // Not on /callback: the SSO code exchange there sets a new session,
+        // and a refresh of the old one racing it could overwrite it.
+        const onCallback =
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/callback");
+        if (
+          error &&
+          first.response?.status === 401 &&
+          !onCallback &&
+          (await refreshSession())
+        ) {
+          refreshed = true;
           ({ data, error } = await sdkGetCurrentUser());
         }
         if (!error && data) {
           const userData = data as unknown as User;
-          // The session cookie went out with the initial system-config
-          // request too, so the cache already matches this principal.
-          principalRef.current = userData.id;
+          if (refreshed) {
+            // The initial system-config request and any data queries went
+            // out before the refresh, so they were answered as anonymous:
+            // refetch them for this principal (#487, #844).
+            void syncPrincipal(userData.id, true);
+          } else {
+            // The session cookie went out with the initial system-config
+            // request too, so the cache already matches this principal.
+            principalRef.current = userData.id;
+          }
           setUser(userData);
           setPasswordExpiresAt(userData.password_expires_at ?? null);
           setMustChangePassword(!!userData.must_change_password);
@@ -340,7 +359,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     initAuth();
-  }, [refreshUser]);
+  }, [refreshUser, syncPrincipal]);
 
   return (
     <AuthContext.Provider

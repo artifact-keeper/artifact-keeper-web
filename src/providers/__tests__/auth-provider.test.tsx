@@ -142,13 +142,59 @@ describe("AuthProvider", () => {
     };
     const unauthorized = { data: undefined, error: { code: "UNAUTHORIZED" }, response: { status: 401 } };
 
-    function mount() {
-      renderWithQuery(
+    function mount(queryClient?: QueryClient) {
+      const ui = (
         <AuthProvider>
           <TestConsumer />
         </AuthProvider>
       );
+      if (queryClient) {
+        render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+      } else {
+        renderWithQuery(ui);
+      }
     }
+
+    it("refetches the queries answered as anonymous before the refresh", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      mount(queryClient);
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(invalidate).toHaveBeenCalled();
+    });
+
+    it("keeps the cache when /auth/me succeeds without a refresh", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({ data: USER, error: undefined });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      mount(queryClient);
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it("does not refresh on /callback, where the SSO exchange sets the session", async () => {
+      window.history.pushState({}, "", "/callback?code=abc");
+      try {
+        mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+        mockRefreshSession.mockResolvedValue(true);
+
+        mount();
+        await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+        expect(mockRefreshSession).not.toHaveBeenCalled();
+      } finally {
+        window.history.pushState({}, "", "/");
+      }
+    });
 
     it("refreshes the session and asks again, so the shell renders signed in", async () => {
       mockSdkGetCurrentUser
