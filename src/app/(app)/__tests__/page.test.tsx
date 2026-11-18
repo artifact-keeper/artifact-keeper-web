@@ -53,7 +53,9 @@ vi.mock("@/lib/api/mcp", () => ({
 }));
 
 // Utils
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  localStorageBytes: (await importOriginal<typeof import("@/lib/utils")>())
+    .localStorageBytes,
   formatBytes: (bytes: number) => `${bytes} B`,
   cn: (...args: any[]) => args.filter(Boolean).join(" "),
 }));

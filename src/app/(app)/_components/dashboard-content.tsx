@@ -27,7 +27,7 @@ import { sbomApi } from "@/lib/api/sbom";
 import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
 import { quotaKeys } from "@/lib/api/quota";
-import { formatBytes } from "@/lib/utils";
+import { formatBytes, localStorageBytes } from "@/lib/utils";
 import { repoSizeLabel } from "@/lib/repo-size";
 import type { Repository } from "@/types";
 import type { CveTrends } from "@/types/sbom";
@@ -475,7 +475,7 @@ export function DashboardContent() {
                 tooltip={
                   <StatBreakdown
                     local={formatBytes(
-                      stats.total_storage_bytes - stats.proxy_storage_bytes,
+                      localStorageBytes(stats.total_storage_bytes, stats.proxy_storage_bytes),
                     )}
                     remote={formatBytes(stats.proxy_storage_bytes)}
                   />

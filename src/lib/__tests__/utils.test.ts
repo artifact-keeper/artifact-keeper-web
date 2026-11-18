@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, isValidInstanceUrl, REPO_TYPE_COLORS } from "../utils";
+import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, isValidInstanceUrl, localStorageBytes, REPO_TYPE_COLORS } from "../utils";
+
+describe("localStorageBytes", () => {
+  it("is the total minus the proxy bytes", () => {
+    expect(localStorageBytes(1000, 400)).toBe(600);
+    expect(localStorageBytes(1000, 1000)).toBe(0);
+  });
+
+  it("clamps at 0 when proxy bytes exceed the total (#1214)", () => {
+    expect(localStorageBytes(400, 1000)).toBe(0);
+  });
+});
 
 describe("formatBytes", () => {
   it("returns '0 B' for zero bytes", () => {

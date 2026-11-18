@@ -18,7 +18,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { analyticsApi } from "@/lib/api/analytics";
 import { adminApi } from "@/lib/api/admin";
 import { mutationErrorToast } from "@/lib/error-utils";
-import { formatBytes, formatDate } from "@/lib/utils";
+import { formatBytes, formatDate, localStorageBytes } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatBreakdown } from "@/components/common/stat-breakdown";
@@ -239,7 +239,7 @@ export default function AnalyticsPage() {
               stats && (
                 <StatBreakdown
                   local={formatBytes(
-                      stats.total_storage_bytes - stats.proxy_storage_bytes,
+                      localStorageBytes(stats.total_storage_bytes, stats.proxy_storage_bytes),
                     )}
                   remote={formatBytes(stats.proxy_storage_bytes)}
                 />
@@ -445,7 +445,7 @@ export default function AnalyticsPage() {
                           split={split}
                         />
                         <SplitCells
-                          local={row.total_storage_bytes - row.proxy_storage_bytes}
+                          local={localStorageBytes(row.total_storage_bytes, row.proxy_storage_bytes)}
                           remote={row.proxy_storage_bytes}
                           split={split}
                           format={formatBytes}

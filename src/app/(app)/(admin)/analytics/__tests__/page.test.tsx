@@ -20,7 +20,9 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api/analytics", () => ({ analyticsApi: {} }));
 vi.mock("@/lib/api/admin", () => ({ adminApi: {} }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  localStorageBytes: (await importOriginal<typeof import("@/lib/utils")>())
+    .localStorageBytes,
   formatBytes: (bytes: number) => `${bytes} B`,
   formatDate: (d: string) => d,
   cn: (...args: any[]) => args.filter(Boolean).join(" "),
@@ -172,6 +174,31 @@ describe("AnalyticsPage local/remote accounting", () => {
     await renderPage();
     const card = screen.getByText("Total Storage").closest("[data-slot=card]")!;
     expect(within(card as HTMLElement).getByText("0 B")).toBeDefined();
+  });
+
+  it("clamps the Local share at 0 when proxy bytes exceed the total (#1214)", async () => {
+    // An old snapshot can carry a hosted-only total next to backfilled proxy
+    // bytes; the live stats can disagree the same way.
+    mockUseQuery.mockImplementation(({ queryKey }: any) => ({
+      data:
+        queryKey[0] === "admin-stats"
+          ? { ...STATS, total_storage_bytes: 300, proxy_storage_bytes: 500 }
+          : queryKey[0] === "analytics-trend"
+            ? [{ ...TREND[0], total_storage_bytes: 500, proxy_storage_bytes: 800 }]
+            : queryData(queryKey[0]),
+      isLoading: false,
+    }));
+    await renderPage();
+
+    // The stat card's and the trend row's Local halves both read 0 B.
+    expect(screen.getAllByText("0 B").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/^-\d+ B$/)).toBeNull();
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /Split local\/remote/ })[0],
+    );
+    expect(screen.getAllByText("0 B").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^-\d+ B$/)).toBeNull();
   });
 
   it("sums artifacts, storage and downloads per repository", async () => {
