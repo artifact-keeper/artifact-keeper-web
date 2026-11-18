@@ -123,6 +123,39 @@ describe("RepoStoragePanel", () => {
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 
+  it("shows what a virtual repository's members hold, with no refresh promise (#1131)", () => {
+    // A virtual repository never gets a repository_storage_stats row, and its
+    // own storage_used_bytes is always 0.
+    storageResponse = {
+      data: {
+        repository_key: "maven-virtual",
+        logical_bytes: 0,
+        dedup_scope: "instance",
+        blob_count: 0,
+        computed_at: null,
+      } satisfies RepositoryStorageUsage,
+      isLoading: false,
+      isError: false,
+    };
+    render(
+      <RepoStoragePanel
+        repository={{
+          key: "maven-virtual",
+          repo_type: "virtual",
+          storage_used_bytes: 0,
+          member_storage_used_bytes: 375 * 1024 * 1024,
+        }}
+        isAdmin
+      />,
+    );
+
+    expect(screen.getByTestId("storage-logical")).toHaveTextContent("Held by members");
+    expect(screen.getByTestId("storage-logical")).toHaveTextContent("375 MiB");
+    expect(screen.getByTestId("storage-fallback-note")).toHaveTextContent(/stores nothing itself/i);
+    expect(screen.getByTestId("storage-fallback-note")).not.toHaveTextContent(/refresh/i);
+    expect(screen.queryByText("0 B")).not.toBeInTheDocument();
+  });
+
   it("shows the full breakdown on per-repo scope for an admin", () => {
     storageResponse = { data: PER_REPO_USAGE, isLoading: false, isError: false };
     render(<RepoStoragePanel repository={REPO} isAdmin={true} />);
