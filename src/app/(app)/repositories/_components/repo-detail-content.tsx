@@ -182,6 +182,7 @@ import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
 import { EnvironmentsTabContent } from "./environments-tab-content";
+import { SafeText } from "@/components/common/safe-text";
 import { CondaWithdrawButton } from "./conda-withdraw-dialog";
 import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
@@ -1088,9 +1089,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </div>
 
             {repository.description && (
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                {repository.description}
-              </p>
+              <SafeText
+                as="p"
+                className="text-sm text-muted-foreground max-w-2xl"
+                value={repository.description}
+              />
             )}
           </div>
         </>
@@ -1133,7 +1136,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </span>
           </div>
           {repository.description && (
-            <p className="text-sm text-muted-foreground max-w-2xl">{repository.description}</p>
+            <SafeText
+              as="p"
+              className="text-sm text-muted-foreground max-w-2xl"
+              value={repository.description}
+            />
           )}
         </div>
       )}
