@@ -1294,10 +1294,23 @@ code-server`,
           // server serves BSR under. So the repository needs a host of its own
           // whose root maps onto that prefix; nothing the CLI accepts can
           // stand in for it.
-          description: `A buf module name is always registry/owner/name, so it cannot carry this repository's /proto/${repoKey} path. Give the repository a hostname whose root maps onto ${REGISTRY_URL}/proto/${repoKey}/, then use that hostname below.`,
+          // buf only speaks HTTPS, and nginx's 1 MiB default body limit
+          // answers a larger buf push with 413; the backend's protobuf routes
+          // accept up to 256 MiB (#1193).
+          description: `A buf module name is always registry/owner/name, so it cannot carry this repository's /proto/${repoKey} path. Give the repository a hostname whose root maps onto ${REGISTRY_URL}/proto/${repoKey}/, then use that hostname below. The buf CLI only connects over HTTPS, so the hostname needs a TLS certificate.`,
           code: `# nginx, on the host serving bsr.example.com
-location / {
-    proxy_pass ${REGISTRY_URL}/proto/${repoKey}/;
+server {
+    listen 443 ssl;
+    server_name bsr.example.com;
+    ssl_certificate     /etc/ssl/certs/bsr.example.com.pem;
+    ssl_certificate_key /etc/ssl/private/bsr.example.com.key;
+
+    # nginx's 1 MiB default rejects a larger buf push with 413
+    client_max_body_size 256m;
+
+    location / {
+        proxy_pass ${REGISTRY_URL}/proto/${repoKey}/;
+    }
 }`,
         },
         {
