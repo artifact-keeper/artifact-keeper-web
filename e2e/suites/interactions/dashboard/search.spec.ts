@@ -1,13 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { navigateTo } from '../../../fixtures/test-fixtures';
 
 test.describe('Search', () => {
   test('page loads with Advanced Search heading', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await expect(page.getByRole('heading', { name: /advanced search/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('all 4 search tabs are visible and clickable', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     const tablist = page.locator('[role="tablist"]').first();
@@ -34,7 +35,7 @@ test.describe('Search', () => {
   });
 
   test('Package search tab shows name, version, repository, and format inputs', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     // Package tab is active by default
@@ -54,7 +55,7 @@ test.describe('Search', () => {
   });
 
   test('Property search tab shows key/value inputs and add filter button', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     const tablist = page.locator('[role="tablist"]').first();
@@ -77,7 +78,7 @@ test.describe('Search', () => {
   });
 
   test('GAVC search tab shows all 4 inputs', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     const tablist = page.locator('[role="tablist"]').first();
@@ -98,7 +99,7 @@ test.describe('Search', () => {
   });
 
   test('Checksum search tab shows checksum input and algorithm select', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     const tablist = page.locator('[role="tablist"]').first();
@@ -114,7 +115,7 @@ test.describe('Search', () => {
   });
 
   test('can perform a package search by filling name and clicking search', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     // Fill in a package name
@@ -134,7 +135,7 @@ test.describe('Search', () => {
   });
 
   test('list and grid view toggles work after performing a search', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(1000);
 
     // Trigger a search to make the results area appear. Scope to <main> so the
@@ -170,7 +171,7 @@ test.describe('Search', () => {
       }
     });
 
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.waitForTimeout(2000);
 
     // The page should have loaded without crashing

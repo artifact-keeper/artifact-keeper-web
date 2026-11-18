@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { navigateTo } from '../../../fixtures/test-fixtures';
 
 /**
  * Search UI coverage for the OpenSearch backend (issue #269, v1.2.0).
@@ -41,7 +42,7 @@ test.describe('OpenSearch Search UI', () => {
   test('sort menu offers relevance, date, name, size, and downloads', async ({
     page,
   }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.getByPlaceholder('e.g., react, lodash').fill('test');
     await page.getByRole('button', { name: /^search$/i }).first().click();
 
@@ -70,7 +71,7 @@ test.describe('OpenSearch Search UI', () => {
   test('sort direction toggle is disabled for relevance and enabled for field sorts', async ({
     page,
   }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.getByPlaceholder('e.g., react, lodash').fill('test');
     await page.getByRole('button', { name: /^search$/i }).first().click();
     await expect(page.getByText(/results/i).first()).toBeVisible({
@@ -93,7 +94,7 @@ test.describe('OpenSearch Search UI', () => {
   test('advanced search request carries sort_by and sort_order for field sorts', async ({
     page,
   }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.getByPlaceholder('e.g., react, lodash').fill('test');
     await page.getByRole('button', { name: /^search$/i }).first().click();
     await expect(page.getByText(/results/i).first()).toBeVisible({
@@ -132,7 +133,7 @@ test.describe('OpenSearch Search UI', () => {
   });
 
   test('relevance sort omits sort_by from the request', async ({ page }) => {
-    await page.goto('/search');
+    await navigateTo(page, '/search');
 
     // The very first search uses the default relevance sort. Capture it and
     // assert sort_by is absent (the backend then applies relevance ranking).
@@ -157,7 +158,7 @@ test.describe('OpenSearch Search UI', () => {
     // non-empty for at least the maven format / e2e repository.
     const path = await uploadArtifact(request, 'facettest');
 
-    await page.goto('/search');
+    await navigateTo(page, '/search');
     await page.getByPlaceholder('e.g., react, lodash').fill('facettest');
     await page.getByRole('button', { name: /^search$/i }).first().click();
     await expect(page.getByText(/results/i).first()).toBeVisible({

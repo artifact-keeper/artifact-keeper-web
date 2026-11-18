@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The E2E check for paging the Permissions list now runs on every stack** (#1189) - It only clicked Next page when the backend held more than 100 rules, and the E2E seed creates fewer, so CI never exercised paging. The spec now serves 150 rules from a mocked list and checks that Next page loads rules 101 to 150 and ends on Page 2 of 2. Test-only.
 - **The lifecycle E2E empty-state check targets the empty state's heading** (#1219) - "policies table renders or shows empty state" looked for `/no.*polic|no.*data|no.*result|empty/i` inside `<main>`, which also matches the page description ("not just one repository. Unassigned policies"), so it resolved to two elements and failed strict mode when another spec had already created a policy. It now looks for the "No lifecycle policies" heading. Test-only.
+- **E2E navigation waits for React's streamed segments** (#1192) - On a first load, React's streamed server copy of a page can sit for a moment in a hidden `<div id="S:n">` under `<body>`, where an unscoped locator also matches it and fails strict mode (#1062 scoped the list-page search locators to `<main>` for this). The shared `navigateTo` helper now also waits until no `[id^="S:"]` segment is left, and the Search and OpenSearch search specs navigate with it instead of a bare `page.goto`. Test-only.
 
 ## [1.12.0] - 2026-11-17
 
