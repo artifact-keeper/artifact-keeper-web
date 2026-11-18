@@ -32,8 +32,10 @@ import { apiFetch } from "@/lib/api/fetch";
  *
  * - `fail_open`  — serve the artifact anyway. Availability first. (default)
  * - `fail_closed`— block the download. Security first ("active blocking").
+ * - `record_only`— serve everything and record the verdicts; never block.
+ *   For trying enforcement out before turning it on (backend #3645).
  */
-export type ProxyScanAction = "fail_open" | "fail_closed";
+export type ProxyScanAction = "fail_open" | "fail_closed" | "record_only";
 
 export type SeverityThreshold = "critical" | "high" | "medium" | "low";
 
@@ -60,7 +62,12 @@ export interface RepoScanConfig {
   scan_on_proxy: boolean;
   block_on_policy_violation: boolean;
   severity_threshold: string;
-  proxy_scan_action: ProxyScanAction;
+  /**
+   * Kept as the backend sent it. A value this build does not know (a mode
+   * added later) must survive a load and a save untouched, so it is not
+   * narrowed to a known action; check with `isKnownProxyScanAction`.
+   */
+  proxy_scan_action: string;
 }
 
 /**
@@ -74,15 +81,14 @@ export interface UpsertScanConfigRequest {
   scan_on_proxy?: boolean;
   block_on_policy_violation?: boolean;
   severity_threshold?: string;
-  proxy_scan_action?: ProxyScanAction;
+  proxy_scan_action?: string;
 }
 
-const ProxyScanActionSchema = z.enum(["fail_open", "fail_closed"]);
-
-// `.catch("fail_open")` keeps the UI resilient if a backend build predates the
-// field or returns an unknown value: we fall back to the safe availability-
-// first default rather than throwing at the trust boundary.
-const ProxyScanActionLoose = ProxyScanActionSchema.catch("fail_open");
+// A missing field (a backend that predates it) falls back to the default in
+// `normalize`. A value we do not recognise is kept, not coerced to
+// `fail_open`: that would show a `record_only` repository as blocking-capable
+// and write the wrong mode back on the next save (#1069).
+const ProxyScanActionLoose = z.string().optional().catch(undefined);
 
 const ScanConfigSchema = z
   .object({
@@ -91,7 +97,7 @@ const ScanConfigSchema = z
     scan_on_proxy: z.boolean().catch(false),
     block_on_policy_violation: z.boolean().catch(false),
     severity_threshold: z.string().catch("high"),
-    proxy_scan_action: ProxyScanActionLoose.optional(),
+    proxy_scan_action: ProxyScanActionLoose,
   })
   .passthrough();
 

@@ -406,3 +406,22 @@ describe("copy constants", () => {
     expect(PROXY_SCAN_SIGN_IN_COPY).toBe("Sign in to view scan status.");
   });
 });
+
+describe("record_only repositories (#1069)", () => {
+  const RECORD_ONLY = { scan_on_proxy: true, proxy_scan_action: "record_only" as const };
+
+  it("describes a vulnerable verdict as recorded and served, not fail-open", () => {
+    const copy = describeProxyVerdict(entry({ state: "vulnerable" }), RECORD_ONLY);
+    expect(copy.detail).toMatch(/only records scan verdicts/);
+    expect(copy.detail).not.toMatch(/fail-open/);
+  });
+
+  it("does not call an unscanned record_only download fail-open either", () => {
+    const copy = describeProxyVerdict(
+      entry({ state: "not_scanned", not_scanned_reason: "unknown" }),
+      RECORD_ONLY,
+    );
+    expect(copy.detail).toMatch(/only records verdicts and never blocks/);
+    expect(copy.detail).not.toMatch(/serves downloads it cannot clear/);
+  });
+});

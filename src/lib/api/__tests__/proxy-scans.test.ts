@@ -254,6 +254,14 @@ describe("parseProxyScansResponse — backend 1.10.0 shape", () => {
     expect(() => parseProxyScansResponse(null, "npm-remote")).toThrow();
   });
 
+  it("reads record_only instead of narrowing it to fail_open (#1069)", () => {
+    const parsed = parseProxyScansResponse(
+      { ...rawResponse(), proxy_scan_action: "record_only" },
+      "npm-remote",
+    );
+    expect(parsed.proxy_scan_action).toBe("record_only");
+  });
+
   it("defaults enforcement conservatively when the fields are missing", () => {
     // An older backend that does not carry enforcement context must not be
     // read as "this repository scans and blocks".
