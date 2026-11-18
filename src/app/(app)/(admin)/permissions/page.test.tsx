@@ -466,6 +466,32 @@ describe("PermissionsPage", () => {
     expect(screen.queryByText("Service_account")).toBeNull();
   });
 
+  it("pages through permissions past the backend cap of 100 (#1181)", async () => {
+    const onPage = (page: number, count: number, name: string) => ({
+      items: Array.from({ length: count }, (_, i) => ({
+        ...PERM_1,
+        id: `perm-${page}-${i}`,
+        principal_name: name,
+      })),
+      pagination: { page, per_page: 100, total: 150, total_pages: 2 },
+    });
+    mockPermissionsApi.list.mockImplementation(({ page }: { page: number }) =>
+      Promise.resolve(page === 2 ? onPage(2, 50, "Zoe") : onPage(1, 100, "Alice")),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await waitForTableLoaded();
+
+    expect(mockPermissionsApi.list).toHaveBeenCalledWith({ page: 1, per_page: 100 });
+    expect(screen.getByText("Page 1 of 2")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Zoe").length).toBe(50);
+    });
+    expect(mockPermissionsApi.list).toHaveBeenLastCalledWith({ page: 2, per_page: 100 });
+  });
+
   it("shows empty state when no permissions exist", async () => {
     mockPermissionsApi.list.mockResolvedValue({
       items: [],
