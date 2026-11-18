@@ -39,13 +39,14 @@ describe("RepoSetupGuide", () => {
   // #1064: a buf module name is exactly registry/owner/name and buf push has
   // no --registry flag, so the guide names the module after a host whose root
   // maps onto /proto/<repo>/ and lets buf push read buf.yaml.
-  it("gives a local protobuf repo buf steps buf can run", () => {
-    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local" })} />);
+  it.each(["local", "staging"] as const)("gives a %s protobuf repo buf steps buf can run", (repo_type) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local", repo_type })} />);
     const text = container.textContent ?? "";
     expect(text).toContain("/proto/proto-local/;");
     expect(text).toContain("name: bsr.example.com/myorg/mymodule");
     expect(text).toContain("buf push --create");
-    expect(text).toContain("buf registry login bsr.example.com --token-stdin");
+    expect(text).toContain("export BUF_TOKEN=YOUR_TOKEN@bsr.example.com");
+    expect(text).not.toContain("buf registry login bsr.example.com");
     expect(text).not.toContain("--registry");
     expect(text).not.toContain("--username");
     expect(text).not.toMatch(/name: \S+\/proto\/proto-local\//);
@@ -54,7 +55,7 @@ describe("RepoSetupGuide", () => {
   it.each(["remote", "virtual"] as const)("gives a %s protobuf repo no buf push steps", (repo_type) => {
     const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", repo_type })} />);
     const text = container.textContent ?? "";
-    expect(text).toContain("buf CLI needs a local repository");
+    expect(text).toContain("buf CLI needs a hosted repository");
     expect(text).not.toContain("buf push");
     expect(text).not.toContain("buf.yaml");
   });
