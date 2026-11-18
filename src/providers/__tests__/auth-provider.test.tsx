@@ -52,6 +52,7 @@ Object.defineProperty(globalThis, "localStorage", { value: localStorageMock, wri
 // ---------------------------------------------------------------------------
 
 import { AuthProvider, useAuth } from "../auth-provider";
+import { sessionSignal } from "@/lib/session-signal";
 
 // ---------------------------------------------------------------------------
 // Test consumer component
@@ -408,6 +409,33 @@ describe("AuthProvider", () => {
 
     expect(screen.getByTestId("expires-at").textContent).toBe("null");
     expect(screen.getByTestId("authenticated").textContent).toBe("false");
+  });
+
+  it("ends the session signal on logout (#1190)", async () => {
+    mockSdkGetCurrentUser.mockResolvedValue({
+      data: { id: "u1", username: "admin", email: "admin@test.com", is_admin: true },
+      error: null,
+    });
+    mockSdkLogout.mockResolvedValue({});
+
+    renderWithQuery(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
+    });
+    const signal = sessionSignal();
+    expect(signal.aborted).toBe(false);
+
+    await act(async () => {
+      await capturedAuthRef.current!.logout();
+    });
+
+    expect(signal.aborted).toBe(true);
+    expect(sessionSignal().aborted).toBe(false);
   });
 
   it("clears passwordExpiresAt after changing password", async () => {

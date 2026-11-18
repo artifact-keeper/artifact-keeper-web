@@ -52,6 +52,11 @@ export const repositoryDeletionsApi = {
 };
 
 export interface WaitForDeletionOptions {
+  /**
+   * Stop polling once aborted (#1190); resolves with the last job seen. The
+   * default `sleep` also wakes up early on abort.
+   */
+  signal?: AbortSignal;
   /** Read the job; defaults to `repositoryDeletionsApi.get`. */
   fetchJob?: (id: string) => Promise<RepositoryDeleteJob>;
   /** Defaults to a `setTimeout` promise; injectable for tests. */
@@ -69,13 +74,26 @@ export interface WaitForDeletionOptions {
 /**
  * Poll a delete job until it completes or fails. Resolves with the terminal
  * job, or with the last job seen (still `pending`/`running`) once `timeoutMs`
- * passes. Throws when the job cannot be read `maxReadErrors` times in a row.
+ * passes or `signal` aborts. Throws when the job cannot be read
+ * `maxReadErrors` times in a row.
  */
 export async function waitForRepositoryDeletion(
   job: RepositoryDeleteJob,
   {
+    signal,
     fetchJob = repositoryDeletionsApi.get,
-    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep = (ms) =>
+      new Promise<void>((resolve) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }),
     intervalMs = 1000,
     maxIntervalMs = 10_000,
     timeoutMs = 30 * 60_000,
@@ -87,8 +105,9 @@ export async function waitForRepositoryDeletion(
   let current = job;
   let delay = intervalMs;
   let readErrors = 0;
-  while (!isTerminalDeleteJob(current) && now() < deadline) {
+  while (!isTerminalDeleteJob(current) && now() < deadline && !signal?.aborted) {
     await sleep(delay);
+    if (signal?.aborted) break;
     delay = Math.min(delay * 2, maxIntervalMs);
     try {
       current = await fetchJob(current.id);

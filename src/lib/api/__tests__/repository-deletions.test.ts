@@ -117,3 +117,46 @@ describe("waitForRepositoryDeletion (#1048)", () => {
     expect(delays).toEqual([1000, 2000, 4000, 4000, 4000]);
   });
 });
+
+describe("waitForRepositoryDeletion stops when its signal aborts (#1190)", () => {
+  it("does not read the job again once aborted", async () => {
+    const controller = new AbortController();
+    const fetchJob = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      return job("running");
+    });
+    const result = await waitForRepositoryDeletion(job("pending"), {
+      signal: controller.signal,
+      fetchJob,
+      sleep: noSleep,
+    });
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("running");
+  });
+
+  it("does not poll at all with an already aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchJob = vi.fn();
+    const result = await waitForRepositoryDeletion(job("pending"), {
+      signal: controller.signal,
+      fetchJob,
+      sleep: noSleep,
+    });
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(result.status).toBe("pending");
+  });
+
+  it("wakes the default sleep on abort instead of waiting out the interval", async () => {
+    const controller = new AbortController();
+    const fetchJob = vi.fn();
+    const pending = waitForRepositoryDeletion(job("pending"), {
+      signal: controller.signal,
+      fetchJob,
+      intervalMs: 60 * 60_000,
+    });
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({ status: "pending" });
+    expect(fetchJob).not.toHaveBeenCalled();
+  });
+});

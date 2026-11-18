@@ -4,6 +4,7 @@ import {
   type RepositoryDeleteJob,
   type WaitForDeletionOptions,
 } from "@/lib/api/repository-deletions";
+import { sessionSignal } from "@/lib/session-signal";
 
 export interface ReportRepositoryDeletionOptions {
   /** Called once the job completes, to refresh the repository queries. */
@@ -12,6 +13,12 @@ export interface ReportRepositoryDeletionOptions {
   onRetry?: (key: string) => void;
   /** Passed through to the poller (tests). */
   wait?: WaitForDeletionOptions;
+  /**
+   * Stops the polling; defaults to the session signal, which aborts on
+   * sign-out (#1190). Navigating away does not stop it on purpose: the toast
+   * is global and is the only place a failed job shows.
+   */
+  signal?: AbortSignal;
 }
 
 function reportFailure(
@@ -43,7 +50,7 @@ function reportFailure(
 export async function reportRepositoryDeletion(
   key: string,
   job: RepositoryDeleteJob | null,
-  { onCompleted, onRetry, wait }: ReportRepositoryDeletionOptions = {},
+  { onCompleted, onRetry, wait, signal = sessionSignal() }: ReportRepositoryDeletionOptions = {},
 ): Promise<void> {
   if (!job || job.status === "completed") {
     toast.success("Repository deleted");
@@ -65,12 +72,23 @@ export async function reportRepositoryDeletion(
 
   let final: RepositoryDeleteJob;
   try {
-    final = await waitForRepositoryDeletion(job, wait);
+    final = await waitForRepositoryDeletion(job, { ...wait, signal });
   } catch {
+    if (signal.aborted) {
+      toast.dismiss(toastId);
+      return;
+    }
     toast.info(`Deletion of repository "${repoKey}" has started`, {
       id: toastId,
       description: "Its progress could not be read. It keeps running in the background.",
     });
+    return;
+  }
+
+  if (signal.aborted) {
+    // Signed out: the job keeps running on the server, but this session no
+    // longer reports on it.
+    toast.dismiss(toastId);
     return;
   }
 

@@ -28,6 +28,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
 import { unwrap } from "@/lib/sdk-utils";
+import { endSession } from "@/lib/session-signal";
 import { clearSilentSsoAttempt } from "@/lib/silent-sso";
 import { SYSTEM_CONFIG_QUERY_KEY } from "./system-config-provider";
 
@@ -212,6 +213,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore logout errors
     } finally {
       clearTokens();
+      // Stop background work of this session, e.g. repository delete job
+      // polling (#1190): its requests would only fail as unauthenticated.
+      endSession();
       setUser(null);
       setMustChangePassword(false);
       setPasswordExpiresAt(null);
