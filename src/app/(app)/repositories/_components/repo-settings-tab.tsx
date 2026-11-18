@@ -700,6 +700,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       // Seed the query cache with the server's echoed row and clear the local
       // edits so the form re-baselines against what was actually persisted.
       queryClient.setQueryData(["scan-config", repository.key], updated);
+      // The Security tab caches the same row under its own key.
+      queryClient.invalidateQueries({
+        queryKey: ["repository-security", repository.key],
+      });
       setScanOverrides({});
       toast.success("Scanning & enforcement settings saved");
     },
@@ -717,8 +721,19 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       const value = scanOverrides[key];
       if (value !== undefined && value !== scanConfig[key]) patch[key] = value;
     }
+    // The instance lock (#1185): an instance administrator's PUT without
+    // `instance_locked` LOCKS the proxy scan policy, so saving any field
+    // would re-lock one that was handed back. Send the current (or edited)
+    // value on every instance-admin save, but only when the GET reported it,
+    // and never from anyone else (the backend answers 403).
+    if (isRepoAdmin && scanConfig.instance_locked !== undefined) {
+      patch.instance_locked =
+        scanOverrides.instance_locked ?? scanConfig.instance_locked;
+    } else {
+      delete patch.instance_locked;
+    }
     scanConfigMutation.mutate(patch as UpsertScanConfigRequest);
-  }, [scanConfig, scanOverrides, scanConfigMutation]);
+  }, [isRepoAdmin, scanConfig, scanOverrides, scanConfigMutation]);
 
   // -- Age Gate (#701). Remote repos only: the backend PUT rejects other repo
   // types with 400 (`require_remote_repo_for_age_gate`) and is admin-only, so
@@ -1787,6 +1802,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                     </p>
                   )}
                 </div>
+
+                {isRepoAdmin && scanForm.instance_locked !== undefined && (
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="settings-scan-locked">
+                        Lock the proxy scan policy
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {scanForm.instance_locked
+                          ? "Locked: a repository administrator can tighten the proxy scan policy but not weaken it (turn off scan on proxy download, move the action towards record only, or loosen the severity threshold)."
+                          : "Not locked: the repository's administrators can change the proxy scan policy. Lock it to keep them from weakening it."}
+                      </p>
+                    </div>
+                    <Switch
+                      id="settings-scan-locked"
+                      checked={scanForm.instance_locked}
+                      onCheckedChange={(v) => setScanField("instance_locked", v)}
+                    />
+                  </div>
+                )}
 
                 <div className="flex justify-end">
                   <Button

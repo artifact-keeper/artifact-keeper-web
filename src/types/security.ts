@@ -200,6 +200,11 @@ export interface ScanConfig {
   scan_on_proxy: boolean;
   block_on_policy_violation: boolean;
   severity_threshold: string;
+  /**
+   * The instance-admin lock on the proxy scan policy (artifact-keeper#4363).
+   * `undefined` when the backend does not report it.
+   */
+  instance_locked?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -245,6 +250,12 @@ export interface UpsertScanConfigRequest {
   scan_on_proxy: boolean;
   block_on_policy_violation: boolean;
   severity_threshold: string;
+  /**
+   * Instance administrators only: omitting it from an instance administrator's
+   * PUT LOCKS the proxy scan policy, and a repository administrator sending it
+   * gets 403 (#1185). Sent only when given.
+   */
+  instance_locked?: boolean;
 }
 
 export type SeverityLevel = 'critical' | 'high' | 'medium' | 'low' | 'info';

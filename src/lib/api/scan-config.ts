@@ -68,6 +68,14 @@ export interface RepoScanConfig {
    * narrowed to a known action; check with `isKnownProxyScanAction`.
    */
   proxy_scan_action: string;
+  /**
+   * The instance-admin lock on this repository's proxy scan policy
+   * (artifact-keeper#4363): while locked, a repository administrator may
+   * tighten the policy but not weaken it. `undefined` when the backend did not
+   * report it (an older backend, or a repository with no scan config row yet),
+   * in which case the UI neither shows nor sends it.
+   */
+  instance_locked?: boolean;
 }
 
 /**
@@ -82,6 +90,13 @@ export interface UpsertScanConfigRequest {
   block_on_policy_violation?: boolean;
   severity_threshold?: string;
   proxy_scan_action?: string;
+  /**
+   * Instance administrators only. Omitting it from an instance
+   * administrator's PUT LOCKS the policy, so an instance-admin save must send
+   * the current value back; a repository administrator sending it at all gets
+   * 403 (#1185).
+   */
+  instance_locked?: boolean;
 }
 
 // A missing field (a backend that predates it) falls back to the default in
@@ -98,6 +113,7 @@ const ScanConfigSchema = z
     block_on_policy_violation: z.boolean().catch(false),
     severity_threshold: z.string().catch("high"),
     proxy_scan_action: ProxyScanActionLoose,
+    instance_locked: z.boolean().optional().catch(undefined),
   })
   .passthrough();
 
@@ -118,6 +134,9 @@ function normalize(raw: z.infer<typeof ScanConfigSchema>): RepoScanConfig {
     block_on_policy_violation: raw.block_on_policy_violation,
     severity_threshold: raw.severity_threshold,
     proxy_scan_action: raw.proxy_scan_action ?? "fail_open",
+    ...(raw.instance_locked === undefined
+      ? {}
+      : { instance_locked: raw.instance_locked }),
   };
 }
 
