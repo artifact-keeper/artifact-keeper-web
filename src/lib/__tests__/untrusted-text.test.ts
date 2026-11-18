@@ -29,7 +29,6 @@ describe("formatUntrustedText", () => {
   it.each([
     ["LRE", "\u202a"], ["RLE", "\u202b"], ["PDF", "\u202c"], ["LRO", "\u202d"], ["RLO", "\u202e"],
     ["LRI", "\u2066"], ["RLI", "\u2067"], ["FSI", "\u2068"], ["PDI", "\u2069"],
-    ["LRM", "\u200e"], ["RLM", "\u200f"], ["ALM", "\u061c"],
   ])("escapes the bidi control %s", (_name, ch) => {
     const r = formatUntrustedText(`a${ch}b`);
     expect(r.text).toBe(`a[U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}]b`);
@@ -58,6 +57,26 @@ describe("formatUntrustedText", () => {
     const r = formatUntrustedText(`hi${hidden}`);
     expect(r.text).toBe("hi[U+E0041][U+E0042]");
     expect(r.escaped).toBe(2);
+  });
+
+  it("keeps the bidi marks that Hebrew and Arabic text uses", () => {
+    for (const text of ["שלום\u200f (v2)", "abc\u200e", "١\u061c٢"]) {
+      const r = formatUntrustedText(text);
+      expect(r.text).toBe(text);
+      expect(r.escaped).toBe(0);
+    }
+  });
+
+  it("keeps subdivision flags, which are built from tag characters", () => {
+    const england = String.fromCodePoint(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f);
+    const r = formatUntrustedText(`go ${england}!`);
+    expect(r.text).toBe(`go ${england}!`);
+    expect(r.escaped).toBe(0);
+  });
+
+  it("still escapes tag characters that do not form a flag", () => {
+    const r = formatUntrustedText(String.fromCodePoint(0x1f3f4, 0xe0041));
+    expect(r.text).toBe("\u{1F3F4}[U+E0041]");
   });
 
   it("keeps tab, line feed and carriage return, which multi-line descriptions use", () => {

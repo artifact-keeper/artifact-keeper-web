@@ -50,6 +50,13 @@ describe("McpServerCard", () => {
     expect(card.textContent).not.toMatch(/[\u202e\u200b\u0007\u001b]/);
   });
 
+  it("shows hidden and bidi characters in the server name visibly (#1107)", () => {
+    const entry = { ...WEATHER, server: { ...WEATHER.server, name: "com.acme/\u202egnp.exe" } };
+    render(<McpServerCard repoKey="mcp-local" entry={entry} packageId="pkg-1" />);
+    const card = screen.getByRole("article", { name: "com.acme/[U+202E]gnp.exe" });
+    expect(card.querySelector("h3")?.textContent).not.toMatch(/\u202e/);
+  });
+
   it("never claims a tool count", () => {
     render(<McpServerCard repoKey="mcp-local" entry={WEATHER} />);
     expect(screen.queryByText(/tools?/i)).toBeNull();

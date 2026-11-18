@@ -14,16 +14,22 @@
 
 /**
  * Escaped: C0 controls except tab, line feed and carriage return; DEL and the
- * C1 controls; the bidi marks, embeddings, overrides and isolates (U+061C,
- * U+200E/F, U+202A-E, U+2066-9); line and paragraph separators; and the
- * invisible zero-width space, word joiner and BOM.
+ * C1 controls; the bidi embeddings, overrides and isolates (U+202A-E,
+ * U+2066-9); line and paragraph separators; the invisible zero-width space,
+ * word joiner and BOM; and Unicode tag characters (U+E0000-E007F).
  *
- * Deliberately NOT escaped: U+200C and U+200D (zero-width non-joiner / joiner),
- * which real text needs (Persian, emoji sequences such as family emoji). The
- * cost is that a hidden character built from those two is not flagged.
+ * Deliberately NOT escaped:
+ * - U+200C and U+200D (zero-width non-joiner / joiner), which real text needs
+ *   (Persian, emoji sequences such as family emoji).
+ * - The bidi marks U+200E/F (LRM/RLM) and U+061C (ALM), which are routine in
+ *   Hebrew and Arabic text and only nudge neutral characters; they cannot
+ *   reverse a run the way an override does.
+ * - A subdivision flag (U+1F3F4, tag characters, U+E007F cancel tag), such as
+ *   the flags of England, Scotland and Wales.
+ * The cost is that a hidden character built from those is not flagged.
  */
 const ESCAPED =
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u061C\u200B\u200E\u200F\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
+  /(\u{1F3F4}[\u{E0020}-\u{E007E}]+\u{E007F})|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
 
 export const DEFAULT_MAX_LENGTH = 1000;
 /** Names, keys and labels are short; anything much longer is not a name. */
@@ -49,7 +55,8 @@ export function formatUntrustedText(
 ): UntrustedText {
   const max = options.max ?? DEFAULT_MAX_LENGTH;
   let escaped = 0;
-  const full = (input ?? "").replace(ESCAPED, (ch) => {
+  const full = (input ?? "").replace(ESCAPED, (ch, flag?: string) => {
+    if (flag) return flag;
     escaped += 1;
     return show(ch.codePointAt(0) ?? 0);
   });

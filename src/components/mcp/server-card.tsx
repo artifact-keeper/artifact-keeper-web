@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { SafeText } from "@/components/common/safe-text";
-import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import Link from "next/link";
 import { KeyRound, Plug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -69,8 +69,8 @@ export function McpServerCard({
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="break-all text-sm leading-5">
             <Link href={mcpServerHref(repoKey, server.name, packageId)} className="hover:underline">
-              {namespace && <span className="text-muted-foreground">{namespace}/</span>}
-              <span className="font-semibold">{shortName}</span>
+              {namespace && <span className="text-muted-foreground">{safeText(namespace, { max: NAME_MAX_LENGTH })}/</span>}
+              <span className="font-semibold">{safeText(shortName, { max: NAME_MAX_LENGTH })}</span>
             </Link>
           </h3>
           {server.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="truncate text-xs text-muted-foreground" value={server.title} />}
