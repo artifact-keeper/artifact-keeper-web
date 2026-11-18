@@ -10,6 +10,7 @@ const mockToast = vi.hoisted(() => ({
 vi.mock("sonner", () => ({ toast: mockToast }));
 
 import { reportRepositoryDeletion } from "./report-repository-deletion";
+import { ApiError } from "@/lib/api/fetch";
 import type { RepositoryDeleteJob } from "@/lib/api/repository-deletions";
 
 const job = (status: string, extra: Partial<RepositoryDeleteJob> = {}): RepositoryDeleteJob => ({
@@ -123,5 +124,22 @@ describe("reportRepositoryDeletion (#1048)", () => {
     expect(fetchJob).not.toHaveBeenCalled();
     expect(mockToast.dismiss).toHaveBeenCalledWith("repository-delete-job-1");
     expect(mockToast.info).not.toHaveBeenCalled();
+  });
+
+  it("says the deletion is already running under someone else when its status is hidden (#1191)", async () => {
+    const fetchJob = vi.fn().mockRejectedValue(new ApiError(404, "Repository delete job not found"));
+    await reportRepositoryDeletion("maven-local", job("running"), { wait: { fetchJob, sleep: noSleep } });
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    expect(mockToast.info).toHaveBeenCalledWith(
+      'Repository "maven-local" is already being deleted',
+      expect.objectContaining({
+        id: "repository-delete-job-1",
+        description: expect.stringMatching(/someone else started/i),
+      }),
+    );
+    expect(mockToast.info).not.toHaveBeenCalledWith(
+      expect.stringMatching(/has started/),
+      expect.anything(),
+    );
   });
 });

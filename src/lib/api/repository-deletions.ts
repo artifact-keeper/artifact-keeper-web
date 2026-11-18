@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { apiFetch } from "@/lib/api/fetch";
+import { ApiError, apiFetch } from "@/lib/api/fetch";
 
 /**
  * Repository delete jobs (backend artifact-keeper#4311, 1.12.0).
@@ -52,6 +52,17 @@ export const repositoryDeletionsApi = {
   },
 };
 
+/**
+ * The status read answered 404 (#1191). The backend shows a job only to the
+ * user who requested it and to instance administrators, and answers 404 to
+ * anyone else. A non-admin whose DELETE returned a job someone else started
+ * gets this, so it means the deletion is already running under another user,
+ * not that it went away. Not worth retrying.
+ */
+export function isDeleteJobHidden(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 export interface WaitForDeletionOptions {
   /** Read the job; defaults to `repositoryDeletionsApi.get`. */
   fetchJob?: (id: string, signal?: AbortSignal) => Promise<RepositoryDeleteJob>;
@@ -91,7 +102,8 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
  * Poll a delete job until it completes or fails. Resolves with the terminal
  * job, or with the last job seen (still `pending`/`running`) once `timeoutMs`
  * passes. Throws when the job cannot be read `maxReadErrors` times in a row,
- * and with the signal's reason once `signal` aborts.
+ * at once when the read answers 404 (see `isDeleteJobHidden`), and with the
+ * signal's reason once `signal` aborts.
  */
 export async function waitForRepositoryDeletion(
   job: RepositoryDeleteJob,
@@ -120,6 +132,7 @@ export async function waitForRepositoryDeletion(
       readErrors = 0;
     } catch (error) {
       signal?.throwIfAborted();
+      if (isDeleteJobHidden(error)) throw error;
       readErrors += 1;
       if (readErrors >= maxReadErrors) throw error;
     }

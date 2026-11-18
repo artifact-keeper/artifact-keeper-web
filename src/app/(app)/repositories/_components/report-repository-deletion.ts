@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import {
+  isDeleteJobHidden,
   waitForRepositoryDeletion,
   type RepositoryDeleteJob,
   type WaitForDeletionOptions,
@@ -75,7 +76,7 @@ export async function reportRepositoryDeletion(
   let final: RepositoryDeleteJob;
   try {
     final = await waitForRepositoryDeletion(job, { ...wait, signal });
-  } catch {
+  } catch (error) {
     if (signal?.aborted) {
       if (signal.reason === DELETION_REPORT_LOGOUT) {
         toast.dismiss(toastId);
@@ -85,6 +86,16 @@ export async function reportRepositoryDeletion(
           description: "The deletion keeps running in the background.",
         });
       }
+      return;
+    }
+    if (isDeleteJobHidden(error)) {
+      // A repeated DELETE returned a job another user started; only they and
+      // instance administrators may read its status (#1191).
+      toast.info(`Repository "${repoKey}" is already being deleted`, {
+        id: toastId,
+        description:
+          "Someone else started this deletion, so its progress is not shown here. It keeps running in the background.",
+      });
       return;
     }
     toast.info(`Deletion of repository "${repoKey}" has started`, {

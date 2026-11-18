@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockApiFetch = vi.fn();
-vi.mock("../fetch", () => ({
+vi.mock("../fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fetch")>()),
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
+
+import { ApiError } from "../fetch";
 
 import {
   parseRepositoryDeleteJob,
@@ -153,5 +156,13 @@ describe("waitForRepositoryDeletion (#1048)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("throws at once when the job is not visible to the caller (#1191)", async () => {
+    const hidden = vi.fn().mockRejectedValue(new ApiError(404, "Repository delete job not found"));
+    await expect(
+      waitForRepositoryDeletion(job("running"), { fetchJob: hidden, sleep: noSleep, maxReadErrors: 3 }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(hidden).toHaveBeenCalledTimes(1);
   });
 });
