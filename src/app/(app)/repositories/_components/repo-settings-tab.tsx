@@ -12,7 +12,12 @@ import {
 } from "@/lib/api/repositories";
 import { ageGateApi } from "@/lib/api/age-gate";
 import { adminApi } from "@/lib/api/admin";
-import { backendAtLeast, PROXY_AGE_POLICY_MIN } from "@/lib/backend-version";
+import {
+  backendAtLeast,
+  PROXY_AGE_POLICY_MIN,
+  RECORD_ONLY_MIN,
+  SCAN_POLICY_LOCK_MIN,
+} from "@/lib/backend-version";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
 import { useAuth } from "@/providers/auth-provider";
@@ -664,7 +669,11 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // elsewhere in the repository views. (`user` / `isRepoAdmin` are read
   // above, where the MCP form needs them.)
 
-  const { data: scanConfig, isLoading: scanConfigLoading } = useQuery({
+  const {
+    data: scanConfig,
+    isLoading: scanConfigLoading,
+    isFetching: scanConfigFetching,
+  } = useQuery({
     queryKey: ["scan-config", repository.key],
     queryFn: () => scanConfigApi.get(repository.key),
     enabled: isRepoAdmin,
@@ -685,6 +694,34 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     (Object.keys(scanOverrides) as (keyof RepoScanConfig)[]).some(
       (k) => scanOverrides[k] !== undefined && scanOverrides[k] !== scanConfig[k]
     );
+
+  // A stored value the selects do not list (an unknown proxy scan action, or a
+  // severity threshold such as `info`) gets its own option. It follows the
+  // STORED value, so after picking another option the operator can still go
+  // back to it, and picking it again is no change (#1194).
+  const storedSeverityExtra =
+    scanConfig &&
+    !(SEVERITY_THRESHOLDS as readonly string[]).includes(
+      scanConfig.severity_threshold
+    )
+      ? scanConfig.severity_threshold
+      : undefined;
+  const storedActionExtra =
+    scanConfig && !isKnownProxyScanAction(scanConfig.proxy_scan_action)
+      ? scanConfig.proxy_scan_action
+      : undefined;
+  // `record_only` arrived in backend 1.11.0 (artifact-keeper#3645); earlier
+  // backends save it as `fail_open`, so it is not offered there (#1194). With
+  // no version known, a backend that does not report `proxy_scan_action` at
+  // all is old enough to rule it out. A stored `record_only` is always listed.
+  const recordOnlySupported =
+    scanConfig?.proxy_scan_action === "record_only" ||
+    (health?.version
+      ? backendAtLeast(health.version, RECORD_ONLY_MIN)
+      : scanConfig?.proxy_scan_action_reported !== false);
+  const offeredProxyScanActions = PROXY_SCAN_ACTION_VALUES.filter(
+    (action) => action !== "record_only" || recordOnlySupported
+  );
 
   const setScanField = useCallback(
     <K extends keyof RepoScanConfig>(key: K, value: RepoScanConfig[K]) => {
@@ -1745,13 +1782,13 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                       ))}
                       {/* A stored threshold this list does not offer (the
                           backend also accepts `info`) is shown as it is and
-                          kept, instead of an empty select (#1069). */}
-                      {!(SEVERITY_THRESHOLDS as readonly string[]).includes(
-                        scanForm.severity_threshold
-                      ) && (
-                        <SelectItem value={scanForm.severity_threshold} disabled>
-                          {scanForm.severity_threshold.charAt(0).toUpperCase() +
-                            scanForm.severity_threshold.slice(1)}
+                          kept, instead of an empty select (#1069). It follows
+                          the stored value, not the edited one, so it can be
+                          picked again after choosing another (#1194). */}
+                      {storedSeverityExtra && (
+                        <SelectItem value={storedSeverityExtra}>
+                          {storedSeverityExtra.charAt(0).toUpperCase() +
+                            storedSeverityExtra.slice(1)}
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -1780,14 +1817,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {PROXY_SCAN_ACTION_VALUES.map((action) => (
+                      {offeredProxyScanActions.map((action) => (
                         <SelectItem key={action} value={action}>
                           {PROXY_SCAN_ACTION_LABELS[action]}
                         </SelectItem>
                       ))}
-                      {!isKnownProxyScanAction(scanForm.proxy_scan_action) && (
-                        <SelectItem value={scanForm.proxy_scan_action} disabled>
-                          {`Unknown (${scanForm.proxy_scan_action})`}
+                      {storedActionExtra && (
+                        <SelectItem value={storedActionExtra}>
+                          {`Unknown (${storedActionExtra})`}
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -1823,10 +1860,29 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   </div>
                 )}
 
+                {/* No config row yet: the backend locks the policy on an
+                    instance administrator's first save (#1213). */}
+                {isRepoAdmin &&
+                  scanForm.unconfigured &&
+                  backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN) && (
+                    <p className="text-xs text-muted-foreground">
+                      This repository has no scanning settings yet. Saving
+                      them for the first time locks the proxy scan policy;
+                      you can hand it back to the repository&apos;s
+                      administrators afterwards with the lock switch.
+                    </p>
+                  )}
+
                 <div className="flex justify-end">
                   <Button
                     onClick={handleSaveScanConfig}
-                    disabled={scanConfigMutation.isPending || !scanChanged}
+                    // A save sends the stored lock back, so wait for a refetch
+                    // to finish rather than send a stale one (#1213).
+                    disabled={
+                      scanConfigMutation.isPending ||
+                      scanConfigFetching ||
+                      !scanChanged
+                    }
                   >
                     {scanConfigMutation.isPending ? (
                       <>
