@@ -393,9 +393,9 @@ describe("registry override from registryBaseUrl", () => {
   it("puts the cargo sparse index in the install note", () => {
     const p = pkg({ registryType: "cargo", identifier: "acme", registryBaseUrl: "https://ak/api/cargo/r/" });
     const cmd = packageCommand(p, {}, (n) => n, new Set());
-    expect(cmd.note).toBe("Install the binary first: cargo install acme --version 1.0.0 --index sparse+https://ak/api/cargo/r/index/");
+    expect(cmd.note).toBe("Install the binary first: cargo install acme --version 1.0.0 --index sparse+https://ak/api/cargo/r/");
     const unversioned = packageCommand({ ...p, version: undefined }, {}, (n) => n, new Set());
-    expect(unversioned.note).toBe("Install the binary first: cargo install acme --index sparse+https://ak/api/cargo/r/index/");
+    expect(unversioned.note).toBe("Install the binary first: cargo install acme --index sparse+https://ak/api/cargo/r/");
     const plain = packageCommand({ ...p, version: undefined, registryBaseUrl: undefined }, {}, (n) => n, new Set());
     expect(plain.note).toBe("Install the binary first: cargo install acme");
   });

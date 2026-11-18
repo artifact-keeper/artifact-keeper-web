@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Storage totals no longer count proxy cache bytes twice** (#1039) - Analytics and Dashboard added proxy bytes to backend totals that already include them. Use the reported total and subtract proxy bytes for the Local tooltip and Storage Trend split; repository breakdowns and artifact/download counts retain their separate-bucket accounting.
+- **Cargo setup guide gave an index URL cargo cannot use** (#1129, artifact-keeper-site#179) - The Setup Guide told users to set `index = "<origin>/cargo/<repo>/index"`. Without the `sparse+` prefix cargo treats that URL as a git index, and with the `/index` suffix cargo asks for `/cargo/<repo>/index/config.json`, which the backend does not serve, so setup failed with `config.json not found in registry`. The guide now gives `index = "sparse+<origin>/cargo/<repo>/"`, the registry root where the backend serves `config.json` and the index files. The cargo install note on an MCP server's Install panel had the same `/index/` suffix and is fixed the same way.
 
 ## [1.12.0] - 2026-11-17
 
