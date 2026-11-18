@@ -108,6 +108,21 @@ describe("DataTable", () => {
     expect(skeletons.length).toBe(10);
   });
 
+  it("keeps the rows up but dims them and marks the table busy while fetching (#1188)", () => {
+    const { rerender } = render(<DataTable columns={columns} data={testData} fetching />);
+
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    const region = screen.getByRole("table").parentElement!;
+    expect(region).toHaveAttribute("aria-busy", "true");
+    expect(region).toHaveClass("opacity-50");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading data");
+
+    rerender(<DataTable columns={columns} data={testData} />);
+    expect(region).not.toHaveAttribute("aria-busy");
+    expect(region).not.toHaveClass("opacity-50");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   // ---- Empty state ----
 
   it("renders the empty message when data is empty", () => {

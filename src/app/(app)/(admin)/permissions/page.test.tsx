@@ -492,6 +492,55 @@ describe("PermissionsPage", () => {
     expect(mockPermissionsApi.list).toHaveBeenLastCalledWith({ page: 2, per_page: 100 });
   });
 
+  it("marks the table busy while the next page loads (#1188)", async () => {
+    let releasePage2: () => void = () => {};
+    const rows = (page: number, count: number, name: string) => ({
+      items: Array.from({ length: count }, (_, i) => ({
+        ...PERM_1,
+        id: `perm-${page}-${i}`,
+        principal_name: name,
+      })),
+      pagination: { page, per_page: 100, total: 150, total_pages: 2 },
+    });
+    mockPermissionsApi.list.mockImplementation(({ page }: { page: number }) =>
+      page === 2
+        ? new Promise((resolve) => {
+            releasePage2 = () => resolve(rows(2, 50, "Zoe"));
+          })
+        : Promise.resolve(rows(1, 100, "Alice")),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await waitForTableLoaded();
+    const busyRegion = () => screen.getByRole("table").closest('[aria-busy="true"]');
+    expect(busyRegion()).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() => expect(busyRegion()).not.toBeNull());
+    // The previous page stays up, dimmed, until the next one arrives
+    expect(screen.getAllByText("Alice").length).toBe(100);
+
+    releasePage2();
+    await waitFor(() => expect(screen.getAllByText("Zoe").length).toBe(50));
+    expect(busyRegion()).toBeNull();
+  });
+
+  it("says a column sort orders this page only when the rules span pages (#1187)", async () => {
+    mockPermissionsApi.list.mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, i) => ({ ...PERM_1, id: `perm-${i}` })),
+      pagination: { page: 1, per_page: 100, total: 150, total_pages: 2 },
+    });
+    renderPage();
+    await waitForTableLoaded();
+    expect(screen.getByText("Sorting by a column orders the rules on this page only.")).toBeTruthy();
+  });
+
+  it("does not show the page-only sort note when every rule fits on one page (#1187)", async () => {
+    renderPage();
+    await waitForTableLoaded();
+    expect(screen.queryByText(/orders the rules on this page only/)).toBeNull();
+  });
+
   it("steps back a page when the last page empties out (#1181)", async () => {
     let total = 101;
     const rows = (page: number, count: number) => ({

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Permissions page says a column sort orders the current page only** (#1187) - Since the list pages on the server, sorting by Principal, Target or Created only reordered the rules on screen, which read as a sort of the whole list. The backend lists rules newest first and takes no sort parameter, so when the rules span more than one page the table now says the sort applies to this page.
+- **The Permissions table shows when the next page is loading** (#1188) - After a page change the old rules stayed up, looking current, until the new page arrived. They now stay up dimmed, with the table marked busy for screen readers, until the next page loads.
+
+### Notes
+
+- **The E2E check for paging the Permissions list now runs on every stack** (#1189) - It only clicked Next page when the backend held more than 100 rules, and the E2E seed creates fewer, so CI never exercised paging. The spec now serves 150 rules from a mocked list and checks that Next page loads rules 101 to 150 and ends on Page 2 of 2. Test-only.
+
 ## [1.12.0] - 2026-11-17
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.

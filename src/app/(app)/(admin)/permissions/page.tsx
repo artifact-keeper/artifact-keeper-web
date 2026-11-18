@@ -133,7 +133,11 @@ export default function PermissionsPage() {
   // Paged on the server: the backend caps per_page at 100, so one big request stopped there (#1181)
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PERMISSIONS_MAX_PER_PAGE);
-  const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
+  const {
+    data: permissionsData,
+    isLoading: permissionsLoading,
+    isPlaceholderData: permissionsPageLoading,
+  } = useQuery({
     queryKey: ["admin-permissions", page, pageSize],
     queryFn: () => permissionsApi.list({ page, per_page: pageSize }),
     enabled: !!currentUser?.is_admin,
@@ -692,22 +696,33 @@ export default function PermissionsPage() {
           }
         />
       ) : (
-        <DataTable
-          columns={columns}
-          data={permissions}
-          total={permissionsTotal}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(1);
-          }}
-          pageSizeOptions={[20, 50, PERMISSIONS_MAX_PER_PAGE]}
-          loading={permissionsLoading}
-          emptyMessage="No permissions found."
-          rowKey={(p) => p.id}
-        />
+        <div className="space-y-2">
+          {/* The backend lists rules newest first and takes no sort parameter,
+              so a column sort can only order the page on screen (#1187) */}
+          {permissionsTotal > pageSize && (
+            <p className="text-xs text-muted-foreground">
+              Sorting by a column orders the rules on this page only.
+            </p>
+          )}
+          <DataTable
+            columns={columns}
+            data={permissions}
+            total={permissionsTotal}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            pageSizeOptions={[20, 50, PERMISSIONS_MAX_PER_PAGE]}
+            loading={permissionsLoading}
+            // the previous page stays up as placeholder data until the next arrives (#1188)
+            fetching={permissionsPageLoading}
+            emptyMessage="No permissions found."
+            rowKey={(p) => p.id}
+          />
+        </div>
       )}
 
       {/* MCP namespace grants (Phase 3); renders nothing without a hosted MCP
