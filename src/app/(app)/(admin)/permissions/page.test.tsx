@@ -492,6 +492,22 @@ describe("PermissionsPage", () => {
     expect(mockPermissionsApi.list).toHaveBeenLastCalledWith({ page: 2, per_page: 100 });
   });
 
+  it("says a column sort orders this page only when the rules span pages (#1187)", async () => {
+    mockPermissionsApi.list.mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, i) => ({ ...PERM_1, id: `perm-${i}` })),
+      pagination: { page: 1, per_page: 100, total: 150, total_pages: 2 },
+    });
+    renderPage();
+    await waitForTableLoaded();
+    expect(screen.getByText("Sorting by a column orders the rules on this page only.")).toBeTruthy();
+  });
+
+  it("does not show the page-only sort note when every rule fits on one page (#1187)", async () => {
+    renderPage();
+    await waitForTableLoaded();
+    expect(screen.queryByText(/orders the rules on this page only/)).toBeNull();
+  });
+
   it("steps back a page when the last page empties out (#1181)", async () => {
     let total = 101;
     const rows = (page: number, count: number) => ({

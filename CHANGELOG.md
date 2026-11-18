@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Permissions page says a column sort orders the current page only** (#1187) - since the list pages on the server, sorting by Principal, Target or Created only reordered the rules on screen, which read as a sort of the whole list. The backend lists rules newest first and takes no sort parameter, so when the rules span more than one page the table now says the sort applies to this page
+
 ## [1.12.0] - 2026-11-17
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
