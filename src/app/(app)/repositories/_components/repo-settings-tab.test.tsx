@@ -2474,6 +2474,117 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     });
   });
 
+  describe("instance lock on the proxy scan policy (#1185)", () => {
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_closed",
+    };
+    const severitySelect = () =>
+      screen
+        .getAllByTestId("mock-select")
+        .find((el) =>
+          Array.from((el as HTMLSelectElement).options).some(
+            (o) => o.value === "critical"
+          )
+        ) as HTMLSelectElement;
+
+    it("sends a handed-back lock back unchanged when another field is saved", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: false });
+      mockUpdateScanConfig.mockResolvedValue({
+        ...base,
+        severity_threshold: "critical",
+        instance_locked: false,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Lock the proxy scan policy").getAttribute("aria-checked")
+        ).toBe("false")
+      );
+      expect(screen.getByText(/Not locked:/)).toBeTruthy();
+
+      await user.selectOptions(severitySelect(), "critical");
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          severity_threshold: "critical",
+          instance_locked: false,
+        })
+      );
+    });
+
+    it("sends the new lock value when only the lock is changed", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: false });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, instance_locked: true });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      const saveBtn = () =>
+        screen.getByRole("button", { name: /save scanning settings/i });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Lock the proxy scan policy")).toBeTruthy()
+      );
+      expect(saveBtn()).toHaveProperty("disabled", true);
+
+      await user.click(screen.getByLabelText("Lock the proxy scan policy"));
+      expect(saveBtn()).toHaveProperty("disabled", false);
+      await user.click(saveBtn());
+
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          instance_locked: true,
+        })
+      );
+    });
+
+    it("shows a locked policy as locked and keeps it locked on save", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: true });
+      mockUpdateScanConfig.mockResolvedValue({
+        ...base,
+        block_on_policy_violation: true,
+        instance_locked: true,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Lock the proxy scan policy").getAttribute("aria-checked")
+        ).toBe("true")
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          block_on_policy_violation: true,
+          instance_locked: true,
+        })
+      );
+    });
+
+    it("neither shows nor sends the lock when the backend does not report it", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, block_on_policy_violation: true });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      expect(screen.queryByLabelText("Lock the proxy scan policy")).toBeNull();
+
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+      await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({
+        block_on_policy_violation: true,
+      });
+    });
+  });
+
   it("sends only proxy_scan_action when only the action is changed", async () => {
     mockGetScanConfig.mockResolvedValue({
       scan_enabled: true,

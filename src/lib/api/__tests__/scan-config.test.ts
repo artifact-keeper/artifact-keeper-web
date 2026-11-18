@@ -157,3 +157,25 @@ describe("scanConfigApi.update", () => {
     ).rejects.toThrow(/did not match the expected shape/);
   });
 });
+
+describe("instance_locked parsing (#1185)", () => {
+  it("keeps a reported lock and leaves it undefined when absent or malformed", async () => {
+    const mod = await import("../scan-config");
+    expect(
+      mod.parseRepoSecurity({ config: { ...fullConfig, instance_locked: false }, score: null })
+        .instance_locked,
+    ).toBe(false);
+    expect(mod.parseScanConfig({ ...fullConfig, instance_locked: true }).instance_locked).toBe(
+      true,
+    );
+    expect(mod.parseRepoSecurity({ config: fullConfig, score: null })).not.toHaveProperty(
+      "instance_locked",
+    );
+    expect(
+      mod.parseScanConfig({ ...fullConfig, instance_locked: "yes" }),
+    ).not.toHaveProperty("instance_locked");
+    expect(mod.parseRepoSecurity({ config: null, score: null })).not.toHaveProperty(
+      "instance_locked",
+    );
+  });
+});
