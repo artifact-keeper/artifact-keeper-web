@@ -992,36 +992,55 @@ code-server`,
         },
       ];
     }
-    case "protobuf":
-      return [
+    case "protobuf": {
+      // Backend 1.11.x answers the buf CLI's binary Connect codec with 415 on
+      // hosted repositories: they take JSON Connect requests only
+      // (artifact-keeper#5066, fixed in backend 1.12.0). A buf module name is
+      // also exactly registry/owner/name, so it cannot carry the
+      // /proto/{repo} prefix. Do not generate buf.yaml or buf push steps on
+      // this line (#1064); web 1.12.0 has the buf CLI steps for backend 1.12.0.
+      const base = `${REGISTRY_URL}/proto/${repoKey}`;
+      const isHosted = repo.repo_type === "local" || repo.repo_type === "staging";
+      const steps: SetupStep[] = [
         {
-          title: "Configure buf.yaml",
-          description: "Set the registry in your module's buf.yaml:",
-          code: `# buf.yaml
-version: v2
-modules:
-  - path: proto
-    name: ${REGISTRY_HOST}/proto/${repoKey}/myorg/mymodule`,
-        },
-        {
-          title: "Authenticate with buf CLI",
-          code: `buf registry login ${REGISTRY_HOST} --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
-        },
-        {
-          title: "Push a module",
-          code: `buf push --registry ${REGISTRY_URL}/proto/${repoKey}`,
-        },
-        {
-          title: "Add a dependency",
-          description: "In buf.yaml, add deps and run update:",
-          code: `# buf.yaml
-deps:
-  - ${REGISTRY_HOST}/proto/${repoKey}/owner/module
-
-# Then resolve:
-buf dep update`,
+          title: "buf CLI is not supported yet",
+          description:
+            "buf push and buf dep update do not work against Artifact Keeper backend 1.11.x: its hosted repositories accept JSON requests only, and a buf module name (registry/owner/name) cannot address the /proto/" +
+            repoKey +
+            " path. buf CLI support for local and staging repositories comes with backend 1.12.0 (artifact-keeper/artifact-keeper#5066), and web 1.12.0 shows its setup steps. Until then, use the JSON Connect API.",
         },
       ];
+      if (isHosted) {
+        steps.push({
+          title: "Upload a module",
+          description:
+            "File contents are base64-encoded. Each upload creates a commit; labelRefs moves the listed labels to it (main when omitted).",
+          code: `curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  ${base}/buf.registry.module.v1beta1.UploadService/Upload \\
+  -d '{"contents": [{
+    "moduleRef": {"owner": "myorg", "module": "mymodule"},
+    "files": [{"path": "myorg/mymodule/v1/service.proto", "content": "<base64>"}],
+    "labelRefs": [{"name": "main"}]
+  }]}'`,
+        });
+        steps.push({
+          title: "Download a module",
+          description: "Returns every file of the labelled commit, base64-encoded:",
+          code: `curl -X POST -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  ${base}/buf.registry.module.v1beta1.DownloadService/Download \\
+  -d '{"values": [{"resourceRef": {"owner": "myorg", "module": "mymodule", "label": "main"}}]}'`,
+        });
+      } else {
+        steps.push({
+          title: "Use a local repository for the JSON API",
+          description:
+            "The JSON Upload and Download calls read and write the repository's own modules, so they are for local and staging protobuf repositories. Proxying an upstream BSR through this repository has not been verified with the buf CLI either.",
+        });
+      }
+      return steps;
+    }
     default:
       return [
         {
