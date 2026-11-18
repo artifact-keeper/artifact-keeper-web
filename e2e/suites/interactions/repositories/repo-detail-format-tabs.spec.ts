@@ -58,4 +58,19 @@ test.describe('Repository detail tabs by format', () => {
     const tabs = await openNewRepo(page, request, created, { format: 'npm', repo_type: 'local' });
     await expect(tabs.getByRole('tab', { name: 'Environments' })).toBeVisible();
   });
+
+  test('#1066: the Tracks tab is shown on a local PyPI repository', async ({ page, request }) => {
+    const tabs = await openNewRepo(page, request, created, { format: 'pypi', repo_type: 'local' });
+    const tracks = tabs.getByRole('tab', { name: 'Tracks' });
+    await expect(tracks).toBeVisible();
+    await tracks.click();
+    await expect(page.getByRole('main').getByRole('tabpanel', { name: 'Tracks' })).toBeVisible();
+  });
+
+  test('#1066: the Tracks tab is hidden on a virtual PyPI repository', async ({ page, request }) => {
+    const tabs = await openNewRepo(page, request, created, { format: 'pypi', repo_type: 'virtual' });
+    // The virtual repository's own tab is there, so the list has rendered.
+    await expect(tabs.getByRole('tab', { name: 'Members' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'Tracks' })).toHaveCount(0);
+  });
 });
