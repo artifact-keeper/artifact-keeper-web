@@ -1,7 +1,7 @@
 "use client";
 
 import { SafeText } from "@/components/common/safe-text";
-import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -98,7 +98,7 @@ function ToolRow({ tool }: { tool: McpTool }) {
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="relative">
-            <pre aria-label={`${tool.name} input schema`} className="max-h-80 overflow-auto rounded bg-muted p-2 pr-8 text-xs font-mono">
+            <pre aria-label={`${safeText(tool.name, { max: NAME_MAX_LENGTH })} input schema`} className="max-h-80 overflow-auto rounded bg-muted p-2 pr-8 text-xs font-mono">
               {schema}
             </pre>
             <CopyButton value={schema} label="Copy JSON" className="absolute right-1 top-1" />

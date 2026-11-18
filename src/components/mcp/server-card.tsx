@@ -69,8 +69,8 @@ export function McpServerCard({
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="break-all text-sm leading-5">
             <Link href={mcpServerHref(repoKey, server.name, packageId)} className="hover:underline">
-              {namespace && <span className="text-muted-foreground">{safeText(namespace, { max: NAME_MAX_LENGTH })}/</span>}
-              <span className="font-semibold">{safeText(shortName, { max: NAME_MAX_LENGTH })}</span>
+              {namespace && <span className="text-muted-foreground"><SafeText max={NAME_MAX_LENGTH} value={namespace} />/</span>}
+              <SafeText max={NAME_MAX_LENGTH} className="font-semibold" value={shortName} />
             </Link>
           </h3>
           {server.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="truncate text-xs text-muted-foreground" value={server.title} />}
@@ -120,7 +120,7 @@ export function McpServerCard({
             variant="outline"
             size="sm"
             onClick={() => onInstall(entry)}
-            aria-label={`Install ${server.name}`}
+            aria-label={`Install ${safeText(server.name, { max: NAME_MAX_LENGTH })}`}
           >
             <Plug className="size-3.5" aria-hidden="true" />
             Install

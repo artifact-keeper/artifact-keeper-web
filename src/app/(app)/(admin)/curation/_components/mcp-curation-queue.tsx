@@ -1,7 +1,7 @@
 "use client";
 
 import { SafeText } from "@/components/common/safe-text";
-import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import { useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Ban, Check, FolderCheck, FolderX, RefreshCw } from "lucide-react";
@@ -414,7 +414,7 @@ function ReviewRow({
     <>
       <tr>
         <td className="px-3 py-2 align-top">
-          {selectable && <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={`Select ${item.name}`} />}
+          {selectable && <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={`Select ${safeText(item.name, { max: NAME_MAX_LENGTH })}`} />}
         </td>
         <td className="px-3 py-2 align-top">
           <div className="flex flex-wrap items-center gap-2">

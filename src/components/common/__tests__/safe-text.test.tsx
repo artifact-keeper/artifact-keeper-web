@@ -35,6 +35,14 @@ describe("SafeText", () => {
     expect(el).toHaveAttribute("title", "w".repeat(30));
   });
 
+  it("still says hidden characters were found when the text is also cut", () => {
+    render(<SafeText value={`${"w".repeat(30)}\u202e`} max={10} />);
+    const el = screen.getByText(`${"w".repeat(10)}…`);
+    expect(el).toHaveAttribute("data-sanitized", "true");
+    expect(el.getAttribute("title")).toContain(`${"w".repeat(30)}[U+202E]`);
+    expect(el.getAttribute("title")).toMatch(/1 hidden or control character,/);
+  });
+
   it("renders the element it is told to and passes its attributes through", () => {
     render(<SafeText as="p" className="text-sm" data-testid="x" value="hi" />);
     const el = screen.getByTestId("x");

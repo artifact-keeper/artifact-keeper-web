@@ -10,8 +10,10 @@ import React from "react";
 // ---------------------------------------------------------------------------
 
 const mockRefreshSession = vi.fn();
+const mockLocalSessionExpired = vi.fn();
 vi.mock("@/lib/sdk-client", () => ({
   refreshSession: () => mockRefreshSession(),
+  localSessionExpired: () => mockLocalSessionExpired(),
 }));
 
 const mockSdkLogin = vi.fn();
@@ -98,6 +100,8 @@ describe("AuthProvider", () => {
     mockSdkSetupStatus.mockReset();
     mockRefreshSession.mockReset();
     mockRefreshSession.mockResolvedValue(false);
+    mockLocalSessionExpired.mockReset();
+    mockLocalSessionExpired.mockResolvedValue(true);
     capturedAuthRef.current = null;
 
     // Default: setup not required, not authenticated
@@ -234,6 +238,34 @@ describe("AuthProvider", () => {
       expect(screen.getByTestId("authenticated").textContent).toBe("false");
     });
 
+    it("does not refresh the local session when the 401 came from a remote instance (#1204)", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(true);
+      mockLocalSessionExpired.mockResolvedValue(false);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("still refreshes when the local session behind a remote instance expired (#1204)", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+      mockLocalSessionExpired.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+    });
+
     it("does not try to refresh on an error that is not a 401", async () => {
       mockSdkGetCurrentUser.mockResolvedValue({
         data: undefined,
@@ -245,6 +277,7 @@ describe("AuthProvider", () => {
       await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
 
       expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(mockLocalSessionExpired).not.toHaveBeenCalled();
       expect(screen.getByTestId("authenticated").textContent).toBe("false");
     });
 

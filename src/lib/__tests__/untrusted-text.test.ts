@@ -82,6 +82,23 @@ describe("formatUntrustedText", () => {
     expect(r.text).toContain("[U+E0069]");
   });
 
+  it("keeps the Scotland and Wales flags too", () => {
+    const flag = (code: string) =>
+      String.fromCodePoint(0x1f3f4, ...Array.from(code, (c) => 0xe0000 + c.codePointAt(0)!), 0xe007f);
+    for (const code of ["gbsct", "gbwls"]) {
+      expect(formatUntrustedText(flag(code))).toMatchObject({ text: flag(code), escaped: 0 });
+    }
+  });
+
+  it("escapes a flag-shaped tag run that is not a real subdivision flag", () => {
+    const tag = (text: string) => String.fromCodePoint(...Array.from(text, (c) => 0xe0000 + c.codePointAt(0)!));
+    for (const code of ["usca", "rmrf", "gbengx", "abc123", "gbeng1"]) {
+      const r = formatUntrustedText(`\u{1F3F4}${tag(code)}\u{E007F}`);
+      expect(r.escaped).toBe(code.length + 1);
+      expect(r.text).not.toMatch(/[\u{E0000}-\u{E007F}]/u);
+    }
+  });
+
   it("still escapes tag characters that do not form a flag", () => {
     const r = formatUntrustedText(String.fromCodePoint(0x1f3f4, 0xe0041));
     expect(r.text).toBe("\u{1F3F4}[U+E0041]");
@@ -119,6 +136,25 @@ describe("formatUntrustedText", () => {
     it("never splits a surrogate pair", () => {
       const r = formatUntrustedText("😀😀😀😀", { max: 3 });
       expect(r.text).toBe("😀😀😀…");
+    });
+
+    it("never splits a joined emoji at the limit", () => {
+      const family = "👨\u200d👩\u200d👧"; // 5 code points
+      expect(formatUntrustedText(`ab${family}`, { max: 4 }).text).toBe("ab…");
+      expect(formatUntrustedText(`ab${family}c`, { max: 7 }).text).toBe(`ab${family}…`);
+    });
+
+    it("never splits a flag at the limit", () => {
+      const england = String.fromCodePoint(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f);
+      const r = formatUntrustedText(`a${england}b`, { max: 4 });
+      expect(r.text).toBe("a…");
+      expect(r.escaped).toBe(0);
+    });
+
+    it("still counts combining marks towards the limit", () => {
+      const r = formatUntrustedText(`a${"\u0301".repeat(50)}b`, { max: 10 });
+      expect(r.truncated).toBe(true);
+      expect(r.text).toBe("…");
     });
 
     it("counts the visible escape, not the hidden character, towards the limit", () => {

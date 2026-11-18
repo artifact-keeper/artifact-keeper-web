@@ -24,14 +24,14 @@
  * - The bidi marks U+200E/F (LRM/RLM) and U+061C (ALM), which are routine in
  *   Hebrew and Arabic text and only nudge neutral characters; they cannot
  *   reverse a run the way an override does.
- * - A subdivision flag in its real shape (U+1F3F4, a lowercase tag region code
- *   and subdivision of 3 to 6 tag letters or digits, U+E007F cancel tag), such
- *   as the flags of England, Scotland and Wales. Any longer tag run is escaped,
- *   so a flag cannot carry a hidden instruction.
+ * - The three subdivision flags Unicode recommends (U+1F3F4, the tag letters
+ *   `gbeng`, `gbsct` or `gbwls`, U+E007F cancel tag): England, Scotland and
+ *   Wales. No other tag sequence renders as a flag, so any other tag run is
+ *   escaped, even one in a flag's shape (#1202).
  * The cost is that a hidden character built from those is not flagged.
  */
 const ESCAPED =
-  /(\u{1F3F4}[\u{E0061}-\u{E007A}]{2}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{1,4}\u{E007F})|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
+  /(\u{1F3F4}\u{E0067}\u{E0062}(?:\u{E0065}\u{E006E}\u{E0067}|\u{E0073}\u{E0063}\u{E0074}|\u{E0077}\u{E006C}\u{E0073})\u{E007F})|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2060\u2066-\u2069\uFEFF]|[\u{E0000}-\u{E007F}]/gu;
 
 export const DEFAULT_MAX_LENGTH = 1000;
 /** Names, keys and labels are short; anything much longer is not a name. */
@@ -63,10 +63,25 @@ export function formatUntrustedText(
     return show(ch.codePointAt(0) ?? 0);
   });
 
-  // Count and cut by code point so a surrogate pair is never split.
-  const points = Array.from(full);
-  if (points.length <= max) return { text: full, full, escaped, truncated: false };
-  return { text: `${points.slice(0, max).join("")}…`, full, escaped, truncated: true };
+  // Count by code point (so a long run of combining marks still counts), but
+  // cut only between graphemes, so a joined emoji or a flag is never split.
+  if (Array.from(full).length <= max) return { text: full, full, escaped, truncated: false };
+  return { text: `${cut(full, max)}…`, full, escaped, truncated: true };
+}
+
+/** The longest run of whole graphemes from the start that has at most `max` code points. */
+function cut(text: string, max: number): string {
+  const Segmenter = typeof Intl !== "undefined" ? Intl.Segmenter : undefined;
+  if (!Segmenter) return Array.from(text).slice(0, max).join("");
+  let out = "";
+  let count = 0;
+  for (const { segment } of new Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+    const size = Array.from(segment).length;
+    if (count + size > max) break;
+    out += segment;
+    count += size;
+  }
+  return out;
 }
 
 /** Plain-string form for places that cannot render the component (labels, attributes). */

@@ -1,6 +1,6 @@
 "use client";
 
-import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import { SafeText } from "@/components/common/safe-text";
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -157,7 +157,7 @@ function CatalogRow({
         {!served && <p className="mt-1 text-xs text-muted-foreground">Not visible to clients until approved</p>}
       </div>
       {requestable && (
-        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${item.name}`}>
+        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${safeText(item.name, { max: NAME_MAX_LENGTH })}`}>
           {requesting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Request approval
         </Button>

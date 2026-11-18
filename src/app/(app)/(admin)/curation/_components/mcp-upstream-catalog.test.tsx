@@ -78,6 +78,12 @@ describe("McpUpstreamCatalog", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ["mcp"] });
   });
 
+  it("keeps hidden characters out of the request button's label (#1202)", async () => {
+    api.listCatalog.mockResolvedValue(page([item("c1", "io.github.new/\u202eeno")]));
+    setup();
+    expect(await screen.findByRole("button", { name: "Request approval for io.github.new/[U+202E]eno" })).toBeInTheDocument();
+  });
+
   it("toasts when requesting approval fails", async () => {
     api.listCatalog.mockResolvedValue(page([item("c1", "io.github.new/one")]));
     api.requestApproval.mockRejectedValue(new Error("x"));

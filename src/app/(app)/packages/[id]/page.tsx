@@ -47,6 +47,7 @@ import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
 import { isMcpFormat } from "@/lib/mcp/format";
 import { McpServerDetail } from "./_components/mcp-server-detail";
+import { SafeText } from "@/components/common/safe-text";
 
 // ---- Helpers ----
 
@@ -275,9 +276,7 @@ function PackageDetailContent() {
             </p>
           )}
           {pkg.description && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {pkg.description}
-            </p>
+            <SafeText as="p" className="text-sm text-muted-foreground mt-2" value={pkg.description} />
           )}
         </div>
         {homepageUrl && isSafeUrl(homepageUrl) ? (

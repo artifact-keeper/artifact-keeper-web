@@ -15,6 +15,13 @@ function list() {
 }
 
 describe("McpLineageGraph", () => {
+  it("shows hidden characters in the server name visibly, in the node and the list label (#1202)", () => {
+    render(<McpLineageGraph server={{ ...SERVER, name: "com.acme/\u202egnp.exe" }} pins={PINS} repoKey="mcp-local" />);
+    expect(screen.getByRole("list", { name: /^Lineage of com\.acme\/\[U\+202E\]gnp\.exe / })).toBeInTheDocument();
+    expect(screen.getByText("com.acme/[U+202E]gnp.exe")).toHaveAttribute("data-sanitized", "true");
+    expect(document.body.textContent).not.toMatch(/\u202e/);
+  });
+
   it("renders an accessible list with artifact and verdict links", () => {
     render(
       <McpLineageGraph

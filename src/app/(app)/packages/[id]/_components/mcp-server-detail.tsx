@@ -1,7 +1,7 @@
 "use client";
 
 import { SafeText } from "@/components/common/safe-text";
-import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import Link from "next/link";
 import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -245,8 +245,8 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
         <McpServerAvatar name={name} className="size-12" />
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-xl break-all">
-            {namespace && <span className="text-muted-foreground">{safeText(namespace, { max: NAME_MAX_LENGTH })} / </span>}
-            <span className="font-semibold">{safeText(shortName, { max: NAME_MAX_LENGTH })}</span>
+            {namespace && <span className="text-muted-foreground"><SafeText max={NAME_MAX_LENGTH} value={namespace} /> / </span>}
+            <SafeText max={NAME_MAX_LENGTH} className="font-semibold" value={shortName} />
           </h1>
           {server?.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="text-sm font-medium" value={server.title} />}
           {server?.description && <SafeText as="p" className="text-sm text-muted-foreground" value={server.description} />}

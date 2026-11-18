@@ -98,4 +98,22 @@ describe("PackageDetailPage MCP branch", () => {
     expect(getByTestId("mcp-detail")).toHaveTextContent("com.acme/weather");
     expect(queryByText("Files")).toBeNull();
   });
+
+  it("shows hidden and bidi characters in a package description visibly (#1202)", () => {
+    detailData = {
+      id: "pkg-1",
+      repository_key: "npm-local",
+      name: "lodash",
+      version: "4.17.21",
+      format: "npm",
+      size_bytes: 0,
+      download_count: 0,
+      description: "Utility \u202egnp.exe \u200bnote",
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-01T00:00:00Z",
+    };
+    const { getByText, container } = render(<PackageDetailPage />);
+    expect(getByText("Utility [U+202E]gnp.exe [U+200B]note")).toHaveAttribute("data-sanitized", "true");
+    expect(container.textContent).not.toMatch(/[\u202e\u200b]/);
+  });
 });
