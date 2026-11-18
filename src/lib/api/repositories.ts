@@ -36,6 +36,7 @@ import type {
   RepositoryVisibility,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
+import { parseRepositoryDeleteJob, type RepositoryDeleteJob } from '@/lib/api/repository-deletions';
 import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '@/lib/backend-version';
 import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
 
@@ -563,8 +564,13 @@ export const repositoriesApi = {
     return adaptRepository(repository);
   },
 
-  delete: async (key: string): Promise<void> => {
-    await unwrap(deleteRepository({ path: { key } }));
+  /**
+   * The background job a 1.12.0+ backend answers with (202), or `null` from a
+   * backend that deletes synchronously (200/204) (#1048).
+   */
+  delete: async (key: string): Promise<RepositoryDeleteJob | null> => {
+    const body: unknown = await unwrap(deleteRepository({ path: { key } }));
+    return parseRepositoryDeleteJob(body);
   },
 
   // Virtual repository member management

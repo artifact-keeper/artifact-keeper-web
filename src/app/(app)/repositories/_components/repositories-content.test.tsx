@@ -52,11 +52,19 @@ vi.mock("@tanstack/react-query", () => ({
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockToastLoading = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
+    loading: (...args: unknown[]) => mockToastLoading(...args),
+    info: vi.fn(),
   },
+}));
+
+// The 202 job's poller: keep it pending so no request leaves the test.
+vi.mock("@/lib/api/repository-deletions", () => ({
+  waitForRepositoryDeletion: () => new Promise(() => {}),
 }));
 
 vi.mock("@/lib/api/repositories", () => ({
@@ -466,8 +474,22 @@ describe("RepositoriesContent", () => {
   it("delete mutation onSuccess shows success toast", () => {
     render(<RepositoriesContent />);
     const deleteConfig = useMutationConfigs[2];
-    deleteConfig.onSuccess?.({}, "my-repo");
+    deleteConfig.onSuccess?.(null, "my-repo");
     expect(mockToastSuccess).toHaveBeenCalledWith("Repository deleted");
+  });
+
+  it("delete mutation says the deletion has started for a 202 job (#1048)", () => {
+    render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    deleteConfig.onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalledWith("Repository deleted");
+    expect(mockToastLoading).toHaveBeenCalledWith(
+      'Deleting repository "my-repo"...',
+      expect.objectContaining({ id: "repository-delete-job-1" }),
+    );
   });
 
   it("delete mutation onError shows error toast", () => {
@@ -827,7 +849,7 @@ describe("RepositoriesContent", () => {
 
     // Delete the selected repo
     const deleteConfig = useMutationConfigs[2];
-    deleteConfig.onSuccess?.({}, "maven-central");
+    deleteConfig.onSuccess?.(null, "maven-central");
 
     expect(mockToastSuccess).toHaveBeenCalledWith("Repository deleted");
 

@@ -766,6 +766,29 @@ describe("repositoriesApi.delete", () => {
     expect(mockDeleteRepository).toHaveBeenCalledWith({ path: { key: "maven-local" } });
   });
 
+  it("returns null for the empty 200/204 of a 1.11.x backend (#1048)", async () => {
+    mockDeleteRepository.mockResolvedValue({ data: undefined, error: undefined });
+    await expect(repositoriesApi.delete("maven-local")).resolves.toBeNull();
+  });
+
+  it("returns the background job a 1.12.0 backend answers 202 with (#1048)", async () => {
+    mockDeleteRepository.mockResolvedValue({
+      data: {
+        id: "job-1",
+        job_type: "repository_delete",
+        status: "pending",
+        phase: "queued",
+        repository_key: "maven-local",
+        status_url: "/api/v1/repository-deletions/job-1",
+      },
+      error: undefined,
+    });
+    await expect(repositoriesApi.delete("maven-local")).resolves.toMatchObject({
+      id: "job-1",
+      status: "pending",
+    });
+  });
+
   it("throws on SDK error", async () => {
     mockDeleteRepository.mockResolvedValue({ error: new Error("delete failed") });
     await expect(repositoriesApi.delete("maven-local")).rejects.toThrow("delete failed");

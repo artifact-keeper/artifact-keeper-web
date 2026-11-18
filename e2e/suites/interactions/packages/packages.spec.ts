@@ -10,7 +10,11 @@ test.describe('Packages Page', () => {
   });
 
   test('search input is visible', async ({ page }) => {
-    await expect(page.getByPlaceholder(/search/i)).toBeVisible({ timeout: 10000 });
+    // Scoped to <main> (#1062): while a streamed Suspense boundary is being
+    // revealed, React's server copy of the page can sit for a moment in a
+    // hidden <div id="S:n"> under <body>, next to the client-rendered page,
+    // so an unscoped locator briefly matches two inputs (strict mode).
+    await expect(page.getByRole('main').getByPlaceholder(/search/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('format filter dropdown is visible', async ({ page }) => {
