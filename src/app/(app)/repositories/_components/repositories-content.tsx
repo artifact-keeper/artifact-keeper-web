@@ -146,18 +146,32 @@ export function RepositoriesContent() {
   });
 
   // Delete-job pollers (#1190): stopped when the page unmounts or the user
-  // signs out, so no status reads outlive the page or the session.
+  // signs out, so no status reads outlive the page or the session. A poller
+  // that starts after that (a DELETE still in flight, or Retry on a failed
+  // toast) gets a signal that is already aborted (#1228).
   const deletionPolls = useRef<AbortController | null>(null);
+  const deletionPollsStopped = useRef<string | null>(null);
   const deletionPollSignal = () => {
+    if (deletionPollsStopped.current) return AbortSignal.abort(deletionPollsStopped.current);
     if (!deletionPolls.current || deletionPolls.current.signal.aborted) {
       deletionPolls.current = new AbortController();
     }
     return deletionPolls.current.signal;
   };
+  const stopDeletionPolls = (reason: string) => {
+    deletionPollsStopped.current = reason;
+    deletionPolls.current?.abort(reason);
+  };
+  // Declared first so a remount (React Strict Mode) clears the stop before the
+  // sign-in check below runs again.
   useEffect(() => {
-    if (!isAuthenticated) deletionPolls.current?.abort(DELETION_REPORT_LOGOUT);
+    deletionPollsStopped.current = null;
+    return () => stopDeletionPolls(deletionPollsStopped.current ?? "unmount");
+  }, []);
+  useEffect(() => {
+    if (!isAuthenticated) stopDeletionPolls(DELETION_REPORT_LOGOUT);
+    else if (deletionPollsStopped.current === DELETION_REPORT_LOGOUT) deletionPollsStopped.current = null;
   }, [isAuthenticated]);
-  useEffect(() => () => deletionPolls.current?.abort("unmount"), []);
 
   const deleteMutation = useMutation({
     mutationFn: (key: string) => repositoriesApi.delete(key),

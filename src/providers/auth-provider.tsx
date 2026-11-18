@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { localSessionExpired, refreshSession } from '@/lib/sdk-client';
+import { dismissSessionToasts } from '@/lib/session-toasts';
 import {
   login as sdkLogin,
   logout as sdkLogout,
@@ -84,6 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [totpToken, setTotpToken] = useState<string | null>(null);
 
   const isAuthenticated = !!user;
+  // Session-bound toasts, such as a failed repository deletion's Retry, go
+  // with the session (#1228).
+  useEffect(() => {
+    if (!user) dismissSessionToasts();
+  }, [user]);
 
   // The principal the cached queries were fetched under: a user id, or null
   // for anonymous. Starts as anonymous, which is what the app fetches as
