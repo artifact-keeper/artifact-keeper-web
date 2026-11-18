@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cargo setup guide gave an index URL cargo cannot use** (#1129, artifact-keeper-site#179) - The Setup Guide told users to set `index = "<origin>/cargo/<repo>/index"`. Without the `sparse+` prefix cargo treats that URL as a git index, and with the `/index` suffix cargo asks for `/cargo/<repo>/index/config.json`, which the backend does not serve, so setup failed with `config.json not found in registry`. The guide now gives `index = "sparse+<origin>/cargo/<repo>/"`, the registry root where the backend serves `config.json` and the index files. The cargo install note on an MCP server's Install panel had the same `/index/` suffix and is fixed the same way.
+
 ## [1.12.0] - 2026-11-17
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
