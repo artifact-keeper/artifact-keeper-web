@@ -646,10 +646,22 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   });
 
   const updateSecurityMutation = useMutation({
-    mutationFn: (values: UpsertScanConfigRequest) =>
-      securityApi.updateRepoSecurity(repoKey, values),
+    mutationFn: (values: UpsertScanConfigRequest) => {
+      // The instance lock (#1185): an instance administrator's PUT without
+      // `instance_locked` LOCKS the proxy scan policy, so send the stored value
+      // back when the GET reported it, and never from anyone else (403).
+      const locked = repoSecurity?.config?.instance_locked;
+      return securityApi.updateRepoSecurity(repoKey, {
+        ...values,
+        ...(user?.is_admin && locked !== undefined
+          ? { instance_locked: locked }
+          : {}),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository-security", repoKey] });
+      // The Settings tab caches the same row under its own key.
+      queryClient.invalidateQueries({ queryKey: ["scan-config", repoKey] });
       setSecForm(null); // reset to refetched defaults
       toast.success("Security settings saved");
     },

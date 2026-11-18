@@ -700,6 +700,10 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
       // Seed the query cache with the server's echoed row and clear the local
       // edits so the form re-baselines against what was actually persisted.
       queryClient.setQueryData(["scan-config", repository.key], updated);
+      // The Security tab caches the same row under its own key.
+      queryClient.invalidateQueries({
+        queryKey: ["repository-security", repository.key],
+      });
       setScanOverrides({});
       toast.success("Scanning & enforcement settings saved");
     },
