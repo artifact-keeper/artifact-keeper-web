@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { refreshSession } from '@/lib/sdk-client';
+import { localSessionExpired, refreshSession } from '@/lib/sdk-client';
 import {
   login as sdkLogin,
   logout as sdkLogout,
@@ -302,6 +302,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           error &&
           first.response?.status === 401 &&
           !onCallback &&
+          // With a remote instance active the 401 may be the remote's (#1204).
+          (await localSessionExpired()) &&
           (await refreshSession())
         ) {
           refreshed = true;

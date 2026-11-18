@@ -203,6 +203,34 @@ export function refreshSession(): Promise<boolean> {
   return inflightRefresh;
 }
 
+/**
+ * Whether a 401 from `/auth/me` means the local session needs a refresh.
+ *
+ * With a remote instance active, `/auth/me` goes through the proxy, so its
+ * 401 can come either from this backend (the local session behind the proxy
+ * expired) or from the remote refusing its stored API key, and the two look
+ * the same. Asking a local-only route that needs the local session tells them
+ * apart: a 401 there means the local session expired; anything else means the
+ * 401 came from the remote, and refreshing the local session would only
+ * rotate it on every load (#1204). Without a remote instance the 401 is
+ * always local.
+ */
+export async function localSessionExpired(): Promise<boolean> {
+  if (!isRemoteInstance()) return true;
+  try {
+    // The remote-instance registry is local-only and needs the local session.
+    // A plain fetch, so the 401 interceptor does not refresh on its own.
+    const res = await fetch(`${API_BASE_URL}/api/v1/instances`, {
+      headers: { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE },
+      credentials: 'include',
+    });
+    return res.status === 401;
+  } catch {
+    // Unreachable: a refresh would fail the same way.
+    return false;
+  }
+}
+
 function retryOriginalRequest(request: Request): Promise<Response> {
   return fetch(new Request(request.url, {
     method: request.method,

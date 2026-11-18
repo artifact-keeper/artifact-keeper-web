@@ -1113,6 +1113,59 @@ describe("sdk-client", () => {
   // Exports
   // -------------------------------------------------------------------------
 
+  describe("localSessionExpired (#1204)", () => {
+    it("is true without asking anything when no remote instance is active", async () => {
+      setupBrowserEnv();
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+      const { localSessionExpired } = await import("../sdk-client");
+
+      await expect(localSessionExpired()).resolves.toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("asks the local instance registry, never the proxy, with credentials and the CSRF header", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      const mockFetch = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+      const { localSessionExpired, CSRF_HEADER_NAME, CSRF_HEADER_VALUE } = await import("../sdk-client");
+
+      await localSessionExpired();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe("/api/v1/instances");
+      expect(init).toMatchObject({ credentials: "include", headers: { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE } });
+    });
+
+    it("is false when the local session is fine, so the 401 was the remote's", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]", { status: 200 })));
+      const { localSessionExpired } = await import("../sdk-client");
+
+      await expect(localSessionExpired()).resolves.toBe(false);
+    });
+
+    it("is true when the local backend refuses the session too", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
+      const { localSessionExpired } = await import("../sdk-client");
+
+      await expect(localSessionExpired()).resolves.toBe(true);
+    });
+
+    it("is false when the local backend cannot be reached", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+      const { localSessionExpired } = await import("../sdk-client");
+
+      await expect(localSessionExpired()).resolves.toBe(false);
+    });
+  });
+
   describe("refreshSession (#1084)", () => {
     const refreshCalls = (mockFetch: ReturnType<typeof vi.fn>) =>
       mockFetch.mock.calls.filter(([url]) => String(url).includes("/auth/refresh"));
