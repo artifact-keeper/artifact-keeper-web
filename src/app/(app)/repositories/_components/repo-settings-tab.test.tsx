@@ -2433,6 +2433,47 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({ block_on_policy_violation: true });
   });
 
+  it("shows a stored severity threshold it does not offer and keeps it on save (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "info",
+      proxy_scan_action: "fail_closed",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "info",
+      proxy_scan_action: "fail_closed",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    const severitySelect = () =>
+      screen
+        .getAllByTestId("mock-select")
+        .find((el) =>
+          Array.from((el as HTMLSelectElement).options).some(
+            (o) => o.value === "critical"
+          )
+        ) as HTMLSelectElement;
+    await waitFor(() => expect(severitySelect().value).toBe("info"));
+    expect(
+      Array.from(severitySelect().options).find((o) => o.value === "info")
+        ?.textContent
+    ).toBe("Info");
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({
+      block_on_policy_violation: true,
+    });
+  });
+
   it("sends only proxy_scan_action when only the action is changed", async () => {
     mockGetScanConfig.mockResolvedValue({
       scan_enabled: true,

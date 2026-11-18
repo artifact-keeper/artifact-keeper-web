@@ -1687,6 +1687,17 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                           {level.charAt(0).toUpperCase() + level.slice(1)}
                         </SelectItem>
                       ))}
+                      {/* A stored threshold this list does not offer (the
+                          backend also accepts `info`) is shown as it is and
+                          kept, instead of an empty select (#1069). */}
+                      {!(SEVERITY_THRESHOLDS as readonly string[]).includes(
+                        scanForm.severity_threshold
+                      ) && (
+                        <SelectItem value={scanForm.severity_threshold} disabled>
+                          {scanForm.severity_threshold.charAt(0).toUpperCase() +
+                            scanForm.severity_threshold.slice(1)}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
