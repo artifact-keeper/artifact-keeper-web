@@ -58,7 +58,7 @@ test.describe('Package Browser (Repo Detail → Packages Tab)', () => {
   test('packages tab has search input', async ({ page }) => {
     await goToPackagesTab(page);
 
-    const searchInput = page.getByPlaceholder(/search packages/i);
+    const searchInput = page.getByRole('main').getByPlaceholder(/search packages/i);
     await expect(searchInput).toBeVisible({ timeout: 5000 });
   });
 
@@ -318,7 +318,7 @@ test.describe('Package Browser (Repo Detail → Packages Tab)', () => {
     await page.waitForTimeout(1000);
 
     // Should be back on the package list — search input should reappear
-    const searchInput = page.getByPlaceholder(/search packages/i);
+    const searchInput = page.getByRole('main').getByPlaceholder(/search packages/i);
     await expect(searchInput).toBeVisible({ timeout: 5000 });
   });
 
