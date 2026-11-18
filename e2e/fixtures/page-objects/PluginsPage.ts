@@ -12,7 +12,7 @@ export class PluginsPage {
       page.locator('[data-testid="plugins-list"]')
     );
     this.installButton = page.getByRole('button', { name: /install/i });
-    this.searchInput = page.getByPlaceholder(/search/i);
+    this.searchInput = page.getByRole('main').getByPlaceholder(/search/i);
   }
 
   async goto() { await this.page.goto('/plugins'); }

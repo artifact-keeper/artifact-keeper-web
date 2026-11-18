@@ -24,7 +24,11 @@ test.describe('Repositories search (#740)', () => {
   }) => {
     await navigateTo(page, '/repositories');
 
-    const searchInput = page.getByPlaceholder('Search...');
+    // Scoped to <main> (#1062): while a streamed Suspense boundary is being
+    // revealed, React's server copy of the page can sit for a moment in a
+    // hidden <div id="S:n"> under <body>, next to the client-rendered page,
+    // so an unscoped locator briefly matches two inputs (strict mode).
+    const searchInput = page.getByRole('main').getByPlaceholder('Search...');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
 
     // The unfiltered list shows the seeded repos.
@@ -55,7 +59,7 @@ test.describe('Repositories search (#740)', () => {
   test('clearing the search restores the full list', async ({ page }) => {
     await navigateTo(page, '/repositories');
 
-    const searchInput = page.getByPlaceholder('Search...');
+    const searchInput = page.getByRole('main').getByPlaceholder('Search...');
     await expect(repoListItem(page, 'e2e-maven-local')).toBeVisible({
       timeout: 10000,
     });
@@ -77,7 +81,7 @@ test.describe('Repositories search (#740)', () => {
     consoleErrors,
   }) => {
     await navigateTo(page, '/repositories');
-    const searchInput = page.getByPlaceholder('Search...');
+    const searchInput = page.getByRole('main').getByPlaceholder('Search...');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill('e2e');
     await expect(repoListItem(page, 'e2e-maven-local')).toBeVisible({
