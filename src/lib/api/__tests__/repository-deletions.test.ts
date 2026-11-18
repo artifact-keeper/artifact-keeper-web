@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockApiFetch = vi.fn();
-vi.mock("../fetch", () => ({
+vi.mock("../fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fetch")>()),
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
+
+import { ApiError } from "../fetch";
 
 import {
   parseRepositoryDeleteJob,
@@ -47,7 +50,14 @@ describe("repositoryDeletionsApi.get", () => {
   it("reads the job status endpoint", async () => {
     mockApiFetch.mockResolvedValue(job("running"));
     await expect(repositoryDeletionsApi.get("job-1")).resolves.toMatchObject({ status: "running" });
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repository-deletions/job-1");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repository-deletions/job-1", undefined);
+  });
+
+  it("passes an abort signal to the request (#1190)", async () => {
+    mockApiFetch.mockResolvedValue(job("running"));
+    const { signal } = new AbortController();
+    await repositoryDeletionsApi.get("job-1", signal);
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/repository-deletions/job-1", { signal });
   });
 
   it("throws on a body that is not a job", async () => {
@@ -65,7 +75,7 @@ describe("waitForRepositoryDeletion (#1048)", () => {
     const final = await waitForRepositoryDeletion(job("pending"), { fetchJob, sleep: noSleep });
     expect(final.status).toBe("completed");
     expect(fetchJob).toHaveBeenCalledTimes(2);
-    expect(fetchJob).toHaveBeenCalledWith("job-1");
+    expect(fetchJob).toHaveBeenCalledWith("job-1", undefined);
   });
 
   it("returns a failed job", async () => {
@@ -115,5 +125,44 @@ describe("waitForRepositoryDeletion (#1048)", () => {
     });
     expect(final.status).toBe("running");
     expect(delays).toEqual([1000, 2000, 4000, 4000, 4000]);
+  });
+
+  it("stops polling once the signal aborts (#1190)", async () => {
+    const controller = new AbortController();
+    const fetchJob = vi.fn().mockImplementation(async () => {
+      controller.abort("logout");
+      return job("running");
+    });
+    await expect(
+      waitForRepositoryDeletion(job("running"), { fetchJob, sleep: noSleep, signal: controller.signal }),
+    ).rejects.toBe("logout");
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("cuts the default sleep short when the signal aborts (#1190)", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const fetchJob = vi.fn();
+      const wait = waitForRepositoryDeletion(job("running"), {
+        fetchJob,
+        intervalMs: 60_000,
+        signal: controller.signal,
+      });
+      controller.abort("unmount");
+      await expect(wait).rejects.toBe("unmount");
+      expect(fetchJob).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("throws at once when the job is not visible to the caller (#1191)", async () => {
+    const hidden = vi.fn().mockRejectedValue(new ApiError(404, "Repository delete job not found"));
+    await expect(
+      waitForRepositoryDeletion(job("running"), { fetchJob: hidden, sleep: noSleep, maxReadErrors: 3 }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(hidden).toHaveBeenCalledTimes(1);
   });
 });

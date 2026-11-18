@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useDeferredValue, useMemo } from "react";
+import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
@@ -15,7 +15,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { reportRepositoryDeletion } from "./report-repository-deletion";
+import { DELETION_REPORT_LOGOUT, reportRepositoryDeletion } from "./report-repository-deletion";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,6 +145,20 @@ export function RepositoriesContent() {
     onError: mutationErrorToast("Failed to update repository"),
   });
 
+  // Delete-job pollers (#1190): stopped when the page unmounts or the user
+  // signs out, so no status reads outlive the page or the session.
+  const deletionPolls = useRef<AbortController | null>(null);
+  const deletionPollSignal = () => {
+    if (!deletionPolls.current || deletionPolls.current.signal.aborted) {
+      deletionPolls.current = new AbortController();
+    }
+    return deletionPolls.current.signal;
+  };
+  useEffect(() => {
+    if (!isAuthenticated) deletionPolls.current?.abort(DELETION_REPORT_LOGOUT);
+  }, [isAuthenticated]);
+  useEffect(() => () => deletionPolls.current?.abort("unmount"), []);
+
   const deleteMutation = useMutation({
     mutationFn: (key: string) => repositoriesApi.delete(key),
     onSuccess: (job, deletedKey) => {
@@ -157,6 +171,7 @@ export function RepositoriesContent() {
       void reportRepositoryDeletion(deletedKey, job, {
         onCompleted: invalidateAllRepoQueries,
         onRetry: (key) => deleteMutation.mutate(key),
+        signal: deletionPollSignal(),
       });
     },
     onError: mutationErrorToast("Failed to delete repository"),

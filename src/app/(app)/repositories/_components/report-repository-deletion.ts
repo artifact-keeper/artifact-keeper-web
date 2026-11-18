@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import {
+  isDeleteJobHidden,
   waitForRepositoryDeletion,
   type RepositoryDeleteJob,
   type WaitForDeletionOptions,
@@ -12,7 +13,16 @@ export interface ReportRepositoryDeletionOptions {
   onRetry?: (key: string) => void;
   /** Passed through to the poller (tests). */
   wait?: WaitForDeletionOptions;
+  /**
+   * Stops polling (#1190). Abort with `"logout"` when the user signs out (the
+   * toast is dismissed); any other reason, such as leaving the page, leaves a
+   * note that the deletion keeps running in the background.
+   */
+  signal?: AbortSignal;
 }
+
+/** The abort reason that drops the toast instead of leaving a note (#1190). */
+export const DELETION_REPORT_LOGOUT = "logout";
 
 function reportFailure(
   key: string,
@@ -43,7 +53,7 @@ function reportFailure(
 export async function reportRepositoryDeletion(
   key: string,
   job: RepositoryDeleteJob | null,
-  { onCompleted, onRetry, wait }: ReportRepositoryDeletionOptions = {},
+  { onCompleted, onRetry, wait, signal }: ReportRepositoryDeletionOptions = {},
 ): Promise<void> {
   if (!job || job.status === "completed") {
     toast.success("Repository deleted");
@@ -65,8 +75,29 @@ export async function reportRepositoryDeletion(
 
   let final: RepositoryDeleteJob;
   try {
-    final = await waitForRepositoryDeletion(job, wait);
-  } catch {
+    final = await waitForRepositoryDeletion(job, { ...wait, signal });
+  } catch (error) {
+    if (signal?.aborted) {
+      if (signal.reason === DELETION_REPORT_LOGOUT) {
+        toast.dismiss(toastId);
+      } else {
+        toast.info(`Repository "${repoKey}" is still being deleted`, {
+          id: toastId,
+          description: "The deletion keeps running in the background.",
+        });
+      }
+      return;
+    }
+    if (isDeleteJobHidden(error)) {
+      // A repeated DELETE returned a job another user started; only they and
+      // instance administrators may read its status (#1191).
+      toast.info(`Repository "${repoKey}" is already being deleted`, {
+        id: toastId,
+        description:
+          "Someone else started this deletion, so its progress is not shown here. It keeps running in the background.",
+      });
+      return;
+    }
     toast.info(`Deletion of repository "${repoKey}" has started`, {
       id: toastId,
       description: "Its progress could not be read. It keeps running in the background.",
