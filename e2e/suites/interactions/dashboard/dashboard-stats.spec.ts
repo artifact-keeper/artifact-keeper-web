@@ -116,15 +116,15 @@ test.describe('Dashboard Statistics cards', () => {
     await navigateTo(page, '/');
 
     const storage = statCard(page, 'Storage Used');
-    await expect(cardValue(storage)).toHaveText('1 MB');
+    await expect(cardValue(storage)).toHaveText('1 MiB');
     await expect(cardValue(statCard(page, 'Artifacts'))).toHaveText('5');
     await storage.hover();
     const tooltip = page.getByRole('tooltip');
     await expect(tooltip).toBeVisible();
     await expect(tooltip.locator('div').filter({ has: page.getByText('Local', { exact: true }) }).last())
-      .toContainText('768 KB');
+      .toContainText('768 KiB');
     await expect(tooltip.locator('div').filter({ has: page.getByText('Remote', { exact: true }) }).last())
-      .toContainText('256 KB');
+      .toContainText('256 KiB');
   });
 
   test('hover shows Local/Remote breakdown tooltip on combined cards', async ({
