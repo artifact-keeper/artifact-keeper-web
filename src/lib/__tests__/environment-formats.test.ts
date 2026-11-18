@@ -11,6 +11,12 @@ describe("formatHasLockfiles", () => {
     "is false for %s",
     (f) => expect(formatHasLockfiles(f as string | null | undefined)).toBe(false),
   );
+
+  // Their lockfiles (yarn.lock, pnpm-lock.yaml) are rejected by the backend,
+  // and bower has none (#1215).
+  it.each(["yarn", "pnpm", "bower"])("is false for the npm alias %s", (f) =>
+    expect(formatHasLockfiles(f)).toBe(false),
+  );
 });
 
 describe("showEnvironmentsTab", () => {
