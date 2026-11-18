@@ -280,7 +280,13 @@ test.describe('Lifecycle Page', () => {
 
   test('policies table renders or shows empty state', async ({ page }) => {
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
+    // Scoped to the main landmark: page-wide, the regex also matches the sidebar
+    // ("Ack-no-wledgements ... Polic-ies"), so `table.or(emptyState)` resolved to two
+    // elements whenever the table had rows and failed strict mode.
+    const emptyState = page
+      .getByRole('main')
+      .getByText(/no.*polic|no.*data|no.*result|empty/i)
+      .first();
 
     await expect(table.or(emptyState)).toBeVisible();
   });

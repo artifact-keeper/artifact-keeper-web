@@ -83,6 +83,22 @@ export function apiErrorMessage(error: unknown): string | null {
 }
 
 /**
+ * Build a query string from optional params, dropping `undefined` and `''` so
+ * an unset filter is omitted rather than sent as an empty value. Returns `''`
+ * when nothing is set, so it can be appended to a path unconditionally.
+ */
+export function queryString(
+  params: Record<string, string | number | undefined>,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
+/**
  * Shared fetch wrapper for API modules that don't use the generated SDK.
  * Adds base URL resolution, JSON headers, credentials, and error handling.
  */

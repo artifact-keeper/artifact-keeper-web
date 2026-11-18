@@ -112,8 +112,8 @@ describe("MavenComponentList", () => {
 
   it("formats total size with formatBytes", () => {
     render(<MavenComponentList components={[COMP_B]} />);
-    // formatBytes(12345) ≈ "12.06 KB" or "12 KB"
-    expect(screen.getByText(/KB/i)).toBeInTheDocument();
+    // formatBytes(12345) ≈ "12.06 KiB" or "12 KiB"
+    expect(screen.getByText(/KiB/)).toBeInTheDocument();
   });
 
   it("renders the trigger as a button with an aria-label including GAV + file count", () => {

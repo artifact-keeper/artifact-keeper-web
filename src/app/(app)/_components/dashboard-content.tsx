@@ -20,11 +20,13 @@ import {
   Plug,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useCanListFindings } from "@/hooks/use-can-list-findings";
 import { adminApi } from "@/lib/api/admin";
 import { repositoriesApi } from "@/lib/api/repositories";
 import { sbomApi } from "@/lib/api/sbom";
 import { mcpApi } from "@/lib/api/mcp";
 import { mcpKeys } from "@/lib/mcp/query-keys";
+import { quotaKeys } from "@/lib/api/quota";
 import { formatBytes } from "@/lib/utils";
 import { repoSizeLabel } from "@/lib/repo-size";
 import type { Repository } from "@/types";
@@ -32,6 +34,7 @@ import type { CveTrends } from "@/types/sbom";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { StatBreakdown } from "@/components/common/stat-breakdown";
+import { QuotaUsageSection } from "@/components/common/quota-usage-cards";
 import { StatusBadge } from "@/components/common/status-badge";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -195,7 +198,37 @@ const SEVERITY_TEXT_COLORS: Record<string, string> = {
   low: "text-blue-600 dark:text-blue-400",
 };
 
-function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
+/** A labelled count that links to its list, and stays inert when it is zero. */
+function CountLink({
+  count,
+  href,
+  children,
+}: Readonly<{ count: number; href?: string; children: string }>) {
+  const body = (
+    <>
+      {children}: <strong className="text-foreground">{count}</strong>
+    </>
+  );
+  if (count === 0 || !href) return <span>{body}</span>;
+  return (
+    <Link
+      href={href}
+      className="rounded hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring outline-none"
+      aria-label={`View ${count} ${children.toLowerCase()} vulnerabilities`}
+    >
+      {body}
+    </Link>
+  );
+}
+
+function SeverityBreakdown({
+  trends,
+  linked,
+}: Readonly<{
+  trends: CveTrends;
+  /** False when the drill-down would refuse this user: the counts stay plain text. */
+  linked: boolean;
+}>) {
   const counts = {
     critical: trends.critical_count,
     high: trends.high_count,
@@ -211,8 +244,8 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
         {SEVERITY_LEVELS.map((sev) => {
           const count = counts[sev];
           const pct = (count / max) * 100;
-          return (
-            <div key={sev} className="flex items-center gap-3">
+          const bar = (
+            <>
               <span className={`text-xs font-medium capitalize w-16 ${SEVERITY_TEXT_COLORS[sev]}`}>
                 {sev}
               </span>
@@ -223,16 +256,37 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
                 />
               </div>
               <span className="text-sm font-medium tabular-nums w-8 text-right">{count}</span>
-            </div>
+            </>
+          );
+          // A zero bar stays inert: there is no list to show.
+          if (count === 0 || !linked) {
+            return (
+              <div key={sev} className="flex items-center gap-3">
+                {bar}
+              </div>
+            );
+          }
+          // `state=open`: these counts exclude acknowledged findings, so the
+          // list has to as well, or it shows more rows than the bar says.
+          return (
+            <Link
+              key={sev}
+              href={`/security/findings?severity=${sev}&state=open`}
+              className="flex items-center gap-3 rounded-md -mx-1 px-1 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring outline-none"
+              aria-label={`View ${count} open ${sev} vulnerabilities`}
+            >
+              {bar}
+            </Link>
           );
         })}
       </div>
 
       {/* Status summary row */}
       <div className="flex items-center gap-6 pt-2 border-t text-xs text-muted-foreground">
-        <span>Open: <strong className="text-foreground">{trends.open_cves}</strong></span>
+        <CountLink count={trends.open_cves} href={linked ? "/security/findings?state=open" : undefined}>Open</CountLink>
+        {/* Fixed is derived by diffing scans, so there is no row list to link to. */}
         <span>Fixed: <strong className="text-foreground">{trends.fixed_cves}</strong></span>
-        <span>Acknowledged: <strong className="text-foreground">{trends.acknowledged_cves}</strong></span>
+        <CountLink count={trends.acknowledged_cves} href={linked ? "/security/findings?state=acknowledged" : undefined}>Acknowledged</CountLink>
         {trends.avg_days_to_fix != null && (
           <span>Avg fix time: <strong className="text-foreground">{Math.round(trends.avg_days_to_fix)}d</strong></span>
         )}
@@ -247,6 +301,8 @@ function SeverityBreakdown({ trends }: Readonly<{ trends: CveTrends }>) {
 
 export function DashboardContent() {
   const { user, isAuthenticated } = useAuth();
+  // The drill-down answers only an unscoped instance admin (artifact-keeper#5865).
+  const canListFindings = useCanListFindings();
   const queryClient = useQueryClient();
 
   const {
@@ -306,6 +362,7 @@ export function DashboardContent() {
     queryClient.invalidateQueries({ queryKey: ["recent-repositories"] });
     queryClient.invalidateQueries({ queryKey: ["cve-trends"] });
     queryClient.invalidateQueries({ queryKey: mcpKeys.pendingCount });
+    queryClient.invalidateQueries({ queryKey: quotaKeys.system });
   }
 
   const greeting = user?.display_name || user?.username;
@@ -371,6 +428,10 @@ export function DashboardContent() {
           )}
         </section>
       )}
+
+      {/* Instance storage and transfer quotas (any signed-in user; hidden
+          when none is configured or the backend does not report them) */}
+      {isAuthenticated && <QuotaUsageSection />}
 
       {/* Admin Stats */}
       {user?.is_admin && (
@@ -489,7 +550,7 @@ export function DashboardContent() {
                     <p className="text-xs text-muted-foreground">{OPEN_SEVERITY_COUNTS_HINT}</p>
                   </CardHeader>
                   <CardContent>
-                    <SeverityBreakdown trends={cveTrends} />
+                    <SeverityBreakdown trends={cveTrends} linked={canListFindings} />
                   </CardContent>
                 </Card>
               )}

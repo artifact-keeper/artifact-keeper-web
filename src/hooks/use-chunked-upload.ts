@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/uploads";
 import type { CompleteResult } from "@/lib/api/uploads";
 import { sha256Blob } from "@/lib/sha256-stream";
+import { QuotaRefusalError } from "@/lib/quota";
 
 // --- Types ---
 
@@ -247,6 +248,10 @@ export function useChunkedUpload(
             lastError = null;
             break;
           } catch (err) {
+            // A quota or size refusal will not change on retry.
+            if (err instanceof QuotaRefusalError) {
+              throw err;
+            }
             // Don't retry expired sessions
             if (err instanceof UploadSessionExpiredError) {
               clearSession(repositoryKey, effectivePath);

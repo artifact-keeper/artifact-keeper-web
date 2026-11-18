@@ -204,7 +204,7 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     test.skip(!key, 'No docker repository available');
 
     // The seeded repositories hold no images, so stub the grouped rollup with
-    // the two rows #957 reported: a size that wrapped ("365.93" / "MB") and a
+    // the two rows #957 reported: a size that wrapped ("365.93" / "MiB") and a
     // 71-character cosign signature tag that wrapped mid-token.
     const digest = `sha256:${'b'.repeat(64)}`;
     const sigTag = `sha256-${'a'.repeat(64)}.sig`;
@@ -239,7 +239,7 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
     await expect(page.getByTestId('docker-tag-name')).toHaveCount(2);
 
     // Number of line boxes the element's text occupies: 1 when it fits on
-    // one line, 2+ when it wraps ("365.93" / "MB").
+    // one line, 2+ when it wraps ("365.93" / "MiB").
     const lineCount = (el: Element) => {
       const range = document.createRange();
       range.selectNodeContents(el);
@@ -251,7 +251,7 @@ test.describe('Artifact Browser Grouping (#254 Maven, #330 Docker)', () => {
 
     const sizes = page.getByTestId('docker-tag-size');
     const names = page.getByTestId('docker-tag-name');
-    await expect(sizes.first()).toHaveText(/MB/);
+    await expect(sizes.first()).toHaveText(/MiB/);
     for (const cell of await sizes.all()) {
       expect(await cell.evaluate(lineCount)).toBe(1);
     }

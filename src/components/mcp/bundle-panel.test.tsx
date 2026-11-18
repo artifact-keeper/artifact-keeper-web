@@ -24,7 +24,7 @@ describe("McpBundlePanel", () => {
   it("shows the stored bundle facts and its download", () => {
     renderWithClient(<McpBundlePanel bundle={BUNDLE} downloadUrl={URL} />);
     expect(screen.getByText("weather-1.4.2.mcpb")).toBeInTheDocument();
-    expect(screen.getByText("2 KB")).toBeInTheDocument();
+    expect(screen.getByText("2 KiB")).toBeInTheDocument();
     expect(screen.getByText("sha256:abc123")).toBeInTheDocument();
     expect(screen.getByText("signed, trusted signer")).toBeInTheDocument();
     expect(screen.getByText("signed by Acme Inc")).toBeInTheDocument();

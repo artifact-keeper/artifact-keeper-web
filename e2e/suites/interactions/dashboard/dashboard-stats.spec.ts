@@ -40,7 +40,7 @@ function cardValue(card: Locator): Locator {
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '--';
   if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
   const k = 1024;
   const i = Math.max(
     0,
@@ -68,9 +68,9 @@ test.describe('Dashboard Statistics cards', () => {
     // Artifacts shows a plain count.
     await expect(cardValue(statCard(page, 'Artifacts'))).toHaveText(/^\d+$/);
 
-    // Storage Used shows a formatted byte size (e.g. "0 B", "1.5 MB").
+    // Storage Used shows a formatted byte size (e.g. "0 B", "1.5 MiB").
     await expect(cardValue(statCard(page, 'Storage Used'))).toHaveText(
-      /^\d+(\.\d+)?\s(B|KB|MB|GB|TB)$/
+      /^\d+(\.\d+)?\s(B|KiB|MiB|GiB|TiB|PiB)$/
     );
     await expect(section).toBeVisible();
   });

@@ -6,14 +6,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format a byte count into a human-readable string (e.g. "1.5 MB").
+ * Format a byte count into a human-readable string (e.g. "1.5 MiB").
+ *
+ * The divisor is 1024, so the units are the binary IEC ones (KiB, MiB, GiB,
+ * TiB, PiB). They used to be labelled KB/MB/GB/TB, which overstated sizes by
+ * up to 10 % against tools that use decimal units: 11,274,290,864 bytes read
+ * "10.5 GB" where it is 11.27 GB or 10.5 GiB.
  *
  * Returns "--" for non-finite or negative inputs (NaN, Infinity, -Infinity,
  * negative numbers) so a misbehaving backend can't render "NaN undefined" or
  * similar in a settings panel — see #348. Matches the missing-data sentinel
  * already in use across the package/search rendering paths.
  */
-const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+const BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"] as const;
 const MISSING_VALUE_SENTINEL = "--";
 
 export function formatBytes(bytes: number): string {
