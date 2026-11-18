@@ -224,6 +224,12 @@ function vulnerableDetail(enforcement: ProxyScanEnforcement): string {
   if (enforcement.proxy_scan_action === "fail_closed") {
     return "This repository withholds downloads it cannot clear (fail-closed).";
   }
+  if (enforcement.proxy_scan_action === "record_only") {
+    return (
+      "This repository only records scan verdicts (record-only) and never " +
+      "blocks, so the artifact is still served."
+    );
+  }
   return (
     "This repository is configured to serve downloads it cannot clear " +
     "(fail-open), so the artifact may still be served."
@@ -243,7 +249,9 @@ function notScannedDetail(
   const posture =
     enforcement.proxy_scan_action === "fail_closed"
       ? "This repository withholds downloads it cannot clear, so it may have been withheld."
-      : "This repository serves downloads it cannot clear, so it may have been served unscanned.";
+      : enforcement.proxy_scan_action === "record_only"
+        ? "This repository only records verdicts and never blocks, so it may have been served unscanned."
+        : "This repository serves downloads it cannot clear, so it may have been served unscanned.";
   return `No verdict is not evidence of safety. ${posture}`;
 }
 
