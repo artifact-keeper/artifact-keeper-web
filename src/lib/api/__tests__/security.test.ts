@@ -476,6 +476,29 @@ describe("securityApi", () => {
     expect(out.id).toBe("cfg1");
   });
 
+  it("updateRepoSecurity passes instance_locked through only when given (#1185)", async () => {
+    mockUpdateRepoSecurity.mockResolvedValue({
+      data: { ...SDK_CONFIG, instance_locked: false },
+      error: undefined,
+    });
+    const mod = await import("../security");
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: false,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+    };
+    const out = await mod.securityApi.updateRepoSecurity("repo-key", {
+      ...base,
+      instance_locked: false,
+    });
+    expect(mockUpdateRepoSecurity.mock.calls.at(-1)![0].body.instance_locked).toBe(false);
+    expect(out.instance_locked).toBe(false);
+    await mod.securityApi.updateRepoSecurity("repo-key", base);
+    expect(mockUpdateRepoSecurity.mock.calls.at(-1)![0].body).not.toHaveProperty("instance_locked");
+  });
+
   it("updateRepoSecurity throws on error", async () => {
     mockUpdateRepoSecurity.mockResolvedValue({
       data: undefined,

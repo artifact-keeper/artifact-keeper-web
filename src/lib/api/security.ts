@@ -222,6 +222,10 @@ function adaptScanConfig(sdk: SdkScanConfigResponse): ScanConfig {
     scan_on_proxy: sdk.scan_on_proxy,
     block_on_policy_violation: sdk.block_on_policy_violation,
     severity_threshold: sdk.severity_threshold,
+    // Not on the SDK 1.7.0 type; anything but a boolean means not reported.
+    ...(typeof (sdk as { instance_locked?: unknown }).instance_locked === 'boolean'
+      ? { instance_locked: (sdk as { instance_locked?: boolean }).instance_locked }
+      : {}),
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
@@ -281,7 +285,9 @@ function adaptUpsertConfigRequest(
     scan_on_proxy: req.scan_on_proxy,
     block_on_policy_violation: req.block_on_policy_violation,
     severity_threshold: req.severity_threshold,
-  };
+    // Not on the SDK 1.7.0 request type; only put on the wire when given.
+    ...(req.instance_locked === undefined ? {} : { instance_locked: req.instance_locked }),
+  } as SdkUpsertScanConfigRequest;
 }
 
 export const securityApi = {
