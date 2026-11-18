@@ -15,6 +15,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { reportRepositoryDeletion } from "./report-repository-deletion";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,12 +147,17 @@ export function RepositoriesContent() {
 
   const deleteMutation = useMutation({
     mutationFn: (key: string) => repositoriesApi.delete(key),
-    onSuccess: (_, deletedKey) => {
+    onSuccess: (job, deletedKey) => {
       invalidateAllRepoQueries();
       setDeleteOpen(false);
       setDialogRepo(null);
       if (selectedKey === deletedKey) setSelectedKey(null);
-      toast.success("Repository deleted");
+      // 1.12.0 answers 202 with a background job (#1048): report that the
+      // deletion has started, then its outcome.
+      void reportRepositoryDeletion(deletedKey, job, {
+        onCompleted: invalidateAllRepoQueries,
+        onRetry: (key) => deleteMutation.mutate(key),
+      });
     },
     onError: mutationErrorToast("Failed to delete repository"),
   });
