@@ -59,7 +59,11 @@ describe("reportRepositoryDeletion (#1048)", () => {
     expect(mockToast.success).not.toHaveBeenCalled();
     const [title, opts] = mockToast.error.mock.calls[0];
     expect(title).toBe('Deleting repository "maven-local" failed');
-    expect(opts).toMatchObject({ id: "repository-delete-job-1", description: "storage offline" });
+    expect(opts).toMatchObject({
+      id: "repository-delete-job-1",
+      description: "storage offline",
+      duration: Infinity,
+    });
     opts.action.onClick();
     expect(onRetry).toHaveBeenCalledWith("maven-local");
   });

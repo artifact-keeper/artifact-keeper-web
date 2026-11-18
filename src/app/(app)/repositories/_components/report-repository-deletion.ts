@@ -24,7 +24,9 @@ function reportFailure(
     id: toastId,
     description:
       job.error_summary || "The background deletion job failed. Delete the repository again to retry.",
-    duration: 60_000,
+    // The only place a failed job shows: the backend hides the renamed
+    // repository and lists no jobs, so keep it until the user dismisses it.
+    duration: Infinity,
     action: onRetry ? { label: "Retry", onClick: () => onRetry(key) } : undefined,
   });
 }
