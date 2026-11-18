@@ -133,7 +133,11 @@ export default function PermissionsPage() {
   // Paged on the server: the backend caps per_page at 100, so one big request stopped there (#1181)
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PERMISSIONS_MAX_PER_PAGE);
-  const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
+  const {
+    data: permissionsData,
+    isLoading: permissionsLoading,
+    isPlaceholderData: permissionsPageLoading,
+  } = useQuery({
     queryKey: ["admin-permissions", page, pageSize],
     queryFn: () => permissionsApi.list({ page, per_page: pageSize }),
     enabled: !!currentUser?.is_admin,
@@ -713,6 +717,8 @@ export default function PermissionsPage() {
             }}
             pageSizeOptions={[20, 50, PERMISSIONS_MAX_PER_PAGE]}
             loading={permissionsLoading}
+            // the previous page stays up as placeholder data until the next arrives (#1188)
+            fetching={permissionsPageLoading}
             emptyMessage="No permissions found."
             rowKey={(p) => p.id}
           />
