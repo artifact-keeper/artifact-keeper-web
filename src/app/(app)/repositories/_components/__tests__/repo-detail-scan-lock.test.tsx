@@ -48,6 +48,11 @@ let storedLock: boolean | undefined = undefined;
 let isAdmin = true;
 // Whether the Security form's query is refetching (#1213).
 let securityFetching = false;
+// Stored fields over the defaults below, a repository with no row yet, and
+// the backend version from /health (#1229).
+let storedFields: Record<string, unknown> = {};
+let unconfigured = false;
+let healthVersion: string | undefined = undefined;
 const mockUpdateRepoSecurity = vi.fn();
 const mockInvalidateQueries = vi.fn();
 
@@ -57,9 +62,12 @@ vi.mock("@tanstack/react-query", () => ({
     if (key === "repository") {
       return { data: repository, isLoading: false, isFetching: false };
     }
+    if (key === "health") {
+      return { data: healthVersion ? { version: healthVersion } : undefined, isLoading: false, isFetching: false };
+    }
     if (key === "repository-security") {
       return {
-        data: {
+        data: unconfigured ? { config: null, score: null } : {
           config: {
             scan_enabled: true,
             scan_on_upload: true,
@@ -67,6 +75,7 @@ vi.mock("@tanstack/react-query", () => ({
             block_on_policy_violation: false,
             severity_threshold: "high",
             ...(storedLock === undefined ? {} : { instance_locked: storedLock }),
+            ...storedFields,
           },
         },
         isLoading: false,
@@ -161,6 +170,9 @@ beforeEach(() => {
   storedLock = undefined;
   isAdmin = true;
   securityFetching = false;
+  storedFields = {};
+  unconfigured = false;
+  healthVersion = undefined;
 });
 afterEach(() => cleanup());
 
@@ -220,5 +232,73 @@ describe("Security tab lock follow-ups (#1213)", () => {
     render(<RepoDetailContent repoKey="proxy" />);
     await userEvent.click(screen.getByRole("tab", { name: /Security/i }));
     expect(screen.queryByText(/^Proxy scan policy (not )?locked:/)).toBeNull();
+  });
+});
+
+describe("Security tab sends only what changed (#1229)", () => {
+  async function openSecurityTab() {
+    const view = render(<RepoDetailContent repoKey="proxy" />);
+    await userEvent.click(screen.getByRole("tab", { name: /Security/i }));
+    return view;
+  }
+
+  it("sends just the edited field", async () => {
+    expect(await saveSecurityTab()).toEqual({ scan_on_proxy: false });
+  });
+
+  it("does not write back scan fields saved from Settings while it had edits", async () => {
+    storedLock = false;
+    const { rerender } = await openSecurityTab();
+    await userEvent.click(screen.getByRole("switch", { name: "Scan on Proxy" }));
+    // Settings saves scanning off and a critical threshold; the row refetches.
+    storedFields = { scan_enabled: false, severity_threshold: "critical" };
+    rerender(<RepoDetailContent repoKey="proxy" />);
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(mockUpdateRepoSecurity.mock.calls[0][1]).toEqual({
+      scan_on_proxy: false,
+      instance_locked: false,
+    });
+  });
+
+  it("sends nothing for an edit that was undone, and keeps Save disabled", async () => {
+    await openSecurityTab();
+    const save = screen.getByRole("button", { name: /save/i });
+    expect(save).toBeDisabled();
+    await userEvent.click(screen.getByRole("switch", { name: "Scan on Proxy" }));
+    expect(save).toBeEnabled();
+    await userEvent.click(screen.getByRole("switch", { name: "Scan on Proxy" }));
+    expect(save).toBeDisabled();
+  });
+
+  it("sends the whole form as the first save of a repository with no row", async () => {
+    unconfigured = true;
+    await openSecurityTab();
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    expect(mockUpdateRepoSecurity.mock.calls[0][1]).toEqual({
+      scan_enabled: false,
+      scan_on_upload: true,
+      scan_on_proxy: false,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+    });
+  });
+
+  it("says a first save locks the policy on backend 1.12.0", async () => {
+    unconfigured = true;
+    healthVersion = "1.12.0";
+    await openSecurityTab();
+    expect(screen.getByText(/Saving them for the first time locks the proxy scan policy/)).toBeInTheDocument();
+  });
+
+  it("does not say so before 1.12.0 or once the repository has a row", async () => {
+    unconfigured = true;
+    healthVersion = "1.11.3";
+    await openSecurityTab();
+    expect(screen.queryByText(/for the first time locks/)).toBeNull();
+    cleanup();
+    unconfigured = false;
+    healthVersion = "1.12.0";
+    await openSecurityTab();
+    expect(screen.queryByText(/for the first time locks/)).toBeNull();
   });
 });

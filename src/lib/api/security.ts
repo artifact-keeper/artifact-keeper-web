@@ -301,17 +301,24 @@ function adaptUpdatePolicyRequest(req: UpdatePolicyRequest): SdkUpdatePolicyRequ
 }
 
 function adaptUpsertConfigRequest(
-  req: UpsertScanConfigRequest,
+  req: Partial<UpsertScanConfigRequest>,
 ): SdkUpsertScanConfigRequest {
-  return {
-    scan_enabled: req.scan_enabled,
-    scan_on_upload: req.scan_on_upload,
-    scan_on_proxy: req.scan_on_proxy,
-    block_on_policy_violation: req.block_on_policy_violation,
-    severity_threshold: req.severity_threshold,
-    // Not on the SDK 1.7.0 request type; only put on the wire when given.
-    ...(req.instance_locked === undefined ? {} : { instance_locked: req.instance_locked }),
-  } as SdkUpsertScanConfigRequest;
+  // Only the fields given go on the wire: the backend merges a patch over the
+  // stored row, so an absent field keeps its stored value (#1229). That also
+  // keeps `instance_locked`, which is not on the SDK 1.7.0 request type, off
+  // the wire unless given.
+  const body: Record<string, unknown> = {};
+  for (const key of [
+    'scan_enabled',
+    'scan_on_upload',
+    'scan_on_proxy',
+    'block_on_policy_violation',
+    'severity_threshold',
+    'instance_locked',
+  ] as const) {
+    if (req[key] !== undefined) body[key] = req[key];
+  }
+  return body as SdkUpsertScanConfigRequest;
 }
 
 export const securityApi = {
@@ -440,7 +447,7 @@ export const securityApi = {
 
   updateRepoSecurity: async (
     repoKey: string,
-    req: UpsertScanConfigRequest,
+    req: Partial<UpsertScanConfigRequest>,
   ): Promise<ScanConfig> => {
     const data = await unwrap(sdkUpdateRepoSecurity({
       path: { key: repoKey },

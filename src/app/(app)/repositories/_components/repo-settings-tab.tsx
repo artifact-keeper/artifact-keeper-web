@@ -17,6 +17,7 @@ import {
   PROXY_AGE_POLICY_MIN,
   RECORD_ONLY_MIN,
   SCAN_POLICY_LOCK_MIN,
+  isComparableVersion,
 } from "@/lib/backend-version";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
@@ -628,7 +629,7 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // caches nothing itself) and shows the form locked, pointing at its member
   // remotes. The version comes from the same cached `/health` query the
   // sidebar uses; an unknown version keeps the 1.10.0 behaviour.
-  const { data: health } = useQuery({
+  const { data: health, isPending: healthPending } = useQuery({
     queryKey: ["health"],
     queryFn: () => adminApi.getHealth(),
     staleTime: 5 * 60 * 1000,
@@ -714,11 +715,13 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // backends save it as `fail_open`, so it is not offered there (#1194). With
   // no version known, a backend that does not report `proxy_scan_action` at
   // all is old enough to rule it out. A stored `record_only` is always listed.
+  // A version that does not parse (a "dev" build) is treated as unknown, and
+  // Record only is not offered until the version has loaded (#1229).
   const recordOnlySupported =
     scanConfig?.proxy_scan_action === "record_only" ||
-    (health?.version
-      ? backendAtLeast(health.version, RECORD_ONLY_MIN)
-      : scanConfig?.proxy_scan_action_reported !== false);
+    (isComparableVersion(health?.version)
+      ? backendAtLeast(health?.version, RECORD_ONLY_MIN)
+      : !healthPending && scanConfig?.proxy_scan_action_reported !== false);
   const offeredProxyScanActions = PROXY_SCAN_ACTION_VALUES.filter(
     (action) => action !== "record_only" || recordOnlySupported
   );

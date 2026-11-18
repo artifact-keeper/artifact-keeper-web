@@ -21,6 +21,11 @@ function parse(version: string | null | undefined): ParsedVersion | null {
   };
 }
 
+/** Whether `version` is a release or pre-release this module can compare (not, say, "dev"). */
+export function isComparableVersion(version: string | null | undefined): boolean {
+  return parse(version) !== null;
+}
+
 /**
  * Whether `version` is at least `minimum`, by semver precedence.
  *
