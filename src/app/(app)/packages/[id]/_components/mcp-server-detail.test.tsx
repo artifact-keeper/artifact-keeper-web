@@ -105,7 +105,7 @@ describe("McpServerDetail", () => {
   it("renders the latest served version with its header", async () => {
     renderDetail();
     expect(await screen.findByText("weather")).toBeInTheDocument();
-    expect(screen.getByText("com.acme /")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("com.acme / weather");
     expect(screen.getByText("Acme Weather")).toBeInTheDocument();
     expect(screen.getByText("v1.4.2 (latest)")).toBeInTheDocument();
     expect(screen.getByText("status:active")).toBeInTheDocument();
@@ -116,6 +116,20 @@ describe("McpServerDetail", () => {
     expect(screen.queryByTestId("mcp-held-panel")).toBeNull();
     expect(api.getVersion).not.toHaveBeenCalled();
     expect(api.getStoredMetadata).toHaveBeenCalledWith("mcp-local", SERVER.name, "1.4.2", "art-1.4.2");
+  });
+
+  it("marks hidden characters in the header's namespace and short name (#1202)", async () => {
+    const hostile = { ...SERVER, name: "com.\u200bacme/\u202eweather" };
+    api.listVersions.mockResolvedValue([entryOf(hostile)]);
+    api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: hostile, registry: { status: "active" }, packages: PINS } });
+    renderWithClient(<McpServerDetail pkg={{ ...PKG, name: hostile.name }} />);
+    const short = await screen.findByText("[U+202E]weather");
+    const ns = screen.getByText("com.[U+200B]acme");
+    for (const el of [ns, short]) {
+      expect(el).toHaveAttribute("data-sanitized", "true");
+      expect(el.getAttribute("title")).toMatch(/hidden or control character/);
+    }
+    expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/[\u202e\u200b]/);
   });
 
   it("jumps to the Install tab", async () => {

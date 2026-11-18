@@ -131,6 +131,15 @@ describe("McpToolsTab", () => {
     expect(el).toHaveAttribute("title", long);
   });
 
+  it("keeps hidden characters out of the input schema's label (#1202)", async () => {
+    api.capabilities.mockResolvedValue(
+      caps({}, snapshot({ ...PROBED, tools: [{ name: "r\u200bead\u202e_file", inputSchema: { type: "object" } }] })),
+    );
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "inputSchema" }));
+    expect(screen.getByLabelText("r[U+200B]ead[U+202E]_file input schema")).toBeInTheDocument();
+  });
+
   it("warns that a caller-specific list may differ per user", async () => {
     api.capabilities.mockResolvedValue(caps({}, { ...PROBED, authState: "caller_specific" }));
     renderTab();

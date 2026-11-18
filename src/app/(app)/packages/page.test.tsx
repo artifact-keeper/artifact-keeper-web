@@ -27,6 +27,7 @@ const PACKAGE = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",
 };
+let listed: Record<string, unknown> = PACKAGE;
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -61,7 +62,7 @@ vi.mock("@tanstack/react-query", () => ({
     if (opts.enabled !== false) opts.queryFn();
     if (opts.queryKey[0] === "packages") {
       return {
-        data: { items: [PACKAGE], pagination: { total: 1, total_pages: 1 } },
+        data: { items: [listed], pagination: { total: 1, total_pages: 1 } },
         isLoading: false,
       };
     }
@@ -75,6 +76,7 @@ describe("PackagesPage virtual-repo context", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    listed = PACKAGE;
   });
 
   it("links to the detail page with the row's repository key", () => {
@@ -97,5 +99,14 @@ describe("PackagesPage virtual-repo context", () => {
     expect(mockGet).toHaveBeenCalledWith("pkg-1", {
       repository_key: "npm-virtual",
     });
+  });
+
+  it("shows hidden and bidi characters in a package description visibly (#1202)", () => {
+    listed = { ...PACKAGE, description: "Utility \u202egnp.exe \u200bnote" };
+    const { container } = render(<PackagesPage />);
+    const shown = screen.getAllByText("Utility [U+202E]gnp.exe [U+200B]note");
+    expect(shown.length).toBeGreaterThan(0);
+    for (const el of shown) expect(el).toHaveAttribute("data-sanitized", "true");
+    expect(container.textContent).not.toMatch(/[\u202e\u200b]/);
   });
 });
