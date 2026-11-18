@@ -10,7 +10,7 @@ test.describe('Builds', () => {
     await page.goto('/builds');
     await page.waitForTimeout(1000);
 
-    await expect(page.getByPlaceholder(/search builds/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('main').getByPlaceholder(/search builds/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('status filter dropdown is visible and has options', async ({ page }) => {

@@ -23,9 +23,12 @@ interface RepoStoragePanelProps {
   /**
    * The repository whose storage is being described. Only `key` (for the
    * lookup) and `storage_used_bytes` (a graceful fallback when the dedup
-   * endpoint is unavailable) are read.
+   * endpoint is unavailable) are read, plus `repo_type` and
+   * `member_storage_used_bytes` so a virtual repository's fallback shows the
+   * size held by its members instead of its own (always 0) bytes.
    */
-  repository: Pick<Repository, "key" | "storage_used_bytes">;
+  repository: Pick<Repository, "key" | "storage_used_bytes"> &
+    Partial<Pick<Repository, "repo_type" | "member_storage_used_bytes">>;
   /**
    * Whether the current viewer is an administrator. Gates the instance-total
    * figure and the reclaimable-space estimate. Field visibility is ALSO
@@ -118,10 +121,18 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     );
   }
 
-  // Endpoint unavailable (e.g. a backend that predates #2056): fall back to the
-  // coarse logical figure already carried on the repository record so the panel
-  // still shows *something* meaningful rather than an error.
-  if (isError || !usage) {
+  // Endpoint unavailable (e.g. a backend that predates #2056), or the stats
+  // refresher has not run for this repository yet, which the backend answers
+  // with zeros and no `computed_at` (#1131): fall back to the coarse logical
+  // figure already carried on the repository record rather than show 0 B.
+  if (isError || !usage || usage.computed_at == null) {
+    // A virtual repository stores nothing of its own, so the stats refresher
+    // never writes a row for it and `storage_used_bytes` is always 0: show
+    // what its members hold, as the header does (#958), with no promise of a
+    // refresh that will never come (#1131).
+    const isVirtual =
+      repository.repo_type === "virtual" &&
+      typeof repository.member_storage_used_bytes === "number";
     return (
       <Card data-testid="storage-panel-fallback">
         <CardHeader>
@@ -129,14 +140,21 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
         </CardHeader>
         <CardContent className="space-y-2">
           <Metric
-            label="Logical size"
-            value={formatBytes(repository.storage_used_bytes)}
+            label={isVirtual ? "Held by members" : "Logical size"}
+            value={formatBytes(
+              isVirtual
+                ? (repository.member_storage_used_bytes as number)
+                : repository.storage_used_bytes,
+            )}
             icon={<Database className="size-3.5" />}
             testId="storage-logical"
           />
-          <p className="text-xs text-muted-foreground">
-            Detailed deduplicated storage metrics are unavailable for this
-            repository.
+          <p className="text-xs text-muted-foreground" data-testid="storage-fallback-note">
+            {isVirtual
+              ? "A virtual repository stores nothing itself. This is the combined size of the member repositories you can see."
+              : usage && !isError
+                ? "Storage breakdown not computed yet. The storage stats refresh computes it once this repository holds files."
+                : "Detailed deduplicated storage metrics are unavailable for this repository."}
           </p>
         </CardContent>
       </Card>

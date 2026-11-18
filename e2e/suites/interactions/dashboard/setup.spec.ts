@@ -26,7 +26,7 @@ test.describe('Setup Guide', () => {
     await page.goto('/setup');
     await page.waitForTimeout(1000);
 
-    const searchInput = page.getByPlaceholder(/search repositories/i);
+    const searchInput = page.getByRole('main').getByPlaceholder(/search repositories/i);
     await expect(searchInput).toBeVisible({ timeout: 10000 });
 
     // Type a search query

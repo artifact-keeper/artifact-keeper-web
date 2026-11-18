@@ -20,9 +20,14 @@ import {
   scanConfigApi,
   SEVERITY_THRESHOLDS,
   type RepoScanConfig,
-  type ProxyScanAction,
   type UpsertScanConfigRequest,
 } from "@/lib/api/scan-config";
+import {
+  PROXY_SCAN_ACTION_LABELS,
+  PROXY_SCAN_ACTION_VALUES,
+  describeProxyScanAction,
+  isKnownProxyScanAction,
+} from "@/lib/proxy-scan-action";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
 import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
@@ -675,18 +680,18 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   });
 
   const handleSaveScanConfig = useCallback(() => {
-    if (!scanForm) return;
-    // Send the full set — the backend upsert merges, but sending everything
-    // keeps the persisted row unambiguous and avoids a stale-field surprise.
-    scanConfigMutation.mutate({
-      scan_enabled: scanForm.scan_enabled,
-      scan_on_upload: scanForm.scan_on_upload,
-      scan_on_proxy: scanForm.scan_on_proxy,
-      block_on_policy_violation: scanForm.block_on_policy_violation,
-      severity_threshold: scanForm.severity_threshold,
-      proxy_scan_action: scanForm.proxy_scan_action,
-    });
-  }, [scanForm, scanConfigMutation]);
+    if (!scanConfig) return;
+    // Send only what the operator changed. The backend upsert merges a patch
+    // over the stored row (every field is optional), so an untouched field
+    // keeps its stored value. Sending the whole form wrote back whatever this
+    // UI had parsed, which silently rewrote a `record_only` action (#1069).
+    const patch: Record<string, unknown> = {};
+    for (const key of Object.keys(scanOverrides) as (keyof RepoScanConfig)[]) {
+      const value = scanOverrides[key];
+      if (value !== undefined && value !== scanConfig[key]) patch[key] = value;
+    }
+    scanConfigMutation.mutate(patch as UpsertScanConfigRequest);
+  }, [scanConfig, scanOverrides, scanConfigMutation]);
 
   // -- Age Gate (#701). Remote repos only: the backend PUT rejects other repo
   // types with 400 (`require_remote_repo_for_age_gate`) and is admin-only, so
@@ -706,6 +711,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   const [ageGateDaysOverride, setAgeGateDaysOverride] = useState<
     string | undefined
   >(undefined);
+  // The instance-admin lock (#1038). `undefined` on a backend that does not
+  // report it, in which case the control is hidden and nothing is sent.
+  const [ageGateLockedOverride, setAgeGateLockedOverride] = useState<
+    boolean | undefined
+  >(undefined);
+  const ageGateLockKnown = ageGateConfig?.instanceLocked !== undefined;
+  const ageGateLocked =
+    ageGateLockedOverride ?? ageGateConfig?.instanceLocked ?? false;
   const ageGateEnabled =
     ageGateEnabledOverride ?? ageGateConfig?.enabled ?? false;
   const ageGateDaysInput =
@@ -723,17 +736,23 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     ((ageGateEnabledOverride !== undefined &&
       ageGateEnabledOverride !== ageGateConfig.enabled) ||
       (ageGateDaysOverride !== undefined &&
-        parsedAgeGateDays !== ageGateConfig.minAgeDays));
+        parsedAgeGateDays !== ageGateConfig.minAgeDays) ||
+      (ageGateLockedOverride !== undefined &&
+        ageGateLockedOverride !== ageGateConfig.instanceLocked));
 
   const ageGateMutation = useMutation({
-    mutationFn: (cfg: { enabled: boolean; minAgeDays: number }) =>
-      ageGateApi.updateRepoConfig(repository.key, cfg),
+    mutationFn: (cfg: {
+      enabled: boolean;
+      minAgeDays: number;
+      instanceLocked?: boolean;
+    }) => ageGateApi.updateRepoConfig(repository.key, cfg),
     onSuccess: (updated) => {
       // Seed the query cache with the server's echoed config and clear the
       // local edits so the form re-baselines against what was persisted.
       queryClient.setQueryData(["age-gate-config", repository.key], updated);
       setAgeGateEnabledOverride(undefined);
       setAgeGateDaysOverride(undefined);
+      setAgeGateLockedOverride(undefined);
       toast.success(
         updated.enabled ? "Age gate enabled" : "Age gate settings saved"
       );
@@ -747,12 +766,19 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
     ageGateMutation.mutate({
       enabled: ageGateEnabled,
       minAgeDays: parsedAgeGateDays,
+      // Always send the lock back when the backend reports one: leaving it out
+      // LOCKS the policy, so saving any other field would silently re-lock one
+      // that was handed back. Only an instance administrator may send it, and
+      // this section is only shown to one (#1038).
+      ...(ageGateLockKnown ? { instanceLocked: ageGateLocked } : {}),
     });
   }, [
     ageGateConfig,
     ageGateDaysValid,
     parsedAgeGateDays,
     ageGateEnabled,
+    ageGateLockKnown,
+    ageGateLocked,
     ageGateMutation,
   ]);
 
@@ -1338,6 +1364,26 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   />
                 </div>
 
+                {ageGateLockKnown && (
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="settings-age-gate-locked">
+                        Lock this policy
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {ageGateLocked
+                          ? "Locked: a repository administrator can only tighten the policy (raise the minimum age). Only an instance administrator can disable it or lower the minimum age."
+                          : "Not locked: the repository's administrators can change the policy. Lock it to keep them from disabling it or lowering the minimum age."}
+                      </p>
+                    </div>
+                    <Switch
+                      id="settings-age-gate-locked"
+                      checked={ageGateLocked}
+                      onCheckedChange={setAgeGateLockedOverride}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="settings-age-gate-days">
                     Minimum age (days)
@@ -1642,6 +1688,17 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                           {level.charAt(0).toUpperCase() + level.slice(1)}
                         </SelectItem>
                       ))}
+                      {/* A stored threshold this list does not offer (the
+                          backend also accepts `info`) is shown as it is and
+                          kept, instead of an empty select (#1069). */}
+                      {!(SEVERITY_THRESHOLDS as readonly string[]).includes(
+                        scanForm.severity_threshold
+                      ) && (
+                        <SelectItem value={scanForm.severity_threshold} disabled>
+                          {scanForm.severity_threshold.charAt(0).toUpperCase() +
+                            scanForm.severity_threshold.slice(1)}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -1650,37 +1707,43 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   </p>
                 </div>
 
-                {/* Proxy scan action: fail-open vs fail-closed */}
+                {/* Proxy scan action: fail open, fail closed or record only */}
                 <div className="rounded-md border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="settings-scan-fail-closed">
-                        Fail closed on proxy downloads
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {scanForm.proxy_scan_action === "fail_closed"
-                          ? "Fail closed: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is blocked. Security first — a proxy outage can interrupt availability."
-                          : "Fail open: if the scanner is unavailable or an inline scan can't confirm the artifact is clean, the download is served anyway. Availability first — an unscanned artifact can slip through."}
-                      </p>
-                    </div>
-                    <Switch
-                      id="settings-scan-fail-closed"
-                      checked={scanForm.proxy_scan_action === "fail_closed"}
-                      disabled={
-                        !scanForm.scan_enabled || !scanForm.scan_on_proxy
-                      }
-                      onCheckedChange={(v) =>
-                        setScanField(
-                          "proxy_scan_action",
-                          (v ? "fail_closed" : "fail_open") as ProxyScanAction
-                        )
-                      }
-                    />
-                  </div>
+                  <Label htmlFor="settings-scan-action">
+                    Proxy scan action
+                  </Label>
+                  <Select
+                    value={scanForm.proxy_scan_action}
+                    onValueChange={(v) => setScanField("proxy_scan_action", v)}
+                    disabled={!scanForm.scan_enabled || !scanForm.scan_on_proxy}
+                  >
+                    <SelectTrigger
+                      id="settings-scan-action"
+                      className="w-56"
+                      aria-label="Proxy scan action"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROXY_SCAN_ACTION_VALUES.map((action) => (
+                        <SelectItem key={action} value={action}>
+                          {PROXY_SCAN_ACTION_LABELS[action]}
+                        </SelectItem>
+                      ))}
+                      {!isKnownProxyScanAction(scanForm.proxy_scan_action) && (
+                        <SelectItem value={scanForm.proxy_scan_action} disabled>
+                          {`Unknown (${scanForm.proxy_scan_action})`}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {describeProxyScanAction(scanForm.proxy_scan_action)}
+                  </p>
                   {(!scanForm.scan_enabled || !scanForm.scan_on_proxy) && (
                     <p className="text-xs text-muted-foreground">
                       Enable scanning and &ldquo;Scan on proxy download&rdquo;
-                      to choose the fail-open / fail-closed behavior.
+                      to choose what happens to proxied downloads.
                     </p>
                   )}
                 </div>

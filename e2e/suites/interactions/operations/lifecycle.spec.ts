@@ -282,7 +282,11 @@ test.describe('Lifecycle Page', () => {
     const table = page.getByRole('table');
     const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
 
-    await expect(table.or(emptyState)).toBeVisible();
+    // The regex also matches the page's own description ("...not just one
+    // repository. Unassigned policies..."), so once another spec has created a
+    // policy, `table.or(emptyState)` resolves to the table and that paragraph
+    // and fails strict mode. Either one being visible is the assertion.
+    await expect(table.or(emptyState).first()).toBeVisible();
   });
 
   test('no console errors on page load', async () => {

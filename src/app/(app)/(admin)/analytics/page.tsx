@@ -161,8 +161,8 @@ export default function AnalyticsPage() {
     enabled: !!user?.is_admin,
   });
 
-  // The daily snapshots behind `growth` count only `artifacts` rows, so they
-  // miss proxy-cached objects. Live instance stats carry both halves.
+  // Prefer live instance totals over daily snapshots. Storage totals already
+  // include the proxy cache; artifact counts are separate and must be added.
   const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: () => adminApi.getStats(),
@@ -232,14 +232,15 @@ export default function AnalyticsPage() {
             icon={HardDrive}
             label="Total Storage"
             value={formatBytes(
-              (stats?.total_storage_bytes ?? growth.storage_bytes_end) +
-                (stats?.proxy_storage_bytes ?? 0),
+              stats?.total_storage_bytes ?? growth.storage_bytes_end,
             )}
             color="blue"
             tooltip={
               stats && (
                 <StatBreakdown
-                  local={formatBytes(stats.total_storage_bytes)}
+                  local={formatBytes(
+                      stats.total_storage_bytes - stats.proxy_storage_bytes,
+                    )}
                   remote={formatBytes(stats.proxy_storage_bytes)}
                 />
               )
@@ -444,7 +445,7 @@ export default function AnalyticsPage() {
                           split={split}
                         />
                         <SplitCells
-                          local={row.total_storage_bytes}
+                          local={row.total_storage_bytes - row.proxy_storage_bytes}
                           remote={row.proxy_storage_bytes}
                           split={split}
                           format={formatBytes}

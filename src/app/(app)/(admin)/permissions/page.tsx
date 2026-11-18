@@ -67,7 +67,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
-import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 // -- constants --
 
@@ -110,6 +109,9 @@ const PRINCIPAL_TYPE_LABELS: Record<PermissionPrincipalType, string> = {
   group: "Group",
 };
 
+/** Backend cap on `per_page` for the permissions listing */
+const PERMISSIONS_MAX_PER_PAGE = 100;
+
 // -- page --
 
 export default function PermissionsPage() {
@@ -127,10 +129,14 @@ export default function PermissionsPage() {
   const [principalSearch, setPrincipalSearch] = useState("");
 
   // -- queries --
+  // Paged on the server: the backend caps per_page at 100, so one big request stopped there (#1181)
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PERMISSIONS_MAX_PER_PAGE);
   const { data: permissionsData, isLoading: permissionsLoading } = useQuery({
-    queryKey: ["admin-permissions"],
-    queryFn: () => permissionsApi.list({ per_page: 1000 }),
+    queryKey: ["admin-permissions", page, pageSize],
+    queryFn: () => permissionsApi.list({ page, per_page: pageSize }),
     enabled: !!currentUser?.is_admin,
+    placeholderData: (prev) => prev,
   });
 
   // People only (#823, backend artifact-keeper#3634). Service accounts are
@@ -165,6 +171,14 @@ export default function PermissionsPage() {
   });
 
   const permissions = permissionsData?.items ?? [];
+  const permissionsTotal = permissionsData?.pagination?.total ?? 0;
+
+  // Deleting the last rule on the last page leaves that page empty; step back
+  // to the new last page instead of showing an empty table under a pager that
+  // says "Page 3 of 2". Adjusted during render, React's pattern for state
+  // derived from a previous render.
+  const lastPage = Math.max(1, Math.ceil(permissionsTotal / pageSize));
+  if (permissionsData && page > lastPage) setPage(lastPage);
   const users = usersData ?? [];
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
@@ -659,7 +673,7 @@ export default function PermissionsPage() {
         }
       />
 
-      {!permissionsLoading && permissions.length === 0 ? (
+      {!permissionsLoading && permissionsTotal === 0 ? (
         <EmptyState
           icon={Shield}
           title="No permissions configured"
@@ -680,15 +694,20 @@ export default function PermissionsPage() {
         <DataTable
           columns={columns}
           data={permissions}
+          total={permissionsTotal}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          pageSizeOptions={[20, 50, PERMISSIONS_MAX_PER_PAGE]}
           loading={permissionsLoading}
           emptyMessage="No permissions found."
           rowKey={(p) => p.id}
         />
       )}
-      <ListTruncationNotice
-        shown={permissions.length}
-        total={permissionsData?.pagination?.total ?? 0}
-      />
 
       {/* Create Permission Dialog */}
       <Dialog

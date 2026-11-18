@@ -10,7 +10,7 @@ export class BuildsPage {
     this.heading = page.getByRole('heading', { name: /builds/i }).first();
     this.buildsTable = page.getByRole('table');
     this.statusFilter = page.getByRole('combobox').first();
-    this.searchInput = page.getByPlaceholder(/search/i);
+    this.searchInput = page.getByRole('main').getByPlaceholder(/search/i);
   }
 
   async goto() { await this.page.goto('/builds'); }
