@@ -497,7 +497,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // rejected artifact would only ever produce a 409.
   const quarantineActionable = quarantineBlocked && !isQuarantineRejected(quarantine);
 
-  const { data: repoSecurity, isLoading: securityLoading } = useQuery({
+  const {
+    data: repoSecurity,
+    isLoading: securityLoading,
+    isFetching: securityFetching,
+  } = useQuery({
     queryKey: ["repository-security", repoKey],
     queryFn: () => securityApi.getRepoSecurity(repoKey),
     enabled: !!repoKey && !!user?.is_admin,
@@ -1748,9 +1752,20 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </SelectContent>
                   </Select>
                 </div>
+                {/* The lock is changed in Settings; here it is only shown
+                    (#1213). */}
+                {repoSecurity?.config?.instance_locked !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    {repoSecurity.config.instance_locked
+                      ? "Proxy scan policy locked: a repository administrator can tighten it but not weaken it. Change the lock in Settings, under Scanning & enforcement."
+                      : "Proxy scan policy not locked: the repository's administrators can change it. Lock it in Settings, under Scanning & enforcement."}
+                  </p>
+                )}
+                {/* A save sends the stored lock back, so wait for a refetch
+                    to finish rather than send a stale one (#1213). */}
                 <Button
                   type="submit"
-                  disabled={updateSecurityMutation.isPending}
+                  disabled={updateSecurityMutation.isPending || securityFetching}
                 >
                   {updateSecurityMutation.isPending
                     ? "Saving..."

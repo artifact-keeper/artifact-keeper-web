@@ -2756,6 +2756,112 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     });
   });
 
+  describe("lock follow-ups (#1213)", () => {
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_closed",
+      instance_locked: false,
+    };
+    function clientWrapper() {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      function Wrapper({ children }: { children: React.ReactNode }) {
+        return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+      }
+      return { client, Wrapper };
+    }
+    const saveBtn = () =>
+      screen.getByRole("button", { name: /save scanning settings/i });
+
+    it("disables Save while the scan config is being refetched", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      const { client, Wrapper } = clientWrapper();
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: Wrapper });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      expect(saveBtn()).toHaveProperty("disabled", false);
+
+      // The Security tab's save invalidates this query; until the refetch
+      // lands, the cached lock may be stale.
+      let finish: (v: unknown) => void = () => {};
+      mockGetScanConfig.mockReturnValueOnce(new Promise((r) => (finish = r)));
+      void client.invalidateQueries({ queryKey: ["scan-config"] });
+      await waitFor(() => expect(saveBtn()).toHaveProperty("disabled", true));
+
+      finish({ ...base, instance_locked: true });
+      await waitFor(() => expect(saveBtn()).toHaveProperty("disabled", false));
+    });
+
+    it("refreshes the Security tab's cached copy after a save", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, block_on_policy_violation: true });
+      const { client, Wrapper } = clientWrapper();
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: Wrapper });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(saveBtn());
+      await waitFor(() =>
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: ["repository-security", "maven-releases"],
+        })
+      );
+    });
+
+    describe("first save on a repository with no config row", () => {
+      const unconfigured = {
+        scan_enabled: false,
+        scan_on_upload: false,
+        scan_on_proxy: false,
+        block_on_policy_violation: false,
+        severity_threshold: "high",
+        proxy_scan_action: "fail_open",
+        unconfigured: true,
+      };
+      const note = /Saving them for the first time locks the proxy scan policy/;
+      afterEach(() => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.0" });
+      });
+
+      it("says the first save locks the policy on a backend with the lock", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.12.0" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByText(note)).toBeTruthy());
+      });
+
+      it("says nothing on a backend without the lock", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.11.3" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByLabelText("Enable scanning")).toBeTruthy());
+        await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+        expect(screen.queryByText(note)).toBeNull();
+      });
+
+      it("says nothing once the repository has a config row", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.12.0" });
+        mockGetScanConfig.mockResolvedValue({ ...base });
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() =>
+          expect(screen.getByLabelText("Lock the proxy scan policy")).toBeTruthy()
+        );
+        expect(screen.queryByText(note)).toBeNull();
+      });
+    });
+  });
+
   it("toasts an error when the save fails", async () => {
     mockGetScanConfig.mockResolvedValue({
       scan_enabled: true,

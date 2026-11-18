@@ -16,6 +16,7 @@ import {
   backendAtLeast,
   PROXY_AGE_POLICY_MIN,
   RECORD_ONLY_MIN,
+  SCAN_POLICY_LOCK_MIN,
 } from "@/lib/backend-version";
 import { supportsVersioning } from "@/lib/api/versions";
 import { useAdminSettings } from "@/hooks/use-admin-settings";
@@ -668,7 +669,11 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
   // elsewhere in the repository views. (`user` / `isRepoAdmin` are read
   // above, where the MCP form needs them.)
 
-  const { data: scanConfig, isLoading: scanConfigLoading } = useQuery({
+  const {
+    data: scanConfig,
+    isLoading: scanConfigLoading,
+    isFetching: scanConfigFetching,
+  } = useQuery({
     queryKey: ["scan-config", repository.key],
     queryFn: () => scanConfigApi.get(repository.key),
     enabled: isRepoAdmin,
@@ -1855,10 +1860,29 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                   </div>
                 )}
 
+                {/* No config row yet: the backend locks the policy on an
+                    instance administrator's first save (#1213). */}
+                {isRepoAdmin &&
+                  scanForm.unconfigured &&
+                  backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN) && (
+                    <p className="text-xs text-muted-foreground">
+                      This repository has no scanning settings yet. Saving
+                      them for the first time locks the proxy scan policy;
+                      you can hand it back to the repository&apos;s
+                      administrators afterwards with the lock switch.
+                    </p>
+                  )}
+
                 <div className="flex justify-end">
                   <Button
                     onClick={handleSaveScanConfig}
-                    disabled={scanConfigMutation.isPending || !scanChanged}
+                    // A save sends the stored lock back, so wait for a refetch
+                    // to finish rather than send a stale one (#1213).
+                    disabled={
+                      scanConfigMutation.isPending ||
+                      scanConfigFetching ||
+                      !scanChanged
+                    }
                   >
                     {scanConfigMutation.isPending ? (
                       <>

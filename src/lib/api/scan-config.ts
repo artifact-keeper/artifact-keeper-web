@@ -76,6 +76,13 @@ export interface RepoScanConfig {
    */
   proxy_scan_action_reported?: false;
   /**
+   * `true` when the repository has no scan config row yet (the GET answered
+   * `config: null`) and these are the documented defaults. The backend locks
+   * the proxy scan policy on an instance administrator's first save (#1213).
+   * Absent otherwise.
+   */
+  unconfigured?: true;
+  /**
    * The instance-admin lock on this repository's proxy scan policy
    * (artifact-keeper#4363): while locked, a repository administrator may
    * tighten the policy but not weaken it. `undefined` when the backend did not
@@ -166,7 +173,7 @@ export function parseRepoSecurity(data: unknown): RepoScanConfig {
   }
   // Wrapped: `config` may be null/absent for an unconfigured repository.
   if (!value.config) {
-    return { ...DEFAULT_SCAN_CONFIG };
+    return { ...DEFAULT_SCAN_CONFIG, unconfigured: true };
   }
   return normalize(value.config);
 }

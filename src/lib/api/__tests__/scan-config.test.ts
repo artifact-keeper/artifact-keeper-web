@@ -43,7 +43,7 @@ describe("scanConfigApi.get", () => {
     mockApiFetch.mockResolvedValue({ config: null, score: null });
     const mod = await import("../scan-config");
     const cfg = await mod.scanConfigApi.get("npm-proxy");
-    expect(cfg).toEqual(mod.DEFAULT_SCAN_CONFIG);
+    expect(cfg).toEqual({ ...mod.DEFAULT_SCAN_CONFIG, unconfigured: true });
     expect(cfg.proxy_scan_action).toBe("fail_open");
   });
 
