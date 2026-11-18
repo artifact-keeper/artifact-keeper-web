@@ -1,4 +1,5 @@
 import { KeyRound } from "lucide-react";
+import { SafeText } from "@/components/common/safe-text";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { McpInput } from "@/types/mcp";
 
@@ -39,7 +40,7 @@ export function McpInputsTable({ inputs, caption }: { inputs: McpInput[]; captio
                 )}
               </span>
             </TableCell>
-            <TableCell className="whitespace-normal text-xs text-muted-foreground">{i.description ?? ""}</TableCell>
+            <TableCell className="whitespace-normal text-xs text-muted-foreground"><SafeText value={i.description ?? ""} /></TableCell>
             <TableCell className="text-xs">{i.isRequired ? "yes" : "no"}</TableCell>
             <TableCell className="font-mono text-xs">
               {shownValue(i)}

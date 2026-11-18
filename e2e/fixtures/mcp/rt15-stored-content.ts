@@ -1,4 +1,13 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { formatUntrustedText } from '../../../src/lib/untrusted-text';
+
+/**
+ * How the UI shows a stored string (#1107): control and bidi characters become
+ * a visible `[U+XXXX]`. Uses the UI's own formatter so the two cannot drift.
+ * Strings without such characters come back unchanged, so this is safe to
+ * apply to every expected text.
+ */
+export const shown = (s: string): string => formatUntrustedText(s, { max: Number.MAX_SAFE_INTEGER }).text;
 
 /**
  * RT-15 rig (artifact-keeper#5472): hostile MCP content stored through the

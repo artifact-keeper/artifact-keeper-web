@@ -1,5 +1,6 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
@@ -69,7 +70,7 @@ export function OverviewSection({
   const { namespace } = splitServerName(server.name);
   return (
     <div className="space-y-6">
-      {server.description && <p className="text-sm whitespace-pre-line">{server.description}</p>}
+      {server.description && <SafeText as="p" className="text-sm whitespace-pre-line" value={server.description} />}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
