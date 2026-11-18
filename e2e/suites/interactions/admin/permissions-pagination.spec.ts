@@ -25,11 +25,17 @@ test('Next page loads the second page of rules (#1189)', async ({ page }) => {
   const requestedPages: string[] = [];
 
   await page.route(LIST_URL, async (route: Route) => {
-    if (route.request().method() !== 'GET') {
+    const url = new URL(route.request().url());
+    // Only the table's unfiltered list; the MCP grants section also lists
+    // permissions, filtered by target_type, and goes to the real backend
+    if (
+      route.request().method() !== 'GET' ||
+      url.searchParams.has('target_type') ||
+      url.searchParams.has('principal_type')
+    ) {
       await route.continue();
       return;
     }
-    const url = new URL(route.request().url());
     const pageNo = Math.max(1, Number(url.searchParams.get('page') ?? '1'));
     const perPage = Math.min(100, Number(url.searchParams.get('per_page') ?? '20'));
     requestedPages.push(String(pageNo));
