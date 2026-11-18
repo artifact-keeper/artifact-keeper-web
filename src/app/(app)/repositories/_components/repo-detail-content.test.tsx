@@ -354,6 +354,42 @@ describe("RepoDetailContent tab strip", () => {
   });
 });
 
+describe("RepoDetailContent PyPI Tracks tab (#1066)", () => {
+  const tracksTab = () => screen.queryByRole("tab", { name: /tracks/i });
+
+  beforeEach(() => {
+    cleanup();
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    repository.repo_type = "virtual";
+  });
+
+  // The backend only accepts tracks declarations on the hosted repository
+  // that owns the project, so the tab must be on local and staging repos.
+  it.each(["local", "staging"])("shows the tab on a %s PyPI repository", (repoType) => {
+    repository.format = "pypi";
+    repository.repo_type = repoType;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).not.toBeNull();
+  });
+
+  it.each(["virtual", "remote"])("hides the tab on a %s PyPI repository", (repoType) => {
+    repository.format = "pypi";
+    repository.repo_type = repoType;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).toBeNull();
+  });
+
+  it("hides the tab on a local repository of another format", () => {
+    repository.format = "npm";
+    repository.repo_type = "local";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).toBeNull();
+  });
+});
+
 describe("RepoDetailContent visibility badge (#839)", () => {
   const mutable = repository as { visibility?: string; is_public?: boolean };
   afterEach(() => {

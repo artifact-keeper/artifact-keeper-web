@@ -693,6 +693,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // path parser as fallback (#482).
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
   const isConda = isCondaFormat(repoFormat);
+  // PEP 708 tracks are declared on the hosted repository that owns the
+  // project; the backend refuses them on remote and virtual repositories, so
+  // the tab belongs on local and staging PyPI repositories (#1066).
+  const isPypiTracksRepo =
+    repoFormat === "pypi" &&
+    (repository?.repo_type === "local" || repository?.repo_type === "staging");
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   // Whether a download count is a real number or an unmeasured blank (#808).
@@ -1222,14 +1228,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Members
             </TabsTrigger>
           )}
-          {user?.is_admin &&
-            repository.format === "pypi" &&
-            repository.repo_type === "virtual" && (
-              <TabsTrigger value="pypi-tracks">
-                <Link2 className="size-3.5 mr-1" />
-                Tracks
-              </TabsTrigger>
-            )}
+          {user?.is_admin && isPypiTracksRepo && (
+            <TabsTrigger value="pypi-tracks">
+              <Link2 className="size-3.5 mr-1" />
+              Tracks
+            </TabsTrigger>
+          )}
           {isConda &&
             (repository.repo_type === "local" || repository.repo_type === "staging") && (
               <TabsTrigger value="notices">
@@ -1483,14 +1487,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </TabsContent>
         )}
 
-        {/* --- PyPI Tracks Tab (PEP 708, virtual PyPI repos) --- */}
-        {user?.is_admin &&
-          repository.format === "pypi" &&
-          repository.repo_type === "virtual" && (
-            <TabsContent value="pypi-tracks" className="mt-4">
-              <PypiTracksPanel repository={repository} />
-            </TabsContent>
-          )}
+        {/* --- PyPI Tracks Tab (PEP 708, hosted PyPI repos) --- */}
+        {user?.is_admin && isPypiTracksRepo && (
+          <TabsContent value="pypi-tracks" className="mt-4">
+            <PypiTracksPanel repository={repository} />
+          </TabsContent>
+        )}
 
         {/* --- Notices Tab (conda CEP-6 channel notices, #913) --- */}
         {isConda &&
