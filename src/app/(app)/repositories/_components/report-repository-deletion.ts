@@ -5,6 +5,7 @@ import {
   type RepositoryDeleteJob,
   type WaitForDeletionOptions,
 } from "@/lib/api/repository-deletions";
+import { trackSessionToast, untrackSessionToast } from "@/lib/session-toasts";
 
 export interface ReportRepositoryDeletionOptions {
   /** Called once the job completes, to refresh the repository queries. */
@@ -38,7 +39,22 @@ function reportFailure(
     // repository and lists no jobs, so keep it until the user dismisses it.
     duration: Infinity,
     action: onRetry ? { label: "Retry", onClick: () => onRetry(key) } : undefined,
+    onDismiss: () => untrackSessionToast(toastId),
   });
+  // Dismissed on sign-out, so its Retry cannot be clicked by the next user (#1228).
+  trackSessionToast(toastId);
+}
+
+/** The poll was stopped: leave a note, or drop the toast on sign-out (#1190). */
+function reportStopped(repoKey: string, toastId: string, signal: AbortSignal) {
+  if (signal.reason === DELETION_REPORT_LOGOUT) {
+    toast.dismiss(toastId);
+  } else {
+    toast.info(`Repository "${repoKey}" is still being deleted`, {
+      id: toastId,
+      description: "The deletion keeps running in the background.",
+    });
+  }
 }
 
 /**
@@ -78,14 +94,7 @@ export async function reportRepositoryDeletion(
     final = await waitForRepositoryDeletion(job, { ...wait, signal });
   } catch (error) {
     if (signal?.aborted) {
-      if (signal.reason === DELETION_REPORT_LOGOUT) {
-        toast.dismiss(toastId);
-      } else {
-        toast.info(`Repository "${repoKey}" is still being deleted`, {
-          id: toastId,
-          description: "The deletion keeps running in the background.",
-        });
-      }
+      reportStopped(repoKey, toastId, signal);
       return;
     }
     if (isDeleteJobHidden(error)) {
@@ -105,6 +114,12 @@ export async function reportRepositoryDeletion(
     return;
   }
 
+  // Stopped just after the last read returned: report the stop, not the
+  // outcome, so no toast appears after sign-out or on another page (#1228).
+  if (signal?.aborted) {
+    reportStopped(repoKey, toastId, signal);
+    return;
+  }
   if (final.status === "completed") {
     onCompleted?.();
     toast.success(`Repository "${repoKey}" deleted`, { id: toastId, description: undefined });

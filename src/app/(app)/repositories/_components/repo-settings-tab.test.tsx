@@ -2700,6 +2700,24 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
       ]);
     });
 
+    it("offers record_only on a backend whose version does not parse, such as a dev build (#1229)", async () => {
+      mockGetHealth.mockResolvedValue({ status: "healthy", version: "dev" });
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toContain("record_only")
+      );
+    });
+
+    it("does not offer record_only before the backend version has loaded (#1229)", async () => {
+      mockGetHealth.mockReturnValue(new Promise(() => {}));
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+      expect(Array.from(proxyActionSelect().options).map((o) => o.value)).not.toContain("record_only");
+    });
+
     it("sends nothing for a field toggled and toggled back", async () => {
       mockGetScanConfig.mockResolvedValue({ ...base });
       mockUpdateScanConfig.mockResolvedValue({ ...base, severity_threshold: "critical" });

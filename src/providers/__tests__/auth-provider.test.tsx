@@ -9,6 +9,9 @@ import React from "react";
 // Mocks (must be before component import)
 // ---------------------------------------------------------------------------
 
+const mockDismissSessionToasts = vi.fn();
+vi.mock("@/lib/session-toasts", () => ({ dismissSessionToasts: () => mockDismissSessionToasts() }));
+
 const mockRefreshSession = vi.fn();
 const mockLocalSessionExpired = vi.fn();
 vi.mock("@/lib/sdk-client", () => ({
@@ -441,6 +444,25 @@ describe("AuthProvider", () => {
 
     expect(screen.getByTestId("expires-at").textContent).toBe("null");
     expect(screen.getByTestId("authenticated").textContent).toBe("false");
+  });
+
+  it("dismisses session-bound toasts on sign-out (#1228)", async () => {
+    mockSdkGetCurrentUser.mockResolvedValue({
+      data: { id: "u1", username: "admin", email: "admin@test.com", is_admin: true },
+      error: null,
+    });
+    mockSdkLogout.mockResolvedValue({});
+    renderWithQuery(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+    mockDismissSessionToasts.mockClear();
+    await act(async () => {
+      await capturedAuthRef.current!.logout();
+    });
+    expect(mockDismissSessionToasts).toHaveBeenCalled();
   });
 
   it("clears passwordExpiresAt after changing password", async () => {

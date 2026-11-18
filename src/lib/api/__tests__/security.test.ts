@@ -579,6 +579,16 @@ describe("securityApi", () => {
     expect(out.id).toBe("cfg1");
   });
 
+  it("updateRepoSecurity sends only the fields given (#1229)", async () => {
+    mockUpdateRepoSecurity.mockResolvedValue({ data: SDK_CONFIG, error: undefined });
+    const mod = await import("../security");
+    await mod.securityApi.updateRepoSecurity("repo-key", { scan_on_proxy: false });
+    expect(mockUpdateRepoSecurity.mock.calls.at(-1)![0]).toEqual({
+      path: { key: "repo-key" },
+      body: { scan_on_proxy: false },
+    });
+  });
+
   it("updateRepoSecurity passes instance_locked through only when given (#1185)", async () => {
     mockUpdateRepoSecurity.mockResolvedValue({
       data: { ...SDK_CONFIG, instance_locked: false },

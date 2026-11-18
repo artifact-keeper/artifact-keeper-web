@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { adminApi } from "@/lib/api/admin";
+import { SCAN_POLICY_LOCK_MIN, backendAtLeast } from "@/lib/backend-version";
 import {
   ArrowLeft,
   Boxes,
@@ -266,7 +268,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const [actionAnnounce, setActionAnnounce] = useState("");
 
   // security form local state
-  const [secForm, setSecForm] = useState<UpsertScanConfigRequest | null>(null);
+  // Only the operator's edits are held, over the fetched row, so a save sends
+  // just those and cannot write back fields saved from Settings since (#1229).
+  const [secEdits, setSecEdits] = useState<Partial<UpsertScanConfigRequest>>({});
 
   // --- queries ---
   const { data: repository, isLoading: repoLoading } = useQuery({
@@ -507,6 +511,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     enabled: !!repoKey && !!user?.is_admin,
   });
 
+  // The backend version, from the same cached `/health` query the sidebar and
+  // Settings use: 1.12.0 locks the proxy scan policy on an instance
+  // administrator's first save, from this tab as from Settings (#1229).
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user?.is_admin,
+  });
+  const secFirstSaveLocks =
+    !!user?.is_admin &&
+    !!repoSecurity &&
+    !repoSecurity.config &&
+    backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN);
+
   // initialise security form from fetched data
   const securityDefaults: UpsertScanConfigRequest = {
     scan_enabled: repoSecurity?.config?.scan_enabled ?? false,
@@ -515,7 +534,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     block_on_policy_violation: repoSecurity?.config?.block_on_policy_violation ?? false,
     severity_threshold: repoSecurity?.config?.severity_threshold ?? "high",
   };
-  const currentSecForm = secForm ?? securityDefaults;
+  const currentSecForm: UpsertScanConfigRequest = { ...securityDefaults, ...secEdits };
+  const setSecField = <K extends keyof UpsertScanConfigRequest>(
+    key: K,
+    value: UpsertScanConfigRequest[K],
+  ) => setSecEdits((e) => ({ ...e, [key]: value }));
+  // With no row yet the whole form is the first save; otherwise only the
+  // fields that differ from the stored row are sent, as Settings does (#1122).
+  const secPatch: Partial<UpsertScanConfigRequest> = repoSecurity?.config
+    ? Object.fromEntries(
+        (Object.keys(secEdits) as (keyof UpsertScanConfigRequest)[])
+          .filter((k) => secEdits[k] !== undefined && secEdits[k] !== securityDefaults[k])
+          .map((k) => [k, secEdits[k]]),
+      )
+    : currentSecForm;
+  const secChanged = !repoSecurity?.config || Object.keys(secPatch).length > 0;
 
   // Proxy-cache scan verdicts are readable by any authenticated user with
   // repository visibility, matching the endpoint's own authorization — the
@@ -652,7 +685,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   });
 
   const updateSecurityMutation = useMutation({
-    mutationFn: (values: UpsertScanConfigRequest) => {
+    mutationFn: (values: Partial<UpsertScanConfigRequest>) => {
       // The instance lock (#1185): an instance administrator's PUT without
       // `instance_locked` LOCKS the proxy scan policy, so send the stored value
       // back when the GET reported it, and never from anyone else (403).
@@ -668,7 +701,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       queryClient.invalidateQueries({ queryKey: ["repository-security", repoKey] });
       // The Settings tab caches the same row under its own key.
       queryClient.invalidateQueries({ queryKey: ["scan-config", repoKey] });
-      setSecForm(null); // reset to refetched defaults
+      setSecEdits({}); // reset to refetched defaults
       toast.success("Security settings saved");
     },
     onError: mutationErrorToast("Failed to save security settings"),
@@ -1665,7 +1698,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 className="space-y-5 max-w-md"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  updateSecurityMutation.mutate(currentSecForm);
+                  updateSecurityMutation.mutate(secPatch);
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -1674,7 +1707,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-enabled"
                     checked={currentSecForm.scan_enabled}
                     onCheckedChange={(v) =>
-                      setSecForm({ ...currentSecForm, scan_enabled: v })
+                      setSecField("scan_enabled", v)
                     }
                   />
                 </div>
@@ -1684,7 +1717,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-upload"
                     checked={currentSecForm.scan_on_upload}
                     onCheckedChange={(v) =>
-                      setSecForm({ ...currentSecForm, scan_on_upload: v })
+                      setSecField("scan_on_upload", v)
                     }
                   />
                 </div>
@@ -1705,7 +1738,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                         proxiesUpstream ? "sec-proxy-note" : undefined
                       }
                       onCheckedChange={(v) =>
-                        setSecForm({ ...currentSecForm, scan_on_proxy: v })
+                        setSecField("scan_on_proxy", v)
                       }
                     />
                   </div>
@@ -1726,10 +1759,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-block"
                     checked={currentSecForm.block_on_policy_violation}
                     onCheckedChange={(v) =>
-                      setSecForm({
-                        ...currentSecForm,
-                        block_on_policy_violation: v,
-                      })
+                      setSecField("block_on_policy_violation", v)
                     }
                   />
                 </div>
@@ -1738,7 +1768,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Select
                     value={currentSecForm.severity_threshold}
                     onValueChange={(v) =>
-                      setSecForm({ ...currentSecForm, severity_threshold: v })
+                      setSecField("severity_threshold", v)
                     }
                   >
                     <SelectTrigger className="w-full">
@@ -1761,11 +1791,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       : "Proxy scan policy not locked: the repository's administrators can change it. Lock it in Settings, under Scanning & enforcement."}
                   </p>
                 )}
+                {/* No config row yet: the backend locks the policy on an
+                    instance administrator's first save (#1213, #1229). */}
+                {secFirstSaveLocks && (
+                  <p className="text-xs text-muted-foreground">
+                    This repository has no scanning settings yet. Saving them
+                    for the first time locks the proxy scan policy; you can
+                    hand it back to the repository&apos;s administrators
+                    afterwards in Settings, under Scanning &amp; enforcement.
+                  </p>
+                )}
                 {/* A save sends the stored lock back, so wait for a refetch
                     to finish rather than send a stale one (#1213). */}
                 <Button
                   type="submit"
-                  disabled={updateSecurityMutation.isPending || securityFetching}
+                  disabled={
+                    updateSecurityMutation.isPending || securityFetching || !secChanged
+                  }
                 >
                   {updateSecurityMutation.isPending
                     ? "Saving..."

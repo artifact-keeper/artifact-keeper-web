@@ -114,6 +114,95 @@ describe("formatUntrustedText", () => {
     expect(formatUntrustedText("می\u200cخواهم").text).toBe("می\u200cخواهم");
   });
 
+  describe("Default_Ignorable_Code_Point (Unicode 18.0.0) (#1226)", () => {
+    const hex = (cp: number) => `[U+${cp.toString(16).toUpperCase().padStart(4, "0")}]`;
+    // Every range in DerivedCoreProperties-18.0.0.txt. The bidi marks
+    // U+200E/F and U+061C are kept on purpose (see the test above).
+    const ranges: [number, number][] = [
+      [0x00ad, 0x00ad], [0x034f, 0x034f], [0x115f, 0x1160], [0x17b4, 0x17b5],
+      [0x180b, 0x180d], [0x180e, 0x180e], [0x180f, 0x180f], [0x200b, 0x200d],
+      [0x202a, 0x202e], [0x2060, 0x2064], [0x2065, 0x2065], [0x2066, 0x206f],
+      [0x3164, 0x3164], [0xfe00, 0xfe0f], [0xfeff, 0xfeff], [0xffa0, 0xffa0],
+      [0xfff0, 0xfff8], [0x1bca0, 0x1bca3], [0x1d173, 0x1d17a], [0xe0000, 0xe0000],
+      [0xe0001, 0xe0001], [0xe0002, 0xe001f], [0xe0020, 0xe007f], [0xe0080, 0xe00ff],
+      [0xe0100, 0xe01ef], [0xe01f0, 0xe0fff],
+    ];
+
+    it.each(ranges.map(([lo, hi]) => [lo.toString(16), hi.toString(16), lo, hi]))(
+      "escapes every code point in %s..%s between Latin letters",
+      (_lo, _hi, lo, hi) => {
+        for (let cp = lo as number; cp <= (hi as number); cp++) {
+          const r = formatUntrustedText(`a${String.fromCodePoint(cp)}b`);
+          expect(r.text).toBe(`a${hex(cp)}b`);
+          expect(r.escaped).toBe(1);
+        }
+      },
+    );
+
+    it("leaves no Default_Ignorable_Code_Point unescaped except the bidi marks", () => {
+      for (let cp = 0; cp <= 0x10ffff; cp++) {
+        if (cp >= 0xd800 && cp <= 0xdfff) continue;
+        const ch = String.fromCodePoint(cp);
+        if (!/\p{Default_Ignorable_Code_Point}/u.test(ch)) continue;
+        if (cp === 0x200e || cp === 0x200f || cp === 0x061c) continue;
+        expect(formatUntrustedText(`x${ch}y`).escaped).toBe(1);
+      }
+    });
+
+    it.each([
+      ["invisible times", "pay⁢pal", "pay[U+2062]pal"],
+      ["invisible separator", "pay⁣pal", "pay[U+2063]pal"],
+      ["function application", "pay⁡pal", "pay[U+2061]pal"],
+      ["invisible plus", "pay⁤pal", "pay[U+2064]pal"],
+      ["soft hyphen", "pay­pal", "pay[U+00AD]pal"],
+      ["combining grapheme joiner", "pay͏pal", "pay[U+034F]pal"],
+      ["ZWJ between Latin letters", "pay‍pal", "pay[U+200D]pal"],
+      ["ZWNJ between Latin letters", "pay‌pal", "pay[U+200C]pal"],
+      ["Hangul filler", "payㅤpal", "pay[U+3164]pal"],
+      ["variation selector on a letter", "pay️pal", "pay[U+FE0F]pal"],
+      ["Mongolian vowel separator", "pay᠎pal", "pay[U+180E]pal"],
+      ["ZWJ between Cyrillic letters", "р‍а", "р[U+200D]а"],
+    ])("flags a spoofed name with %s", (_name, input, expected) => {
+      expect(formatUntrustedText(input).text).toBe(expected);
+      expect(formatUntrustedText(input).text).not.toBe(formatUntrustedText("paypal").text);
+    });
+
+    it.each([
+      ["family", "👨‍👩‍👧"],
+      ["skin-toned ZWJ sequence", "👩🏽‍💻"],
+      ["rainbow flag", "🏳️‍🌈"],
+      ["pirate flag", "🏴‍☠️"],
+      ["heart with VS16", "❤️"],
+      ["text-style VS15", "☺︎"],
+      ["keycap", "1️⃣"],
+      ["keycap without VS16", "#⃣"],
+    ])("keeps a valid emoji sequence: %s", (_name, emoji) => {
+      expect(formatUntrustedText(`ok ${emoji}!`)).toMatchObject({ text: `ok ${emoji}!`, escaped: 0 });
+    });
+
+    it("escapes joiners and selectors that hang off an emoji sequence", () => {
+      expect(formatUntrustedText("👨‍").text).toBe("👨[U+200D]");
+      expect(formatUntrustedText("‍👨").text).toBe("[U+200D]👨");
+      expect(formatUntrustedText("👨‍a").text).toBe("👨[U+200D]a");
+      expect(formatUntrustedText("❤️️").text).toBe("❤️[U+FE0F]");
+      expect(formatUntrustedText("1️").text).toBe("1[U+FE0F]");
+    });
+
+    it("keeps the joiners Indic scripts need between letters", () => {
+      for (const text of ["क्‍ष", "क्‌ष", "ര്‍"]) {
+        // The last one ends on the joiner, so it is escaped.
+        const r = formatUntrustedText(text);
+        if (text.endsWith("‍")) expect(r.escaped).toBe(1);
+        else expect(r).toMatchObject({ text, escaped: 0 });
+      }
+    });
+
+    it("escapes an ideographic variation selector (only emoji keep selectors)", () => {
+      const ivs = String.fromCodePoint(0x845b, 0xe0100);
+      expect(formatUntrustedText(ivs).text).toBe("葛[U+E0100]");
+    });
+  });
+
   it("counts every escaped character", () => {
     expect(formatUntrustedText(`${RLO}a\u200b\u0007`).escaped).toBe(3);
   });

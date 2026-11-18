@@ -520,6 +520,35 @@ describe("RepositoriesContent", () => {
     expect(signal.reason).toBe("logout");
   });
 
+  const JOB = { id: "job-1", status: "pending", repository_key: "my-repo" };
+  const lastPollSignal = () =>
+    (mockWaitForDeletion.mock.calls.at(-1)![1] as { signal: AbortSignal }).signal;
+
+  it("stops a delete-job poller that starts after the page unmounts (#1228)", () => {
+    const { unmount } = render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    unmount();
+    // A DELETE still in flight, or Retry on the failed toast, from another page.
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    expect(lastPollSignal().aborted).toBe(true);
+    expect(lastPollSignal().reason).not.toBe("logout");
+  });
+
+  it("stops a delete-job poller that starts after sign-out, until the next sign-in (#1228)", () => {
+    const { rerender } = render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
+    rerender(<RepositoriesContent />);
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    expect(lastPollSignal().aborted).toBe(true);
+    expect(lastPollSignal().reason).toBe("logout");
+
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    rerender(<RepositoriesContent />);
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    expect(lastPollSignal().aborted).toBe(false);
+  });
+
   it("delete mutation onError shows error toast", () => {
     render(<RepositoriesContent />);
     const deleteConfig = useMutationConfigs[2];
