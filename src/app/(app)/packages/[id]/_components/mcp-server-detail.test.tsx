@@ -132,6 +132,16 @@ describe("McpServerDetail", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/[\u202e\u200b]/);
   });
 
+  it("marks hidden characters in the Overview's Metadata name (#1226)", async () => {
+    const hostile = { ...SERVER, name: "com.acme/pay\u2062pal" };
+    api.listVersions.mockResolvedValue([entryOf(hostile)]);
+    api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: hostile, registry: { status: "active" }, packages: PINS } });
+    renderWithClient(<McpServerDetail pkg={{ ...PKG, name: hostile.name }} />);
+    const name = await screen.findByText("com.acme/pay[U+2062]pal");
+    expect(name).toHaveAttribute("data-sanitized", "true");
+    expect(name.closest("dl")?.textContent).not.toMatch(/\u2062/);
+  });
+
   it("jumps to the Install tab", async () => {
     renderDetail();
     fireEvent.click(await screen.findByRole("button", { name: "Install / Connect" }));

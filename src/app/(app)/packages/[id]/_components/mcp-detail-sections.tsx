@@ -1,6 +1,7 @@
 "use client";
 
 import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
@@ -79,7 +80,7 @@ export function OverviewSection({
           <CardContent>
             <dl>
               <Field label="Name">
-                <span className="font-mono text-xs">{server.name}</span>
+                <SafeText className="font-mono text-xs" max={NAME_MAX_LENGTH} value={server.name} />
               </Field>
               <Field label="Status">{official?.status ?? "not served"}</Field>
               <Field label="Published">{official?.publishedAt ? formatDate(official.publishedAt) : "--"}</Field>
