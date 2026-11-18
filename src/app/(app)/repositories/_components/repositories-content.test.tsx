@@ -62,9 +62,11 @@ vi.mock("sonner", () => ({
   },
 }));
 
-// The 202 job's poller: keep it pending so no request leaves the test.
+// The 202 job's poller: keep it pending so no request leaves the test, and
+// record the options so a test can check the signal that stops it (#1190).
+const mockWaitForDeletion = vi.fn<(...args: unknown[]) => Promise<never>>(() => new Promise(() => {}));
 vi.mock("@/lib/api/repository-deletions", () => ({
-  waitForRepositoryDeletion: () => new Promise(() => {}),
+  waitForRepositoryDeletion: (...args: unknown[]) => mockWaitForDeletion(...args),
 }));
 
 vi.mock("@/lib/api/repositories", () => ({
@@ -490,6 +492,32 @@ describe("RepositoriesContent", () => {
       'Deleting repository "my-repo"...',
       expect.objectContaining({ id: "repository-delete-job-1" }),
     );
+  });
+
+  it("stops the delete-job poller when the page unmounts (#1190)", () => {
+    const { unmount } = render(<RepositoriesContent />);
+    useMutationConfigs[2].onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    const { signal } = mockWaitForDeletion.mock.calls[0][1] as { signal: AbortSignal };
+    expect(signal.aborted).toBe(false);
+    unmount();
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).not.toBe("logout");
+  });
+
+  it("stops the delete-job poller when the user signs out (#1190)", () => {
+    const { rerender } = render(<RepositoriesContent />);
+    useMutationConfigs[2].onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    const { signal } = mockWaitForDeletion.mock.calls[0][1] as { signal: AbortSignal };
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
+    rerender(<RepositoriesContent />);
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBe("logout");
   });
 
   it("delete mutation onError shows error toast", () => {

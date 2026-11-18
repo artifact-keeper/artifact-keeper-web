@@ -5,6 +5,7 @@ const mockToast = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
   loading: vi.fn(),
+  dismiss: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: mockToast }));
 
@@ -91,5 +92,36 @@ describe("reportRepositoryDeletion (#1048)", () => {
       expect.objectContaining({ id: "repository-delete-job-1" }),
     );
     expect(mockToast.error).not.toHaveBeenCalled();
+  });
+
+  it("stops polling when aborted and notes the deletion keeps running (#1190)", async () => {
+    const controller = new AbortController();
+    const fetchJob = vi.fn().mockImplementation(async () => {
+      controller.abort("unmount");
+      return job("running");
+    });
+    await reportRepositoryDeletion("maven-local", job("running"), {
+      signal: controller.signal,
+      wait: { fetchJob, sleep: noSleep },
+    });
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    expect(mockToast.info).toHaveBeenCalledWith(
+      'Repository "maven-local" is still being deleted',
+      expect.objectContaining({ id: "repository-delete-job-1" }),
+    );
+    expect(mockToast.dismiss).not.toHaveBeenCalled();
+  });
+
+  it("drops the toast without reading again when the user signs out (#1190)", async () => {
+    const controller = new AbortController();
+    controller.abort("logout");
+    const fetchJob = vi.fn();
+    await reportRepositoryDeletion("maven-local", job("running"), {
+      signal: controller.signal,
+      wait: { fetchJob, sleep: noSleep },
+    });
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(mockToast.dismiss).toHaveBeenCalledWith("repository-delete-job-1");
+    expect(mockToast.info).not.toHaveBeenCalled();
   });
 });
