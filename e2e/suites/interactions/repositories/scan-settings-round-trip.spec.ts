@@ -136,4 +136,75 @@ test.describe('Scan settings round trips', () => {
       await request.delete(`/api/v1/repositories/${key}`).catch(() => {});
     }
   });
+
+  test('#1185: saving the Scanning & enforcement settings keeps a handed-back policy unlocked', async ({
+    page,
+    request,
+  }) => {
+    const key = `e2e-scan-unlocked-settings-${RUN}`;
+    await createNpmRemote(request, key);
+    try {
+      const seeded = await putScanConfig(request, key, {
+        scan_enabled: true,
+        scan_on_upload: false,
+        scan_on_proxy: true,
+        instance_locked: false,
+      });
+      expect(seeded.instance_locked).toBe(false);
+
+      const settings = await openRepoTab(page, key, 'Settings');
+      const scan = settings.getByRole('region', { name: 'Scanning & enforcement' });
+      const onUpload = scan.getByRole('switch', { name: 'Scan on upload' });
+      await expect(onUpload).not.toBeChecked();
+      await onUpload.click();
+      const put = waitForSecurityPut(page, key);
+      await scan.getByRole('button', { name: 'Save Scanning Settings' }).click();
+      expect((await put).ok()).toBeTruthy();
+      await expect(page.getByText('Scanning & enforcement settings saved')).toBeVisible();
+
+      const stored = await getScanConfig(request, key);
+      expect(stored.scan_on_upload, 'the edited field was saved').toBe(true);
+      expect(stored.instance_locked, 'the policy is still handed back').toBe(false);
+
+      // The lock switch shows the stored state.
+      await expect(scan.getByRole('switch', { name: 'Lock the proxy scan policy' })).not.toBeChecked();
+    } finally {
+      await request.delete(`/api/v1/repositories/${key}`).catch(() => {});
+    }
+  });
+
+  test('#1185: saving the Security tab keeps a handed-back policy unlocked', async ({
+    page,
+    request,
+  }) => {
+    const key = `e2e-scan-unlocked-security-${RUN}`;
+    await createNpmRemote(request, key);
+    try {
+      const seeded = await putScanConfig(request, key, {
+        scan_enabled: true,
+        scan_on_proxy: true,
+        block_on_policy_violation: false,
+        proxy_scan_action: 'record_only',
+        instance_locked: false,
+      });
+      expect(seeded.instance_locked).toBe(false);
+
+      const security = await openRepoTab(page, key, 'Security');
+      const block = security.getByRole('switch', { name: 'Block on Violation' });
+      await expect(block).not.toBeChecked();
+      await block.click();
+      const put = waitForSecurityPut(page, key);
+      await security.getByRole('button', { name: 'Save Settings' }).click();
+      expect((await put).ok()).toBeTruthy();
+      await expect(page.getByText('Security settings saved')).toBeVisible();
+
+      const stored = await getScanConfig(request, key);
+      expect(stored.block_on_policy_violation, 'the edited field was saved').toBe(true);
+      expect(stored.instance_locked, 'the policy is still handed back').toBe(false);
+      // The Security tab form has no proxy scan action, so it must not move it.
+      expect(stored.proxy_scan_action).toBe('record_only');
+    } finally {
+      await request.delete(`/api/v1/repositories/${key}`).catch(() => {});
+    }
+  });
 });
