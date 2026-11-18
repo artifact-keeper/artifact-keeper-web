@@ -52,6 +52,17 @@ describe("RepoSetupGuide", () => {
     expect(text).not.toMatch(/name: \S+\/proto\/proto-local\//);
   });
 
+  it("serves the buf hostname over TLS with room for a larger buf push (#1193)", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local", repo_type: "local" })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("listen 443 ssl;");
+    expect(text).toContain("server_name bsr.example.com;");
+    expect(text).toMatch(/ssl_certificate\s+\S+;/);
+    expect(text).toMatch(/ssl_certificate_key\s+\S+;/);
+    expect(text).toContain("client_max_body_size 256m;");
+    expect(text).toMatch(/needs a TLS certificate/);
+  });
+
   it.each(["remote", "virtual"] as const)("gives a %s protobuf repo no buf push steps", (repo_type) => {
     const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", repo_type })} />);
     const text = container.textContent ?? "";

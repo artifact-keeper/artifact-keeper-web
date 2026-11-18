@@ -1141,7 +1141,7 @@ describe("RepoDetailContent - Environments tab (#1037)", () => {
     h.environments = undefined;
   });
 
-  it.each(["maven", "gradle", "docker", "helm", "debian", "rpm", "nuget", "go", "generic"])(
+  it.each(["maven", "gradle", "docker", "helm", "debian", "rpm", "nuget", "go", "generic", "yarn", "pnpm", "bower"])(
     "hides the tab on a %s repository that has no registered environment",
     (format) => {
       repository.format = format;

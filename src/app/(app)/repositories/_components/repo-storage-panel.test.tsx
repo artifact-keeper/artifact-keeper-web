@@ -154,6 +154,91 @@ describe("RepoStoragePanel", () => {
     expect(screen.getByTestId("storage-fallback-note")).toHaveTextContent(/stores nothing itself/i);
     expect(screen.getByTestId("storage-fallback-note")).not.toHaveTextContent(/refresh/i);
     expect(screen.queryByText("0 B")).not.toBeInTheDocument();
+    // A virtual repository stores nothing, so there is nothing to reclaim.
+    expect(screen.queryByTestId("storage-reclaimable")).not.toBeInTheDocument();
+  });
+
+  it("keeps the virtual copy when the backend omits member bytes, showing them as unavailable (#1214)", () => {
+    // A backend that predates member_storage_used_bytes.
+    storageResponse = {
+      data: {
+        repository_key: "maven-virtual",
+        logical_bytes: 0,
+        dedup_scope: "instance",
+        blob_count: 0,
+        computed_at: null,
+      } satisfies RepositoryStorageUsage,
+      isLoading: false,
+      isError: false,
+    };
+    render(
+      <RepoStoragePanel
+        repository={{ key: "maven-virtual", repo_type: "virtual", storage_used_bytes: 0 }}
+        isAdmin={false}
+      />,
+    );
+
+    expect(screen.getByTestId("storage-logical")).toHaveTextContent("Held by members");
+    expect(screen.getByTestId("storage-logical")).toHaveTextContent("Unavailable");
+    expect(screen.getByTestId("storage-fallback-note")).toHaveTextContent(/stores nothing itself/i);
+    expect(screen.getByTestId("storage-fallback-note")).not.toHaveTextContent(/not computed yet/i);
+    expect(screen.queryByText("0 B")).not.toBeInTheDocument();
+  });
+
+  it("keeps the admin instance total and reclaimable estimate before the breakdown is computed (#1214)", async () => {
+    storageResponse = {
+      data: {
+        repository_key: "maven-remote",
+        logical_bytes: 0,
+        dedup_scope: "instance",
+        blob_count: 0,
+        instance_unique_bytes: 9_000_000,
+        computed_at: null,
+      } satisfies RepositoryStorageUsage,
+      isLoading: false,
+      isError: false,
+    };
+    gcResponse = {
+      data: { bytes_freed: 2048, storage_keys_deleted: 3 },
+      isFetching: false,
+      isError: false,
+    };
+    render(
+      <RepoStoragePanel
+        repository={{ key: "maven-remote", storage_used_bytes: 1000 }}
+        isAdmin
+      />,
+    );
+
+    expect(screen.getByTestId("storage-panel-fallback")).toBeInTheDocument();
+    expect(screen.getByTestId("storage-instance-total")).toHaveTextContent("8.58 MiB");
+    expect(screen.getByTestId("storage-reclaimable")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /estimate/i }));
+    expect(screen.getByTestId("storage-reclaimable-value")).toHaveTextContent("2 KiB");
+  });
+
+  it("keeps the admin extras off the fallback for a non-admin, and when the endpoint errors", () => {
+    storageResponse = {
+      data: {
+        repository_key: "maven-remote",
+        logical_bytes: 0,
+        dedup_scope: "instance",
+        blob_count: 0,
+        instance_unique_bytes: 9_000_000,
+        computed_at: null,
+      } satisfies RepositoryStorageUsage,
+      isLoading: false,
+      isError: false,
+    };
+    render(<RepoStoragePanel repository={REPO} isAdmin={false} />);
+    expect(screen.queryByTestId("storage-instance-total")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("storage-reclaimable")).not.toBeInTheDocument();
+    cleanup();
+
+    storageResponse = { data: undefined, isLoading: false, isError: true };
+    render(<RepoStoragePanel repository={REPO} isAdmin />);
+    expect(screen.queryByTestId("storage-instance-total")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("storage-reclaimable")).not.toBeInTheDocument();
   });
 
   it("shows the full breakdown on per-repo scope for an admin", () => {

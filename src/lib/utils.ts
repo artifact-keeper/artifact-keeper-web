@@ -36,6 +36,15 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
+ * The Local share of a storage total: everything that is not proxy-cached
+ * bytes, clamped at 0 (#1214). An old snapshot can carry a hosted-only total
+ * next to backfilled proxy bytes, and a negative difference would render "--".
+ */
+export function localStorageBytes(totalBytes: number, proxyBytes: number): number {
+  return Math.max(totalBytes - proxyBytes, 0);
+}
+
+/**
  * Format an ISO date string into a short locale-friendly display string.
  */
 export function formatDate(dateStr: string): string {

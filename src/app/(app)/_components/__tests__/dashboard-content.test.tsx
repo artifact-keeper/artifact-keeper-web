@@ -47,7 +47,9 @@ vi.mock("@/lib/api/mcp", () => ({
   mcpApi: { pendingSummary: (...a: unknown[]) => mockPendingSummary(...a) },
 }));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  localStorageBytes: (await importOriginal<typeof import("@/lib/utils")>())
+    .localStorageBytes,
   formatBytes: (bytes: number) => `${bytes} B`,
   cn: (...args: any[]) => args.filter(Boolean).join(" "),
 }));
@@ -243,6 +245,8 @@ describe("DashboardContent", () => {
     [1000, 0, 1000],
     [1000, 1000, 0],
     [0, 0, 0],
+    // Proxy bytes above the total clamp the Local share at 0 (#1214).
+    [400, 1000, 0],
   ])("shows storage total %i with proxy %i and local %i", (total, proxy, local) => {
     mockUseAuth.mockReturnValue({ user: { is_admin: true }, isAuthenticated: true });
     setupUseQuery({
