@@ -492,6 +492,38 @@ describe("PermissionsPage", () => {
     expect(mockPermissionsApi.list).toHaveBeenLastCalledWith({ page: 2, per_page: 100 });
   });
 
+  it("steps back a page when the last page empties out (#1181)", async () => {
+    let total = 101;
+    const rows = (page: number, count: number) => ({
+      items: Array.from({ length: count }, (_, i) => ({
+        ...PERM_1,
+        id: `perm-${page}-${i}`,
+        principal_name: page === 2 ? "Zoe" : "Alice",
+      })),
+      pagination: { page, per_page: 100, total, total_pages: Math.ceil(total / 100) },
+    });
+    mockPermissionsApi.list.mockImplementation(({ page }: { page: number }) =>
+      Promise.resolve(page === 2 ? rows(2, total - 100) : rows(1, 100)),
+    );
+    mockPermissionsApi.delete.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderPage();
+    await waitForTableLoaded();
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() => expect(screen.getByText("Zoe")).toBeTruthy());
+
+    // Delete the only rule on page 2; the refetch reports 100 rules
+    total = 100;
+    await user.click(findActionButton("Delete"));
+    await user.click(screen.getByText("Confirm Delete"));
+
+    await waitFor(() => {
+      expect(mockPermissionsApi.list).toHaveBeenLastCalledWith({ page: 1, per_page: 100 });
+    });
+    await waitFor(() => expect(screen.getAllByText("Alice").length).toBe(100));
+  });
+
   it("shows empty state when no permissions exist", async () => {
     mockPermissionsApi.list.mockResolvedValue({
       items: [],

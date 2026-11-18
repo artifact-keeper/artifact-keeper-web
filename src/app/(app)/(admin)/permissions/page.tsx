@@ -173,6 +173,13 @@ export default function PermissionsPage() {
 
   const permissions = permissionsData?.items ?? [];
   const permissionsTotal = permissionsData?.pagination?.total ?? 0;
+
+  // Deleting the last rule on the last page leaves that page empty; step back
+  // to the new last page instead of showing an empty table under a pager that
+  // says "Page 3 of 2". Adjusted during render, React's pattern for state
+  // derived from a previous render.
+  const lastPage = Math.max(1, Math.ceil(permissionsTotal / pageSize));
+  if (permissionsData && page > lastPage) setPage(lastPage);
   const users = usersData ?? [];
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
