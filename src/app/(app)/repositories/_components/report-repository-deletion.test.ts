@@ -185,6 +185,24 @@ describe("reportRepositoryDeletion (#1048)", () => {
     expect(mockToast.dismiss).not.toHaveBeenCalled();
   });
 
+  it.each([null, "completed", "failed"])(
+    "shows no outcome when the DELETE returns (%s) after sign-out (#1231)",
+    async (status) => {
+      const controller = new AbortController();
+      controller.abort("logout");
+      const onRetry = vi.fn();
+      await reportRepositoryDeletion("maven-local", status ? job(status) : null, {
+        onRetry,
+        signal: controller.signal,
+      });
+      expect(mockToast.success).not.toHaveBeenCalled();
+      expect(mockToast.error).not.toHaveBeenCalled();
+      expect(mockToast.loading).not.toHaveBeenCalled();
+      dismissSessionToasts();
+      expect(onRetry).not.toHaveBeenCalled();
+    },
+  );
+
   it("stops tracking a failed-job toast the user dismissed (#1228)", async () => {
     await reportRepositoryDeletion("maven-local", job("failed", { id: "job-2" }));
     const { onDismiss } = mockToast.error.mock.calls[0][1] as { onDismiss: () => void };

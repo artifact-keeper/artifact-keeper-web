@@ -57,6 +57,7 @@ vi.mock("sonner", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
+    dismiss: vi.fn(),
     loading: (...args: unknown[]) => mockToastLoading(...args),
     info: vi.fn(),
   },
@@ -539,9 +540,10 @@ describe("RepositoriesContent", () => {
     const deleteConfig = useMutationConfigs[2];
     mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
     rerender(<RepositoriesContent />);
+    const polls = mockWaitForDeletion.mock.calls.length;
     deleteConfig.onSuccess?.(JOB, "my-repo");
-    expect(lastPollSignal().aborted).toBe(true);
-    expect(lastPollSignal().reason).toBe("logout");
+    // Signed out: no poll starts and no outcome is shown (#1231).
+    expect(mockWaitForDeletion.mock.calls.length).toBe(polls);
 
     mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
     rerender(<RepositoriesContent />);
