@@ -66,7 +66,10 @@ vi.mock("@/components/ui/card", () => ({
   CardDescription: ({ children }: any) => <p>{children}</p>,
 }));
 
-vi.mock("@/lib/sdk-client", () => ({}));
+vi.mock("@/lib/sdk-client", () => ({
+  REMOTE_KEY_REJECTED_EVENT: "ak:remote-key-rejected",
+  notifyRemoteKeyRejected: () => {},
+}));
 
 const sdk = vi.hoisted(() => ({
   login: vi.fn(),

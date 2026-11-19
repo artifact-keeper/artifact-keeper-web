@@ -222,6 +222,31 @@ describe("LoginPage lockout UI", () => {
     expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
   });
 
+  it.each([
+    "User not found",
+    "Invalid password",
+    "User account is disabled",
+  ])("shows one fixed message for any 401, never the backend text %s (#1153)", async (detail) => {
+    mockLogin.mockRejectedValueOnce({ code: "AUTH_ERROR", message: detail });
+
+    render(<LoginPage />);
+
+    const usernameInput = await screen.findByPlaceholderText("Enter your username");
+    const passwordInput = screen.getByPlaceholderText("Enter your password");
+    await act(async () => {
+      fireEvent.change(usernameInput, { target: { value: "someone" } });
+      fireEvent.change(passwordInput, { target: { value: "whatever" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Sign In"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid username or password")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(detail)).not.toBeInTheDocument();
+  });
+
   it("hides the generic error text when lockout is shown", async () => {
     mockLogin.mockRejectedValueOnce({
       error: "Account locked",

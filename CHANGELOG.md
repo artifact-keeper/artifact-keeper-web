@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A remote instance's 401 no longer refreshes the local session, and a rejected key says so** (#1227) - With a remote instance active, a 401 relayed through the proxy on any request now first asks the local `GET /api/v1/instances` whether the local session expired, as #1223 did for the first `/auth/me` load. Only then is the local session refreshed; otherwise the 401 is returned as is, with no refresh and no trip to /login. When the local session is valid, a banner says the remote instance rejected its API key and offers a switch back to Local, instead of the shell just looking signed out.
+- **Sign-in no longer leaks a redirect, the SSO code or which usernames exist** (#1153) - An SSO button now navigates only when the provider's `login_url` resolves to this origin over http(s), so `//host`, `/\host`, other hosts and `javascript:` values are ignored. The SSO callback removes the single-use `?code=` from the address bar and history before the exchange runs, so a refused exchange or a network failure no longer leaves it behind. A rejected password or LDAP sign-in (HTTP 401) always shows "Invalid username or password" instead of the server's text; the account-locked notice and the TOTP step are unchanged.
+
 ## [1.12.0] - 2026-11-18
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
