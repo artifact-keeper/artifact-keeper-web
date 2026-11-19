@@ -67,6 +67,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { McpNamespaceGrants } from "./_components/mcp-namespace-grants";
 
 // -- constants --
@@ -164,7 +165,7 @@ export default function PermissionsPage() {
   const { data: usersData } = useQuery({
     queryKey: ["admin-users", "principal-picker", userSearch],
     queryFn: () =>
-      adminApi.listUsers({
+      adminApi.listUsersPage({
         isServiceAccount: false,
         perPage: USER_PICKER_PAGE_SIZE,
         search: userSearch || undefined,
@@ -200,7 +201,8 @@ export default function PermissionsPage() {
   // derived from a previous render.
   const lastPage = Math.max(1, Math.ceil(permissionsTotal / pageSize));
   if (permissionsData && page > lastPage) setPage(lastPage);
-  const users = usersData ?? [];
+  const users = usersData?.items ?? [];
+  const total = usersData?.total ?? 0;
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
 
@@ -537,12 +539,13 @@ export default function PermissionsPage() {
                         : "No principals are available."}
                     </CommandEmpty>
                   )}
-                  {form.principal_type === "user" &&
-                    users.length >= USER_PICKER_PAGE_SIZE && (
-                      <p className="px-3 py-2 text-xs text-muted-foreground">
-                        Showing the first {USER_PICKER_PAGE_SIZE} matches. Keep typing to narrow the list.
-                      </p>
-                    )}
+                  {form.principal_type === "user" && (
+                    <ListTruncationNotice
+                      shown={users.length}
+                      total={total}
+                      className="px-3 py-2 text-xs"
+                    />
+                  )}
                   {filteredPrincipalOptions.length > 0 && (
                     <CommandGroup heading="Principals">
                       {filteredPrincipalOptions.map((principal) => (

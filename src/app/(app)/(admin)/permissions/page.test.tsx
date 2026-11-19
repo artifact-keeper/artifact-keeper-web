@@ -36,7 +36,7 @@ vi.mock("@/lib/api/groups", () => ({
   groupsApi: mockGroupsApi,
 }));
 
-const mockAdminApi = { listUsers: vi.fn() };
+const mockAdminApi = { listUsersPage: vi.fn() };
 vi.mock("@/lib/api/admin", () => ({
   adminApi: mockAdminApi,
 }));
@@ -401,7 +401,7 @@ beforeEach(async () => {
     items: [PERM_1],
     pagination: { page: 1, per_page: 1000, total: 1, total_pages: 1 },
   });
-  mockAdminApi.listUsers.mockResolvedValue(MOCK_USERS);
+  mockAdminApi.listUsersPage.mockResolvedValue({ items: MOCK_USERS, total: MOCK_USERS.length });
   mockGroupsApi.list.mockResolvedValue({
     items: MOCK_GROUPS,
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
@@ -744,7 +744,7 @@ describe("PermissionsPage", () => {
     // page now asks the server for people only (`is_service_account=false`,
     // backend 1.9.0).
     //
-    // The listUsers mock honours that parameter the way the backend does:
+    // The listUsersPage mock honours that parameter the way the backend does:
     // unfiltered, it returns the service account too, which is the shape the
     // real API returns.
     describe("service accounts are not offered as user principals (#823)", () => {
@@ -757,11 +757,14 @@ describe("PermissionsPage", () => {
       };
 
       beforeEach(() => {
-        mockAdminApi.listUsers.mockImplementation(
-          async (params: { isServiceAccount?: boolean } = {}) =>
-            params.isServiceAccount === false
-              ? MOCK_USERS
-              : [...MOCK_USERS, SERVICE_ACCOUNT_AS_USER_ROW],
+        mockAdminApi.listUsersPage.mockImplementation(
+          async (params: { isServiceAccount?: boolean } = {}) => {
+            const items =
+              params.isServiceAccount === false
+                ? MOCK_USERS
+                : [...MOCK_USERS, SERVICE_ACCOUNT_AS_USER_ROW];
+            return { items, total: items.length };
+          },
         );
       });
 
@@ -771,7 +774,7 @@ describe("PermissionsPage", () => {
         await waitForTableLoaded();
         await openCreateDialog(user);
 
-        expect(mockAdminApi.listUsers).toHaveBeenCalledWith({
+        expect(mockAdminApi.listUsersPage).toHaveBeenCalledWith({
           isServiceAccount: false,
           perPage: 100,
         });
@@ -852,9 +855,10 @@ describe("PermissionsPage", () => {
 
     it("sends the typed text to the server as the search term", async () => {
       const user = userEvent.setup();
-      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
-        p.search === "zed" ? [person(500)] : MOCK_USERS,
-      );
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search === "zed" ? [person(500)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
@@ -863,7 +867,7 @@ describe("PermissionsPage", () => {
       await user.type(screen.getByRole("textbox", { name: "Search principals" }), "zed");
 
       await waitFor(() =>
-        expect(mockAdminApi.listUsers).toHaveBeenCalledWith({
+        expect(mockAdminApi.listUsersPage).toHaveBeenCalledWith({
           isServiceAccount: false,
           perPage: 100,
           search: "zed",
@@ -875,9 +879,10 @@ describe("PermissionsPage", () => {
 
     it("does not filter server results again by the label (the server also matches username and email)", async () => {
       const user = userEvent.setup();
-      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
-        p.search === "person9@" ? [person(9)] : MOCK_USERS,
-      );
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search === "person9@" ? [person(9)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
@@ -890,9 +895,10 @@ describe("PermissionsPage", () => {
 
     it("keeps the chosen user's name on the button after the search changes", async () => {
       const user = userEvent.setup();
-      mockAdminApi.listUsers.mockImplementation(async (p: { search?: string }) =>
-        p.search ? [person(7)] : MOCK_USERS,
-      );
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search ? [person(7)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
@@ -907,15 +913,29 @@ describe("PermissionsPage", () => {
       await waitFor(() => expect(picker.textContent).toContain("Person 7"));
     });
 
-    it("tells the admin when a search is capped at one page", async () => {
+    const firstHundred = Array.from({ length: 100 }, (_, i) => person(i));
+
+    it("tells the admin when more users match than one page shows", async () => {
       const user = userEvent.setup();
-      mockAdminApi.listUsers.mockResolvedValue(Array.from({ length: 100 }, (_, i) => person(i)));
+      mockAdminApi.listUsersPage.mockResolvedValue({ items: firstHundred, total: 250 });
       renderPage();
       await waitForTableLoaded();
       await openCreateDialog(user);
 
       await user.click(screen.getByRole("combobox", { name: "Principal" }));
-      expect(await screen.findByText(/Showing the first 100 matches/)).toBeTruthy();
+      expect(await screen.findByText(/Showing first 100 of 250/)).toBeTruthy();
+    });
+
+    it("does not show the cap notice when exactly one page matches", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockResolvedValue({ items: firstHundred, total: 100 });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(await screen.findByRole("button", { name: "Person 99" })).toBeTruthy();
+      expect(screen.queryByText(/Showing first/)).toBeNull();
     });
 
     it("does not show the cap notice for a short list", async () => {
@@ -925,7 +945,7 @@ describe("PermissionsPage", () => {
       await openCreateDialog(user);
 
       await user.click(screen.getByRole("combobox", { name: "Principal" }));
-      expect(screen.queryByText(/Showing the first 100 matches/)).toBeNull();
+      expect(screen.queryByText(/Showing first/)).toBeNull();
     });
   });
 
