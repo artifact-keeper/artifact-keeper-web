@@ -2,7 +2,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, within } from "@testing-library/react";
+import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ import userEvent from "@testing-library/user-event";
 // the DockerTagList stub was last rendered with.
 const h = vi.hoisted(() => ({
   isAdmin: true,
+  backendVersion: "1.12.0" as string | undefined,
   searchParams: new URLSearchParams(),
   artifactsQueryKeys: [] as unknown[][],
   // The artifacts `queryFn`, recorded but not executed by the useQuery mock.
@@ -139,15 +140,31 @@ vi.mock("@tanstack/react-query", () => ({
         isFetching: false,
       };
     }
+    if (key === "health") {
+      return { data: { version: h.backendVersion }, isLoading: false, isFetching: false };
+    }
     if (key === "artifact-stats") {
       return { data: h.artifactStats ?? undefined, isLoading: false, isFetching: false };
     }
     return { data: undefined, isLoading: false, isFetching: false };
   },
   // Invoke the real mutationFn when a test triggers `mutate`, so behavior
-  // assertions can observe what the mutation would send to the API layer.
-  useMutation: (opts: { mutationFn?: (arg: never) => unknown }) => ({
-    mutate: vi.fn((arg: never) => opts.mutationFn?.(arg)),
+  // assertions can observe what the mutation would send to the API layer,
+  // then its callbacks the way TanStack Query would.
+  useMutation: (opts: {
+    mutationFn?: (arg: never) => unknown;
+    onSuccess?: () => void;
+    onError?: (err: unknown) => void;
+    onSettled?: () => void;
+  }) => ({
+    mutate: vi.fn((arg: never) =>
+      Promise.resolve(opts.mutationFn?.(arg))
+        .then(
+          () => opts.onSuccess?.(),
+          (err: unknown) => opts.onError?.(err),
+        )
+        .finally(() => opts.onSettled?.()),
+    ),
     isPending: false,
   }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -201,6 +218,7 @@ vi.mock("@/lib/api/artifacts", () => ({
     getAbsoluteDownloadUrl: () => "http://localhost/download",
     getDownloadUrl: () => "/download",
     createDownloadTicket: vi.fn(),
+    deletePermanently: vi.fn().mockResolvedValue(undefined),
   },
 }));
 vi.mock("@/lib/api/security", () => ({
@@ -363,6 +381,7 @@ vi.mock("@/components/common/quarantine-banner", () => ({
 import { RepoDetailContent } from "./repo-detail-content";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { securityApi } from "@/lib/api/security";
+import { toast } from "sonner";
 
 describe("RepoDetailContent tab strip", () => {
   beforeEach(() => {
@@ -743,11 +762,16 @@ describe("RepoDetailContent artifact detail dialog — Delete permanently", () =
     cleanup();
     repository.format = "generic";
     h.isAdmin = true;
+    h.backendVersion = "1.12.0";
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(artifactsApi.deletePermanently).mockClear();
   });
   afterEach(() => {
     cleanup();
     repository.format = "generic";
     h.isAdmin = true;
+    h.backendVersion = "1.12.0";
   });
 
   async function openDetailDialog() {
@@ -782,6 +806,50 @@ describe("RepoDetailContent artifact detail dialog — Delete permanently", () =
     expect(
       within(dialog).queryByRole("button", { name: /delete permanently/i }),
     ).toBeNull();
+  });
+
+  it.each([
+    ["1.12.0", true],
+    ["1.11.14", false],
+    [undefined, false],
+  ])("on backend %s offers it: %s", async (version, offered) => {
+    h.backendVersion = version;
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).queryByRole("button", { name: /delete permanently/i }) !== null,
+    ).toBe(offered);
+  });
+
+  async function confirmPermanentDelete() {
+    const dialog = await openDetailDialog();
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /delete permanently/i }),
+    );
+    const confirm = await screen.findByRole("alertdialog");
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: /delete permanently/i }),
+    );
+  }
+
+  it("deletes the artifact permanently on confirm and closes the dialog", async () => {
+    await confirmPermanentDelete();
+    expect(artifactsApi.deletePermanently).toHaveBeenCalledWith(
+      "demo",
+      "team/config.yaml",
+    );
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Artifact permanently deleted"),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("toasts the error when the backend refuses the permanent delete", async () => {
+    vi.mocked(artifactsApi.deletePermanently).mockRejectedValueOnce(
+      new Error("refused"),
+    );
+    await confirmPermanentDelete();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
 
