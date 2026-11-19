@@ -203,3 +203,43 @@ describe("RepoListItem - visibility marker", () => {
     expect(screen.queryByLabelText(INTERNAL_LABEL)).not.toBeInTheDocument();
   });
 });
+
+describe("RepoListItem - Cache-only badge (#1094)", () => {
+  const CACHE_ONLY = {
+    repository_key: "npm-proxy",
+    upstream_mode: "cache_only" as const,
+    effective_upstream_mode: "cache_only" as const,
+  };
+
+  it("badges a Remote whose effective mode is cache-only, inside the row's name", () => {
+    render(
+      <RepoListItem repo={repo} isSelected={false} onSelect={vi.fn()} upstreamMode={CACHE_ONLY} />,
+    );
+    const rowAction = screen.getByRole("button", { name: /npm-proxy/i });
+    expect(within(rowAction).getByText("Cache-only")).toBeInTheDocument();
+    // Not a focus stop nested inside the row's button (#672).
+    expect(within(rowAction).getByText("Cache-only").closest("[tabindex]")).toBeNull();
+  });
+
+  it("shows nothing for an online Remote or an unknown mode", () => {
+    const online = { ...CACHE_ONLY, upstream_mode: "online" as const, effective_upstream_mode: "online" as const };
+    const { rerender } = render(
+      <RepoListItem repo={repo} isSelected={false} onSelect={vi.fn()} upstreamMode={online} />,
+    );
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
+    rerender(<RepoListItem repo={repo} isSelected={false} onSelect={vi.fn()} upstreamMode={null} />);
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
+  });
+
+  it("never badges a non-Remote", () => {
+    render(
+      <RepoListItem
+        repo={{ ...repo, repo_type: "local" }}
+        isSelected={false}
+        onSelect={vi.fn()}
+        upstreamMode={CACHE_ONLY}
+      />,
+    );
+    expect(screen.queryByText("Cache-only")).not.toBeInTheDocument();
+  });
+});

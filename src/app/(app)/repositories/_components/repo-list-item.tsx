@@ -5,6 +5,8 @@ import type { Repository, RepositoryVisibility } from "@/types";
 import { resolveVisibility } from "./visibility-select";
 import { REPO_TYPE_COLORS, cn } from "@/lib/utils";
 import { repoSizeLabel } from "@/lib/repo-size";
+import type { UpstreamModeInfo } from "@/lib/upstream-mode";
+import { CacheOnlyBadge } from "./upstream-mode-badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -55,9 +57,15 @@ interface RepoListItemProps {
    * name so the row does not show a bare "GENERIC"; defaults to `repo.format`.
    */
   formatLabel?: string;
+  /**
+   * Upstream mode of a Remote (#1094), read by the parent. A "Cache-only"
+   * badge shows when the effective mode is `cache_only`; omitted or `null`
+   * (unknown, older backend) shows nothing.
+   */
+  upstreamMode?: UpstreamModeInfo | null;
 }
 
-export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel }: RepoListItemProps) {
+export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, artifactMatchCount, formatLabel, upstreamMode }: RepoListItemProps) {
   // #672: the row's primary action is a real <button> that is a SIBLING of the
   // actions dropdown trigger — never an ancestor — so no interactive element
   // nests inside another and the row's accessible name stays clean (it no
@@ -80,6 +88,13 @@ export function RepoListItem({ repo, isSelected, onSelect, onEdit, onDelete, art
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-medium truncate">{repo.key}</span>
               <VisibilityIcon visibility={resolveVisibility(repo)} />
+              {repo.repo_type === "remote" && (
+                <CacheOnlyBadge
+                  upstreamMode={upstreamMode}
+                  focusable={false}
+                  className="text-[10px] px-1.5 py-0 leading-4"
+                />
+              )}
             </div>
             <p className="text-xs text-muted-foreground truncate" aria-hidden={repo.name === repo.key}>
               {repo.name}
