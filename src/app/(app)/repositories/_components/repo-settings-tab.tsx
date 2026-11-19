@@ -1864,10 +1864,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
                 )}
 
                 {/* No config row yet: the backend locks the policy on an
-                    instance administrator's first save (#1213). */}
+                    instance administrator's first save (#1213). A version
+                    that does not parse (a "dev" build of backend main) has
+                    the lock, so the note shows there too (#1231). */}
                 {isRepoAdmin &&
                   scanForm.unconfigured &&
-                  backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN) && (
+                  (isComparableVersion(health?.version)
+                    ? backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN)
+                    : !healthPending && !!health?.version) && (
                     <p className="text-xs text-muted-foreground">
                       This repository has no scanning settings yet. Saving
                       them for the first time locks the proxy scan policy;

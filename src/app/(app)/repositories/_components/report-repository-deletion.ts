@@ -71,6 +71,13 @@ export async function reportRepositoryDeletion(
   job: RepositoryDeleteJob | null,
   { onCompleted, onRetry, wait, signal }: ReportRepositoryDeletionOptions = {},
 ): Promise<void> {
+  // Signed out before the DELETE returned: show no outcome, so a Retry for an
+  // already-failed job cannot reach the next user (#1231). Leaving the page
+  // still reports an immediate outcome, as it is the only place it shows.
+  if (signal?.aborted && signal.reason === DELETION_REPORT_LOGOUT) {
+    if (job) toast.dismiss(`repository-delete-${job.id}`);
+    return;
+  }
   if (!job || job.status === "completed") {
     toast.success("Repository deleted");
     return;

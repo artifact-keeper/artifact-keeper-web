@@ -16,7 +16,12 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 
-vi.mock("@/hooks/use-document-title", () => ({ useDocumentTitle: () => {} }));
+const docTitle = vi.hoisted(() => ({ value: "" }));
+vi.mock("@/hooks/use-document-title", () => ({
+  useDocumentTitle: (t: string) => {
+    docTitle.value = t;
+  },
+}));
 vi.mock("@/components/package/file-tree", () => ({
   FileTree: () => <div />,
   PackageFileTree: () => <div />,
@@ -115,5 +120,25 @@ describe("PackageDetailPage MCP branch", () => {
     const { getByText, container } = render(<PackageDetailPage />);
     expect(getByText("Utility [U+202E]gnp.exe [U+200B]note")).toHaveAttribute("data-sanitized", "true");
     expect(container.textContent).not.toMatch(/[\u202e\u200b]/);
+  });
+  it("shows hidden characters in the package name's breadcrumb, heading and title visibly (#1231)", () => {
+    detailData = {
+      id: "pkg-1",
+      repository_key: "npm-local",
+      name: "lo\u202edash\u200b",
+      version: "4.17.21",
+      format: "npm",
+      size_bytes: 0,
+      download_count: 0,
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-01T00:00:00Z",
+    };
+    const { getAllByText, getByRole } = render(<PackageDetailPage />);
+    const shown = "lo[U+202E]dash[U+200B]";
+    expect(getByRole("heading", { level: 1 })).toHaveTextContent(shown);
+    for (const el of getAllByText(shown)) expect(el).toHaveAttribute("data-sanitized", "true");
+    expect(getAllByText(shown).length).toBeGreaterThanOrEqual(2);
+    expect(docTitle.value).toBe(shown);
+    expect(getByRole("navigation", { name: /breadcrumb/i }).textContent).not.toMatch(/[\u202e\u200b]/);
   });
 });

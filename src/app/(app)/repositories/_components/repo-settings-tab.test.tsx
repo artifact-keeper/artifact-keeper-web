@@ -2859,6 +2859,13 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
         await waitFor(() => expect(screen.getByText(note)).toBeTruthy());
       });
 
+      it("says the first save locks the policy on a dev build (#1231)", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "dev" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByText(note)).toBeTruthy());
+      });
+
       it("says nothing on a backend without the lock", async () => {
         mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.11.3" });
         mockGetScanConfig.mockResolvedValue(unconfigured);
