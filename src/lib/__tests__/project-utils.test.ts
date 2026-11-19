@@ -23,6 +23,6 @@ describe("project quota helpers", () => {
 
   it("formats an unset quota as Unlimited", () => {
     expect(formatQuota(undefined)).toBe("Unlimited");
-    expect(formatQuota(1024 ** 3)).toContain("GB");
+    expect(formatQuota(1024 ** 3)).toContain("GiB");
   });
 });
