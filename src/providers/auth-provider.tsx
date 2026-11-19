@@ -10,7 +10,12 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { localSessionExpired, refreshSession } from '@/lib/sdk-client';
+import {
+  localSessionState,
+  notifyRemoteKeyRejected,
+  refreshSession,
+  REMOTE_KEY_REJECTED_EVENT,
+} from '@/lib/sdk-client';
 import { dismissSessionToasts } from '@/lib/session-toasts';
 import {
   login as sdkLogin,
@@ -57,6 +62,12 @@ interface AuthContextType {
    */
   beginTotpChallenge: (totpToken: string) => void;
   clearTotpRequired: () => void;
+  /**
+   * The active remote instance refused its stored API key while the local
+   * session is valid (#1227). Requests to it return 401 until the key is
+   * fixed or the user switches back to Local.
+   */
+  remoteKeyRejected: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -83,6 +94,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [setupPasswordHint, setSetupPasswordHint] = useState<string | null>(null);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpToken, setTotpToken] = useState<string | null>(null);
+  const [remoteKeyRejected, setRemoteKeyRejected] = useState(false);
+
+  useEffect(() => {
+    const onRejected = () => setRemoteKeyRejected(true);
+    window.addEventListener(REMOTE_KEY_REJECTED_EVENT, onRejected);
+    return () => window.removeEventListener(REMOTE_KEY_REJECTED_EVENT, onRejected);
+  }, []);
 
   const isAuthenticated = !!user;
   // Session-bound toasts, such as a failed repository deletion's Retry, go
@@ -304,16 +322,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const onCallback =
           typeof window !== "undefined" &&
           window.location.pathname.startsWith("/callback");
-        if (
-          error &&
-          first.response?.status === 401 &&
-          !onCallback &&
+        if (error && first.response?.status === 401 && !onCallback) {
           // With a remote instance active the 401 may be the remote's (#1204).
-          (await localSessionExpired()) &&
-          (await refreshSession())
-        ) {
-          refreshed = true;
-          ({ data, error } = await sdkGetCurrentUser());
+          const local = await localSessionState();
+          if (local === 'valid') {
+            // The local session is fine, so the remote refused its API key:
+            // say so instead of just looking signed out (#1227).
+            notifyRemoteKeyRejected();
+          } else if (local === 'expired' && (await refreshSession())) {
+            refreshed = true;
+            ({ data, error } = await sdkGetCurrentUser());
+          }
         }
         if (!error && data) {
           const userData = data as unknown as User;
@@ -389,6 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyTotp,
         beginTotpChallenge,
         clearTotpRequired,
+        remoteKeyRejected,
       }}
     >
       {children}
