@@ -36,7 +36,7 @@ vi.mock("@/lib/api/groups", () => ({
   groupsApi: mockGroupsApi,
 }));
 
-const mockAdminApi = { listUsers: vi.fn() };
+const mockAdminApi = { listUsersPage: vi.fn() };
 vi.mock("@/lib/api/admin", () => ({
   adminApi: mockAdminApi,
 }));
@@ -401,7 +401,7 @@ beforeEach(async () => {
     items: [PERM_1],
     pagination: { page: 1, per_page: 1000, total: 1, total_pages: 1 },
   });
-  mockAdminApi.listUsers.mockResolvedValue(MOCK_USERS);
+  mockAdminApi.listUsersPage.mockResolvedValue({ items: MOCK_USERS, total: MOCK_USERS.length });
   mockGroupsApi.list.mockResolvedValue({
     items: MOCK_GROUPS,
     pagination: { page: 1, per_page: 1000, total: 2, total_pages: 1 },
@@ -744,7 +744,7 @@ describe("PermissionsPage", () => {
     // page now asks the server for people only (`is_service_account=false`,
     // backend 1.9.0).
     //
-    // The listUsers mock honours that parameter the way the backend does:
+    // The listUsersPage mock honours that parameter the way the backend does:
     // unfiltered, it returns the service account too, which is the shape the
     // real API returns.
     describe("service accounts are not offered as user principals (#823)", () => {
@@ -757,11 +757,14 @@ describe("PermissionsPage", () => {
       };
 
       beforeEach(() => {
-        mockAdminApi.listUsers.mockImplementation(
-          async (params: { isServiceAccount?: boolean } = {}) =>
-            params.isServiceAccount === false
-              ? MOCK_USERS
-              : [...MOCK_USERS, SERVICE_ACCOUNT_AS_USER_ROW],
+        mockAdminApi.listUsersPage.mockImplementation(
+          async (params: { isServiceAccount?: boolean } = {}) => {
+            const items =
+              params.isServiceAccount === false
+                ? MOCK_USERS
+                : [...MOCK_USERS, SERVICE_ACCOUNT_AS_USER_ROW];
+            return { items, total: items.length };
+          },
         );
       });
 
@@ -771,7 +774,7 @@ describe("PermissionsPage", () => {
         await waitForTableLoaded();
         await openCreateDialog(user);
 
-        expect(mockAdminApi.listUsers).toHaveBeenCalledWith({
+        expect(mockAdminApi.listUsersPage).toHaveBeenCalledWith({
           isServiceAccount: false,
           perPage: 100,
         });
@@ -836,6 +839,113 @@ describe("PermissionsPage", () => {
       expect(screen.getByRole("button", { name: "QA Team" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Alice" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Release Bot" })).toBeNull();
+    });
+  });
+
+  // -- #892: the User picker searches the server as you type ----------------
+
+  describe("search-driven user picker (#892)", () => {
+    const person = (n: number) => ({
+      id: `u-${n}`,
+      username: `person${n}`,
+      email: `person${n}@test.com`,
+      display_name: `Person ${n}`,
+      is_admin: false,
+    });
+
+    it("sends the typed text to the server as the search term", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search === "zed" ? [person(500)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "zed");
+
+      await waitFor(() =>
+        expect(mockAdminApi.listUsersPage).toHaveBeenCalledWith({
+          isServiceAccount: false,
+          perPage: 100,
+          search: "zed",
+        }),
+      );
+      // A person who was never in the first page can now be picked.
+      expect(await screen.findByRole("button", { name: "Person 500" })).toBeTruthy();
+    });
+
+    it("does not filter server results again by the label (the server also matches username and email)", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search === "person9@" ? [person(9)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "person9@");
+
+      expect(await screen.findByRole("button", { name: "Person 9" })).toBeTruthy();
+    });
+
+    it("keeps the chosen user's name on the button after the search changes", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockImplementation(async (p: { search?: string }) => {
+        const items = p.search ? [person(7)] : MOCK_USERS;
+        return { items, total: items.length };
+      });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      const picker = screen.getByRole("combobox", { name: "Principal" });
+      await user.click(picker);
+      await user.type(screen.getByRole("textbox", { name: "Search principals" }), "seven");
+      await user.click(await screen.findByRole("button", { name: "Person 7" }));
+
+      // The picker closes and its search resets, so the unfiltered list no
+      // longer contains this person; the button must still name them.
+      await waitFor(() => expect(picker.textContent).toContain("Person 7"));
+    });
+
+    const firstHundred = Array.from({ length: 100 }, (_, i) => person(i));
+
+    it("tells the admin when more users match than one page shows", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockResolvedValue({ items: firstHundred, total: 250 });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(await screen.findByText(/Showing first 100 of 250/)).toBeTruthy();
+    });
+
+    it("does not show the cap notice when exactly one page matches", async () => {
+      const user = userEvent.setup();
+      mockAdminApi.listUsersPage.mockResolvedValue({ items: firstHundred, total: 100 });
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(await screen.findByRole("button", { name: "Person 99" })).toBeTruthy();
+      expect(screen.queryByText(/Showing first/)).toBeNull();
+    });
+
+    it("does not show the cap notice for a short list", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await waitForTableLoaded();
+      await openCreateDialog(user);
+
+      await user.click(screen.getByRole("combobox", { name: "Principal" }));
+      expect(screen.queryByText(/Showing first/)).toBeNull();
     });
   });
 
