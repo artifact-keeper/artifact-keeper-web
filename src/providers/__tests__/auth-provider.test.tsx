@@ -13,10 +13,13 @@ const mockDismissSessionToasts = vi.fn();
 vi.mock("@/lib/session-toasts", () => ({ dismissSessionToasts: () => mockDismissSessionToasts() }));
 
 const mockRefreshSession = vi.fn();
-const mockLocalSessionExpired = vi.fn();
+// Resolves to the local session state: "expired" | "valid" | "unknown".
+const mockLocalSessionState = vi.fn();
 vi.mock("@/lib/sdk-client", () => ({
   refreshSession: () => mockRefreshSession(),
-  localSessionExpired: () => mockLocalSessionExpired(),
+  localSessionState: () => mockLocalSessionState(),
+  REMOTE_KEY_REJECTED_EVENT: "ak:remote-key-rejected",
+  notifyRemoteKeyRejected: () => window.dispatchEvent(new Event("ak:remote-key-rejected")),
 }));
 
 const mockSdkLogin = vi.fn();
@@ -75,6 +78,7 @@ function TestConsumer() {
       <span data-testid="loading">{String(auth.isLoading)}</span>
       <span data-testid="must-change">{String(auth.mustChangePassword)}</span>
       <span data-testid="expires-at">{auth.passwordExpiresAt ?? "null"}</span>
+      <span data-testid="remote-key-rejected">{String(auth.remoteKeyRejected)}</span>
     </div>
   );
 }
@@ -103,8 +107,8 @@ describe("AuthProvider", () => {
     mockSdkSetupStatus.mockReset();
     mockRefreshSession.mockReset();
     mockRefreshSession.mockResolvedValue(false);
-    mockLocalSessionExpired.mockReset();
-    mockLocalSessionExpired.mockResolvedValue(true);
+    mockLocalSessionState.mockReset();
+    mockLocalSessionState.mockResolvedValue("expired");
     capturedAuthRef.current = null;
 
     // Default: setup not required, not authenticated
@@ -244,15 +248,48 @@ describe("AuthProvider", () => {
     it("does not refresh the local session when the 401 came from a remote instance (#1204)", async () => {
       mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
       mockRefreshSession.mockResolvedValue(true);
-      mockLocalSessionExpired.mockResolvedValue(false);
+      mockLocalSessionState.mockResolvedValue("valid");
 
       mount();
       await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
 
-      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockLocalSessionState).toHaveBeenCalledTimes(1);
       expect(mockRefreshSession).not.toHaveBeenCalled();
       expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(1);
       expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("reports a rejected remote key when the local session is valid (#1227)", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockLocalSessionState.mockResolvedValue("valid");
+
+      mount();
+      await waitFor(() =>
+        expect(screen.getByTestId("remote-key-rejected").textContent).toBe("true")
+      );
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+    });
+
+    it("neither refreshes nor blames the remote key when the local check is inconclusive (#1227)", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockLocalSessionState.mockResolvedValue("unknown");
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(screen.getByTestId("remote-key-rejected").textContent).toBe("false");
+    });
+
+    it("reports a rejected remote key when another request signals it (#1227)", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({ data: USER, error: undefined });
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+      expect(screen.getByTestId("remote-key-rejected").textContent).toBe("false");
+      act(() => {
+        window.dispatchEvent(new Event("ak:remote-key-rejected"));
+      });
+      expect(screen.getByTestId("remote-key-rejected").textContent).toBe("true");
     });
 
     it("still refreshes when the local session behind a remote instance expired (#1204)", async () => {
@@ -260,12 +297,12 @@ describe("AuthProvider", () => {
         .mockResolvedValueOnce(unauthorized)
         .mockResolvedValueOnce({ data: USER, error: undefined });
       mockRefreshSession.mockResolvedValue(true);
-      mockLocalSessionExpired.mockResolvedValue(true);
+      mockLocalSessionState.mockResolvedValue("expired");
 
       mount();
       await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
 
-      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockLocalSessionState).toHaveBeenCalledTimes(1);
       expect(mockRefreshSession).toHaveBeenCalledTimes(1);
     });
 
@@ -280,7 +317,7 @@ describe("AuthProvider", () => {
       await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
 
       expect(mockRefreshSession).not.toHaveBeenCalled();
-      expect(mockLocalSessionExpired).not.toHaveBeenCalled();
+      expect(mockLocalSessionState).not.toHaveBeenCalled();
       expect(screen.getByTestId("authenticated").textContent).toBe("false");
     });
 
