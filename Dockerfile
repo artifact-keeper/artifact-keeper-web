@@ -1,5 +1,5 @@
 # ---------- Base: Node.js 24 on UBI 9 ----------
-FROM registry.access.redhat.com/ubi9/ubi:9.8 AS node-base
+FROM registry.access.redhat.com/ubi9/ubi:9.9 AS node-base
 RUN dnf module enable nodejs:24 -y && \
     dnf install -y --nodocs nodejs npm && \
     dnf clean all
@@ -44,7 +44,7 @@ ENV AK_ENFORCE_HTTPS=${AK_ENFORCE_HTTPS}
 RUN echo "Building version: ${APP_VERSION} (${GIT_SHA})" && npm run build
 
 # ---------- Stage 3: Build minimal rootfs ----------
-FROM registry.access.redhat.com/ubi9/ubi:9.8 AS rootfs-builder
+FROM registry.access.redhat.com/ubi9/ubi:9.9 AS rootfs-builder
 
 # Install only the shared libraries Node.js needs at runtime
 RUN mkdir -p /mnt/rootfs && \
