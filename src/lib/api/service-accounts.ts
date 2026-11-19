@@ -1,4 +1,4 @@
-import { apiFetch } from './fetch';
+import { apiFetch, narrowEnum } from './fetch';
 import { readTokenExpiryInfo, type TokenExpiryInfo } from './token-policy';
 
 export interface ServiceAccount {
@@ -41,6 +41,17 @@ export interface ServiceAccountToken {
   is_expired: boolean;
   repo_selector?: RepoSelector;
   repository_ids: string[];
+  /**
+   * How many virtual-repository members this token cannot reach
+   * (artifact-keeper#4215). Absent on backends before 1.12.
+   */
+  unreachable_member_count?: number;
+  /**
+   * Why this token's repository restriction denies all repositories
+   * (artifact-keeper#4215). Reported separately from `unreachable_member_count`
+   * because a zero count with a `scope_error` is deny-all, not the all-clear.
+   */
+  scope_error?: TokenScopeError;
 }
 
 export interface RepoSelector {
@@ -48,6 +59,77 @@ export interface RepoSelector {
   match_formats?: string[];
   match_pattern?: string;
   match_repos?: string[];
+}
+
+/**
+ * Why one member of a virtual repository is out of reach for a token
+ * (backend artifact-keeper#4215). A closed set, so the UI groups on it rather
+ * than parsing the message. `unknown` stands in for a value this web build
+ * does not model yet, so the badge degrades instead of breaking the table.
+ */
+export type UnreachableReason = 'out_of_token_scope' | 'no_grant' | 'unknown';
+
+/**
+ * Why a token's stored repository restriction denies all repositories
+ * (backend artifact-keeper#4215). `unknown` as for `UnreachableReason`: no
+ * known value is a safe stand-in, because each one names a different fix.
+ */
+export type TokenScopeError =
+  | 'invalid_selector'
+  | 'selector_matches_nothing'
+  | 'deleted_pinned_repositories'
+  | 'unknown';
+
+const UNREACHABLE_REASONS: ReadonlySet<UnreachableReason> = new Set([
+  'out_of_token_scope',
+  'no_grant',
+]);
+
+const TOKEN_SCOPE_ERRORS: ReadonlySet<TokenScopeError> = new Set([
+  'invalid_selector',
+  'selector_matches_nothing',
+  'deleted_pinned_repositories',
+]);
+
+function narrowScopeError(value: unknown): TokenScopeError | undefined {
+  if (value === undefined || value === null) return undefined;
+  return narrowEnum(
+    String(value),
+    TOKEN_SCOPE_ERRORS,
+    'unknown',
+    `serviceAccountsApi: unknown scope_error "${String(value)}"`,
+  );
+}
+
+function narrowUnreachable(unreachable: UnreachableVirtual[] | undefined) {
+  return unreachable?.map((v) => ({
+    ...v,
+    members: v.members.map((m) => ({
+      ...m,
+      reason: narrowEnum(
+        String(m.reason),
+        UNREACHABLE_REASONS,
+        'unknown',
+        `serviceAccountsApi: unknown unreachable reason "${String(m.reason)}"`,
+      ),
+    })),
+  }));
+}
+
+export interface UnreachableMember {
+  repo_key: string;
+  reason: UnreachableReason;
+}
+
+export interface UnreachableVirtual {
+  virtual_repo_key: string;
+  members: UnreachableMember[];
+}
+
+export interface TokenScopeAnalysis {
+  unreachable: UnreachableVirtual[];
+  unreachable_member_count: number;
+  scope_error?: TokenScopeError;
 }
 
 export interface MatchedRepository {
@@ -59,6 +141,12 @@ export interface MatchedRepository {
 export interface PreviewRepoSelectorResponse {
   matched_repositories: MatchedRepository[];
   total: number;
+  /**
+   * Members of a matched virtual repository this scope would not reach
+   * (backend artifact-keeper#4215). Absent on backends before 1.12, and only
+   * populated when the preview is asked on behalf of a service account.
+   */
+  unreachable?: UnreachableVirtual[];
 }
 
 export interface CreateTokenRequest {
@@ -123,7 +211,9 @@ export const serviceAccountsApi = {
     const data = await apiFetch<{ items: ServiceAccountToken[] }>(
       `/api/v1/service-accounts/${id}/tokens`
     );
-    return data.items;
+    return data.items.map((t) =>
+      t.scope_error === undefined ? t : { ...t, scope_error: narrowScopeError(t.scope_error) }
+    );
   },
 
   createToken: async (
@@ -146,16 +236,47 @@ export const serviceAccountsApi = {
     });
   },
 
+  /**
+   * `serviceAccountId` is optional and only sharpens the answer: with it the
+   * backend can also report members the account has no grant on, which it
+   * cannot know otherwise (artifact-keeper#4215).
+   */
   previewRepoSelector: async (
-    selector: RepoSelector
+    selector: RepoSelector,
+    serviceAccountId?: string
   ): Promise<PreviewRepoSelectorResponse> => {
-    return apiFetch<PreviewRepoSelectorResponse>(
+    const data = await apiFetch<PreviewRepoSelectorResponse>(
       '/api/v1/service-accounts/repo-selector/preview',
       {
         method: 'POST',
-        body: JSON.stringify({ repo_selector: selector }),
+        body: JSON.stringify({
+          repo_selector: selector,
+          ...(serviceAccountId ? { service_account_id: serviceAccountId } : {}),
+        }),
       }
     );
+    return data.unreachable === undefined
+      ? data
+      : { ...data, unreachable: narrowUnreachable(data.unreachable) };
+  },
+
+  /**
+   * Which members this token cannot read, and why (artifact-keeper#4215).
+   * Goes through `apiFetch` because the endpoint is not in the generated SDK
+   * yet.
+   */
+  getTokenScopeAnalysis: async (
+    accountId: string,
+    tokenId: string
+  ): Promise<TokenScopeAnalysis> => {
+    const data = await apiFetch<TokenScopeAnalysis>(
+      `/api/v1/service-accounts/${encodeURIComponent(accountId)}/tokens/${encodeURIComponent(tokenId)}/scope-analysis`
+    );
+    return {
+      ...data,
+      unreachable: narrowUnreachable(data.unreachable) ?? [],
+      scope_error: narrowScopeError(data.scope_error),
+    };
   },
 };
 

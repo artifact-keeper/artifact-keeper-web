@@ -101,6 +101,14 @@ describe("PackagesPage virtual-repo context", () => {
     });
   });
 
+  it("passes the selected row's repository key to the versions lookup", () => {
+    render(<PackagesPage />);
+
+    expect(mockGetVersions).toHaveBeenCalledWith("pkg-1", {
+      repository_key: "npm-virtual",
+    });
+  });
+
   it("shows hidden and bidi characters in a package description visibly (#1202)", () => {
     listed = { ...PACKAGE, description: "Utility \u202egnp.exe \u200bnote" };
     const { container } = render(<PackagesPage />);

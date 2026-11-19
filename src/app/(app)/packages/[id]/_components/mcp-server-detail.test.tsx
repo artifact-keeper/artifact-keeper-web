@@ -198,6 +198,13 @@ describe("McpServerDetail", () => {
     expect(nav.replace).toHaveBeenCalledWith("/packages/pkg-1?tab=versions&version=2.0.0", { scroll: false });
   });
 
+  it("passes the repository_key search param to the versions lookup", async () => {
+    setUrl("repository_key=mcp-virtual");
+    renderDetail();
+    await screen.findByText("weather");
+    expect(pkgApi.getVersions).toHaveBeenCalledWith("pkg-1", { repository_key: "mcp-virtual" });
+  });
+
   it("explains a held version and still shows stored metadata", async () => {
     setUrl("version=2.0.0&tab=versions");
     api.getVersion.mockResolvedValue({ kind: "held", problem: { status: 404, hold: "quarantine", error: "mcp_pending_review" } });
