@@ -73,6 +73,7 @@ const EXPECTED_POLICY: LifecyclePolicy = {
   policy_type: "max_age_days",
   config: { days: 30 },
   priority: 100,
+  cron_schedule: null,
   last_run_at: "2026-05-01T00:00:00Z",
   last_run_items_removed: 12,
   created_at: "2026-04-01T00:00:00Z",
@@ -228,6 +229,27 @@ describe("lifecycleApi", () => {
     expect(
       await mod.lifecycleApi.update("p1", { name: "updated" })
     ).toEqual(EXPECTED_POLICY);
+  });
+
+  it("reads, creates and updates cron_schedule", async () => {
+    mockGet.mockResolvedValue({ data: { ...SDK_POLICY, cron_schedule: "0 3 * * *" }, error: undefined });
+    mockCreate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
+    mockUpdate.mockResolvedValue({ data: SDK_POLICY, error: undefined });
+    const mod = await import("../lifecycle");
+    expect((await mod.lifecycleApi.get("p1")).cron_schedule).toBe("0 3 * * *");
+    await mod.lifecycleApi.create({
+      name: "cleanup", policy_type: "max_age_days", config: {},
+      applies_to_all: false, repository_ids: [], cron_schedule: "0 3 * * *",
+    });
+    expect(mockCreate.mock.calls[0][0].body.cron_schedule).toBe("0 3 * * *");
+    mockCapabilities.mockClear(); // create always checks assignment support
+    await mod.lifecycleApi.update("p1", { cron_schedule: "0 4 * * *" });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      path: { id: "p1" },
+      body: expect.objectContaining({ cron_schedule: "0 4 * * *" }),
+    });
+    // A schedule-only update does not touch scope or need assignment support.
+    expect(mockCapabilities).not.toHaveBeenCalled();
   });
 
   it("update throws on error", async () => {

@@ -9,6 +9,7 @@ import {
   Play,
   Eye,
   Trash2,
+  Pencil,
   RefreshCw,
   CheckCircle2,
   XCircle,
@@ -27,6 +28,7 @@ import { formatBytes } from "@/lib/utils";
 import type {
   LifecyclePolicy,
   CreateLifecyclePolicyRequest,
+  UpdateLifecyclePolicyRequest,
   PolicyExclusions,
   PolicyExecutionResult,
 } from "@/types/lifecycle";
@@ -78,6 +80,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { ExclusionsEditor } from "./_components/exclusions-editor";
 import { PreviewResultAlert } from "./_components/preview-result-alert";
+import { buildPolicyUpdate, splitPolicyConfig } from "./_components/policy-edit";
 import { LifecycleCapabilityNotice } from "@/components/common/lifecycle-capability-notice";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -103,6 +106,9 @@ export default function LifecyclePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  // The policy being edited; the create dialog doubles as the edit dialog.
+  const [editTarget, setEditTarget] = useState<LifecyclePolicy | null>(null);
+  const isEdit = editTarget !== null;
   const [previewResult, setPreviewResult] =
     useState<PolicyExecutionResult | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LifecyclePolicy | null>(
@@ -124,6 +130,7 @@ export default function LifecyclePage() {
     null
   );
   const [formAppliesToAll, setFormAppliesToAll] = useState(false);
+  const [formCron, setFormCron] = useState("");
   const capabilities = useLifecycleCapabilities(!!user?.is_admin);
   const canAssign = capabilities.data === true && !capabilities.isError;
 
@@ -146,6 +153,22 @@ export default function LifecyclePage() {
       mutationErrorToast("Failed to create policy")(err);
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, req }: { id: string; req: UpdateLifecyclePolicyRequest }) =>
+      lifecycleApi.update(id, req),
+    onSuccess: () => {
+      toast.success("Policy updated");
+      queryClient.invalidateQueries({ queryKey: ["lifecycle-policies"] });
+      setEditTarget(null);
+      resetForm();
+    },
+    onError: (err) => {
+      setConfigError(parseLifecycleConfigError(err));
+      mutationErrorToast("Failed to update policy")(err);
+    },
+  });
+  const savePending = createMutation.isPending || updateMutation.isPending;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => lifecycleApi.delete(id),
@@ -207,11 +230,61 @@ export default function LifecyclePage() {
     setFormExclusions({ versions: [], version_patterns: [] });
     setConfigError(null);
     setFormAppliesToAll(false);
+    setFormCron("");
   }
 
-  function handleCreateOpenChange(open: boolean) {
-    setCreateOpen(open);
-    if (!open) resetForm();
+  function handleDialogOpenChange(open: boolean) {
+    if (open) return;
+    setCreateOpen(false);
+    setEditTarget(null);
+    resetForm();
+  }
+
+  function openEdit(policy: LifecyclePolicy) {
+    const { config, exclusions } = splitPolicyConfig(policy.config);
+    setFormName(policy.name);
+    setFormDescription(policy.description ?? "");
+    setFormType(policy.policy_type);
+    setFormConfig(JSON.stringify(config, null, 2));
+    setFormExclusions(exclusions);
+    setConfigError(null);
+    setFormAppliesToAll(policy.applies_to_all);
+    setFormCron(policy.cron_schedule ?? "");
+    setEditTarget(policy);
+  }
+
+  function handleSubmit() {
+    if (editTarget) handleUpdate(editTarget);
+    else handleCreate();
+  }
+
+  function handleUpdate(policy: LifecyclePolicy) {
+    let config: Record<string, unknown>;
+    try {
+      config = JSON.parse(formConfig);
+    } catch {
+      toast.error("Invalid JSON in config field");
+      return;
+    }
+    if (policy.cron_schedule && !formCron.trim()) {
+      // The backend reads a missing or null schedule as "keep", so an
+      // emptied field would look saved while the old schedule kept running.
+      toast.error("A cron schedule cannot be cleared once set. Enter a schedule or keep the current one.");
+      return;
+    }
+    if (configError) setConfigError(null);
+    const req = buildPolicyUpdate(policy, {
+      name: formName,
+      description: formDescription,
+      config: withExclusions(config, formExclusions),
+      cronSchedule: formCron,
+      appliesToAll: formAppliesToAll,
+    });
+    if (Object.keys(req).length === 0) {
+      handleDialogOpenChange(false);
+      return;
+    }
+    updateMutation.mutate({ id: policy.id, req });
   }
 
   function handleCreate() {
@@ -236,8 +309,33 @@ export default function LifecyclePage() {
       config: withExclusions(config, formExclusions),
       applies_to_all: formAppliesToAll,
       repository_ids: [],
+      ...(formCron.trim() ? { cron_schedule: formCron.trim() } : {}),
     });
   }
+
+  function scopeHelp(): string {
+    if (editTarget && formAppliesToAll !== editTarget.applies_to_all) {
+      if (formAppliesToAll) {
+        const count = editTarget.repository_ids.length;
+        return count > 0
+          ? `Saving makes this policy global and removes its ${count} explicit repository ${count === 1 ? "assignment" : "assignments"}.`
+          : "Saving makes this policy global: it applies to every repository, including repositories created later.";
+      }
+      return "Saving makes this policy unassigned: it stops applying to every repository until attached from a repository's Settings > Cleanup Policies.";
+    }
+    if (editTarget && !formAppliesToAll && editTarget.repository_ids.length > 0) {
+      const count = editTarget.repository_ids.length;
+      return `Assigned to ${count} selected ${count === 1 ? "repository" : "repositories"}. Attach or detach repositories from their Settings > Cleanup Policies.`;
+    }
+    return formAppliesToAll
+      ? "Global policy: cleanup applies to every repository, including repositories created later. Individual repositories cannot opt out."
+      : editTarget
+        ? "Unassigned: no effect until attached from a repository's Settings > Cleanup Policies."
+        : "Created unassigned with no effect until attached from a repository's Settings > Cleanup Policies. You can reuse the same policy across selected repositories.";
+  }
+
+  const scopeLocked =
+    !canAssign || savePending || editTarget?.scope_source === "legacy";
 
   if (!user?.is_admin) {
     return (
@@ -458,6 +556,14 @@ export default function LifecyclePage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => openEdit(policy)}
+                          aria-label={`Edit policy ${policy.name}`}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setDeleteTarget(policy)}
                           aria-label={`Delete policy ${policy.name}`}
                         >
@@ -476,16 +582,20 @@ export default function LifecyclePage() {
       {/* Preview Result */}
       {previewResult && <PreviewResultAlert result={previewResult} />}
 
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={handleCreateOpenChange}>
+      {/* Create / Edit Dialog */}
+      <Dialog open={createOpen || isEdit} onOpenChange={handleDialogOpenChange}>
         {/* Bounded height + scroll: the form is taller than a short viewport
             once the exclusion lists fill up, and the footer has to stay
             reachable. Same treatment as the other admin create dialogs. */}
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create Lifecycle Policy</DialogTitle>
+            <DialogTitle>
+              {isEdit ? "Edit Lifecycle Policy" : "Create Lifecycle Policy"}
+            </DialogTitle>
             <DialogDescription>
-              Define a policy to automatically clean up artifacts.
+              {isEdit
+                ? "Changes apply from the next run. Only the fields you change are saved."
+                : "Define a policy to automatically clean up artifacts."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -511,6 +621,7 @@ export default function LifecyclePage() {
               <Label htmlFor="lifecycle-type">Policy Type</Label>
               <Select
                 value={formType}
+                disabled={isEdit}
                 onValueChange={(v) => {
                   setFormType(v);
                   setFormConfig(POLICY_CONFIG_HINTS[v] ?? "{}");
@@ -525,8 +636,18 @@ export default function LifecyclePage() {
                       {label}
                     </SelectItem>
                   ))}
+                  {/* A stored type the form does not offer (e.g. composite)
+                      still needs an item for the locked select to show. */}
+                  {isEdit && !(formType in POLICY_TYPE_LABELS) && (
+                    <SelectItem value={formType}>{formType}</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
+              {isEdit && (
+                <p className="text-sm text-muted-foreground">
+                  The policy type cannot be changed. Create a new policy for a different type.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <div className="flex items-start gap-2">
@@ -535,20 +656,25 @@ export default function LifecyclePage() {
                   checked={formAppliesToAll}
                   onCheckedChange={(checked) => setFormAppliesToAll(checked === true)}
                   aria-describedby="lifecycle-scope-help"
-                  disabled={!canAssign || createMutation.isPending}
+                  disabled={scopeLocked}
                 />
                 <Label htmlFor="lifecycle-applies-to-all">
                   Automatically apply to all current and future repositories
                 </Label>
               </div>
               <p id="lifecycle-scope-help" className="text-sm text-muted-foreground">
-                {formAppliesToAll
-                  ? "Global policy: cleanup applies to every repository, including repositories created later. Individual repositories cannot opt out."
-                  : "Created unassigned with no effect until attached from a repository's Settings > Cleanup Policies. You can reuse the same policy across selected repositories."}
+                {scopeHelp()}
               </p>
+              {isEdit && editTarget?.scope_source === "legacy" && (
+                <p className="text-sm text-muted-foreground">
+                  This policy uses a legacy scope, which cannot be changed here.
+                </p>
+              )}
               {!canAssign && (
                 <p role="alert" className="text-sm text-destructive">
-                  Creation is blocked until backend assignment support is confirmed.
+                  {isEdit
+                    ? "Scope changes are blocked until backend assignment support is confirmed."
+                    : "Creation is blocked until backend assignment support is confirmed."}
                 </p>
               )}
             </div>
@@ -559,7 +685,7 @@ export default function LifecyclePage() {
                 value={formConfig}
                 onChange={(e) => setFormConfig(e.target.value)}
                 className="font-mono text-sm"
-                rows={3}
+                rows={isEdit ? 5 : 3}
                 aria-describedby={
                   configError?.field === "config"
                     ? "lifecycle-config-error"
@@ -577,6 +703,22 @@ export default function LifecyclePage() {
                 </p>
               )}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="lifecycle-cron">Schedule (cron, optional)</Label>
+              <Input
+                id="lifecycle-cron"
+                value={formCron}
+                onChange={(e) => setFormCron(e.target.value)}
+                placeholder="e.g., 0 3 * * *"
+                className="font-mono text-sm"
+                aria-describedby="lifecycle-cron-help"
+              />
+              <p id="lifecycle-cron-help" className="text-sm text-muted-foreground">
+                {editTarget?.cron_schedule
+                  ? "Leave as is to keep the current schedule. A schedule cannot be removed once set."
+                  : "Empty runs the policy on the default 6-hour cadence."}
+              </p>
+            </div>
             <ExclusionsEditor
               value={formExclusions}
               onChange={setFormExclusions}
@@ -593,21 +735,21 @@ export default function LifecyclePage() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => handleCreateOpenChange(false)}>
+            <Button variant="outline" onClick={() => handleDialogOpenChange(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleCreate}
+              onClick={handleSubmit}
               disabled={
                 !formName.trim() ||
-                createMutation.isPending ||
-                !canAssign
+                savePending ||
+                (!isEdit && !canAssign)
               }
             >
-              {createMutation.isPending && (
+              {savePending && (
                 <Loader2 className="size-4 mr-1.5 animate-spin" />
               )}
-              Create
+              {isEdit ? "Save" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -210,6 +210,37 @@ test.describe('Lifecycle Page', () => {
     expect(writes).toBe(0);
   });
 
+  test('renaming a policy sends only the new name', async ({ page }) => {
+    const policy = {
+      ...lifecyclePolicyStub({ applies_to_all: true, repository_ids: [] }),
+      name: 'Old retention',
+    };
+    let updateRequest: unknown;
+    await page.route('**/api/v1/admin/lifecycle**', async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/capabilities')) {
+        return route.fulfill({ json: { explicit_repository_assignment: true } });
+      }
+      if (request.method() === 'PATCH' && url.pathname.endsWith(`/lifecycle/${policy.id}`)) {
+        updateRequest = request.postDataJSON();
+        return route.fulfill({ json: { ...policy, name: 'Renamed retention' } });
+      }
+      if (request.method() !== 'GET') {
+        throw new Error(`Unexpected policy write: ${request.method()} ${url.pathname}`);
+      }
+      if (!url.pathname.endsWith('/lifecycle')) return route.continue();
+      return route.fulfill({ json: [policy] });
+    });
+    await page.reload();
+    await page.getByRole('button', { name: 'Edit policy Old retention', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^name$/i).fill('Renamed retention');
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => updateRequest).toEqual({ name: 'Renamed retention' });
+    await expect(dialog).toBeHidden();
+  });
+
   test('repository settings attach and detach membership without deleting a shared policy', async ({ page }) => {
     const repositoryId = '00000000-0000-4000-8000-000000000010';
     const otherRepositoryId = '00000000-0000-4000-8000-000000000011';
