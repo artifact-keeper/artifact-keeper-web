@@ -311,6 +311,11 @@ vi.mock("./upstream-mode-settings", () => ({
   ),
 }));
 
+// Same for the upstream filter (upstream-filter-settings.test.tsx)
+vi.mock("./upstream-filter-settings", () => ({
+  UpstreamFilterSettings: () => <div data-testid="upstream-filter-section-stub" />,
+}));
+
 const baseRepo: Repository = {
   id: "repo-1",
   key: "maven-releases",
@@ -3412,6 +3417,28 @@ describe("RepoSettingsTab - conda allowlist section (#971)", () => {
       wrapper: createWrapper(),
     });
     expect(!!screen.queryByTestId("allowlist-section-stub")).toBe(shown);
+  });
+});
+
+describe("RepoSettingsTab - upstream filter section (#1034)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetCacheTtl.mockResolvedValue({ cache_ttl_seconds: 86400 });
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+  });
+
+  it.each([
+    ["remote", true, true],
+    ["remote", false, false],
+    ["local", true, false],
+    ["virtual", true, false],
+    ["staging", true, false],
+  ] as const)("type %s, admin %s: shown=%s", (repo_type, is_admin, shown) => {
+    mockUseAuth.mockReturnValue({ user: { is_admin } });
+    render(<RepoSettingsTab repository={{ ...baseRepo, key: "npm-remote", format: "npm", repo_type }} />, {
+      wrapper: createWrapper(),
+    });
+    expect(!!screen.queryByTestId("upstream-filter-section-stub")).toBe(shown);
   });
 });
 
