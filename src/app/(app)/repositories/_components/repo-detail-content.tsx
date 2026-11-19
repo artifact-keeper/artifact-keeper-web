@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api/admin";
-import { SCAN_POLICY_LOCK_MIN, backendAtLeast } from "@/lib/backend-version";
+import {
+  PERMANENT_ARTIFACT_DELETE_MIN,
+  SCAN_POLICY_LOCK_MIN,
+  backendAtLeast,
+} from "@/lib/backend-version";
 import {
   ArrowLeft,
   Boxes,
@@ -603,12 +607,14 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     onError: mutationErrorToast("Failed to permanently delete artifact"),
   });
   // The backend refuses a permanent delete of OCI content: tags and shared
-  // layers are reclaimed by storage GC.
+  // layers are reclaimed by storage GC. Older backends ignore `permanent` and
+  // only move the artifact to the trash.
   const canDeletePermanently =
     !!user?.is_admin &&
     !!repoFormat &&
     !DOCKER_FAMILY_FORMATS.has(repoFormat) &&
-    !isMcpRepo;
+    !isMcpRepo &&
+    backendAtLeast(health?.version, PERMANENT_ARTIFACT_DELETE_MIN);
 
   const scanArtifactMutation = useMutation({
     mutationFn: (artifactId: string) =>
