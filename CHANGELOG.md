@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-
+- **Permissions page: filter the list by principal, target and action** (#1096) - The page listed every permission in one table with sorting only, so "what can group X access?", "who has access to repository Y?" and "who has `delete` anywhere?" meant scrolling hundreds of rows (one per principal and repository). Filters now sit above the table: principal type and name, target type and name, and action, combined with AND, with an "N of M" count and "Clear filters". They are kept in the address bar (`?principal_type=group&target=plat&action=delete`) so a filtered view can be bookmarked or shared; unknown values in a link are ignored. Trade-offs: the principal and target type are applied by the backend, but the backend has no name or action parameter, so those two apply to the page of rules loaded (a note says so when the list spans more than one page); a name search matches the displayed name or the id, not the repository's other fields.
 
 ### Fixed
 
