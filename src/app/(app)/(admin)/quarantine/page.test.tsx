@@ -2,7 +2,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 beforeAll(() => {
@@ -202,6 +202,37 @@ describe("QuarantineHoldsPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(mutation.releaseMutate).toHaveBeenCalledWith(ACTIVE);
     expect(mutation.rejectMutate).not.toHaveBeenCalled();
+  });
+
+  it("rejects with the trimmed reason, then closes the dialog", async () => {
+    const user = userEvent.setup();
+    holdData = { data: { items: [ACTIVE], total: 1 }, isLoading: false };
+    render(<QuarantineHoldsPage />);
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/permanent/i);
+    await user.type(screen.getByLabelText("Rejection reason"), "  typosquat  ");
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    const vars = { hold: ACTIVE, why: "typosquat" };
+    expect(mutation.rejectMutate).toHaveBeenCalledWith(vars);
+    expect(mutation.releaseMutate).not.toHaveBeenCalled();
+
+    const rejectConfig = mutation.configs[mutation.configs.length - 1];
+    await rejectConfig.mutationFn(vars);
+    expect(api.reject).toHaveBeenCalledWith("a1", "typosquat");
+    act(() => rejectConfig.onSuccess?.(undefined, vars));
+    expect(mockInvalidate).toHaveBeenCalledTimes(2);
+    expect(mockToastSuccess).toHaveBeenCalledWith("Rejected leftpad@1.0.0");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("asks for at least one kind and names the kinds in the empty state", async () => {
+    const user = userEvent.setup();
+    render(<QuarantineHoldsPage />);
+    await user.click(screen.getByRole("checkbox", { name: "Show rejected" }));
+    expect(screen.getByText("No active packages in quarantine.")).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Show active" }));
+    expect(screen.getByText(/Select at least one kind/i)).toBeInTheDocument();
   });
 
   it("shows an error state", () => {
