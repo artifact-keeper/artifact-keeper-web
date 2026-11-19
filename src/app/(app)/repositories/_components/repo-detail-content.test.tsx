@@ -808,6 +808,14 @@ describe("RepoDetailContent artifact detail dialog — Delete permanently", () =
     ).toBeNull();
   });
 
+  it("hides it for MCP repositories, which delete in the MCP registry", async () => {
+    repository.format = "mcp";
+    const dialog = await openDetailDialog();
+    expect(
+      within(dialog).queryByRole("button", { name: /delete permanently/i }),
+    ).toBeNull();
+  });
+
   it.each([
     ["1.12.0", true],
     ["1.11.14", false],
