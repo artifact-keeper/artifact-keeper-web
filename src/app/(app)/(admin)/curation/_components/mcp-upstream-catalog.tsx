@@ -1,5 +1,7 @@
 "use client";
 
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
+import { SafeText } from "@/components/common/safe-text";
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search, Send } from "lucide-react";
@@ -141,11 +143,11 @@ function CatalogRow({
       {/* Greyed: an upstream name is not served until it is approved. */}
       <div className={`min-w-0 flex-1 ${served ? "" : "opacity-70"}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium break-all">{item.name}</span>
+          <SafeText max={NAME_MAX_LENGTH} className="font-medium break-all" value={item.name} />
           {item.latestVersion && <span className="font-mono text-xs text-muted-foreground">{item.latestVersion}</span>}
           <McpReviewStatusBadge status={item.status} />
         </div>
-        {item.description && <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>}
+        {item.description && <SafeText as="p" className="mt-0.5 text-xs text-muted-foreground" value={item.description} />}
         {item.summary && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
             <McpSummaryChips summary={item.summary} />
@@ -155,7 +157,7 @@ function CatalogRow({
         {!served && <p className="mt-1 text-xs text-muted-foreground">Not visible to clients until approved</p>}
       </div>
       {requestable && (
-        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${item.name}`}>
+        <Button size="sm" variant="outline" onClick={onRequest} disabled={requesting} aria-label={`Request approval for ${safeText(item.name, { max: NAME_MAX_LENGTH })}`}>
           {requesting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Request approval
         </Button>

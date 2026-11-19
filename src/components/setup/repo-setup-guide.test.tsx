@@ -36,6 +36,41 @@ describe("RepoSetupGuide", () => {
     expect(container.textContent).not.toContain("Push artifacts");
   });
 
+  // #1064: a buf module name is exactly registry/owner/name and buf push has
+  // no --registry flag, so the guide names the module after a host whose root
+  // maps onto /proto/<repo>/ and lets buf push read buf.yaml.
+  it.each(["local", "staging"] as const)("gives a %s protobuf repo buf steps buf can run", (repo_type) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local", repo_type })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("/proto/proto-local/;");
+    expect(text).toContain("name: bsr.example.com/myorg/mymodule");
+    expect(text).toContain("buf push --create");
+    expect(text).toContain("export BUF_TOKEN=YOUR_TOKEN@bsr.example.com");
+    expect(text).not.toContain("buf registry login bsr.example.com");
+    expect(text).not.toContain("--registry");
+    expect(text).not.toContain("--username");
+    expect(text).not.toMatch(/name: \S+\/proto\/proto-local\//);
+  });
+
+  it("serves the buf hostname over TLS with room for a larger buf push (#1193)", () => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", key: "proto-local", repo_type: "local" })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("listen 443 ssl;");
+    expect(text).toContain("server_name bsr.example.com;");
+    expect(text).toMatch(/ssl_certificate\s+\S+;/);
+    expect(text).toMatch(/ssl_certificate_key\s+\S+;/);
+    expect(text).toContain("client_max_body_size 256m;");
+    expect(text).toMatch(/needs a TLS certificate/);
+  });
+
+  it.each(["remote", "virtual"] as const)("gives a %s protobuf repo no buf push steps", (repo_type) => {
+    const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "protobuf", repo_type })} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("buf CLI needs a hosted repository");
+    expect(text).not.toContain("buf push");
+    expect(text).not.toContain("buf.yaml");
+  });
+
   it("does not advertise pull-through installation for a local mirror format", () => {
     const { container } = render(<RepoSetupGuide repo={makeRepo({ format: "github", repo_type: "local" })} />);
     expect(container.textContent).toContain("Create a remote GitHub mirror");
@@ -249,6 +284,18 @@ describe("RepoSetupGuide", () => {
     );
     const hostedPanel = screen.getByRole("tabpanel", { name: "Npm" });
     expect(hostedPanel.textContent).toContain("npm config set @pkgs:registry");
+  });
+
+  // #1129: cargo fetches `{index}/config.json`, which the
+  // backend serves only at the registry root, and needs the `sparse+` prefix
+  // to use the sparse protocol instead of treating the URL as a git index.
+  it("points the cargo index at the sparse registry root", () => {
+    const { container } = render(
+      <RepoSetupGuide repo={makeRepo({ format: "cargo", key: "crates", repo_type: "remote" })} />,
+    );
+    const text = container.textContent ?? "";
+    expect(text).toMatch(/index = "sparse\+\S+\/cargo\/crates\/"/);
+    expect(text).not.toContain("/cargo/crates/index");
   });
 
   // Agent Plugins (artifact-keeper#5251): Claude Code reads the marketplace

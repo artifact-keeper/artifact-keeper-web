@@ -23,9 +23,12 @@ interface RepoStoragePanelProps {
   /**
    * The repository whose storage is being described. Only `key` (for the
    * lookup) and `storage_used_bytes` (a graceful fallback when the dedup
-   * endpoint is unavailable) are read.
+   * endpoint is unavailable) are read, plus `repo_type` and
+   * `member_storage_used_bytes` so a virtual repository's fallback shows the
+   * size held by its members instead of its own (always 0) bytes.
    */
-  repository: Pick<Repository, "key" | "storage_used_bytes">;
+  repository: Pick<Repository, "key" | "storage_used_bytes"> &
+    Partial<Pick<Repository, "repo_type" | "member_storage_used_bytes">>;
   /**
    * Whether the current viewer is an administrator. Gates the instance-total
    * figure and the reclaimable-space estimate. Field visibility is ALSO
@@ -59,6 +62,102 @@ function Metric({
 }
 
 /**
+ * The admin-only extras: the instance-wide unique total and the on-demand
+ * reclaimable estimate. Both work whether or not this repository's breakdown
+ * has been computed yet, so the fallback card shows them too (#1214). The
+ * caller renders this only for administrators.
+ */
+function AdminStorageExtras({
+  repoKey,
+  instanceUniqueBytes,
+  showReclaimable = true,
+}: {
+  repoKey: string;
+  instanceUniqueBytes?: number | null;
+  /** False for a virtual repository: it stores nothing, so nothing to reclaim. */
+  showReclaimable?: boolean;
+}) {
+  // The reclaimable estimate is a dedup-aware GC dry-run, which can be an
+  // expensive full scan — so it is admin-only and computed on demand rather
+  // than automatically on page load.
+  const [reclaimRequested, setReclaimRequested] = useState(false);
+  const {
+    data: gcPreview,
+    isFetching: gcFetching,
+    isError: gcError,
+  } = useQuery({
+    queryKey: ["repository-storage-gc-preview", repoKey],
+    queryFn: () => storageApi.runGc(repoKey, true),
+    enabled: showReclaimable && reclaimRequested && !!repoKey,
+    staleTime: 60_000,
+  });
+
+  return (
+    <>
+      {/* Admin-only instance total. */}
+      {instanceUniqueBytes != null && (
+        <div
+          className="border-t pt-3"
+          data-testid="storage-instance-total"
+        >
+          <Metric
+            label="Instance unique (all repositories)"
+            value={formatBytes(instanceUniqueBytes)}
+            icon={<HardDrive className="size-3.5" />}
+          />
+        </div>
+      )}
+
+      {/* Admin-only reclaimable estimate (GC dry-run). */}
+      {showReclaimable && (
+        <div className="border-t pt-3" data-testid="storage-reclaimable">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              Reclaimable now
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReclaimRequested(true)}
+              disabled={gcFetching}
+            >
+              <RefreshCcw
+                className={`size-3.5 ${gcFetching ? "animate-spin" : ""}`}
+              />
+              {gcFetching
+                ? "Estimating…"
+                : reclaimRequested
+                  ? "Re-estimate"
+                  : "Estimate"}
+            </Button>
+          </div>
+          {gcError && (
+            <p className="mt-2 text-xs text-destructive">
+              Could not estimate reclaimable space.
+            </p>
+          )}
+          {gcPreview && !gcFetching && (
+            <p
+              className="mt-2 text-sm"
+              data-testid="storage-reclaimable-value"
+            >
+              <span className="font-semibold">
+                {formatBytes(gcPreview.bytes_freed)}
+              </span>{" "}
+              <span className="text-muted-foreground">
+                could be reclaimed by garbage-collecting{" "}
+                {gcPreview.storage_keys_deleted.toLocaleString()} unreferenced
+                blob(s). This is a dry-run estimate; nothing was deleted.
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Repository storage panel (epic artifact-keeper#2056).
  *
  * Renders the real, deduplicated storage footprint for a repository: logical
@@ -84,21 +183,6 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     enabled: !!repoKey,
   });
 
-  // The reclaimable estimate is a dedup-aware GC dry-run, which can be an
-  // expensive full scan — so it is admin-only and computed on demand rather
-  // than automatically on page load.
-  const [reclaimRequested, setReclaimRequested] = useState(false);
-  const {
-    data: gcPreview,
-    isFetching: gcFetching,
-    isError: gcError,
-  } = useQuery({
-    queryKey: ["repository-storage-gc-preview", repoKey],
-    queryFn: () => storageApi.runGc(repoKey, true),
-    enabled: reclaimRequested && isAdmin && !!repoKey,
-    staleTime: 60_000,
-  });
-
   if (isLoading) {
     return (
       <Card data-testid="storage-panel-loading">
@@ -118,10 +202,25 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
     );
   }
 
-  // Endpoint unavailable (e.g. a backend that predates #2056): fall back to the
-  // coarse logical figure already carried on the repository record so the panel
-  // still shows *something* meaningful rather than an error.
-  if (isError || !usage) {
+  // Endpoint unavailable (e.g. a backend that predates #2056), or the stats
+  // refresher has not run for this repository yet, which the backend answers
+  // with zeros and no `computed_at` (#1131): fall back to the coarse logical
+  // figure already carried on the repository record rather than show 0 B.
+  if (isError || !usage || usage.computed_at == null) {
+    // A virtual repository stores nothing of its own, so the stats refresher
+    // never writes a row for it and `storage_used_bytes` is always 0: show
+    // what its members hold, as the header does (#958), with no promise of a
+    // refresh that will never come (#1131). A backend that predates
+    // `member_storage_used_bytes` still gets the virtual copy, with the
+    // members' size shown as unavailable rather than as 0 B (#1214).
+    const isVirtual = repository.repo_type === "virtual";
+    const memberBytes =
+      typeof repository.member_storage_used_bytes === "number"
+        ? repository.member_storage_used_bytes
+        : null;
+    // The usage answer came back, it just has no computed breakdown yet: the
+    // admin-only instance total and the reclaimable estimate still work (#1214).
+    const usageLoaded = !!usage && !isError;
     return (
       <Card data-testid="storage-panel-fallback">
         <CardHeader>
@@ -129,15 +228,33 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
         </CardHeader>
         <CardContent className="space-y-2">
           <Metric
-            label="Logical size"
-            value={formatBytes(repository.storage_used_bytes)}
+            label={isVirtual ? "Held by members" : "Logical size"}
+            value={
+              isVirtual
+                ? memberBytes === null
+                  ? "Unavailable"
+                  : formatBytes(memberBytes)
+                : formatBytes(repository.storage_used_bytes)
+            }
             icon={<Database className="size-3.5" />}
             testId="storage-logical"
           />
-          <p className="text-xs text-muted-foreground">
-            Detailed deduplicated storage metrics are unavailable for this
-            repository.
+          <p className="text-xs text-muted-foreground" data-testid="storage-fallback-note">
+            {isVirtual
+              ? memberBytes === null
+                ? "A virtual repository stores nothing itself. This server does not report the combined size of its members."
+                : "A virtual repository stores nothing itself. This is the combined size of the member repositories you can see."
+              : usageLoaded
+                ? "Storage breakdown not computed yet. The storage stats refresh computes it once this repository holds files."
+                : "Detailed deduplicated storage metrics are unavailable for this repository."}
           </p>
+          {usageLoaded && isAdmin && (
+            <AdminStorageExtras
+              repoKey={repoKey}
+              instanceUniqueBytes={usage.instance_unique_bytes}
+              showReclaimable={!isVirtual}
+            />
+          )}
         </CardContent>
       </Card>
     );
@@ -284,64 +401,11 @@ export function RepoStoragePanel({ repository, isAdmin }: RepoStoragePanelProps)
           </p>
         )}
 
-        {/* Admin-only instance total. */}
-        {isAdmin && usage.instance_unique_bytes != null && (
-          <div
-            className="border-t pt-3"
-            data-testid="storage-instance-total"
-          >
-            <Metric
-              label="Instance unique (all repositories)"
-              value={formatBytes(usage.instance_unique_bytes)}
-              icon={<HardDrive className="size-3.5" />}
-            />
-          </div>
-        )}
-
-        {/* Admin-only reclaimable estimate (GC dry-run). */}
         {isAdmin && (
-          <div className="border-t pt-3" data-testid="storage-reclaimable">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Reclaimable now
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setReclaimRequested(true)}
-                disabled={gcFetching}
-              >
-                <RefreshCcw
-                  className={`size-3.5 ${gcFetching ? "animate-spin" : ""}`}
-                />
-                {gcFetching
-                  ? "Estimating…"
-                  : reclaimRequested
-                    ? "Re-estimate"
-                    : "Estimate"}
-              </Button>
-            </div>
-            {gcError && (
-              <p className="mt-2 text-xs text-destructive">
-                Could not estimate reclaimable space.
-              </p>
-            )}
-            {gcPreview && !gcFetching && (
-              <p
-                className="mt-2 text-sm"
-                data-testid="storage-reclaimable-value"
-              >
-                <span className="font-semibold">
-                  {formatBytes(gcPreview.bytes_freed)}
-                </span>{" "}
-                <span className="text-muted-foreground">
-                  could be reclaimed by garbage-collecting{" "}
-                  {gcPreview.storage_keys_deleted.toLocaleString()} unreferenced
-                  blob(s). This is a dry-run estimate; nothing was deleted.
-                </span>
-              </p>
-            )}
-          </div>
+          <AdminStorageExtras
+            repoKey={repoKey}
+            instanceUniqueBytes={usage.instance_unique_bytes}
+          />
         )}
 
         {usage.computed_at && (

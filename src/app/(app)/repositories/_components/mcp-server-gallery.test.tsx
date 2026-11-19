@@ -119,7 +119,7 @@ describe("McpServerGallery", () => {
     await waitFor(() => expect(cards()).toHaveLength(3));
     fireEvent.change(screen.getByLabelText("Transport"), { target: { value: "sse" } });
     expect(cards()).toHaveLength(1);
-    expect(screen.getByText("io.github.acme/")).toBeInTheDocument();
+    expect(screen.getByText("io.github.acme")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Transport"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Package type"), { target: { value: "oci" } });
     expect(cards()).toHaveLength(1);

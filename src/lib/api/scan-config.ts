@@ -32,8 +32,10 @@ import { apiFetch } from "@/lib/api/fetch";
  *
  * - `fail_open`  — serve the artifact anyway. Availability first. (default)
  * - `fail_closed`— block the download. Security first ("active blocking").
+ * - `record_only`— serve everything and record the verdicts; never block.
+ *   For trying enforcement out before turning it on (backend #3645).
  */
-export type ProxyScanAction = "fail_open" | "fail_closed";
+export type ProxyScanAction = "fail_open" | "fail_closed" | "record_only";
 
 export type SeverityThreshold = "critical" | "high" | "medium" | "low";
 
@@ -60,7 +62,34 @@ export interface RepoScanConfig {
   scan_on_proxy: boolean;
   block_on_policy_violation: boolean;
   severity_threshold: string;
-  proxy_scan_action: ProxyScanAction;
+  /**
+   * Kept as the backend sent it. A value this build does not know (a mode
+   * added later) must survive a load and a save untouched, so it is not
+   * narrowed to a known action; check with `isKnownProxyScanAction`.
+   */
+  proxy_scan_action: string;
+  /**
+   * `false` when the backend's config row did not carry `proxy_scan_action`
+   * (a backend that predates it): `proxy_scan_action` is then this UI's
+   * `fail_open` stand-in, and `record_only` is not offered (#1194). Absent
+   * otherwise.
+   */
+  proxy_scan_action_reported?: false;
+  /**
+   * `true` when the repository has no scan config row yet (the GET answered
+   * `config: null`) and these are the documented defaults. The backend locks
+   * the proxy scan policy on an instance administrator's first save (#1213).
+   * Absent otherwise.
+   */
+  unconfigured?: true;
+  /**
+   * The instance-admin lock on this repository's proxy scan policy
+   * (artifact-keeper#4363): while locked, a repository administrator may
+   * tighten the policy but not weaken it. `undefined` when the backend did not
+   * report it (an older backend, or a repository with no scan config row yet),
+   * in which case the UI neither shows nor sends it.
+   */
+  instance_locked?: boolean;
 }
 
 /**
@@ -74,15 +103,21 @@ export interface UpsertScanConfigRequest {
   scan_on_proxy?: boolean;
   block_on_policy_violation?: boolean;
   severity_threshold?: string;
-  proxy_scan_action?: ProxyScanAction;
+  proxy_scan_action?: string;
+  /**
+   * Instance administrators only. Omitting it from an instance
+   * administrator's PUT LOCKS the policy, so an instance-admin save must send
+   * the current value back; a repository administrator sending it at all gets
+   * 403 (#1185).
+   */
+  instance_locked?: boolean;
 }
 
-const ProxyScanActionSchema = z.enum(["fail_open", "fail_closed"]);
-
-// `.catch("fail_open")` keeps the UI resilient if a backend build predates the
-// field or returns an unknown value: we fall back to the safe availability-
-// first default rather than throwing at the trust boundary.
-const ProxyScanActionLoose = ProxyScanActionSchema.catch("fail_open");
+// A missing field (a backend that predates it) falls back to the default in
+// `normalize`. A value we do not recognise is kept, not coerced to
+// `fail_open`: that would show a `record_only` repository as blocking-capable
+// and write the wrong mode back on the next save (#1069).
+const ProxyScanActionLoose = z.string().optional().catch(undefined);
 
 const ScanConfigSchema = z
   .object({
@@ -91,7 +126,8 @@ const ScanConfigSchema = z
     scan_on_proxy: z.boolean().catch(false),
     block_on_policy_violation: z.boolean().catch(false),
     severity_threshold: z.string().catch("high"),
-    proxy_scan_action: ProxyScanActionLoose.optional(),
+    proxy_scan_action: ProxyScanActionLoose,
+    instance_locked: z.boolean().optional().catch(undefined),
   })
   .passthrough();
 
@@ -112,6 +148,12 @@ function normalize(raw: z.infer<typeof ScanConfigSchema>): RepoScanConfig {
     block_on_policy_violation: raw.block_on_policy_violation,
     severity_threshold: raw.severity_threshold,
     proxy_scan_action: raw.proxy_scan_action ?? "fail_open",
+    ...(raw.proxy_scan_action === undefined
+      ? { proxy_scan_action_reported: false as const }
+      : {}),
+    ...(raw.instance_locked === undefined
+      ? {}
+      : { instance_locked: raw.instance_locked }),
   };
 }
 
@@ -131,7 +173,7 @@ export function parseRepoSecurity(data: unknown): RepoScanConfig {
   }
   // Wrapped: `config` may be null/absent for an unconfigured repository.
   if (!value.config) {
-    return { ...DEFAULT_SCAN_CONFIG };
+    return { ...DEFAULT_SCAN_CONFIG, unconfigured: true };
   }
   return normalize(value.config);
 }

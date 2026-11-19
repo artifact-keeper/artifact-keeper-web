@@ -9,7 +9,11 @@ export class StagingPage {
 
   constructor(private page: Page) {
     this.heading = page.getByRole('heading', { name: /staging/i }).first();
-    this.searchInput = page.getByPlaceholder(/search/i);
+    // Scoped to <main> (#1062): while a streamed Suspense boundary is being
+    // revealed, React's server copy of the page can sit for a moment in a
+    // hidden <div id="S:n"> under <body>, next to the client-rendered page,
+    // so an unscoped locator briefly matches two inputs (strict mode).
+    this.searchInput = page.getByRole('main').getByPlaceholder(/search/i);
     this.stagingTable = page.locator('[data-testid="staging-list"]').or(
       page.getByRole('list').first()
     );

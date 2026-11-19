@@ -87,10 +87,24 @@ export function filterCriticalErrors(errors: string[]): string[] {
   );
 }
 
-/** Navigate to a page and wait for the DOM to be ready. */
+/**
+ * Wait until React has moved every streamed segment into place (#1192).
+ *
+ * On a first load, React streams parts of the server render into hidden
+ * `<div id="S:n">` elements under `<body>` and swaps them into the page
+ * afterwards, which can be a moment after `domcontentloaded`. Until then an
+ * unscoped locator can match the hidden copy as well as the visible one and
+ * fail in strict mode.
+ */
+export async function waitForStreamedSegments(page: Page): Promise<void> {
+  await base.expect(page.locator('[id^="S:"]')).toHaveCount(0, { timeout: 10000 });
+}
+
+/** Navigate to a page and wait for the DOM to be ready and its streamed segments placed. */
 export async function navigateTo(page: Page, path: string): Promise<void> {
   await page.goto(path);
   await page.waitForLoadState('domcontentloaded');
+  await waitForStreamedSegments(page);
 }
 
 /** Open a dialog by clicking a button, return the dialog locator. */

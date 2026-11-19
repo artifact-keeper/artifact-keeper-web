@@ -47,6 +47,8 @@ import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
 import { isMcpFormat } from "@/lib/mcp/format";
 import { McpServerDetail } from "./_components/mcp-server-detail";
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 
 // ---- Helpers ----
 
@@ -148,7 +150,7 @@ function PackageDetailContent() {
     enabled: !!packageId,
   });
 
-  useDocumentTitle(pkg?.name ?? "Package Details");
+  useDocumentTitle(pkg?.name ? safeText(pkg.name, { max: NAME_MAX_LENGTH }) : "Package Details");
 
   // Fetch versions
   const { data: versions, isLoading: versionsLoading } = useQuery({
@@ -246,7 +248,9 @@ function PackageDetailContent() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>{pkg.name}</BreadcrumbPage>
+            <BreadcrumbPage>
+              <SafeText max={NAME_MAX_LENGTH} value={pkg.name} />
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -266,7 +270,7 @@ function PackageDetailContent() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold truncate">{pkg.name}</h1>
+            <SafeText as="h1" className="text-2xl font-semibold truncate" max={NAME_MAX_LENGTH} value={pkg.name} />
             <Badge variant="secondary">{pkg.format}</Badge>
           </div>
           {pkg.version && (
@@ -275,9 +279,7 @@ function PackageDetailContent() {
             </p>
           )}
           {pkg.description && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {pkg.description}
-            </p>
+            <SafeText as="p" className="text-sm text-muted-foreground mt-2" value={pkg.description} />
           )}
         </div>
         {homepageUrl && isSafeUrl(homepageUrl) ? (

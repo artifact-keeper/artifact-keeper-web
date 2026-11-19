@@ -9,7 +9,15 @@ import React from "react";
 // Mocks (must be before component import)
 // ---------------------------------------------------------------------------
 
-vi.mock("@/lib/sdk-client", () => ({}));
+const mockDismissSessionToasts = vi.fn();
+vi.mock("@/lib/session-toasts", () => ({ dismissSessionToasts: () => mockDismissSessionToasts() }));
+
+const mockRefreshSession = vi.fn();
+const mockLocalSessionExpired = vi.fn();
+vi.mock("@/lib/sdk-client", () => ({
+  refreshSession: () => mockRefreshSession(),
+  localSessionExpired: () => mockLocalSessionExpired(),
+}));
 
 const mockSdkLogin = vi.fn();
 const mockSdkLogout = vi.fn();
@@ -93,6 +101,10 @@ describe("AuthProvider", () => {
     mockSdkVerifyTotp.mockReset();
     mockSdkChangePassword.mockReset();
     mockSdkSetupStatus.mockReset();
+    mockRefreshSession.mockReset();
+    mockRefreshSession.mockResolvedValue(false);
+    mockLocalSessionExpired.mockReset();
+    mockLocalSessionExpired.mockResolvedValue(true);
     capturedAuthRef.current = null;
 
     // Default: setup not required, not authenticated
@@ -123,6 +135,164 @@ describe("AuthProvider", () => {
     });
 
     expect(screen.getByTestId("authenticated").textContent).toBe("false");
+  });
+
+  // -- #1084: an expired access cookie with a still-valid refresh cookie ----
+
+  describe("initial load with an expired access cookie (#1084)", () => {
+    const USER = {
+      id: "u1",
+      username: "admin",
+      email: "admin@test.com",
+      is_admin: true,
+      must_change_password: false,
+    };
+    const unauthorized = { data: undefined, error: { code: "UNAUTHORIZED" }, response: { status: 401 } };
+
+    function mount(queryClient?: QueryClient) {
+      const ui = (
+        <AuthProvider>
+          <TestConsumer />
+        </AuthProvider>
+      );
+      if (queryClient) {
+        render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+      } else {
+        renderWithQuery(ui);
+      }
+    }
+
+    it("refetches the queries answered as anonymous before the refresh", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      mount(queryClient);
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(invalidate).toHaveBeenCalled();
+    });
+
+    it("keeps the cache when /auth/me succeeds without a refresh", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({ data: USER, error: undefined });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      mount(queryClient);
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it("does not refresh on /callback, where the SSO exchange sets the session", async () => {
+      window.history.pushState({}, "", "/callback?code=abc");
+      try {
+        mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+        mockRefreshSession.mockResolvedValue(true);
+
+        mount();
+        await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+        expect(mockRefreshSession).not.toHaveBeenCalled();
+      } finally {
+        window.history.pushState({}, "", "/");
+      }
+    });
+
+    it("refreshes the session and asks again, so the shell renders signed in", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
+    });
+
+    it("stays anonymous, without asking again, when the refresh fails", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(false);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("stays anonymous when the second ask is refused too, and does not loop", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("does not refresh the local session when the 401 came from a remote instance (#1204)", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue(unauthorized);
+      mockRefreshSession.mockResolvedValue(true);
+      mockLocalSessionExpired.mockResolvedValue(false);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(mockSdkGetCurrentUser).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("still refreshes when the local session behind a remote instance expired (#1204)", async () => {
+      mockSdkGetCurrentUser
+        .mockResolvedValueOnce(unauthorized)
+        .mockResolvedValueOnce({ data: USER, error: undefined });
+      mockRefreshSession.mockResolvedValue(true);
+      mockLocalSessionExpired.mockResolvedValue(true);
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+
+      expect(mockLocalSessionExpired).toHaveBeenCalledTimes(1);
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not try to refresh on an error that is not a 401", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({
+        data: undefined,
+        error: { code: "INTERNAL" },
+        response: { status: 500 },
+      });
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(mockLocalSessionExpired).not.toHaveBeenCalled();
+      expect(screen.getByTestId("authenticated").textContent).toBe("false");
+    });
+
+    it("does not refresh when the first ask already succeeded", async () => {
+      mockSdkGetCurrentUser.mockResolvedValue({ data: USER, error: undefined });
+
+      mount();
+      await waitFor(() => expect(screen.getByTestId("loading").textContent).toBe("false"));
+
+      expect(mockRefreshSession).not.toHaveBeenCalled();
+      expect(screen.getByTestId("authenticated").textContent).toBe("true");
+    });
   });
 
   it("sets passwordExpiresAt from user data on init when authenticated", async () => {
@@ -276,6 +446,25 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("authenticated").textContent).toBe("false");
   });
 
+  it("dismisses session-bound toasts on sign-out (#1228)", async () => {
+    mockSdkGetCurrentUser.mockResolvedValue({
+      data: { id: "u1", username: "admin", email: "admin@test.com", is_admin: true },
+      error: null,
+    });
+    mockSdkLogout.mockResolvedValue({});
+    renderWithQuery(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("authenticated").textContent).toBe("true"));
+    mockDismissSessionToasts.mockClear();
+    await act(async () => {
+      await capturedAuthRef.current!.logout();
+    });
+    expect(mockDismissSessionToasts).toHaveBeenCalled();
+  });
+
   it("clears passwordExpiresAt after changing password", async () => {
     const expiresAt = "2026-04-20T00:00:00Z";
     mockSdkGetCurrentUser.mockResolvedValue({
@@ -365,6 +554,45 @@ describe("AuthProvider", () => {
     });
 
     expect(screen.getByTestId("expires-at").textContent).toBe(expiresAt);
+    expect(screen.getByTestId("authenticated").textContent).toBe("true");
+  });
+
+  it("beginTotpChallenge puts up the TOTP step and verifyTotp redeems that token (artifact-keeper#5484)", async () => {
+    renderWithQuery(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("loading").textContent).toBe("false");
+    });
+
+    // The LDAP login page and the SSO callback hand over the challenge token
+    // they got instead of a session.
+    act(() => {
+      capturedAuthRef.current!.beginTotpChallenge("sso-pending.jwt");
+    });
+    expect(capturedAuthRef.current!.totpRequired).toBe(true);
+    expect(capturedAuthRef.current!.totpToken).toBe("sso-pending.jwt");
+    expect(screen.getByTestId("authenticated").textContent).toBe("false");
+
+    mockSdkVerifyTotp.mockResolvedValueOnce({
+      data: { access_token: "tok", refresh_token: "rtok", must_change_password: false },
+      error: null,
+    });
+    mockSdkGetCurrentUser.mockResolvedValueOnce({
+      data: { id: "u2", username: "fed", email: "fed@test.com", is_admin: false },
+      error: null,
+    });
+    await act(async () => {
+      await capturedAuthRef.current!.verifyTotp("654321");
+    });
+
+    expect(mockSdkVerifyTotp).toHaveBeenCalledWith({
+      body: { totp_token: "sso-pending.jwt", code: "654321" },
+    });
+    expect(capturedAuthRef.current!.totpRequired).toBe(false);
+    expect(capturedAuthRef.current!.totpToken).toBeNull();
     expect(screen.getByTestId("authenticated").textContent).toBe("true");
   });
 

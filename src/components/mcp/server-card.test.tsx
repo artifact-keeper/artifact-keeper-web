@@ -34,6 +34,42 @@ describe("McpServerCard", () => {
     expect(within(card).getByText("Weather forecasts and alerts")).toBeInTheDocument();
   });
 
+  it("shows hidden and bidi characters in a title and description visibly (#1107)", () => {
+    const entry = {
+      ...WEATHER,
+      server: {
+        ...WEATHER.server,
+        title: "rt15 \u202egnp.exe \u200b",
+        description: "IMPORTANT \u202ebidi \u0007bel \u001b[31mred",
+      },
+    };
+    render(<McpServerCard repoKey="mcp-local" entry={entry} packageId="pkg-1" />);
+    const card = screen.getByRole("article", { name: "com.acme/weather" });
+    expect(within(card).getByText("rt15 [U+202E]gnp.exe [U+200B]")).toBeInTheDocument();
+    expect(within(card).getByText("IMPORTANT [U+202E]bidi [U+0007]bel [U+001B][31mred")).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/[\u202e\u200b\u0007\u001b]/);
+  });
+
+  it("shows hidden and bidi characters in the server name visibly (#1107)", () => {
+    const entry = { ...WEATHER, server: { ...WEATHER.server, name: "com.acme/\u202egnp.exe" } };
+    render(<McpServerCard repoKey="mcp-local" entry={entry} packageId="pkg-1" />);
+    const card = screen.getByRole("article", { name: "com.acme/[U+202E]gnp.exe" });
+    expect(card.querySelector("h3")?.textContent).not.toMatch(/\u202e/);
+  });
+
+  it("marks hidden characters in the namespace and short name and keeps them out of the Install label (#1202)", () => {
+    const entry = { ...WEATHER, server: { ...WEATHER.server, name: "com.\u200bacme/\u202egnp.exe" } };
+    render(<McpServerCard repoKey="mcp-local" entry={entry} packageId="pkg-1" onInstall={() => {}} />);
+    const ns = screen.getByText("com.[U+200B]acme");
+    const short = screen.getByText("[U+202E]gnp.exe");
+    for (const el of [ns, short]) {
+      expect(el).toHaveAttribute("data-sanitized", "true");
+      expect(el.getAttribute("title")).toMatch(/1 hidden or control character,/);
+    }
+    const install = screen.getByRole("button", { name: /^Install / });
+    expect(install.getAttribute("aria-label")).toBe("Install com.[U+200B]acme/[U+202E]gnp.exe");
+  });
+
   it("never claims a tool count", () => {
     render(<McpServerCard repoKey="mcp-local" entry={WEATHER} />);
     expect(screen.queryByText(/tools?/i)).toBeNull();

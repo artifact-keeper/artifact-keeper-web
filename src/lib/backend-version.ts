@@ -21,6 +21,11 @@ function parse(version: string | null | undefined): ParsedVersion | null {
   };
 }
 
+/** Whether `version` is a release or pre-release this module can compare (not, say, "dev"). */
+export function isComparableVersion(version: string | null | undefined): boolean {
+  return parse(version) !== null;
+}
+
 /**
  * Whether `version` is at least `minimum`, by semver precedence.
  *
@@ -62,3 +67,16 @@ export const PERSONAL_TOKEN_REPO_SELECTOR_MIN = "1.11.0";
  * hold from artifact-keeper#4264 (#3912). Earlier backends answer 400.
  */
 export const PROXY_AGE_POLICY_MIN = "1.11.0";
+
+/**
+ * Backend release with the instance lock on a repository's proxy scan policy
+ * (artifact-keeper#4363). From it, an instance administrator's first save on
+ * a repository with no scan config row locks the policy.
+ */
+export const SCAN_POLICY_LOCK_MIN = "1.12.0";
+
+/**
+ * Backend release that accepts `proxy_scan_action = record_only`
+ * (artifact-keeper#3645). Earlier backends store it as `fail_open`.
+ */
+export const RECORD_ONLY_MIN = "1.11.0";

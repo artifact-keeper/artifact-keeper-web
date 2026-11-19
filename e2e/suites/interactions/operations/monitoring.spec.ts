@@ -48,9 +48,10 @@ test.describe('Monitoring Page', () => {
 
   test('health log table renders or shows empty state', async ({ page }) => {
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no.*log|no.*data|no.*record|no.*result|empty/i).first();
+    const emptyState = page.getByText(/\bno\b.*\b(log|data|record|result)s?\b|\bempty\b/i).first();
 
-    await expect(table.or(emptyState)).toBeVisible();
+    // .first(): the table and its tbody can both match.
+    await expect(table.or(emptyState).first()).toBeVisible();
   });
 
   test('no console errors on page load', async () => {

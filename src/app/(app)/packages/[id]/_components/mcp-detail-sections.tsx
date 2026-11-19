@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH } from "@/lib/untrusted-text";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
@@ -69,7 +71,7 @@ export function OverviewSection({
   const { namespace } = splitServerName(server.name);
   return (
     <div className="space-y-6">
-      {server.description && <p className="text-sm whitespace-pre-line">{server.description}</p>}
+      {server.description && <SafeText as="p" className="text-sm whitespace-pre-line" value={server.description} />}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -78,7 +80,7 @@ export function OverviewSection({
           <CardContent>
             <dl>
               <Field label="Name">
-                <span className="font-mono text-xs">{server.name}</span>
+                <SafeText className="font-mono text-xs" max={NAME_MAX_LENGTH} value={server.name} />
               </Field>
               <Field label="Status">{official?.status ?? "not served"}</Field>
               <Field label="Published">{official?.publishedAt ? formatDate(official.publishedAt) : "--"}</Field>
@@ -96,7 +98,11 @@ export function OverviewSection({
           <CardContent>
             <dl>
               <Field label="Namespace">
-                <span className="font-mono text-xs">{namespace || "--"}</span>
+                {namespace ? (
+                  <SafeText className="font-mono text-xs" max={NAME_MAX_LENGTH} value={namespace} />
+                ) : (
+                  <span className="font-mono text-xs">--</span>
+                )}
               </Field>
               <Field label="Source">{source ? <McpSourceBadge kind={source} /> : "--"}</Field>
               <Field label="Repository">

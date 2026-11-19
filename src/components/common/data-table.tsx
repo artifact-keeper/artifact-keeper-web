@@ -37,6 +37,8 @@ interface DataTableProps<T> {
   onPageSizeChange?: (size: number) => void;
   pageSizeOptions?: number[];
   loading?: boolean;
+  /** Rows on screen are stale while the next page loads: dim them and mark the table busy */
+  fetching?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: T) => void;
   rowKey?: (row: T) => string;
@@ -52,6 +54,7 @@ export function DataTable<T>({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
   loading = false,
+  fetching = false,
   emptyMessage = "No data found.",
   onRowClick,
   rowKey,
@@ -151,7 +154,15 @@ export function DataTable<T>({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md border">
+      <div
+        className={cn("rounded-md border transition-opacity", fetching && "opacity-50")}
+        aria-busy={fetching || undefined}
+      >
+        {fetching && (
+          <span className="sr-only" role="status">
+            Loading data
+          </span>
+        )}
         <Table>
           <TableHeader>
             <TableRow>

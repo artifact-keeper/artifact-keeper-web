@@ -1069,6 +1069,29 @@ describe("artifactsApi", () => {
       );
     });
 
+    it("rejects with the server's message for a storage quota refusal", async () => {
+      const { artifactsApi } = await import("../artifacts");
+      const { QuotaRefusalError } = await import("@/lib/quota");
+      const file = new File(["data"], "lib.jar");
+
+      const promise = artifactsApi.upload("my-repo", file);
+      const xhr = xhrInstances[0];
+
+      xhr.status = 403;
+      xhr.responseText = JSON.stringify({
+        code: "STORAGE_QUOTA_EXCEEDED",
+        message: "Storage quota reached: new uploads are refused",
+        scope: "instance",
+        limit_bytes: 100,
+        used_bytes: 100,
+      });
+      xhr.onload();
+
+      const err = await promise.catch((e) => e);
+      expect(err).toBeInstanceOf(QuotaRefusalError);
+      expect(err.message).toBe("Storage quota reached: new uploads are refused");
+    });
+
     it("rejects with server error detail on non-2xx response", async () => {
       const { artifactsApi } = await import("../artifacts");
       const file = new File(["data"], "bad.jar");

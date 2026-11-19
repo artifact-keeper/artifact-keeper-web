@@ -66,7 +66,7 @@ const { mockListProviders } = vi.hoisted(() => ({
 vi.mock("@/lib/api/sso", () => ({
   ssoApi: {
     listProviders: mockListProviders,
-    ldapLogin: vi.fn().mockResolvedValue(undefined),
+    ldapLogin: vi.fn().mockResolvedValue({ kind: "session" }),
   },
 }));
 

@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { adminApi } from "@/lib/api/admin";
+import { SCAN_POLICY_LOCK_MIN, backendAtLeast } from "@/lib/backend-version";
 import {
   ArrowLeft,
   Boxes,
@@ -190,9 +192,15 @@ import { withoutAttestationBundle } from "@/lib/attestation";
 import { ArtifactAttestationSection } from "./artifact-attestation-section";
 import { CondaPackageSection } from "./conda-package-section";
 import { EnvironmentsTabContent } from "./environments-tab-content";
+import { SafeText } from "@/components/common/safe-text";
+import { environmentsApi } from "@/lib/api/environments";
+import { formatHasLockfiles, showEnvironmentsTab } from "@/lib/environment-formats";
 import { CondaWithdrawButton } from "./conda-withdraw-dialog";
 import { ChannelNoticesPanel } from "./channel-notices-panel";
 import { FileUpload } from "@/components/common/file-upload";
+import { useInstanceQuota } from "@/hooks/use-instance-quota";
+import { effectiveMaxUpload, QuotaRefusalError } from "@/lib/quota";
+import { quotaKeys } from "@/lib/api/quota";
 import { RepoSetupGuide } from "@/components/setup/repo-setup-guide";
 import { repodataRootExample, validateRepodataUploadPath } from "@/lib/rpm-repodata";
 
@@ -214,6 +222,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
   const { config: systemConfig } = useSystemConfig();
+  const instanceQuota = useInstanceQuota();
 
   // artifact search / pagination
   const [searchQuery, setSearchQuery] = useState("");
@@ -259,7 +268,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const [actionAnnounce, setActionAnnounce] = useState("");
 
   // security form local state
-  const [secForm, setSecForm] = useState<UpsertScanConfigRequest | null>(null);
+  // Only the operator's edits are held, over the fetched row, so a save sends
+  // just those and cannot write back fields saved from Settings since (#1229).
+  const [secEdits, setSecEdits] = useState<Partial<UpsertScanConfigRequest>>({});
 
   // --- queries ---
   const { data: repository, isLoading: repoLoading } = useQuery({
@@ -490,11 +501,30 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // rejected artifact would only ever produce a 409.
   const quarantineActionable = quarantineBlocked && !isQuarantineRejected(quarantine);
 
-  const { data: repoSecurity, isLoading: securityLoading } = useQuery({
+  const {
+    data: repoSecurity,
+    isLoading: securityLoading,
+    isFetching: securityFetching,
+  } = useQuery({
     queryKey: ["repository-security", repoKey],
     queryFn: () => securityApi.getRepoSecurity(repoKey),
     enabled: !!repoKey && !!user?.is_admin,
   });
+
+  // The backend version, from the same cached `/health` query the sidebar and
+  // Settings use: 1.12.0 locks the proxy scan policy on an instance
+  // administrator's first save, from this tab as from Settings (#1229).
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user?.is_admin,
+  });
+  const secFirstSaveLocks =
+    !!user?.is_admin &&
+    !!repoSecurity &&
+    !repoSecurity.config &&
+    backendAtLeast(health?.version, SCAN_POLICY_LOCK_MIN);
 
   // initialise security form from fetched data
   const securityDefaults: UpsertScanConfigRequest = {
@@ -504,7 +534,21 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     block_on_policy_violation: repoSecurity?.config?.block_on_policy_violation ?? false,
     severity_threshold: repoSecurity?.config?.severity_threshold ?? "high",
   };
-  const currentSecForm = secForm ?? securityDefaults;
+  const currentSecForm: UpsertScanConfigRequest = { ...securityDefaults, ...secEdits };
+  const setSecField = <K extends keyof UpsertScanConfigRequest>(
+    key: K,
+    value: UpsertScanConfigRequest[K],
+  ) => setSecEdits((e) => ({ ...e, [key]: value }));
+  // With no row yet the whole form is the first save; otherwise only the
+  // fields that differ from the stored row are sent, as Settings does (#1122).
+  const secPatch: Partial<UpsertScanConfigRequest> = repoSecurity?.config
+    ? Object.fromEntries(
+        (Object.keys(secEdits) as (keyof UpsertScanConfigRequest)[])
+          .filter((k) => secEdits[k] !== undefined && secEdits[k] !== securityDefaults[k])
+          .map((k) => [k, secEdits[k]]),
+      )
+    : currentSecForm;
+  const secChanged = !repoSecurity?.config || Object.keys(secPatch).length > 0;
 
   // Proxy-cache scan verdicts are readable by any authenticated user with
   // repository visibility, matching the endpoint's own authorization — the
@@ -641,11 +685,23 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   });
 
   const updateSecurityMutation = useMutation({
-    mutationFn: (values: UpsertScanConfigRequest) =>
-      securityApi.updateRepoSecurity(repoKey, values),
+    mutationFn: (values: Partial<UpsertScanConfigRequest>) => {
+      // The instance lock (#1185): an instance administrator's PUT without
+      // `instance_locked` LOCKS the proxy scan policy, so send the stored value
+      // back when the GET reported it, and never from anyone else (403).
+      const locked = repoSecurity?.config?.instance_locked;
+      return securityApi.updateRepoSecurity(repoKey, {
+        ...values,
+        ...(user?.is_admin && locked !== undefined
+          ? { instance_locked: locked }
+          : {}),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["repository-security", repoKey] });
-      setSecForm(null); // reset to refetched defaults
+      // The Settings tab caches the same row under its own key.
+      queryClient.invalidateQueries({ queryKey: ["scan-config", repoKey] });
+      setSecEdits({}); // reset to refetched defaults
       toast.success("Security settings saved");
     },
     onError: mutationErrorToast("Failed to save security settings"),
@@ -693,7 +749,16 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
 
   const handleUpload = useCallback(
     async (file: File, path?: string) => {
-      await artifactsApi.upload(repoKey, file, path);
+      try {
+        await artifactsApi.upload(repoKey, file, path);
+      } catch (err) {
+        // A quota refusal means the quota banner is out of date; refresh it.
+        if (err instanceof QuotaRefusalError) {
+          queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+          queryClient.invalidateQueries({ queryKey: quotaKeys.system });
+        }
+        throw err;
+      }
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
       queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
@@ -738,6 +803,25 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // path parser as fallback (#482).
   const isMavenFamily = repoFormat === "maven" || repoFormat === "gradle";
   const isConda = isCondaFormat(repoFormat);
+  // PEP 708 tracks are declared on the hosted repository that owns the
+  // project; the backend refuses them on remote and virtual repositories, so
+  // the tab belongs on local and staging PyPI repositories (#1066).
+  const isPypiTracksRepo =
+    repoFormat === "pypi" &&
+    (repository?.repo_type === "local" || repository?.repo_type === "staging");
+  // The Environments tab only helps where the ecosystem has a supported
+  // lockfile, or where environments are already registered. The stored list is
+  // only fetched when the format alone does not decide it, and shares its cache
+  // entry with the tab's own query (#1037).
+  const formatLocksEnvironments = formatHasLockfiles(repoFormat);
+  const { data: storedEnvironments } = useQuery({
+    queryKey: ["environments", repoKey],
+    queryFn: () => environmentsApi.list(repoKey),
+    retry: false,
+    enabled: isAuthenticated && !!repoFormat && !formatLocksEnvironments,
+  });
+  const showEnvironments =
+    isAuthenticated && showEnvironmentsTab(repoFormat, storedEnvironments?.length ?? 0);
   const artifactGavc = (a: Artifact) =>
     mavenGavcFromMetadata(a.metadata) ?? parseMavenGav(a.path);
   // Whether a download count is a real number or an unmeasured blank (#808).
@@ -747,6 +831,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     repository
       ? downloadCountKind(a.download_count, repository, formatHandlers)
       : "count";
+  // Proxy-cached rows carry no `version` (the cache catalog has no column for
+  // one), so every file in a mirrored Maven repo showed a dash. Fall back to
+  // the coordinates, which prefer backend metadata and parse the path second.
+  const artifactVersion = (a: Artifact) =>
+    a.version || (isMavenFamily ? artifactGavc(a)?.version : undefined);
   const artifactColumns: DataTableColumn<Artifact>[] = [
     {
       id: "name",
@@ -820,15 +909,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     {
       id: "version",
       header: "Version",
-      accessor: (a) => a.version ?? "",
-      cell: (a) =>
-        a.version ? (
+      accessor: (a) => artifactVersion(a) ?? "",
+      cell: (a) => {
+        const version = artifactVersion(a);
+        return version ? (
           <Badge variant="outline" className="text-xs font-normal">
-            {a.version}
+            {version}
           </Badge>
         ) : (
           <span className="text-xs text-muted-foreground">-</span>
-        ),
+        );
+      },
     },
     // Conda packages differ by platform subdir and build string as often as
     // by version (`linux-64` vs `noarch`, `py310h…` vs `py311h…`); neither was
@@ -1144,9 +1235,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </div>
 
             {repository.description && (
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                {repository.description}
-              </p>
+              <SafeText
+                as="p"
+                className="text-sm text-muted-foreground max-w-2xl"
+                value={repository.description}
+              />
             )}
           </div>
         </>
@@ -1189,7 +1282,11 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
             </span>
           </div>
           {repository.description && (
-            <p className="text-sm text-muted-foreground max-w-2xl">{repository.description}</p>
+            <SafeText
+              as="p"
+              className="text-sm text-muted-foreground max-w-2xl"
+              value={repository.description}
+            />
           )}
         </div>
       )}
@@ -1286,14 +1383,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Members
             </TabsTrigger>
           )}
-          {user?.is_admin &&
-            repository.format === "pypi" &&
-            repository.repo_type === "virtual" && (
-              <TabsTrigger value="pypi-tracks">
-                <Link2 className="size-3.5 mr-1" />
-                Tracks
-              </TabsTrigger>
-            )}
+          {user?.is_admin && isPypiTracksRepo && (
+            <TabsTrigger value="pypi-tracks">
+              <Link2 className="size-3.5 mr-1" />
+              Tracks
+            </TabsTrigger>
+          )}
           {isConda &&
             (repository.repo_type === "local" || repository.repo_type === "staging") && (
               <TabsTrigger value="notices">
@@ -1307,7 +1402,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               Curation
             </TabsTrigger>
           )}
-          {isAuthenticated && (
+          {showEnvironments && (
             <TabsTrigger value="environments">
               <Boxes className="size-3.5 mr-1" />
               Environments
@@ -1528,7 +1623,10 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 showPathInput
                 repositoryKey={repoKey}
                 onChunkedComplete={handleChunkedComplete}
-                maxUploadSizeBytes={systemConfig.max_upload_size_bytes}
+                maxUploadSizeBytes={effectiveMaxUpload(
+                  systemConfig.max_upload_size_bytes,
+                  instanceQuota?.maxUploadBytes
+                )}
                 {...(repository.format === "rpm" && (repository.repodata_depth ?? 0) > 0
                   ? {
                       pathLabel: "Artifact path (required)",
@@ -1554,14 +1652,12 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           </TabsContent>
         )}
 
-        {/* --- PyPI Tracks Tab (PEP 708, virtual PyPI repos) --- */}
-        {user?.is_admin &&
-          repository.format === "pypi" &&
-          repository.repo_type === "virtual" && (
-            <TabsContent value="pypi-tracks" className="mt-4">
-              <PypiTracksPanel repository={repository} />
-            </TabsContent>
-          )}
+        {/* --- PyPI Tracks Tab (PEP 708, hosted PyPI repos) --- */}
+        {user?.is_admin && isPypiTracksRepo && (
+          <TabsContent value="pypi-tracks" className="mt-4">
+            <PypiTracksPanel repository={repository} />
+          </TabsContent>
+        )}
 
         {/* --- Notices Tab (conda CEP-6 channel notices, #913) --- */}
         {isConda &&
@@ -1572,7 +1668,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
           )}
 
         {/* --- Environments Tab (registered lockfiles, PURL lookup) --- */}
-        {isAuthenticated && (
+        {showEnvironments && (
           <TabsContent value="environments" className="mt-4">
             <EnvironmentsTabContent repoKey={repoKey} canRegister={!!user?.is_admin} />
           </TabsContent>
@@ -1602,7 +1698,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 className="space-y-5 max-w-md"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  updateSecurityMutation.mutate(currentSecForm);
+                  updateSecurityMutation.mutate(secPatch);
                 }}
               >
                 <div className="flex items-center justify-between">
@@ -1611,7 +1707,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-enabled"
                     checked={currentSecForm.scan_enabled}
                     onCheckedChange={(v) =>
-                      setSecForm({ ...currentSecForm, scan_enabled: v })
+                      setSecField("scan_enabled", v)
                     }
                   />
                 </div>
@@ -1621,7 +1717,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-upload"
                     checked={currentSecForm.scan_on_upload}
                     onCheckedChange={(v) =>
-                      setSecForm({ ...currentSecForm, scan_on_upload: v })
+                      setSecField("scan_on_upload", v)
                     }
                   />
                 </div>
@@ -1642,7 +1738,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                         proxiesUpstream ? "sec-proxy-note" : undefined
                       }
                       onCheckedChange={(v) =>
-                        setSecForm({ ...currentSecForm, scan_on_proxy: v })
+                        setSecField("scan_on_proxy", v)
                       }
                     />
                   </div>
@@ -1663,10 +1759,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     id="sec-block"
                     checked={currentSecForm.block_on_policy_violation}
                     onCheckedChange={(v) =>
-                      setSecForm({
-                        ...currentSecForm,
-                        block_on_policy_violation: v,
-                      })
+                      setSecField("block_on_policy_violation", v)
                     }
                   />
                 </div>
@@ -1675,7 +1768,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   <Select
                     value={currentSecForm.severity_threshold}
                     onValueChange={(v) =>
-                      setSecForm({ ...currentSecForm, severity_threshold: v })
+                      setSecField("severity_threshold", v)
                     }
                   >
                     <SelectTrigger className="w-full">
@@ -1689,9 +1782,32 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </SelectContent>
                   </Select>
                 </div>
+                {/* The lock is changed in Settings; here it is only shown
+                    (#1213). */}
+                {repoSecurity?.config?.instance_locked !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    {repoSecurity.config.instance_locked
+                      ? "Proxy scan policy locked: a repository administrator can tighten it but not weaken it. Change the lock in Settings, under Scanning & enforcement."
+                      : "Proxy scan policy not locked: the repository's administrators can change it. Lock it in Settings, under Scanning & enforcement."}
+                  </p>
+                )}
+                {/* No config row yet: the backend locks the policy on an
+                    instance administrator's first save (#1213, #1229). */}
+                {secFirstSaveLocks && (
+                  <p className="text-xs text-muted-foreground">
+                    This repository has no scanning settings yet. Saving them
+                    for the first time locks the proxy scan policy; you can
+                    hand it back to the repository&apos;s administrators
+                    afterwards in Settings, under Scanning &amp; enforcement.
+                  </p>
+                )}
+                {/* A save sends the stored lock back, so wait for a refetch
+                    to finish rather than send a stale one (#1213). */}
                 <Button
                   type="submit"
-                  disabled={updateSecurityMutation.isPending}
+                  disabled={
+                    updateSecurityMutation.isPending || securityFetching || !secChanged
+                  }
                 >
                   {updateSecurityMutation.isPending
                     ? "Saving..."

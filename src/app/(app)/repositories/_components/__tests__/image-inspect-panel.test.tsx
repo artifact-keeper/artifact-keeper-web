@@ -68,7 +68,7 @@ describe("DockerfileView", () => {
     expect(list).toHaveTextContent("ADD file:abc in /");
     expect(list).toHaveTextContent("RUN echo hello > /hello");
     expect(list).toHaveTextContent("ENV BIFROST_SPIKE=1");
-    expect(list).toHaveTextContent("3.43 MB");
+    expect(list).toHaveTextContent("3.43 MiB");
   });
 
   it("prefers the real Dockerfile from a provenance attestation", () => {

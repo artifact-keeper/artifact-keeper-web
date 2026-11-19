@@ -52,11 +52,22 @@ vi.mock("@tanstack/react-query", () => ({
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockToastLoading = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
+    dismiss: vi.fn(),
+    loading: (...args: unknown[]) => mockToastLoading(...args),
+    info: vi.fn(),
   },
+}));
+
+// The 202 job's poller: keep it pending so no request leaves the test, and
+// record the options so a test can check the signal that stops it (#1190).
+const mockWaitForDeletion = vi.fn<(...args: unknown[]) => Promise<never>>(() => new Promise(() => {}));
+vi.mock("@/lib/api/repository-deletions", () => ({
+  waitForRepositoryDeletion: (...args: unknown[]) => mockWaitForDeletion(...args),
 }));
 
 vi.mock("@/lib/api/repositories", () => ({
@@ -466,8 +477,78 @@ describe("RepositoriesContent", () => {
   it("delete mutation onSuccess shows success toast", () => {
     render(<RepositoriesContent />);
     const deleteConfig = useMutationConfigs[2];
-    deleteConfig.onSuccess?.({}, "my-repo");
+    deleteConfig.onSuccess?.(null, "my-repo");
     expect(mockToastSuccess).toHaveBeenCalledWith("Repository deleted");
+  });
+
+  it("delete mutation says the deletion has started for a 202 job (#1048)", () => {
+    render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    deleteConfig.onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalledWith("Repository deleted");
+    expect(mockToastLoading).toHaveBeenCalledWith(
+      'Deleting repository "my-repo"...',
+      expect.objectContaining({ id: "repository-delete-job-1" }),
+    );
+  });
+
+  it("stops the delete-job poller when the page unmounts (#1190)", () => {
+    const { unmount } = render(<RepositoriesContent />);
+    useMutationConfigs[2].onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    const { signal } = mockWaitForDeletion.mock.calls[0][1] as { signal: AbortSignal };
+    expect(signal.aborted).toBe(false);
+    unmount();
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).not.toBe("logout");
+  });
+
+  it("stops the delete-job poller when the user signs out (#1190)", () => {
+    const { rerender } = render(<RepositoriesContent />);
+    useMutationConfigs[2].onSuccess?.(
+      { id: "job-1", status: "pending", repository_key: "my-repo" },
+      "my-repo",
+    );
+    const { signal } = mockWaitForDeletion.mock.calls[0][1] as { signal: AbortSignal };
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
+    rerender(<RepositoriesContent />);
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBe("logout");
+  });
+
+  const JOB = { id: "job-1", status: "pending", repository_key: "my-repo" };
+  const lastPollSignal = () =>
+    (mockWaitForDeletion.mock.calls.at(-1)![1] as { signal: AbortSignal }).signal;
+
+  it("stops a delete-job poller that starts after the page unmounts (#1228)", () => {
+    const { unmount } = render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    unmount();
+    // A DELETE still in flight, or Retry on the failed toast, from another page.
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    expect(lastPollSignal().aborted).toBe(true);
+    expect(lastPollSignal().reason).not.toBe("logout");
+  });
+
+  it("stops a delete-job poller that starts after sign-out, until the next sign-in (#1228)", () => {
+    const { rerender } = render(<RepositoriesContent />);
+    const deleteConfig = useMutationConfigs[2];
+    mockUseAuth.mockReturnValue({ isAuthenticated: false, user: null });
+    rerender(<RepositoriesContent />);
+    const polls = mockWaitForDeletion.mock.calls.length;
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    // Signed out: no poll starts and no outcome is shown (#1231).
+    expect(mockWaitForDeletion.mock.calls.length).toBe(polls);
+
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    rerender(<RepositoriesContent />);
+    deleteConfig.onSuccess?.(JOB, "my-repo");
+    expect(lastPollSignal().aborted).toBe(false);
   });
 
   it("delete mutation onError shows error toast", () => {
@@ -827,7 +908,7 @@ describe("RepositoriesContent", () => {
 
     // Delete the selected repo
     const deleteConfig = useMutationConfigs[2];
-    deleteConfig.onSuccess?.({}, "maven-central");
+    deleteConfig.onSuccess?.(null, "maven-central");
 
     expect(mockToastSuccess).toHaveBeenCalledWith("Repository deleted");
 

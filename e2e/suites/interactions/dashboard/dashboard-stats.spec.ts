@@ -8,8 +8,8 @@ import type { Page, Locator } from '@playwright/test';
 
 /**
  * Dashboard Statistics cards (PR #738):
- * "Storage Used" and "Artifacts" show local + remote (proxy cache) combined
- * totals, with a hover tooltip breaking down Local vs Remote. Proxy values
+ * "Storage Used" uses the inclusive backend total; "Artifacts" adds hosted
+ * and proxy counts. Hover tooltips break down Local vs Remote. Proxy values
  * come from admin-stats fields `proxy_artifact_count` / `proxy_storage_bytes`
  * and default to 0 on older backends.
  */
@@ -40,7 +40,7 @@ function cardValue(card: Locator): Locator {
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '--';
   if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
   const k = 1024;
   const i = Math.max(
     0,
@@ -68,9 +68,9 @@ test.describe('Dashboard Statistics cards', () => {
     // Artifacts shows a plain count.
     await expect(cardValue(statCard(page, 'Artifacts'))).toHaveText(/^\d+$/);
 
-    // Storage Used shows a formatted byte size (e.g. "0 B", "1.5 MB").
+    // Storage Used shows a formatted byte size (e.g. "0 B", "1.5 MiB").
     await expect(cardValue(statCard(page, 'Storage Used'))).toHaveText(
-      /^\d+(\.\d+)?\s(B|KB|MB|GB|TB)$/
+      /^\d+(\.\d+)?\s(B|KiB|MiB|GiB|TiB|PiB)$/
     );
     await expect(section).toBeVisible();
   });
@@ -87,7 +87,7 @@ test.describe('Dashboard Statistics cards', () => {
     const expectedArtifacts =
       stats.total_artifacts + (stats.proxy_artifact_count ?? 0);
     const expectedStorage = formatBytes(
-      stats.total_storage_bytes + (stats.proxy_storage_bytes ?? 0)
+      stats.total_storage_bytes
     );
 
     await navigateTo(page, '/');
@@ -100,6 +100,31 @@ test.describe('Dashboard Statistics cards', () => {
       expectedStorage,
       { timeout: 10000 }
     );
+  });
+
+  test('proxy cache bytes are included once in storage and split correctly', async ({ page }) => {
+    await page.route('**/api/v1/admin/stats', (route) => route.fulfill({
+      json: {
+        total_repositories: 1,
+        total_artifacts: 2,
+        total_users: 1,
+        total_storage_bytes: 1048576,
+        proxy_artifact_count: 3,
+        proxy_storage_bytes: 262144,
+      },
+    }));
+    await navigateTo(page, '/');
+
+    const storage = statCard(page, 'Storage Used');
+    await expect(cardValue(storage)).toHaveText('1 MiB');
+    await expect(cardValue(statCard(page, 'Artifacts'))).toHaveText('5');
+    await storage.hover();
+    const tooltip = page.getByRole('tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip.locator('div').filter({ has: page.getByText('Local', { exact: true }) }).last())
+      .toContainText('768 KiB');
+    await expect(tooltip.locator('div').filter({ has: page.getByText('Remote', { exact: true }) }).last())
+      .toContainText('256 KiB');
   });
 
   test('hover shows Local/Remote breakdown tooltip on combined cards', async ({

@@ -61,6 +61,7 @@ import type {
   PackageVersion,
 } from "@/types/packages";
 import type { Repository } from "@/types";
+import { SafeText } from "@/components/common/safe-text";
 
 // ---- Helpers ----
 
@@ -135,9 +136,7 @@ function PackageListItem({
           </div>
         </div>
         {pkg.description && (
-          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-            {pkg.description}
-          </p>
+          <SafeText as="p" className="text-xs text-muted-foreground mt-2 line-clamp-2" value={pkg.description} />
         )}
         {formatPackageDownloads(pkg.download_count) && (
           <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
@@ -238,9 +237,7 @@ function PackageDetailPanel({
               </p>
             )}
             {pkg.description && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
-                {pkg.description}
-              </p>
+              <SafeText as="p" className="text-sm text-muted-foreground mt-2 line-clamp-3" value={pkg.description} />
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">

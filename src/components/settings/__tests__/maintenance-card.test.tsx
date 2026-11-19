@@ -179,7 +179,7 @@ describe("MaintenanceCard (#859)", () => {
     // npm-local had zero drift, so the backfill changed nothing for it.
     expect(within(table).queryByText("npm-local")).not.toBeInTheDocument();
     expect(within(table).getByText("No ledger row")).toBeInTheDocument();
-    expect(within(table).getByText("+3 KB")).toBeInTheDocument();
+    expect(within(table).getByText("+3 KiB")).toBeInTheDocument();
     expect(mockToastSuccess).toHaveBeenCalled();
   });
 
@@ -254,11 +254,11 @@ describe("MaintenanceCard (#859)", () => {
 
 describe("formatDriftBytes", () => {
   it("signs a positive delta", () => {
-    expect(formatDriftBytes(3072)).toBe("+3 KB");
+    expect(formatDriftBytes(3072)).toBe("+3 KiB");
   });
 
   it("signs a negative delta instead of returning the missing-value sentinel", () => {
-    expect(formatDriftBytes(-2048)).toBe("-2 KB");
+    expect(formatDriftBytes(-2048)).toBe("-2 KiB");
   });
 
   it("renders a zero delta without a sign", () => {

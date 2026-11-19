@@ -280,7 +280,13 @@ test.describe('Lifecycle Page', () => {
 
   test('policies table renders or shows empty state', async ({ page }) => {
     const table = page.getByRole('table');
-    const emptyState = page.getByText(/no.*polic|no.*data|no.*result|empty/i).first();
+    // The empty state's own heading, not a loose /no.*polic/ text regex: that also
+    // matched the sidebar and the page description ("not just one repository.
+    // Unassigned policies"), so `table.or(emptyState)` resolved to two elements
+    // whenever a policy existed and failed strict mode (#1219).
+    const emptyState = page
+      .getByRole('main')
+      .getByRole('heading', { name: 'No lifecycle policies', exact: true });
 
     await expect(table.or(emptyState)).toBeVisible();
   });

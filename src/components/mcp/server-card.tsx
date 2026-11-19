@@ -1,4 +1,6 @@
 import { useId } from "react";
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import Link from "next/link";
 import { KeyRound, Plug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -67,11 +69,11 @@ export function McpServerCard({
         <div className="min-w-0 flex-1">
           <h3 id={titleId} className="break-all text-sm leading-5">
             <Link href={mcpServerHref(repoKey, server.name, packageId)} className="hover:underline">
-              {namespace && <span className="text-muted-foreground">{namespace}/</span>}
-              <span className="font-semibold">{shortName}</span>
+              {namespace && <span className="text-muted-foreground"><SafeText max={NAME_MAX_LENGTH} value={namespace} />/</span>}
+              <SafeText max={NAME_MAX_LENGTH} className="font-semibold" value={shortName} />
             </Link>
           </h3>
-          {server.title && <p className="truncate text-xs text-muted-foreground">{server.title}</p>}
+          {server.title && <SafeText as="p" max={NAME_MAX_LENGTH} className="truncate text-xs text-muted-foreground" value={server.title} />}
         </div>
       </div>
 
@@ -95,7 +97,7 @@ export function McpServerCard({
         )}
       </div>
 
-      {server.description && <p className="line-clamp-2 text-sm text-muted-foreground">{server.description}</p>}
+      {server.description && <SafeText as="p" className="line-clamp-2 text-sm text-muted-foreground" value={server.description} />}
 
       <div className="mt-auto flex flex-wrap items-center gap-1.5">
         <McpTransportBadges server={server} />
@@ -118,7 +120,7 @@ export function McpServerCard({
             variant="outline"
             size="sm"
             onClick={() => onInstall(entry)}
-            aria-label={`Install ${server.name}`}
+            aria-label={`Install ${safeText(server.name, { max: NAME_MAX_LENGTH })}`}
           >
             <Plug className="size-3.5" aria-hidden="true" />
             Install

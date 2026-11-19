@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { cn, formatBytes } from "@/lib/utils";
+import { QuotaRefusalError } from "@/lib/quota";
 import {
   useChunkedUpload,
   type UploadProgress,
@@ -40,7 +41,7 @@ interface FileUploadProps {
   onChunkedComplete?: () => void;
   /**
    * Server-enforced maximum upload size in bytes, sourced from
-   * `/api/v1/system/config` (#271). When greater than 0 the limit is shown to
+   * `/api/v1/system/config` (#271) and the instance quota response. When greater than 0 the limit is shown to
    * the user and oversize files are rejected client-side before any request is
    * sent. 0 or undefined means "no limit advertised".
    */
@@ -126,6 +127,8 @@ export function FileUpload({
   const [dragOver, setDragOver] = useState(false);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Link the server sent with a quota refusal, shown next to its message.
+  const [errorHelpUrl, setErrorHelpUrl] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isChunkedMode = !!repositoryKey && !!file && file.size >= chunkedThreshold;
@@ -156,6 +159,7 @@ export function FileUpload({
       setSimpleProgress(0);
       setShowResumePrompt(false);
       setError(null);
+      setErrorHelpUrl(null);
 
       // Reject files over the server-advertised limit before selecting them,
       // so the user gets immediate feedback instead of a failed upload (#271).
@@ -217,6 +221,7 @@ export function FileUpload({
     setCustomPath("");
     setShowResumePrompt(false);
     setError(null);
+    setErrorHelpUrl(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
 
@@ -231,6 +236,7 @@ export function FileUpload({
     setSimpleProgress(0);
     setShowResumePrompt(false);
     setError(null);
+    setErrorHelpUrl(null);
 
     try {
       if (isChunkedMode) {
@@ -241,9 +247,12 @@ export function FileUpload({
       }
     } catch (err) {
       if (!isChunkedMode) {
+        // A quota or size refusal carries the server's own explanation,
+        // which is shown as is (see QuotaRefusalError).
         const message =
           err instanceof Error ? err.message : "Upload failed";
         setError(message);
+        setErrorHelpUrl(err instanceof QuotaRefusalError ? err.helpUrl : null);
       }
     } finally {
       if (!isChunkedMode) {
@@ -269,6 +278,15 @@ export function FileUpload({
       setUploading(false);
     }
   }, [chunked.status]);
+
+  const chunkedError = chunked.status === "error" ? chunked.error : null;
+  const chunkedRefusal = chunkedError instanceof QuotaRefusalError ? chunkedError : null;
+  let displayError: string | null = pathError ?? error ?? null;
+  let displayHelpUrl: string | null = pathError ? null : errorHelpUrl;
+  if (!displayError && chunkedError) {
+    displayError = chunkedRefusal ? chunkedRefusal.message : `Upload failed: ${chunkedError.message}`;
+    displayHelpUrl = chunkedRefusal?.helpUrl ?? null;
+  }
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -400,13 +418,28 @@ export function FileUpload({
         </div>
       )}
 
-      {(pathError || error || (chunked.status === "error" && chunked.error)) && (
+      {displayError && (
         <div
           className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle className="size-4 mt-0.5 shrink-0" />
-          <p>{pathError ?? error ?? `Upload failed: ${chunked.error?.message}`}</p>
+          <p>
+            {displayError}
+            {displayHelpUrl && (
+              <>
+                {" "}
+                <a
+                  href={displayHelpUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-2"
+                >
+                  Learn more<span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              </>
+            )}
+          </p>
         </div>
       )}
 

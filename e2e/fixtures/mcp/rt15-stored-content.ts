@@ -1,4 +1,13 @@
 import { expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { formatUntrustedText } from '../../../src/lib/untrusted-text';
+
+/**
+ * How the UI shows a stored string (#1107): control and bidi characters become
+ * a visible `[U+XXXX]`. Uses the UI's own formatter so the two cannot drift.
+ * Strings without such characters come back unchanged, so this is safe to
+ * apply to every expected text.
+ */
+export const shown = (s: string): string => formatUntrustedText(s, { max: Number.MAX_SAFE_INTEGER }).text;
 
 /**
  * RT-15 rig (artifact-keeper#5472): hostile MCP content stored through the
@@ -87,11 +96,11 @@ function markupServer() {
         headers: [{ name: 'X-Rt15', description: TEXT.headerDescription, value: 'rt15' }],
       },
       {
-        // A templated remote: the backend checks only that the URL starts
-        // with `{variable}`, so the variable's default and choices can carry
-        // an active scheme into anything that substitutes them.
+        // A templated remote: every expansion must be an http(s) URL
+        // (artifact-keeper#5529), so the active-scheme values sit in a path
+        // variable, still stored verbatim as its default and choices.
         type: 'sse',
-        url: '{base}/sse',
+        url: `${ATTACKER}/mcp-rt15/{base}/sse`,
         variables: {
           base: {
             description: TEXT.variableDescription,

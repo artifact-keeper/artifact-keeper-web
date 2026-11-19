@@ -48,6 +48,7 @@ import { PackageDependencies } from "./package-dependencies";
 import { PackageMetadataViewer } from "./package-metadata-viewer";
 import { McpServerGallery } from "./mcp-server-gallery";
 import { isMcpFormat } from "@/lib/mcp/format";
+import { SafeText } from "@/components/common/safe-text";
 
 interface PackagesTabContentProps {
   repositoryKey: string;
@@ -292,7 +293,7 @@ function PackageDetailView({
       </div>
 
       {pkg.description && (
-        <p className="text-sm text-muted-foreground">{pkg.description}</p>
+        <SafeText as="p" className="text-sm text-muted-foreground" value={pkg.description} />
       )}
 
       {/* Sub-tabs */}

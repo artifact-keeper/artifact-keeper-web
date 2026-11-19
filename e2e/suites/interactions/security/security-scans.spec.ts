@@ -33,3 +33,58 @@ test.describe('Security Scans Page', () => {
     }
   });
 });
+
+/**
+ * `not_applicable` rows are hidden unless that status is picked (#1098).
+ *
+ * The backend records one `not_applicable` scan per scanner that does not
+ * handle an artifact's format, so on a mixed instance they outnumber the real
+ * results. The list hides them by default and offers the status explicitly.
+ */
+test.describe('Security scans: not_applicable rows', () => {
+  test('the status filter offers "Not applicable"', async ({ page }) => {
+    await page.goto('/security/scans');
+    await page.waitForLoadState('domcontentloaded');
+
+    const status = page.getByRole('combobox', { name: 'Status' });
+    await expect(status).toBeVisible({ timeout: 15000 });
+    await status.click();
+    await expect(
+      page.getByRole('option', { name: 'Not applicable' })
+    ).toBeVisible();
+  });
+
+  test('the default view lists no not_applicable row, and selecting it does', async ({
+    page,
+    request,
+  }) => {
+    const probe = await request.get(
+      '/api/v1/security/scans?per_page=1&status=not_applicable'
+    );
+    test.skip(
+      !probe.ok(),
+      `Backend does not accept status=not_applicable (status ${probe.status()})`
+    );
+    const body = await probe.json();
+    test.skip(
+      (body.items ?? []).length === 0,
+      'No not_applicable scan recorded on this instance'
+    );
+
+    await page.goto('/security/scans');
+    await page.waitForLoadState('domcontentloaded');
+    const table = page.getByRole('table').first();
+    await expect(table).toBeVisible({ timeout: 15000 });
+
+    // Nothing in the default listing reads "not applicable".
+    await expect(table.getByText(/not.applicable/i)).toHaveCount(0);
+
+    const status = page.getByRole('combobox', { name: 'Status' });
+    await status.click();
+    await page.getByRole('option', { name: 'Not applicable' }).click();
+
+    await expect(table.getByText(/not.applicable/i).first()).toBeVisible({
+      timeout: 15000,
+    });
+  });
+});

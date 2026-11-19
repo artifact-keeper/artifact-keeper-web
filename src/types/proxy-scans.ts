@@ -73,13 +73,15 @@ export const PROXY_SCAN_REASONS: ReadonlySet<ProxyScanNotScannedReason> =
 
 /**
  * What the repository does when a proxy scan cannot produce a usable verdict.
- * `fail_open` serves the artifact anyway; `fail_closed` withholds it.
+ * `fail_open` serves the artifact anyway; `fail_closed` withholds it;
+ * `record_only` serves everything and only records the verdicts.
  */
-export type ProxyScanAction = "fail_open" | "fail_closed";
+export type ProxyScanAction = "fail_open" | "fail_closed" | "record_only";
 
 export const PROXY_SCAN_ACTIONS: ReadonlySet<ProxyScanAction> = new Set([
   "fail_open",
   "fail_closed",
+  "record_only",
 ]);
 
 /**

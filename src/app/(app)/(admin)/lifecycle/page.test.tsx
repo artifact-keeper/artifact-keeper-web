@@ -294,7 +294,7 @@ describe("LifecyclePage preview figure (#855)", () => {
     );
 
     expect(
-      await screen.findByText(/Would delete 12 artifacts and reclaim 1\.5 MB/)
+      await screen.findByText(/Would delete 12 artifacts and reclaim 1\.5 MiB/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/free 0 B/)).not.toBeInTheDocument();
   });

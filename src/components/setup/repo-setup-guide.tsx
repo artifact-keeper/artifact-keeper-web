@@ -1003,7 +1003,7 @@ mise install --locked`,
           title: "Configure Cargo",
           description: "Add to ~/.cargo/config.toml:",
           code: `[registries.${repoKey}]
-index = "${REGISTRY_URL}/cargo/${repoKey}/index"
+index = "sparse+${REGISTRY_URL}/cargo/${repoKey}/"
 token = "YOUR_TOKEN"`,
         },
         {
@@ -1274,30 +1274,73 @@ code-server`,
       ];
     }
     case "protobuf":
+      // The backend serves the buf CLI's binary Connect codec on hosted
+      // (local, staging) repositories; a remote or virtual one answers it with Connect
+      // `unimplemented` (artifact-keeper#5066 / #5074).
+      if (repo.repo_type === "remote" || repo.repo_type === "virtual") {
+        return [
+          {
+            title: "buf CLI needs a hosted repository",
+            description: `The buf CLI can push to and resolve modules from a local or staging protobuf repository only. This ${repo.repo_type} repository answers the buf CLI with "unimplemented", so point buf at a local protobuf repository, or at the upstream registry directly.`,
+          },
+        ];
+      }
       return [
         {
+          title: "Point a hostname at this repository",
+          // A buf module name is exactly registry/owner/name, and buf only
+          // prepends a scheme to the registry segment before appending the RPC
+          // path -- there is nowhere to put the /proto/<repo> prefix this
+          // server serves BSR under. So the repository needs a host of its own
+          // whose root maps onto that prefix; nothing the CLI accepts can
+          // stand in for it.
+          // buf only speaks HTTPS, and nginx's 1 MiB default body limit
+          // answers a larger buf push with 413; the backend's protobuf routes
+          // accept up to 256 MiB (#1193).
+          description: `A buf module name is always registry/owner/name, so it cannot carry this repository's /proto/${repoKey} path. Give the repository a hostname whose root maps onto ${REGISTRY_URL}/proto/${repoKey}/, then use that hostname below. The buf CLI only connects over HTTPS, so the hostname needs a TLS certificate.`,
+          code: `# nginx, on the host serving bsr.example.com
+server {
+    listen 443 ssl;
+    server_name bsr.example.com;
+    ssl_certificate     /etc/ssl/certs/bsr.example.com.pem;
+    ssl_certificate_key /etc/ssl/private/bsr.example.com.key;
+
+    # nginx's 1 MiB default rejects a larger buf push with 413
+    client_max_body_size 256m;
+
+    location / {
+        proxy_pass ${REGISTRY_URL}/proto/${repoKey}/;
+    }
+}`,
+        },
+        {
           title: "Configure buf.yaml",
-          description: "Set the registry in your module's buf.yaml:",
+          description: "Name the module after that hostname:",
           code: `# buf.yaml
 version: v2
 modules:
   - path: proto
-    name: ${REGISTRY_HOST}/proto/${repoKey}/myorg/mymodule`,
+    name: bsr.example.com/myorg/mymodule`,
         },
         {
           title: "Authenticate with buf CLI",
-          code: `buf registry login ${REGISTRY_HOST} --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
+          // Not `buf registry login`: it validates the token through
+          // buf.alpha AuthnService/GetCurrentUser, which the backend does not
+          // serve, so it always reports an invalid token.
+          description: "buf reads the token from BUF_TOKEN (buf registry login does not work against Artifact Keeper):",
+          code: `export BUF_TOKEN=YOUR_TOKEN@bsr.example.com`,
         },
         {
           title: "Push a module",
-          code: `buf push --registry ${REGISTRY_URL}/proto/${repoKey}`,
+          description: "buf push reads its destination from buf.yaml:",
+          code: `buf push --create`,
         },
         {
           title: "Add a dependency",
           description: "In buf.yaml, add deps and run update:",
           code: `# buf.yaml
 deps:
-  - ${REGISTRY_HOST}/proto/${repoKey}/owner/module
+  - bsr.example.com/owner/module
 
 # Then resolve:
 buf dep update`,

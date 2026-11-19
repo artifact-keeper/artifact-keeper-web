@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 import { runnerLabel, runnersOf, type McpRunner } from "@/lib/mcp/server-json";
 import type { McpHealth, McpPackagePin, McpPackagePolicy, McpServerJson } from "@/types/mcp";
 import {
@@ -217,7 +219,7 @@ function ColumnHeading({ children }: { children: ReactNode }) {
 
 function RowList({ rows, server }: { rows: Row[]; server: McpServerJson }) {
   return (
-    <ul role="list" aria-label={`Lineage of ${server.name} ${server.version}`} className="space-y-2 text-sm md:sr-only md:focus-within:not-sr-only">
+    <ul role="list" aria-label={`Lineage of ${safeText(server.name, { max: NAME_MAX_LENGTH })} ${safeText(server.version, { max: NAME_MAX_LENGTH })}`} className="space-y-2 text-sm md:sr-only md:focus-within:not-sr-only">
       {rows.map((r) => (
         <li key={r.runner.id} className="rounded-md border p-2">
           <span className="font-medium">{runnerLabel(r.runner)}</span>
@@ -299,8 +301,8 @@ export function McpLineageGraph({
           <ColumnHeading>AK artifacts</ColumnHeading>
           <ColumnHeading>Verdicts</ColumnHeading>
           <Node nodeRef={register("server")} style={{ gridColumn: 1, gridRow: `2 / span ${rows.length}` }}>
-            <span className="font-medium">{server.name}</span>
-            <span className="block text-muted-foreground">v{server.version}</span>
+            <SafeText max={NAME_MAX_LENGTH} className="font-medium" value={server.name} />
+            <SafeText max={NAME_MAX_LENGTH} className="block text-muted-foreground" value={`v${server.version}`} />
           </Node>
           {rows.map((r, i) => (
             <RowNodes key={r.runner.id} row={r} i={i} register={register} />
