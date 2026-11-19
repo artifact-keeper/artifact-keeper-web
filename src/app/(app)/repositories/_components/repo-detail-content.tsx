@@ -596,15 +596,17 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const deletePermanentlyMutation = useMutation({
     mutationFn: (path: string) => artifactsApi.deletePermanently(repoKey, path),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
-      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
-      queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
       setDetailOpen(false);
       setSelectedArtifact(null);
       toast.success("Artifact permanently deleted");
       setActionAnnounce("Artifact permanently deleted.");
     },
     onError: mutationErrorToast("Failed to permanently delete artifact"),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
+    },
   });
   // The backend refuses a permanent delete of OCI content: tags and shared
   // layers are reclaimed by storage GC. Older backends ignore `permanent` and
