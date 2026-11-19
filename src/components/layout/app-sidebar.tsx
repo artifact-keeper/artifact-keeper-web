@@ -52,6 +52,7 @@ import {
   Network,
   Crosshair,
   Hourglass,
+  ShieldAlert,
   Plug,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -119,6 +120,7 @@ const securityItems: NavItem[] = [
   { title: "License Policies", href: "/license-policies", icon: Scale },
   { title: "Curation", href: "/curation", icon: PackageCheck },
   { title: "Age Gate", href: "/age-gate", icon: Hourglass },
+  { title: "Quarantine", href: "/quarantine", icon: ShieldAlert },
   { title: "Signing", href: "/signing", icon: FileSignature },
   { title: "Permissions", href: "/permissions", icon: Lock },
 ];
