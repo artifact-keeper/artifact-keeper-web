@@ -124,7 +124,7 @@ describe("McpServerDetail", () => {
     api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: hostile, registry: { status: "active" }, packages: PINS } });
     renderWithClient(<McpServerDetail pkg={{ ...PKG, name: hostile.name }} />);
     const short = await screen.findByText("[U+202E]weather");
-    const ns = screen.getByText("com.[U+200B]acme");
+    const [ns] = screen.getAllByText("com.[U+200B]acme");
     for (const el of [ns, short]) {
       expect(el).toHaveAttribute("data-sanitized", "true");
       expect(el.getAttribute("title")).toMatch(/hidden or control character/);
@@ -132,12 +132,26 @@ describe("McpServerDetail", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/[\u202e\u200b]/);
   });
 
+  it("marks hidden characters in the Publisher namespace (#1231)", async () => {
+    const hostile = { ...SERVER, name: "com.ac\u2062me/weather" };
+    api.listVersions.mockResolvedValue([entryOf(hostile)]);
+    api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: hostile, registry: { status: "active" }, packages: PINS } });
+    renderWithClient(<McpServerDetail pkg={{ ...PKG, name: hostile.name }} />);
+    await screen.findByText("Publisher");
+    const shown = await screen.findAllByText("com.ac[U+2062]me");
+    expect(shown.length).toBeGreaterThanOrEqual(2);
+    for (const el of shown) expect(el).toHaveAttribute("data-sanitized", "true");
+    const breadcrumb = screen.getByRole("navigation", { name: /breadcrumb/i });
+    expect(breadcrumb.textContent).toContain("com.ac[U+2062]me/weather");
+    expect(breadcrumb.textContent).not.toMatch(/\u2062/);
+  });
+
   it("marks hidden characters in the Overview's Metadata name (#1226)", async () => {
     const hostile = { ...SERVER, name: "com.acme/pay\u2062pal" };
     api.listVersions.mockResolvedValue([entryOf(hostile)]);
     api.getStoredMetadata.mockResolvedValue({ artifactId: "a", metadata: { server: hostile, registry: { status: "active" }, packages: PINS } });
     renderWithClient(<McpServerDetail pkg={{ ...PKG, name: hostile.name }} />);
-    const name = await screen.findByText("com.acme/pay[U+2062]pal");
+    const name = (await screen.findAllByText("com.acme/pay[U+2062]pal")).find((el) => el.closest("dl"))!;
     expect(name).toHaveAttribute("data-sanitized", "true");
     expect(name.closest("dl")?.textContent).not.toMatch(/\u2062/);
   });

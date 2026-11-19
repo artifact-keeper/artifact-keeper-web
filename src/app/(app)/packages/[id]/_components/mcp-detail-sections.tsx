@@ -98,7 +98,11 @@ export function OverviewSection({
           <CardContent>
             <dl>
               <Field label="Namespace">
-                <span className="font-mono text-xs">{namespace || "--"}</span>
+                {namespace ? (
+                  <SafeText className="font-mono text-xs" max={NAME_MAX_LENGTH} value={namespace} />
+                ) : (
+                  <span className="font-mono text-xs">--</span>
+                )}
               </Field>
               <Field label="Source">{source ? <McpSourceBadge kind={source} /> : "--"}</Field>
               <Field label="Repository">

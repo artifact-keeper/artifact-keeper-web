@@ -236,7 +236,9 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>{name}</BreadcrumbPage>
+            <BreadcrumbPage>
+              <SafeText max={NAME_MAX_LENGTH} value={name} />
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
