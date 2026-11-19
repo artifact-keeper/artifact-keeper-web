@@ -11,6 +11,11 @@ import Image from "next/image";
 import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { toUserMessage, isAccountLocked } from "@/lib/error-utils";
+import {
+  INVALID_CREDENTIALS_MESSAGE,
+  isCredentialRejection,
+  sameOriginLoginUrl,
+} from "@/lib/sign-in-guards";
 import { ssoApi } from "@/lib/api/sso";
 import { clearSilentSsoReturnTo } from "@/lib/silent-sso";
 import { useSystemConfig } from "@/providers/system-config-provider";
@@ -229,7 +234,13 @@ function LoginContent() {
       if (isAccountLocked(err)) {
         setAccountLocked(true);
       } else {
-        setError(toUserMessage(err, "Login failed. Please check your credentials."));
+        // #1153: never echo the backend's 401 text for a password sign-in, so
+        // the page cannot tell an unknown user from a wrong password.
+        setError(
+          isCredentialRejection(err)
+            ? INVALID_CREDENTIALS_MESSAGE
+            : toUserMessage(err, "Login failed. Please check your credentials.")
+        );
       }
     } finally {
       setIsLoading(false);
@@ -527,15 +538,21 @@ function LoginContent() {
                     variant="outline"
                     className="w-full"
                     onClick={() => {
-                      if (provider.login_url.startsWith('/')) {
-                        // An explicit sign-in: drop a return path a silent
-                        // probe left behind (one that ended on an IdP error
-                        // never reached the callback to consume it), so the
-                        // callback does not take this round trip for a
-                        // silent one (artifact-keeper#5484).
-                        clearSilentSsoReturnTo();
-                        window.location.href = provider.login_url;
+                      const target = sameOriginLoginUrl(provider.login_url);
+                      if (target === null) {
+                        console.warn(
+                          "Ignoring SSO provider with a cross-origin login_url",
+                          provider.id
+                        );
+                        return;
                       }
+                      // An explicit sign-in: drop a return path a silent
+                      // probe left behind (one that ended on an IdP error
+                      // never reached the callback to consume it), so the
+                      // callback does not take this round trip for a
+                      // silent one (artifact-keeper#5484).
+                      clearSilentSsoReturnTo();
+                      window.location.href = target;
                     }}
                   >
                     <LogIn className="size-4 mr-2" />
