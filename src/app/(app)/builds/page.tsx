@@ -59,6 +59,7 @@ import type {
   BuildDiff,
   BuildModule,
 } from "@/types/builds";
+import { BuildMetadata, BuildUrl } from "./_components/build-links";
 
 // ---- Helpers ----
 
@@ -220,6 +221,13 @@ function BuildDetailDialog({
                 </InfoItem>
               </div>
 
+              {build.vcs_url && (
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Repository:</span>{" "}
+                  <BuildUrl url={build.vcs_url} />
+                </div>
+              )}
+
               {build.vcs_message && (
                 <div className="text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">Commit:</span>{" "}
@@ -235,6 +243,8 @@ function BuildDetailDialog({
                   </span>
                 </div>
               )}
+
+              <BuildMetadata metadata={build.metadata} />
 
               <div className="pt-2">
                 <Button
@@ -297,15 +307,37 @@ function InfoItem({
 function ModuleCard({ module }: { module: BuildModule }) {
   return (
     <div className="rounded-lg border">
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <FileText className="size-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-sm truncate">{module.module_name || module.name}</span>
-        </div>
+      <div className="flex items-center gap-2 p-3 border-b">
+        <Layers className="size-4 text-muted-foreground shrink-0" />
+        <span className="font-medium text-sm truncate">
+          {module.name || "No module"}
+        </span>
         <span className="text-xs text-muted-foreground">
-          {formatBytes(module.size_bytes)}
+          {module.artifacts.length}{" "}
+          {module.artifacts.length === 1 ? "artifact" : "artifacts"}
         </span>
       </div>
+      <ul className="divide-y">
+        {module.artifacts.map((artifact) => (
+          <li
+            key={`${artifact.path}-${artifact.checksum_sha256}`}
+            className="flex items-center justify-between gap-3 px-3 py-2"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="size-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm truncate">{artifact.name}</p>
+                <p className="text-xs text-muted-foreground truncate font-mono">
+                  {artifact.path}
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatBytes(artifact.size_bytes)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

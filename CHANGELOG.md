@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The build detail shows the repository link, the metadata and every artifact of a module** (#1163, #618) - The Builds page never showed `vcs_url` or `metadata`, and a module with several artifacts was cut to its first one (`artifacts[0]`). The detail now shows the repository URL and each metadata key and value, with a URL as a link only when it is http or https (a `javascript:` or `data:` value stays text), and the Modules tab lists every artifact with its path and size. The data comes from backend `GET /api/v1/builds` and `GET /api/v1/builds/{id}`, which return the VCS fields, metadata and modules from artifact-keeper#6048 on, and that change also makes the Date and Duration sort work. Against an older backend the dialog looks as before
+
 ## [1.12.0] - 2026-11-18
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
