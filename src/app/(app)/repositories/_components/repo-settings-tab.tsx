@@ -63,6 +63,7 @@ import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ReleaseTargetSettings } from "./release-target-settings";
 import { UpstreamModeSettings } from "./upstream-mode-settings";
 import { RoutingRulesSettings } from "./routing-rules-settings";
+import { UpstreamFilterSettings } from "./upstream-filter-settings";
 import { CondaAllowlistSettings } from "./conda-allowlist-settings";
 import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { CleanupPolicySettings } from "./cleanup-policy-settings";
@@ -1567,6 +1568,14 @@ export function RepoSettingsTab({ repository }: RepoSettingsTabProps) {
         repository.repo_type === "staging") && (
         <>
           <RoutingRulesSettings repository={repository} />
+          <Separator />
+        </>
+      )}
+
+      {/* -- Upstream Filter (Remote-only, repository admins, #1034) -- */}
+      {isRemote && isRepoAdmin && (
+        <>
+          <UpstreamFilterSettings repository={repository} />
           <Separator />
         </>
       )}
