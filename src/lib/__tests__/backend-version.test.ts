@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { backendAtLeast } from "../backend-version";
+import { PERMANENT_ARTIFACT_DELETE_MIN, backendAtLeast } from "../backend-version";
 
 describe("backendAtLeast", () => {
   it.each([
@@ -37,6 +37,12 @@ describe("backendAtLeast", () => {
     expect(backendAtLeast("1.11.0+abc1234", "1.11.0")).toBe(true);
     expect(backendAtLeast("1.10.1+abc1234", "1.11.0")).toBe(false);
     expect(backendAtLeast("1.11.0-rc.1+abc1234", "1.11.0")).toBe(false);
+  });
+
+  it("offers the permanent artifact delete from backend 1.12.0", () => {
+    expect(backendAtLeast("1.12.0", PERMANENT_ARTIFACT_DELETE_MIN)).toBe(true);
+    expect(backendAtLeast("1.11.14", PERMANENT_ARTIFACT_DELETE_MIN)).toBe(false);
+    expect(backendAtLeast(undefined, PERMANENT_ARTIFACT_DELETE_MIN)).toBe(false);
   });
 
   it("is false for an unparseable or pre-release minimum", () => {

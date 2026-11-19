@@ -76,6 +76,13 @@ export const PROXY_AGE_POLICY_MIN = "1.11.0";
 export const SCAN_POLICY_LOCK_MIN = "1.12.0";
 
 /**
+ * Backend release with the permanent delete of an artifact
+ * (`DELETE .../artifacts/{path}?permanent=true`, artifact-keeper#4701).
+ * Earlier backends move the artifact to the trash instead.
+ */
+export const PERMANENT_ARTIFACT_DELETE_MIN = "1.12.0";
+
+/**
  * Backend release that accepts `proxy_scan_action = record_only`
  * (artifact-keeper#3645). Earlier backends store it as `fail_open`.
  */
