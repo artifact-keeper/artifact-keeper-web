@@ -1,5 +1,9 @@
 # Artifact Keeper — Web
 
+<p align="center">
+  <img alt="Artifact Keeper" src="https://raw.githubusercontent.com/artifact-keeper/.github/main/brand/banners/github-readme_1600x600.png" width="100%">
+</p>
+
 Next.js 15 web frontend for Artifact Keeper, an enterprise artifact registry.
 
 ## Tech Stack

@@ -64,8 +64,9 @@ test.describe.serial('API Comprehensive - Repository CRUD', () => {
   test('DELETE /api/v1/repositories/e2e-test-repo cleans up', async ({ request }) => {
     const response = await request.delete('/api/v1/repositories/e2e-test-repo');
     expect(response.status()).toBeLessThan(500);
-    // 200, 204, or 404 are all acceptable
-    expect([200, 204, 404]).toContain(response.status());
+    // 200, 204, or 404 are all acceptable; 202 since backend
+    // artifact-keeper#4311 deletes a repository as a background job.
+    expect([200, 202, 204, 404]).toContain(response.status());
   });
 });
 

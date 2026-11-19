@@ -375,13 +375,15 @@ function auditSide(v: unknown): string | null {
   const r = v as Record<string, unknown>;
   if (r.unusable === true) return "unreadable";
   if (typeof r.enabled !== "boolean" || typeof r.entry_count !== "number") return null;
-  return allowlistStateLabel(r.enabled, r.entry_count);
+  // Backend 1.11.9 adds `scope`; name only the opt-out, as the summary does.
+  const label = allowlistStateLabel(r.enabled, r.entry_count);
+  return r.scope === "remote_only" ? `${label}, remote members only` : label;
 }
 
 /**
  * One-line rendering of a `REPOSITORY_ALLOWLIST_CHANGED` audit event's
  * details (`{repository, previous, current}`, each side `{enabled,
- * entry_count}`, `{unusable: true}` or null), e.g.
+ * entry_count, scope?}`, `{unusable: true}` or null), e.g.
  * `conda-virtual: off, 43 → on, 43 entries`. Null when the details do
  * not have that shape.
  */

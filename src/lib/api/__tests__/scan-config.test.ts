@@ -43,7 +43,7 @@ describe("scanConfigApi.get", () => {
     mockApiFetch.mockResolvedValue({ config: null, score: null });
     const mod = await import("../scan-config");
     const cfg = await mod.scanConfigApi.get("npm-proxy");
-    expect(cfg).toEqual(mod.DEFAULT_SCAN_CONFIG);
+    expect(cfg).toEqual({ ...mod.DEFAULT_SCAN_CONFIG, unconfigured: true });
     expect(cfg.proxy_scan_action).toBe("fail_open");
   });
 
@@ -54,15 +54,42 @@ describe("scanConfigApi.get", () => {
     const mod = await import("../scan-config");
     const cfg = await mod.scanConfigApi.get("maven-releases");
     expect(cfg.proxy_scan_action).toBe("fail_open");
+    // Marked as not reported, so record_only is not offered (#1194).
+    expect(cfg.proxy_scan_action_reported).toBe(false);
     // Other fields still parse through.
     expect(cfg.scan_enabled).toBe(true);
   });
 
-  it("falls back to fail_open for an unrecognized proxy_scan_action value", async () => {
+  it("does not mark a reported proxy_scan_action (#1194)", async () => {
+    mockApiFetch.mockResolvedValue({ config: fullConfig, score: null });
+    const mod = await import("../scan-config");
+    const cfg = await mod.scanConfigApi.get("maven-releases");
+    expect(cfg).not.toHaveProperty("proxy_scan_action_reported");
+  });
+
+  it("keeps record_only instead of showing it as fail_open (#1069)", async () => {
+    mockApiFetch.mockResolvedValue({
+      config: { ...fullConfig, proxy_scan_action: "record_only" },
+      score: null,
+    });
+    const mod = await import("../scan-config");
+    const cfg = await mod.scanConfigApi.get("maven-releases");
+    expect(cfg.proxy_scan_action).toBe("record_only");
+  });
+
+  it("keeps a value it does not recognise as stored, never coercing it to fail_open (#1069)", async () => {
     mockApiFetch.mockResolvedValue({
       config: { ...fullConfig, proxy_scan_action: "explode" },
       score: null,
     });
+    const mod = await import("../scan-config");
+    const cfg = await mod.scanConfigApi.get("maven-releases");
+    expect(cfg.proxy_scan_action).toBe("explode");
+  });
+
+  it("defaults to fail_open when the backend omits the field", async () => {
+    const { proxy_scan_action: _omitted, ...withoutAction } = fullConfig;
+    mockApiFetch.mockResolvedValue({ config: withoutAction, score: null });
     const mod = await import("../scan-config");
     const cfg = await mod.scanConfigApi.get("maven-releases");
     expect(cfg.proxy_scan_action).toBe("fail_open");
@@ -137,5 +164,27 @@ describe("scanConfigApi.update", () => {
     await expect(
       mod.scanConfigApi.update("x", { scan_enabled: true }),
     ).rejects.toThrow(/did not match the expected shape/);
+  });
+});
+
+describe("instance_locked parsing (#1185)", () => {
+  it("keeps a reported lock and leaves it undefined when absent or malformed", async () => {
+    const mod = await import("../scan-config");
+    expect(
+      mod.parseRepoSecurity({ config: { ...fullConfig, instance_locked: false }, score: null })
+        .instance_locked,
+    ).toBe(false);
+    expect(mod.parseScanConfig({ ...fullConfig, instance_locked: true }).instance_locked).toBe(
+      true,
+    );
+    expect(mod.parseRepoSecurity({ config: fullConfig, score: null })).not.toHaveProperty(
+      "instance_locked",
+    );
+    expect(
+      mod.parseScanConfig({ ...fullConfig, instance_locked: "yes" }),
+    ).not.toHaveProperty("instance_locked");
+    expect(mod.parseRepoSecurity({ config: null, score: null })).not.toHaveProperty(
+      "instance_locked",
+    );
   });
 });

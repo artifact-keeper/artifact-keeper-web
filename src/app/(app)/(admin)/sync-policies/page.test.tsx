@@ -191,6 +191,14 @@ describe("SyncPoliciesPage", () => {
     );
   });
 
+  it("offers push and mirror, never pull (artifact-keeper#5293)", async () => {
+    const user = userEvent.setup();
+    render(<SyncPoliciesPage />);
+    await user.click(screen.getByRole("button", { name: /new policy/i }));
+    const options = Array.from((screen.getByLabelText("Mode") as HTMLSelectElement).options).map((o) => o.value);
+    expect(options).toEqual(["push", "mirror"]);
+  });
+
   it("clearing Priority yields undefined (not 0/NaN)", async () => {
     const user = userEvent.setup();
     render(<SyncPoliciesPage />);
@@ -226,11 +234,11 @@ describe("SyncPoliciesPage", () => {
     save.mutationFn({ id: null, form: { name: "x", filter: "*.tgz" } });
     expect(api.create).toHaveBeenCalledWith({ name: "x", filter: "*.tgz" });
     // update must translate the glob filter into artifact_filter (UpdateSyncPolicyPayload has no `filter`)
-    save.mutationFn({ id: "sp1", form: { name: "y", filter: "*.whl", replication_mode: "pull", priority: 5 } });
+    save.mutationFn({ id: "sp1", form: { name: "y", filter: "*.whl", replication_mode: "mirror", priority: 5 } });
     expect(api.update).toHaveBeenCalledWith("sp1", {
       name: "y",
       description: undefined,
-      replication_mode: "pull",
+      replication_mode: "mirror",
       priority: 5,
       artifact_filter: { include_paths: ["*.whl"] },
     });

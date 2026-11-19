@@ -21,10 +21,12 @@ interface PypiTracksPanelProps {
 const TRACKS_QUERY_KEY = (key: string) => ["pypi-tracks", key];
 
 /**
- * Admin panel for managing PEP 708 `tracks` declarations on a PyPI virtual
- * repository (artifact-keeper#1600). By default a virtual isolates a
- * locally-owned project name from the same name upstream; declaring a track
- * re-unions that project with a named upstream Simple index.
+ * Admin panel for managing PEP 708 `tracks` declarations on a hosted (local or
+ * staging) PyPI repository (artifact-keeper#1600). By default a virtual
+ * isolates a locally-owned project name from the same name upstream; declaring
+ * a track on the repository that owns the project re-unions it with a named
+ * upstream Simple index. The backend refuses tracks on remote and virtual
+ * repositories (#1066).
  */
 export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
   const queryClient = useQueryClient();
@@ -79,8 +81,9 @@ export function PypiTracksPanel({ repository }: PypiTracksPanelProps) {
         <p>
           PyPI virtual repositories isolate locally-owned project names from the same name
           upstream by default (PEP 708, dependency-confusion mitigation). Declare a{" "}
-          <span className="font-medium text-foreground">tracks</span> relationship to re-union a
-          local project&apos;s versions with a named upstream Simple index.
+          <span className="font-medium text-foreground">tracks</span> relationship here, on the
+          repository that owns the project, to re-union its versions with a named upstream Simple
+          index in every virtual repository that includes this one.
         </p>
       </div>
 

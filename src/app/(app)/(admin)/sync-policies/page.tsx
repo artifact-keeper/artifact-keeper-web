@@ -40,7 +40,10 @@ import {
 } from "@/components/ui/select";
 
 const QUERY_KEY = ["sync-policies"];
-const MODES = ["push", "pull", "mirror"] as const;
+// `pull` is not implemented and the backend refuses it (artifact-keeper#5293):
+// it never created a sync task. A policy saved with it before then is shown
+// as such, but cannot be chosen.
+const MODES = ["push", "mirror"] as const;
 
 const emptyForm: CreateSyncPolicyRequest = {
   name: "",
@@ -252,6 +255,9 @@ export default function SyncPoliciesPage() {
                       {MODES.map((mode) => (
                         <SelectItem key={mode} value={mode} className="capitalize">{mode}</SelectItem>
                       ))}
+                      {form.replication_mode === "pull" && (
+                        <SelectItem value="pull" disabled>pull (not implemented)</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

@@ -24,7 +24,7 @@ test('Tutorial: Virtual Repositories', async ({ page }) => {
   await tutorial.pause(1500);
 
   // Show existing repos
-  const searchInput = page.getByPlaceholder('Search...');
+  const searchInput = page.getByRole('main').getByPlaceholder('Search...');
   await searchInput.fill('npm');
   await tutorial.pause(1500);
   await tutorial.show('NPM repositories', 'We can see our local NPM repository and NPM proxy are already set up.');

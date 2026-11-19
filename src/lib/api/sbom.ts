@@ -130,6 +130,10 @@ function adaptCveHistory(sdk: SdkCveHistoryEntry): CveHistoryEntry {
     acknowledged_by: sdk.acknowledged_by ?? null,
     acknowledged_at: sdk.acknowledged_at ?? null,
     acknowledged_reason: sdk.acknowledged_reason ?? null,
+    // Not in the generated SDK yet (backend 1.12.0, artifact-keeper#5224).
+    acknowledgements_left_effective: (
+      sdk as SdkCveHistoryEntry & { acknowledgements_left_effective?: number | null }
+    ).acknowledgements_left_effective ?? null,
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };

@@ -41,6 +41,7 @@ export default function GlobalError({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo-48.png"
+            srcSet="/logo-48.png 1x, /logo-96.png 2x"
             alt="Artifact Keeper"
             width={48}
             height={48}

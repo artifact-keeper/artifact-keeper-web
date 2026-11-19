@@ -127,10 +127,10 @@ describe("DockerTagList", () => {
     expect(copyBtn).toHaveAttribute("data-value", FULL_DIGEST);
   });
 
-  it("renders the server-computed total size in human-readable form (MB)", () => {
+  it("renders the server-computed total size in human-readable form (MiB)", () => {
     render(<DockerTagList tags={[TAG_14]} />);
-    // formatBytes(50_000_000) ≈ "47.68 MB" / "50 MB"
-    expect(screen.getByText(/MB/i)).toBeInTheDocument();
+    // formatBytes(50_000_000) ≈ "47.68 MiB" / "50 MiB"
+    expect(screen.getByText(/MiB/)).toBeInTheDocument();
   });
 
   it("renders the last-pushed date for each tag", () => {

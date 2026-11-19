@@ -601,3 +601,24 @@ describe("apiErrorHint", () => {
     expect(apiErrorHint("locked")).toBeUndefined();
   });
 });
+
+describe("toUserMessage: a decision that does not name its repository (409)", () => {
+  const BACKEND =
+    "This finding's scan has copies in other repositories; say which one is meant with repository_id";
+
+  it("explains it for the bare SDK body, which has no status on it", () => {
+    const message = toUserMessage(
+      { code: "CONFLICT", message: BACKEND },
+      "Failed to acknowledge finding",
+    );
+    expect(message).toMatch(/copied into other repositories/i);
+    expect(message).toMatch(/open .* from the repository/i);
+    expect(message).not.toContain("repository_id");
+  });
+
+  it("explains it for an error that does carry the status", () => {
+    expect(
+      toUserMessage({ status: 409, body: { message: BACKEND } }, "Failed"),
+    ).toMatch(/copied into other repositories/i);
+  });
+});

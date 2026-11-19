@@ -32,6 +32,11 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockCanListFindings = vi.fn();
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => mockCanListFindings(),
+}));
+
 const mockUseFeatureFlags = vi.fn();
 vi.mock("@/providers/system-config-provider", () => ({
   useFeatureFlags: () => mockUseFeatureFlags(),
@@ -40,6 +45,12 @@ vi.mock("@/providers/system-config-provider", () => ({
 const mockUseQuery = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
+}));
+
+// The MCP catalog entry is gated on the backend advertising the `mcp` format.
+const mockFormatHandlers = vi.fn();
+vi.mock("@/hooks/use-format-handlers", () => ({
+  useFormatHandlers: () => ({ data: mockFormatHandlers() }),
 }));
 
 vi.mock("@/lib/api/admin", () => ({
@@ -85,8 +96,12 @@ vi.mock("lucide-react", () => {
     ShieldAlert: icon,
     ShieldCheck: icon,
     Ban: icon,
+    ShieldBan: icon,
+    BadgeCheck: icon,
     ListChecks: icon,
     Search: icon,
+    Bug: icon,
+    Inbox: icon,
     FileCheck: icon,
     Lock: icon,
     Users: icon,
@@ -109,6 +124,7 @@ vi.mock("lucide-react", () => {
     Crosshair: icon,
     GitBranch: icon,
     Hourglass: icon,
+    Plug: icon,
   };
 });
 
@@ -160,7 +176,25 @@ describe("AppSidebar", () => {
     process.env.NEXT_PUBLIC_APP_VERSION = "1.1.0";
     delete process.env.NEXT_PUBLIC_BUILD_REF;
     mockUseQuery.mockReturnValue({ data: undefined });
+    mockCanListFindings.mockReturnValue(true);
     mockUseFeatureFlags.mockReturnValue(ALL_FLAGS_ON);
+    mockFormatHandlers.mockReturnValue(undefined);
+  });
+
+  it("shows MCP Servers only when the backend registers the mcp format", () => {
+    authState({ isAuthenticated: true });
+    render(<AppSidebar />);
+    expect(screen.queryByText("MCP Servers")).toBeNull();
+    cleanup();
+
+    mockFormatHandlers.mockReturnValue([{ format_key: "npm", is_enabled: true }]);
+    render(<AppSidebar />);
+    expect(screen.queryByText("MCP Servers")).toBeNull();
+    cleanup();
+
+    mockFormatHandlers.mockReturnValue([{ format_key: "mcp", is_enabled: true }]);
+    render(<AppSidebar />);
+    expect(screen.getByText("MCP Servers").closest("a")?.getAttribute("href")).toBe("/mcp-servers");
   });
 
   it("shows the commit hash instead of the version for a build that is not a release tag", () => {
@@ -335,7 +369,40 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.queryByText("Scan Results")).toBeNull();
     expect(screen.queryByText("DT Projects")).toBeNull();
+    // Findings outlive the scanner that found them, so the list is ungated,
+    // like the Security dashboard entry next to it.
+    expect(screen.getByText("Vulnerabilities")).toBeDefined();
+    // The page says when the queue is off, so the entry is not scanner-gated.
+    expect(screen.getByText("Scan Queue")).toBeDefined();
     expect(screen.getByText("Quality Gates")).toBeDefined();
+  });
+
+  it("hides Vulnerabilities from an admin the endpoint refuses", () => {
+    // A repository-scoped admin token (403) or an older backend (404).
+    authState({ isAuthenticated: true, isAdmin: true });
+    mockCanListFindings.mockReturnValue(false);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Vulnerabilities")).toBeNull();
+    expect(screen.getByText("Proxy Blocked")).toBeDefined();
+  });
+
+  it("keeps Vulnerabilities out of a non-admin sidebar", () => {
+    authState({ isAuthenticated: true, isAdmin: false });
+    mockCanListFindings.mockReturnValue(false);
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Vulnerabilities")).toBeNull();
+  });
+
+  it("keeps Scan Queue out of a non-admin sidebar", () => {
+    authState({ isAuthenticated: true, isAdmin: false });
+
+    render(<AppSidebar />);
+
+    expect(screen.queryByText("Scan Queue")).toBeNull();
   });
 
   it("shows DT Projects only when Dependency-Track is enabled (#271)", () => {

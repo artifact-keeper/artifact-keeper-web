@@ -71,7 +71,7 @@ jobs:
             echo "No baseline changes to commit."
           else
             git commit -m "test(visual): refresh Linux baselines [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
       - name: Dump container logs on failure

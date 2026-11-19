@@ -191,6 +191,11 @@ const FORMAT_CATEGORIES: { key: string; label: string; formats: string[] }[] = [
     formats: ["terraform", "opentofu", "chef", "puppet", "ansible", "vagrant"],
   },
   {
+    key: "ai-agents",
+    label: "AI agents",
+    formats: ["agentplugins", "mcp"],
+  },
+  {
     key: "other",
     label: "Other",
     formats: ["github", "mise", "aqua", "generic", "gitlfs", "bazel", "p2", "protobuf", "huggingface", "mlmodel", "vscode", "jetbrains", "jupyter"],

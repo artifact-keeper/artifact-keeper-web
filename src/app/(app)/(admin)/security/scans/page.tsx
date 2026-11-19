@@ -12,11 +12,13 @@ import { securityApi } from "@/lib/api/security";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { artifactsApi } from "@/lib/api/artifacts";
 import { useRepositories } from "@/hooks/use-repositories";
+import { scanDetailHref } from "@/lib/acknowledgements";
 import {
   isScanIncomplete,
   isScanFailed,
   isScanClean,
   isScanNotCataloged,
+  isScanRowVisible,
   NOT_CATALOGED_EXPLANATION,
 } from "@/lib/scan-utils";
 import type { ScanResult } from "@/types/security";
@@ -148,6 +150,16 @@ export default function SecurityScansPage() {
     { enabled: triggerOpen },
   );
   const repos = reposPage?.items;
+
+  // A scanner that does not handle an artifact's format records one
+  // `not_applicable` row per artifact it skipped, which on a mixed instance is
+  // most of the list and is never what someone opening this page is looking
+  // for. Hidden unless that status is picked explicitly. The backend has no
+  // "exclude this status" parameter, so the page filters what it was sent and
+  // says how many rows that removed.
+  const rows = isError ? [] : (data?.items ?? []);
+  const visibleScans = rows.filter((r) => isScanRowVisible(r.status, statusFilter));
+  const hiddenCount = rows.length - visibleScans.length;
 
   const { data: scanConfigs } = useQuery({
     queryKey: ["security", "scan-configs"],
@@ -314,7 +326,7 @@ export default function SecurityScansPage() {
           size="sm"
           onClick={(e) => {
             e.stopPropagation();
-            router.push(`/security/scans/${r.id}`);
+            router.push(scanDetailHref(r));
           }}
         >
           View
@@ -360,7 +372,7 @@ export default function SecurityScansPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-[160px]" aria-label="Status">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -369,6 +381,7 @@ export default function SecurityScansPage() {
             <SelectItem value="running">Running</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="not_applicable">Not applicable</SelectItem>
           </SelectContent>
         </Select>
 
@@ -422,7 +435,7 @@ export default function SecurityScansPage() {
       {/* Data table */}
       <DataTable
         columns={columns}
-        data={isError ? [] : (data?.items ?? [])}
+        data={visibleScans}
         total={data?.total}
         page={page}
         pageSize={pageSize}
@@ -432,10 +445,23 @@ export default function SecurityScansPage() {
           setPage(1);
         }}
         loading={isLoading}
-        emptyMessage="No scan results found."
+        emptyMessage={
+          hiddenCount > 0
+            ? "Every scan on this page is not applicable, so none is listed. Try the next page, or pick the \"Not applicable\" status."
+            : "No scan results found."
+        }
         rowKey={(r) => r.id}
-        onRowClick={(r) => router.push(`/security/scans/${r.id}`)}
+        onRowClick={(r) => router.push(scanDetailHref(r))}
       />
+
+      {hiddenCount > 0 && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {hiddenCount} not-applicable{" "}
+          {hiddenCount === 1 ? "scan is" : "scans are"} hidden on this page, so
+          the count above includes rows that are not listed. Pick the &quot;Not
+          applicable&quot; status to see them.
+        </p>
+      )}
 
       {/* Trigger Scan Dialog */}
       <Dialog

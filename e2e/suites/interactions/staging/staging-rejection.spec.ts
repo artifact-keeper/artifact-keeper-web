@@ -116,7 +116,7 @@ test.describe('Staging Rejection Workflow', () => {
     const hasStagingBadge = await stagingBadge.first().isVisible({ timeout: 5000 }).catch(() => false);
 
     // Should show artifacts tab and search
-    const searchInput = page.getByPlaceholder(/search artifacts/i);
+    const searchInput = page.getByRole('main').getByPlaceholder(/search artifacts/i);
     const hasSearch = await searchInput.isVisible({ timeout: 5000 }).catch(() => false);
 
     expect(hasStagingBadge || hasSearch).toBeTruthy();

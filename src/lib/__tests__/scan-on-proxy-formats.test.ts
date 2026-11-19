@@ -65,6 +65,9 @@ const EXPECTED_GATED: Record<RepositoryFormat, boolean> = {
   ansible: false,
   gitlfs: false,
   jetbrains: false,
+  // Hosted only: no proxy route to gate (artifact-keeper#5251).
+  agentplugins: false,
+  mcp: false,
   huggingface: false,
   mlmodel: false,
   cran: false,

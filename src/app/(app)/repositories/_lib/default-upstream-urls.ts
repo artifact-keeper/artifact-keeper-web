@@ -1,3 +1,5 @@
+import { MCP_OFFICIAL_REGISTRY_URL } from "@/lib/mcp/format";
+
 /** Common upstream registry URLs by package format. */
 export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
   github: "https://github.com",
@@ -26,4 +28,7 @@ export const DEFAULT_UPSTREAM_URLS: Record<string, string> = {
   debian: "https://deb.debian.org/debian",
   rpm: "https://mirror.stream.centos.org",
   vscode: "https://open-vsx.org/vscode/gallery",
+  // A Remote MCP repository proxies the official registry by default
+  // (artifact-keeper#5253, Phase 2); deny by default still applies.
+  mcp: MCP_OFFICIAL_REGISTRY_URL,
 };

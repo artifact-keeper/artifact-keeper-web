@@ -261,6 +261,45 @@ describe("ArtifactScansSection (#368)", () => {
     expect(link.getAttribute("href")).toBe("/security/scans/scan-1");
   });
 
+  it("links a reused row to its own copy, not just the source's id", () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: "source-scan",
+            is_reused: true,
+            source_scan_id: "source-scan",
+            artifact_id: "copy-artifact",
+            artifact_name: "lib.jar",
+            artifact_version: "1.0",
+            repository_id: "prod",
+            scan_type: "trivy",
+            status: "completed",
+            findings_count: 1,
+            critical_count: 0,
+            high_count: 1,
+            medium_count: 0,
+            low_count: 0,
+            info_count: 0,
+            scanner_version: null,
+            error_message: null,
+            started_at: "2026-05-01T00:00:00Z",
+            completed_at: "2026-05-01T00:01:00Z",
+            created_at: "2026-05-01T00:00:00Z",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ArtifactScansSection artifactId="copy-artifact" />);
+    const link = screen.getByText(/View findings/i).closest("a") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe(
+      "/security/scans/source-scan?artifact_id=copy-artifact&repository_id=prod",
+    );
+  });
+
   it("shows a not-cataloged scan as not assessed, never as zero findings (#4154)", () => {
     mockUseQuery.mockReturnValue({
       data: {

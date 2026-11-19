@@ -4,6 +4,7 @@ import {
   FORMAT_OPTIONS,
   FORMAT_GROUPS,
   FILTER_HIDDEN_FORMATS,
+  formatGroupsFor,
   hasRpmTrustedKeyConfig,
   hasDebianConfig,
   hasNpmScopePolicy,
@@ -48,15 +49,34 @@ describe('FORMAT_OPTIONS', () => {
   // JupyterLab Extensions is a PyPI alias (artifact-keeper#3784) filed with the
   // other IDE extension formats (#833). The group drives the list-page filter;
   // the create dialog itself sorts formats alphabetically.
-  it('lists JupyterLab Extensions in the Extensions group with VS Code and JetBrains', () => {
+  it('lists JupyterLab Extensions and Agent Plugins in the Extensions group with VS Code and JetBrains', () => {
     const extensions = FORMAT_OPTIONS.filter((o) => o.group === 'Extensions').map(
       (o) => [o.value, o.label],
     );
     expect(extensions).toEqual([
       ['vscode', 'VS Code Extensions'],
       ['jetbrains', 'JetBrains Plugins'],
+      ['agentplugins', 'Agent Plugins'],
       ['jupyter', 'JupyterLab Extensions'],
     ]);
+  });
+});
+
+describe('MCP Registry option (artifact-keeper#5253)', () => {
+  it('files MCP Registry in its own AI Agents group', () => {
+    expect(FORMAT_OPTIONS.filter((o) => o.group === 'AI Agents')).toEqual([
+      { value: 'mcp', label: 'MCP Registry', group: 'AI Agents' },
+    ]);
+  });
+
+  it('drops the option, and its emptied group, from the filter when the backend lacks mcp', () => {
+    expect(formatGroupsFor(true)).toBe(FORMAT_GROUPS);
+    const groups = formatGroupsFor(false);
+    expect(groups.map(([g]) => g)).not.toContain('AI Agents');
+    expect(groups.flatMap(([, o]) => o.map((x) => x.value))).not.toContain('mcp');
+    expect(groups.find(([g]) => g === 'Core')?.[1]).toEqual(
+      FORMAT_GROUPS.find(([g]) => g === 'Core')?.[1],
+    );
   });
 });
 

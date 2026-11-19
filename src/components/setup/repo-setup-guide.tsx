@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/tabs";
 import { CopyButton } from "@/components/common/copy-button";
 import { repodataRootExample } from "@/lib/rpm-repodata";
+import { resolveVisibility } from "@/lib/repo-visibility";
+import { isRemoteMcpRepo, mcpRegistryBaseUrl } from "@/lib/mcp/format";
 
 // -- types --
 
@@ -592,6 +594,275 @@ micromamba install -c ${channelUrl} <package-name>`,
   return variants;
 }
 
+/** Marketplace names Claude Code reserves for itself; the backend appends
+ *  `-ak` to a repository key that collides with one (artifact-keeper#5251). */
+const CLAUDE_RESERVED_MARKETPLACE_NAMES = new Set([
+  "claude-plugins-official",
+  "claude-code-plugins",
+  "anthropic-marketplace",
+  "knowledge-work-plugins",
+  "first-party-plugins",
+  "claude-community",
+  "inline",
+  "builtin",
+  "skills-dir",
+  "synced",
+  "claude-plugin-test",
+  "npm",
+  "pip",
+  "uv",
+  "cargo",
+  "github",
+  "gh",
+]);
+
+/** The `name` the backend gives a repository's Claude Code marketplace
+ *  (artifact-keeper#5251); `claude plugin install` addresses a plugin as
+ *  `<plugin>@<marketplace name>`. Validated repository keys pass through
+ *  unchanged, except that a key not starting with a letter or digit gets an
+ *  `ak-` prefix and a key Claude Code reserves (or one starting `claudeai-`)
+ *  gets an `-ak` suffix. Characters outside `[A-Za-z0-9._-]` and `..` become
+ *  `-`, for keys that predate key validation. */
+export function claudeMarketplaceName(repoKey: string): string {
+  let name = repoKey.replace(/[^A-Za-z0-9._-]/g, "-").replace(/\.{2,}/g, "-");
+  if (!/^[A-Za-z0-9]/.test(name)) name = `ak-${name}`;
+  if (CLAUDE_RESERVED_MARKETPLACE_NAMES.has(name) || name.startsWith("claudeai-")) {
+    name = `${name}-ak`;
+  }
+  return name;
+}
+
+/** Agent Plugins client variants (artifact-keeper#5251): Claude Code reads the
+ *  repository's marketplace document directly; Cursor, Codex and VS Code /
+ *  Copilot accept no hosted marketplace URL, so they install through the
+ *  `ak` CLI; the Publish tab covers `ak` and a plain `curl -T`. */
+function getAgentPluginsClientVariants(repo: Repository): SetupClientVariant[] {
+  const repoKey = repo.key;
+  const base = `${REGISTRY_URL}/agentplugins`;
+  const marketplace = claudeMarketplaceName(repoKey);
+  const httpsNote =
+    "Claude Code downloads plugin archives over HTTPS only; behind a TLS-terminating proxy the backend needs AK_EXTERNAL_URL set so the marketplace lists https:// URLs.";
+
+  const claudeAddSteps: SetupStep[] = repo.is_public
+    ? [
+        {
+          title: "Add the marketplace",
+          description: `This repository is public, so Claude Code reads the marketplace without credentials. ${httpsNote}`,
+          code: `claude plugin marketplace add ${base}/${repoKey}/claude-marketplace.json`,
+        },
+      ]
+    : [
+        {
+          title: "Create a read token for this repository",
+          description:
+            "On the Access Tokens page, create a token with only the read:artifacts scope, restricted to this repository, with an expiry.",
+        },
+        {
+          title: "Option 1 (recommended): register the marketplace in Claude Code settings",
+          description: `Add this to ~/.claude/settings.json, replacing YOUR_READ_TOKEN. Claude Code sends these headers when it fetches the marketplace and when it downloads each plugin zip from the same origin, so the token stays out of the URL. ${httpsNote}`,
+          code: `{
+  "extraKnownMarketplaces": {
+    "${marketplace}": {
+      "source": {
+        "source": "url",
+        "url": "${base}/${repoKey}/claude-marketplace.json",
+        "headers": { "Authorization": "Bearer YOUR_READ_TOKEN" }
+      }
+    }
+  }
+}`,
+        },
+        {
+          title: "Option 2: add the marketplace with the token in the URL",
+          description:
+            "No settings edit, but the token is stored in Claude Code's marketplace record (known_marketplaces.json) and appears in server access logs, so use a read-only token scoped to this repository with an expiry.",
+          code: `claude plugin marketplace add ${base}/t/YOUR_READ_TOKEN/${repoKey}/claude-marketplace.json`,
+        },
+      ];
+
+  const akInstall = (harness: string) =>
+    `ak agent plugins install <plugin> --repo ${repoKey} --harness ${harness}`;
+  const akNote =
+    "These agents cannot add a hosted marketplace URL, so the ak CLI downloads the plugin, verifies its SHA-256 and installs it where the agent loads plugins from, using the credential ak has stored for this instance.";
+
+  return [
+    {
+      key: "claude",
+      label: "Claude Code",
+      steps: [
+        ...claudeAddSteps,
+        {
+          title: "Install a plugin",
+          description: `The marketplace is named ${marketplace}. Run claude plugin marketplace update ${marketplace} to pick up newly published versions. Inside a Claude Code session, the same commands are /plugin marketplace add, /plugin install and /plugin marketplace update.`,
+          code: `claude plugin install <plugin>@${marketplace}`,
+        },
+      ],
+    },
+    {
+      key: "other-agents",
+      label: "Cursor / Codex / VS Code",
+      steps: [
+        { title: "Cursor", description: akNote, code: akInstall("cursor") },
+        { title: "Codex", code: akInstall("codex") },
+        { title: "VS Code / GitHub Copilot", code: akInstall("vscode") },
+      ],
+    },
+    {
+      key: "publish",
+      label: "Publish",
+      steps: [
+        {
+          title: "Publish with the ak CLI",
+          description:
+            "Checks the plugin's manifests, zips the directory and uploads it. The credential needs the write:artifacts scope.",
+          code: `ak agent plugins publish ./my-plugin --repo ${repoKey}`,
+        },
+        {
+          title: "Or upload a zip with curl",
+          description:
+            "The path is <name>/<version>/<name>-<version>.zip, and the version must match the one in the plugin's manifest. Versions are plain SemVer without build metadata (1.0.0+build is refused). A published version cannot be overwritten; after deleting a version it can be re-published only with identical content, otherwise publish a new version number.",
+          code: `curl -T my-plugin-1.0.0.zip -H "Authorization: Bearer YOUR_TOKEN" \\
+  ${base}/${repoKey}/my-plugin/1.0.0/my-plugin-1.0.0.zip`,
+        },
+      ],
+    },
+  ];
+}
+
+/** MCP registry client variants (artifact-keeper#5253). The registry is
+ *  read by clients that know the registry API (the VS Code gallery, GitHub
+ *  Copilot's registry policy, any /v0.1 reader); Claude Code has no registry
+ *  subscription, so its tab points at the per-server Install panel instead. */
+function getMcpClientVariants(repo: Repository): SetupClientVariant[] {
+  const base = mcpRegistryBaseUrl(REGISTRY_URL, repo.key);
+  const visibility = resolveVisibility(repo);
+  const isPublic = visibility === "public";
+  const anonymousNote = `This repository is ${visibility}, and these clients read the registry without an Artifact Keeper credential, so they would see it as empty. Make the repository public to use it here, or install servers one by one from their Install panel in Artifact Keeper.`;
+
+  const vscodeSteps: SetupStep[] = isPublic
+    ? [
+        {
+          title: "Point the VS Code MCP gallery at this registry",
+          description:
+            "Add this to your VS Code user settings (settings.json), or deploy the same URL through the McpGalleryServiceUrl enterprise policy. The gallery reads /v0.1/servers and /versions/latest from it.",
+          code: `{
+  "chat.mcp.gallery.serviceUrl": "${base}"
+}`,
+        },
+      ]
+    : [
+        {
+          title: "The VS Code gallery needs a public repository",
+          description: `The VS Code gallery (chat.mcp.gallery.serviceUrl, or the McpGalleryServiceUrl policy) sends no credential. ${anonymousNote}`,
+        },
+      ];
+
+  const copilotSteps: SetupStep[] = [
+    {
+      title: "Set the organization's MCP registry URL",
+      description:
+        "In the GitHub organization (or enterprise) Copilot policies, set the MCP registry URL to this value. Copilot appends /v0.1/servers itself and checks the CORS headers, which the registry's read routes send.",
+      code: base,
+    },
+    ...(isPublic ? [] : [{ title: "Visibility", description: anonymousNote }]),
+  ];
+
+  const claudeSteps: SetupStep[] = [
+    {
+      title: "Install servers one at a time",
+      description:
+        "Claude Code has no registry subscription: it does not read /v0.1/servers. Browse this repository's servers in Artifact Keeper and use Install on a server for its claude mcp add command, which runs the package through Artifact Keeper. Add --scope project to write the entry to the project's .mcp.json so everyone working in the project gets it.",
+      code: "claude mcp add --scope project <alias> -- <command from the Install panel>",
+    },
+  ];
+
+  const policyStep: SetupStep =
+    repo.mcp_package_policy === "open"
+      ? {
+          title: "Open catalog",
+          description:
+            "This repository's package policy is open: packages[] is stored and served as published, and nothing is resolved or gated.",
+        }
+      : {
+          title: "Publish the package first",
+          description:
+            "Under the own-repos package policy every package must already be in Artifact Keeper: publish (or pull through a Remote) your package to Artifact Keeper first, then publish the server.json. A refused publish answers 422 with one line naming the entry and the fix: mcp_external_registry (no backing repository for the registryType, mcpb included, or a registryBaseUrl or image host outside this instance), mcp_package_not_found (that exact version, tag or digest is not in the backing repository; pull it through first), mcp_package_version_unpinned (an npm, PyPI, NuGet or Cargo entry without version), mcp_oci_floating_tag (:latest or no tag), mcp_oci_legacy_fields (version, registryBaseUrl or fileSha256 on an OCI entry) and mcp_oci_not_an_image.",
+        };
+
+  const publishVariant: SetupClientVariant = isRemoteMcpRepo(repo)
+    ? {
+        key: "publish",
+        label: "Approvals",
+        steps: [
+          {
+            title: "Remote repositories are read-only",
+            description:
+              "A Remote MCP repository serves servers from its upstream registry and accepts no publishes. Deny by default: an upstream server stays invisible to clients until an administrator approves it in the curation queue.",
+          },
+        ],
+      }
+    : {
+        key: "publish",
+        label: "Publish",
+        steps: [
+          {
+            title: "Publish a server.json with curl",
+            description:
+              "Needs repository write; an API token also needs the write:artifacts scope. Any Artifact Keeper credential works, there is no separate registry login.",
+            code: `curl -X POST ${base}/v0.1/publish \\
+  -H "Authorization: Bearer $AK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  --data @server.json`,
+          },
+          {
+            title: "Or publish with mcp-publisher",
+            description:
+              "Write mcp-publisher's token file yourself with an Artifact Keeper API token instead of running mcp-publisher login.",
+            code: `mkdir -p ~/.config/mcp-publisher
+cat > ~/.config/mcp-publisher/token.json <<EOF
+{"token": "$AK_TOKEN", "method": "none", "registry": "${base}"}
+EOF
+mcp-publisher publish`,
+          },
+          policyStep,
+          {
+            title: "Versions are write-once",
+            description:
+              "Republishing a version answers 409; publish a new version instead, and deprecate or delete old ones through the status route. Server versions enter only through /v0.1/publish: the generic artifact upload routes refuse MCP repositories.",
+            code: `curl -X PATCH ${base}/v0.1/servers/<namespace>%2F<name>/versions/<version>/status \\
+  -H "Authorization: Bearer $AK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status": "deprecated", "statusMessage": "Use 2.0.0"}'`,
+          },
+        ],
+      };
+
+  const auth = isPublic ? "" : ` \\\n  -H "Authorization: Bearer $AK_TOKEN"`;
+  const apiVariant: SetupClientVariant = {
+    key: "api",
+    label: "Registry API",
+    steps: [
+      {
+        title: "Search the registry",
+        description: `Any client of the MCP registry API reads ${base}/v0.1/servers (/v0 is an alias). search needs at least 3 characters.${isPublic ? "" : " This repository is not public, so send a credential."}`,
+        code: `curl "${base}/v0.1/servers?search=weather&version=latest"${auth}`,
+      },
+      {
+        title: "Read one server's latest version",
+        code: `curl "${base}/v0.1/servers/<namespace>%2F<name>/versions/latest"${auth}`,
+      },
+    ],
+  };
+
+  return [
+    { key: "vscode", label: "VS Code", steps: vscodeSteps },
+    { key: "copilot", label: "GitHub Copilot", steps: copilotSteps },
+    { key: "claude", label: "Claude Code", steps: claudeSteps },
+    publishVariant,
+    apiVariant,
+  ];
+}
+
 /** Generate repo-specific setup content based on format. JVM, npm, PyPI, and
  *  conda formats return a set of client variants (rendered as tabs); all other
  *  formats return a flat list of steps. */
@@ -623,6 +894,16 @@ function getRepoSetupContent(repo: Repository): RepoSetupContent {
       variants: getCondaClientVariants(repo.key, repo.repo_type),
       defaultKey: "conda",
     };
+  }
+  if (repo.format === "agentplugins") {
+    return {
+      kind: "variants",
+      variants: getAgentPluginsClientVariants(repo),
+      defaultKey: "claude",
+    };
+  }
+  if (repo.format === "mcp") {
+    return { kind: "variants", variants: getMcpClientVariants(repo), defaultKey: "vscode" };
   }
   return { kind: "steps", steps: getRepoSetupSteps(repo) };
 }
@@ -722,7 +1003,7 @@ mise install --locked`,
           title: "Configure Cargo",
           description: "Add to ~/.cargo/config.toml:",
           code: `[registries.${repoKey}]
-index = "${REGISTRY_URL}/cargo/${repoKey}/index"
+index = "sparse+${REGISTRY_URL}/cargo/${repoKey}/"
 token = "YOUR_TOKEN"`,
         },
         {
@@ -993,30 +1274,73 @@ code-server`,
       ];
     }
     case "protobuf":
+      // The backend serves the buf CLI's binary Connect codec on hosted
+      // (local, staging) repositories; a remote or virtual one answers it with Connect
+      // `unimplemented` (artifact-keeper#5066 / #5074).
+      if (repo.repo_type === "remote" || repo.repo_type === "virtual") {
+        return [
+          {
+            title: "buf CLI needs a hosted repository",
+            description: `The buf CLI can push to and resolve modules from a local or staging protobuf repository only. This ${repo.repo_type} repository answers the buf CLI with "unimplemented", so point buf at a local protobuf repository, or at the upstream registry directly.`,
+          },
+        ];
+      }
       return [
         {
+          title: "Point a hostname at this repository",
+          // A buf module name is exactly registry/owner/name, and buf only
+          // prepends a scheme to the registry segment before appending the RPC
+          // path -- there is nowhere to put the /proto/<repo> prefix this
+          // server serves BSR under. So the repository needs a host of its own
+          // whose root maps onto that prefix; nothing the CLI accepts can
+          // stand in for it.
+          // buf only speaks HTTPS, and nginx's 1 MiB default body limit
+          // answers a larger buf push with 413; the backend's protobuf routes
+          // accept up to 256 MiB (#1193).
+          description: `A buf module name is always registry/owner/name, so it cannot carry this repository's /proto/${repoKey} path. Give the repository a hostname whose root maps onto ${REGISTRY_URL}/proto/${repoKey}/, then use that hostname below. The buf CLI only connects over HTTPS, so the hostname needs a TLS certificate.`,
+          code: `# nginx, on the host serving bsr.example.com
+server {
+    listen 443 ssl;
+    server_name bsr.example.com;
+    ssl_certificate     /etc/ssl/certs/bsr.example.com.pem;
+    ssl_certificate_key /etc/ssl/private/bsr.example.com.key;
+
+    # nginx's 1 MiB default rejects a larger buf push with 413
+    client_max_body_size 256m;
+
+    location / {
+        proxy_pass ${REGISTRY_URL}/proto/${repoKey}/;
+    }
+}`,
+        },
+        {
           title: "Configure buf.yaml",
-          description: "Set the registry in your module's buf.yaml:",
+          description: "Name the module after that hostname:",
           code: `# buf.yaml
 version: v2
 modules:
   - path: proto
-    name: ${REGISTRY_HOST}/proto/${repoKey}/myorg/mymodule`,
+    name: bsr.example.com/myorg/mymodule`,
         },
         {
           title: "Authenticate with buf CLI",
-          code: `buf registry login ${REGISTRY_HOST} --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"`,
+          // Not `buf registry login`: it validates the token through
+          // buf.alpha AuthnService/GetCurrentUser, which the backend does not
+          // serve, so it always reports an invalid token.
+          description: "buf reads the token from BUF_TOKEN (buf registry login does not work against Artifact Keeper):",
+          code: `export BUF_TOKEN=YOUR_TOKEN@bsr.example.com`,
         },
         {
           title: "Push a module",
-          code: `buf push --registry ${REGISTRY_URL}/proto/${repoKey}`,
+          description: "buf push reads its destination from buf.yaml:",
+          code: `buf push --create`,
         },
         {
           title: "Add a dependency",
           description: "In buf.yaml, add deps and run update:",
           code: `# buf.yaml
 deps:
-  - ${REGISTRY_HOST}/proto/${repoKey}/owner/module
+  - bsr.example.com/owner/module
 
 # Then resolve:
 buf dep update`,

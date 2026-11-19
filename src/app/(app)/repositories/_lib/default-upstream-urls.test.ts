@@ -33,6 +33,10 @@ describe("DEFAULT_UPSTREAM_URLS", () => {
     expect(DEFAULT_UPSTREAM_URLS.vscode).toMatch(/\/vscode\/gallery$/);
   });
 
+  it("mcp proxies the official MCP registry", () => {
+    expect(DEFAULT_UPSTREAM_URLS.mcp).toBe("https://registry.modelcontextprotocol.io");
+  });
+
   it("each URL is a non-empty string", () => {
     for (const [key, url] of Object.entries(DEFAULT_UPSTREAM_URLS)) {
       expect(typeof url, `value for "${key}" should be a string`).toBe(

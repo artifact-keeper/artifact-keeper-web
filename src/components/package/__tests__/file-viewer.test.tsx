@@ -120,8 +120,8 @@ describe("FileViewer", () => {
 
     // File name
     expect(screen.getByText("index.js")).toBeInTheDocument();
-    // Formatted size (2 KB)
-    expect(screen.getByText("2 KB")).toBeInTheDocument();
+    // Formatted size (2 KiB)
+    expect(screen.getByText("2 KiB")).toBeInTheDocument();
     // Download link
     const downloadLink = screen.getByRole("link", { name: /download .+/i });
     expect(downloadLink).toBeInTheDocument();

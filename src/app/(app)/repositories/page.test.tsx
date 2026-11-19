@@ -296,7 +296,8 @@ describe('RepositoriesPage - delete mutation callbacks', () => {
 
   it('shows success toast on repo deletion', async () => {
     const config = await getDeleteMutationConfig();
-    config.onSuccess?.({}, 'test-repo');
+    // `repositoriesApi.delete` resolves null on a backend that deletes at once (#1048)
+    config.onSuccess?.(null, 'test-repo');
 
     expect(mockToastSuccess).toHaveBeenCalledWith('Repository deleted');
   });

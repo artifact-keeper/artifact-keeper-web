@@ -53,3 +53,20 @@ export function isScanNotCataloged(
 /** Short user-facing explanation for a not-cataloged scan. */
 export const NOT_CATALOGED_EXPLANATION =
   "The scanner could not catalog this package's contents, so nothing was assessed. Zero findings here is not a clean result.";
+
+/** The status a scanner records when it does not apply to an artifact's format. */
+export const SCAN_STATUS_NOT_APPLICABLE = "not_applicable";
+
+/**
+ * Whether a scan row belongs on the list under the active status filter.
+ *
+ * `not_applicable` rows are noise on the default view (one per scanner that
+ * does not handle the format), so they are opt-in: hidden unless the user picks
+ * that status explicitly.
+ */
+export function isScanRowVisible(status: string, statusFilter: string): boolean {
+  return (
+    statusFilter === SCAN_STATUS_NOT_APPLICABLE ||
+    status !== SCAN_STATUS_NOT_APPLICABLE
+  );
+}

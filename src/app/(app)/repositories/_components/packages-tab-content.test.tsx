@@ -28,6 +28,7 @@ const PACKAGE = {
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",
 };
+let listed: Record<string, unknown> = PACKAGE;
 
 const mockGet = vi.fn();
 const mockList = vi.fn();
@@ -45,6 +46,13 @@ vi.mock("@/components/package/file-tree", () => ({
   PackageFileTree: () => <div />,
 }));
 vi.mock("@/components/package/file-viewer", () => ({ FileViewer: () => <div /> }));
+vi.mock("./mcp-server-gallery", () => ({
+  McpServerGallery: (p: { repositoryKey: string; repositoryType?: string }) => (
+    <div data-testid="mcp-gallery">
+      {p.repositoryKey}:{p.repositoryType}
+    </div>
+  ),
+}));
 
 const queryKeys: unknown[][] = [];
 vi.mock("@tanstack/react-query", () => ({
@@ -52,7 +60,7 @@ vi.mock("@tanstack/react-query", () => ({
     queryKeys.push(opts.queryKey);
     if (opts.enabled !== false) opts.queryFn();
     if (opts.queryKey[0] === "repo-packages") {
-      return { data: { items: [PACKAGE], pagination: { total: 1 } }, isLoading: false };
+      return { data: { items: [listed], pagination: { total: 1 } }, isLoading: false };
     }
     return { data: undefined, isLoading: false };
   },
@@ -85,5 +93,31 @@ describe("PackagesTabContent virtual-repo context", () => {
       "pkg-1",
       "npm-virtual",
     ]);
+  });
+
+  it("shows hidden and bidi characters in a package description visibly (#1202)", () => {
+    listed = { ...PACKAGE, description: "Utility \u202egnp.exe \u200bnote" };
+    const { container } = render(
+      <PackagesTabContent repositoryKey="npm-virtual" repositoryFormat="npm" />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "lodash" })[0]);
+    expect(screen.getByText("Utility [U+202E]gnp.exe [U+200B]note")).toHaveAttribute("data-sanitized", "true");
+    expect(container.textContent).not.toMatch(/[\u202e\u200b]/);
+    listed = PACKAGE;
+  });
+});
+
+describe("PackagesTabContent for MCP repositories", () => {
+  beforeEach(() => {
+    cleanup();
+    queryKeys.length = 0;
+  });
+
+  it("renders the Servers gallery instead of the package table", () => {
+    render(
+      <PackagesTabContent repositoryKey="mcp-local" repositoryFormat="mcp" repositoryType="local" />,
+    );
+    expect(screen.getByTestId("mcp-gallery")).toHaveTextContent("mcp-local:local");
+    expect(queryKeys).toEqual([]);
   });
 });

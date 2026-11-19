@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useDeferredValue, useMemo } from "react";
+import { useState, useCallback, useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, RefreshCw, Package, AlertCircle } from "lucide-react";
@@ -15,6 +15,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import { DELETION_REPORT_LOGOUT, reportRepositoryDeletion } from "./report-repository-deletion";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,8 @@ import {
 } from "@/components/ui/resizable";
 
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
-import { FORMAT_GROUPS, TYPE_OPTIONS } from "../_lib/constants";
+import { formatGroupsFor, TYPE_OPTIONS } from "../_lib/constants";
+import { backendSupportsMcp } from "@/lib/mcp/format";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
@@ -98,6 +100,7 @@ export function RepositoriesContent() {
   // plugin layouts (#591) and the plugin layout labels in the list (#592).
   const { data: formatHandlers } = useFormatHandlers();
   const pluginFormats = useMemo(() => wasmPluginFormats(formatHandlers), [formatHandlers]);
+  const formatGroups = formatGroupsFor(backendSupportsMcp(formatHandlers));
 
   // --- mutations ---
 
@@ -142,14 +145,48 @@ export function RepositoriesContent() {
     onError: mutationErrorToast("Failed to update repository"),
   });
 
+  // Delete-job pollers (#1190): stopped when the page unmounts or the user
+  // signs out, so no status reads outlive the page or the session. A poller
+  // that starts after that (a DELETE still in flight, or Retry on a failed
+  // toast) gets a signal that is already aborted (#1228).
+  const deletionPolls = useRef<AbortController | null>(null);
+  const deletionPollsStopped = useRef<string | null>(null);
+  const deletionPollSignal = () => {
+    if (deletionPollsStopped.current) return AbortSignal.abort(deletionPollsStopped.current);
+    if (!deletionPolls.current || deletionPolls.current.signal.aborted) {
+      deletionPolls.current = new AbortController();
+    }
+    return deletionPolls.current.signal;
+  };
+  const stopDeletionPolls = (reason: string) => {
+    deletionPollsStopped.current = reason;
+    deletionPolls.current?.abort(reason);
+  };
+  // Declared first so a remount (React Strict Mode) clears the stop before the
+  // sign-in check below runs again.
+  useEffect(() => {
+    deletionPollsStopped.current = null;
+    return () => stopDeletionPolls(deletionPollsStopped.current ?? "unmount");
+  }, []);
+  useEffect(() => {
+    if (!isAuthenticated) stopDeletionPolls(DELETION_REPORT_LOGOUT);
+    else if (deletionPollsStopped.current === DELETION_REPORT_LOGOUT) deletionPollsStopped.current = null;
+  }, [isAuthenticated]);
+
   const deleteMutation = useMutation({
     mutationFn: (key: string) => repositoriesApi.delete(key),
-    onSuccess: (_, deletedKey) => {
+    onSuccess: (job, deletedKey) => {
       invalidateAllRepoQueries();
       setDeleteOpen(false);
       setDialogRepo(null);
       if (selectedKey === deletedKey) setSelectedKey(null);
-      toast.success("Repository deleted");
+      // 1.12.0 answers 202 with a background job (#1048): report that the
+      // deletion has started, then its outcome.
+      void reportRepositoryDeletion(deletedKey, job, {
+        onCompleted: invalidateAllRepoQueries,
+        onRetry: (key) => deleteMutation.mutate(key),
+        signal: deletionPollSignal(),
+      });
     },
     onError: mutationErrorToast("Failed to delete repository"),
   });
@@ -294,7 +331,7 @@ export function RepositoriesContent() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All formats</SelectItem>
-              {FORMAT_GROUPS.map(([group, options]) => (
+              {formatGroups.map(([group, options]) => (
                 <SelectGroup key={group}>
                   <span className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                     {group}

@@ -14,6 +14,16 @@ import {
 } from "../_lib/constants";
 import { DEFAULT_UPSTREAM_URLS } from "../_lib/default-upstream-urls";
 import { useRpmRepodataCapabilities } from "@/hooks/use-rpm-repodata-capabilities";
+import { useFormatHandlers } from "@/hooks/use-format-handlers";
+import { useRepositories } from "@/hooks/use-repositories";
+import {
+  backendSupportsMcp,
+  hasMcpConfig,
+  isMcpFormat,
+  mcpCreatableRepoTypes,
+  mcpRepoTypeSupport,
+} from "@/lib/mcp/format";
+import { useAuth } from "@/providers/auth-provider";
 import { parseRepodataDepth, supportsRpmRepodataDepth } from "@/lib/rpm-repodata";
 import { toUserMessage } from "@/lib/error-utils";
 
@@ -51,6 +61,11 @@ import {
   RpmRepodataDepthField,
   DebianConfigFields,
   NpmScopePolicyFields,
+  McpConfigFields,
+  buildMcpCreateFields,
+  mcpCreateKeys,
+  seedMcpRemoteConfig,
+  EMPTY_MCP_CONFIG,
   buildRpmConfigFields,
   buildDebianConfigFields,
   buildNpmScopePolicyFields,
@@ -61,6 +76,7 @@ import {
   type RpmConfigValue,
   type DebianConfigValue,
   type NpmScopePolicyValue,
+  type McpConfigValue,
 } from "./format-config-fields";
 import {
   AwsUpstreamAuthFields,
@@ -73,6 +89,15 @@ import {
 } from "./upstream-auth-fields";
 
 type QuotaUnit = "MB" | "GB";
+
+/** One line under the type selector for an `mcp` repository (artifact-keeper#5253). */
+const MCP_TYPE_HINTS: Record<string, string> = {
+  local: "Local hosts your own server.json entries, published with mcp-publisher or curl.",
+  staging: "Staging holds server.json entries for review before promotion.",
+  remote:
+    "Remote proxies an MCP registry, deny by default: nothing is visible until approved.",
+  virtual: "Virtual merges the servers of its member MCP repositories behind one URL.",
+};
 
 const BYTES_PER_MB = 1048576;
 const BYTES_PER_GB = 1073741824;
@@ -203,6 +228,31 @@ export function RepoDialogs({
     EMPTY_NPM_SCOPE_POLICY,
   );
 
+  // MCP registry (artifact-keeper#5253). The option is offered only when
+  // GET /api/v1/formats lists `mcp` (hidden while that loads). Every
+  // repository type is offered unless the handler advertises a narrower
+  // `capabilities.repo_types`. Only an instance administrator may set the
+  // posture/probe locks (anyone else gets 403).
+  const { user } = useAuth();
+  const isInstanceAdmin = !!user?.is_admin;
+  const { data: formatHandlers } = useFormatHandlers();
+  const mcpSupported = backendSupportsMcp(formatHandlers);
+  const mcpTypes = mcpCreatableRepoTypes(mcpRepoTypeSupport(formatHandlers));
+  const isMcp = isMcpFormat(createForm.format);
+  const [mcpConfig, setMcpConfig] = useState<McpConfigValue>(EMPTY_MCP_CONFIG);
+  // Candidate backing repositories across every format, not the list page's
+  // filtered page of results.
+  const { data: allRepos } = useRepositories({ per_page: 1000 }, { enabled: createOpen && isMcp });
+  const formatOptions = useMemo(
+    () => SORTED_FORMAT_OPTIONS.filter((o) => mcpSupported || !isMcpFormat(o.value)),
+    [mcpSupported],
+  );
+  const typeOptions = isMcp ? TYPE_OPTIONS.filter((o) => mcpTypes.includes(o.value)) : TYPE_OPTIONS;
+  // The Remote wizard pre-approves the official reference servers.
+  const seedMcpForType = (format: string, repoType: string) => {
+    if (isMcpFormat(format) && repoType === "remote") setMcpConfig(seedMcpRemoteConfig);
+  };
+
   /**
    * Suggest a default upstream URL when the repo type is "remote".
    * Only auto-fills if the current URL is empty or matches a known default
@@ -331,6 +381,7 @@ export function RepoDialogs({
     setRepodataDepth("0");
     setDebianConfig(EMPTY_DEBIAN_CONFIG);
     setNpmScopePolicy(EMPTY_NPM_SCOPE_POLICY);
+    setMcpConfig(EMPTY_MCP_CONFIG);
   };
 
   // Reset the create form whenever the dialog opens. The parent flips
@@ -428,6 +479,12 @@ export function RepoDialogs({
                   buildNpmScopePolicyFields(npmScopePolicy),
                 );
               }
+              if (hasMcpConfig(createForm.format)) {
+                Object.assign(
+                  submitData,
+                  buildMcpCreateFields(mcpConfig, createForm.repo_type, isInstanceAdmin),
+                );
+              }
               if (hasRepodataDepth && parsedDepth !== null && parsedDepth > 0) {
                 submitData.repodata_depth = parsedDepth;
               }
@@ -487,18 +544,26 @@ export function RepoDialogs({
                   value={createForm.format}
                   onValueChange={(v) => {
                     setRepodataDepth("0");
+                    // An `mcp` repository cannot keep a type the backend
+                    // refuses for it; fall back to Local.
+                    const repoType =
+                      isMcpFormat(v) && !mcpTypes.includes(createForm.repo_type)
+                        ? "local"
+                        : createForm.repo_type;
                     setCreateForm((f) => ({
                       ...f,
                       format: v as RepositoryFormat,
+                      repo_type: repoType,
                     }));
-                    maybeSetDefaultUpstreamUrl(v, createForm.repo_type, createForm.upstream_url ?? "");
+                    maybeSetDefaultUpstreamUrl(v, repoType, createForm.upstream_url ?? "");
+                    seedMcpForType(v, repoType);
                   }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SORTED_FORMAT_OPTIONS.map((o) => (
+                    {formatOptions.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
                       </SelectItem>
@@ -524,6 +589,7 @@ export function RepoDialogs({
                       repo_type: v as RepositoryType,
                     }));
                     maybeSetDefaultUpstreamUrl(createForm.format, v, createForm.upstream_url ?? "");
+                    seedMcpForType(createForm.format, v);
                     if (v !== "remote") {
                       setUpstreamAuthType("none");
                       setUpstreamUsername("");
@@ -535,7 +601,7 @@ export function RepoDialogs({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TYPE_OPTIONS.map((o) => (
+                    {typeOptions.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
                       </SelectItem>
@@ -544,6 +610,11 @@ export function RepoDialogs({
                 </Select>
               </div>
             </div>
+            {isMcp && MCP_TYPE_HINTS[createForm.repo_type] && (
+              <p className="text-xs text-muted-foreground" data-testid="mcp-type-hint">
+                {MCP_TYPE_HINTS[createForm.repo_type]}
+              </p>
+            )}
             {/* Staging repository: inline hint */}
             {createForm.repo_type === "staging" && (
               <p className="text-xs text-muted-foreground">
@@ -719,6 +790,23 @@ export function RepoDialogs({
                   idPrefix="create"
                   value={npmScopePolicy}
                   onChange={setNpmScopePolicy}
+                />
+              </div>
+            )}
+
+            {/* MCP registry options (artifact-keeper#5253) */}
+            {hasMcpConfig(createForm.format) && (
+              <div className="space-y-3 border-t pt-4">
+                <Label>MCP Options</Label>
+                <McpConfigFields
+                  idPrefix="create"
+                  repoType={createForm.repo_type}
+                  value={mcpConfig}
+                  onChange={setMcpConfig}
+                  repositories={allRepos?.items ?? []}
+                  visibleKeys={mcpCreateKeys(createForm.repo_type)}
+                  canLock={isInstanceAdmin}
+                  offerOfficialPreset
                 />
               </div>
             )}

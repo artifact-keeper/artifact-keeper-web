@@ -11,7 +11,11 @@ export class RepositoriesPage {
 
   constructor(private page: Page) {
     this.heading = page.getByRole('heading', { name: /repositor/i }).first();
-    this.searchInput = page.getByPlaceholder(/search/i);
+    // Scoped to <main> (#1062): while a streamed Suspense boundary is being
+    // revealed, React's server copy of the page can sit for a moment in a
+    // hidden <div id="S:n"> under <body>, next to the client-rendered page,
+    // so an unscoped locator briefly matches two inputs (strict mode).
+    this.searchInput = page.getByRole('main').getByPlaceholder(/search/i);
     this.createButton = page.getByRole('button', { name: /create/i });
     this.repoList = page.locator('[data-testid="repo-list"]').or(
       page.getByRole('listbox').or(page.getByRole('list'))

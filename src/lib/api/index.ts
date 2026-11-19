@@ -118,3 +118,4 @@ export type {
   RegisterPeerRequest,
   AssignRepoRequest,
 } from './replication';
+export { mcpApi } from './mcp';

@@ -42,6 +42,10 @@ const h = vi.hoisted(() => ({
   // flag it was issued with on the latest render.
   artifactDetail: undefined as Record<string, unknown> | undefined,
   artifactDetailEnabled: undefined as boolean | undefined,
+  // The repository's registered environments (#1037), and the `enabled` flag
+  // of the query that decides whether the Environments tab is shown.
+  environments: undefined as unknown[] | undefined,
+  environmentsEnabled: [] as Array<boolean | undefined>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -122,6 +126,14 @@ vi.mock("@tanstack/react-query", () => ({
       h.artifactDetailEnabled = opts.enabled;
       return {
         data: opts.enabled ? h.artifactDetail : undefined,
+        isLoading: false,
+        isFetching: false,
+      };
+    }
+    if (key === "environments") {
+      h.environmentsEnabled.push(opts.enabled);
+      return {
+        data: opts.enabled === false ? undefined : h.environments,
         isLoading: false,
         isFetching: false,
       };
@@ -274,7 +286,11 @@ vi.mock("@/components/common/data-table", () => ({
     rowKey,
   }: {
     data?: Array<{ id: string; name: string }>;
-    columns?: Array<{ id: string; cell?: (row: unknown) => React.ReactNode }>;
+    columns?: Array<{
+      id: string;
+      accessor?: (row: unknown) => unknown;
+      cell?: (row: unknown) => React.ReactNode;
+    }>;
     onRowClick?: (row: unknown) => void;
     onPageSizeChange?: (size: number) => void;
     rowKey?: (row: { id: string; name: string }) => string;
@@ -292,13 +308,33 @@ vi.mock("@/components/common/data-table", () => ({
           {row.name}
         </button>
       ))}
-      {/* The real `name` column cell, so the column definition is covered
-          rather than stubbed away (#768). Only this column is rendered: the
-          `actions` cell mounts Radix tooltips, which need a provider that this
-          suite deliberately does not set up. */}
+      {/* Every column's accessor value, which is what the real table sorts
+          and filters on. */}
+      {(data ?? []).map((row) =>
+        (columns ?? []).map((c) => (
+          <span
+            key={`acc-${c.id}-${row.id}`}
+            data-testid={`stub-cell-${c.id}-${row.id}`}
+          >
+            {String(c.accessor?.(row) ?? "")}
+          </span>
+        )),
+      )}
+      {/* The real `name` and `version` column cells, so those column
+          definitions are covered rather than stubbed away (#768). Only these
+          are rendered: the `actions` cell mounts Radix tooltips, which need a
+          provider that this suite deliberately does not set up. */}
       {(data ?? []).map((row) => (
         <div key={`name-cell-${row.id}`} data-testid={`stub-name-cell-${row.id}`}>
           {columns?.find((c) => c.id === "name")?.cell?.(row)}
+        </div>
+      ))}
+      {(data ?? []).map((row) => (
+        <div
+          key={`version-cell-${row.id}`}
+          data-testid={`stub-version-cell-${row.id}`}
+        >
+          {columns?.find((c) => c.id === "version")?.cell?.(row)}
         </div>
       ))}
       <button
@@ -351,6 +387,42 @@ describe("RepoDetailContent tab strip", () => {
       tabsWithoutIcon,
       `every tab should render a leading icon, but these did not: ${tabsWithoutIcon.join(", ")}`,
     ).toEqual([]);
+  });
+});
+
+describe("RepoDetailContent PyPI Tracks tab (#1066)", () => {
+  const tracksTab = () => screen.queryByRole("tab", { name: /tracks/i });
+
+  beforeEach(() => {
+    cleanup();
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    repository.repo_type = "virtual";
+  });
+
+  // The backend only accepts tracks declarations on the hosted repository
+  // that owns the project, so the tab must be on local and staging repos.
+  it.each(["local", "staging"])("shows the tab on a %s PyPI repository", (repoType) => {
+    repository.format = "pypi";
+    repository.repo_type = repoType;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).not.toBeNull();
+  });
+
+  it.each(["virtual", "remote"])("hides the tab on a %s PyPI repository", (repoType) => {
+    repository.format = "pypi";
+    repository.repo_type = repoType;
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).toBeNull();
+  });
+
+  it("hides the tab on a local repository of another format", () => {
+    repository.format = "npm";
+    repository.repo_type = "local";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(tracksTab()).toBeNull();
   });
 });
 
@@ -474,6 +546,15 @@ describe("RepoDetailContent default primary tab (#2793)", () => {
     );
     // Active panel is the Packages view (stubbed), not the artifact browser.
     expect(document.querySelector('[data-stub="packages"]')).toBeInTheDocument();
+  });
+
+  it("labels the catalog tab Servers for an MCP repository", () => {
+    repository.format = "mcp";
+    render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getByRole("tab", { name: /servers/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: /^packages$/i })).toBeNull();
+    repository.format = "generic";
   });
 });
 
@@ -941,5 +1022,159 @@ describe("RepoDetailContent allowlist summary (#971)", () => {
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "false");
     await userEvent.click(screen.getByRole("button", { name: "Allowlist: on, 2 entries" }));
     expect(screen.getByRole("tab", { name: /settings/i })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+/**
+ * A proxy-cached Maven row carries no `version`: the cache catalog has no
+ * column for one, so every file in a mirrored Maven repository showed a dash
+ * where the version belongs. The column falls back to the GAV coordinates,
+ * which prefer the backend-parsed metadata (#482) and parse the path second.
+ */
+describe("RepoDetailContent flat Maven version column", () => {
+  beforeEach(() => {
+    cleanup();
+    h.searchParams = new URLSearchParams("view=flat");
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    artifactFixture.path = "team/config.yaml";
+    delete (artifactFixture as { version?: string }).version;
+    delete (artifactFixture as { metadata?: Record<string, unknown> }).metadata;
+    h.searchParams = new URLSearchParams();
+  });
+
+  async function renderFlat() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+  }
+
+  it("falls back to the Maven path version when the row carries none", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("1.0");
+    // The cell renders the fallback too, not just the sort key.
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("1.0");
+  });
+
+  it("prefers the backend-parsed metadata over the path", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    (artifactFixture as { metadata?: Record<string, unknown> }).metadata = {
+      groupId: "com.example",
+      artifactId: "lib",
+      version: "2.0",
+    };
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("2.0");
+  });
+
+  it("keeps the row's own version when the backend sent one", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "com/example/lib/1.0/lib-1.0.jar";
+    (artifactFixture as { version?: string }).version = "9.9";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toHaveTextContent("9.9");
+  });
+
+  it("leaves a non-Maven repository's version empty", async () => {
+    repository.format = "generic";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-cell-version-a1")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("-");
+  });
+
+  it("shows a dash for a Maven path with no parseable version", async () => {
+    repository.format = "maven";
+    artifactFixture.path = "notes.txt";
+    await renderFlat();
+
+    expect(screen.getByTestId("stub-version-cell-a1")).toHaveTextContent("-");
+  });
+});
+
+describe("RepoDetailContent - untrusted repository description (#1107)", () => {
+  beforeEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    delete (repository as { description?: string }).description;
+  });
+
+  it("shows hidden and bidi characters in the description visibly", () => {
+    (repository as { description?: string }).description =
+      "RT15 repo \u202efdp.exe \u200bzw \u0007";
+    const { container } = render(<RepoDetailContent repoKey="demo" />);
+
+    expect(screen.getAllByText("RT15 repo [U+202E]fdp.exe [U+200B]zw [U+0007]").length).toBeGreaterThan(0);
+    expect(container.textContent).not.toMatch(/[\u202e\u200b\u0007]/);
+  });
+
+  it("cuts an over-long description and keeps the whole text in a tooltip", () => {
+    const long = Array.from({ length: 100 }, () => "a long description").join(" ");
+    (repository as { description?: string }).description = long;
+    render(<RepoDetailContent repoKey="demo" />);
+
+    const shown = screen.getAllByTitle(long);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown[0].textContent?.endsWith("…")).toBe(true);
+  });
+});
+
+describe("RepoDetailContent - Environments tab (#1037)", () => {
+  const envsTab = () => screen.queryByRole("tab", { name: /environments/i });
+
+  beforeEach(() => {
+    cleanup();
+    h.environments = undefined;
+    h.environmentsEnabled = [];
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    h.environments = undefined;
+  });
+
+  it.each(["maven", "gradle", "docker", "helm", "debian", "rpm", "nuget", "go", "generic", "yarn", "pnpm", "bower"])(
+    "hides the tab on a %s repository that has no registered environment",
+    (format) => {
+      repository.format = format;
+      render(<RepoDetailContent repoKey="demo" />);
+      expect(envsTab()).toBeNull();
+    },
+  );
+
+  it.each(["conda", "conda_native", "npm", "cargo", "pypi", "poetry", "jupyter"])(
+    "shows the tab on a %s repository",
+    (format) => {
+      repository.format = format;
+      render(<RepoDetailContent repoKey="demo" />);
+      expect(envsTab()).not.toBeNull();
+    },
+  );
+
+  it("keeps the tab on an unrelated repository that already holds an environment", () => {
+    repository.format = "maven";
+    h.environments = [{ id: "env-1", name: "pinned" }];
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(envsTab()).not.toBeNull();
+  });
+
+  it("only looks up the stored environments when the format does not already decide it", () => {
+    repository.format = "npm";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(h.environmentsEnabled.every((e) => e === false)).toBe(true);
+
+    cleanup();
+    h.environmentsEnabled = [];
+    repository.format = "maven";
+    render(<RepoDetailContent repoKey="demo" />);
+    expect(h.environmentsEnabled.some((e) => e === true)).toBe(true);
   });
 });

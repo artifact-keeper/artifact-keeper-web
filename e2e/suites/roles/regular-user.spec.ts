@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/test-fixtures';
+import { expectMcpCurationDenied } from '../../fixtures/mcp-curation-mocks';
 
 test.describe('Developer role access', () => {
   test('can access repositories', async ({ page }) => {
@@ -42,5 +43,9 @@ test.describe('Developer role access', () => {
     // Should NOT see admin-only items
     await expect(sidebar.getByText(/^Users$/)).not.toBeVisible();
     await expect(sidebar.getByText(/^Settings$/)).not.toBeVisible();
+  });
+
+  test('cannot reach the MCP approval queue on /curation', async ({ page }) => {
+    await expectMcpCurationDenied(page);
   });
 });

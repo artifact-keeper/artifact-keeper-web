@@ -12,6 +12,7 @@ import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { toUserMessage, isAccountLocked } from "@/lib/error-utils";
 import { ssoApi } from "@/lib/api/sso";
+import { clearSilentSsoReturnTo } from "@/lib/silent-sso";
 import { useSystemConfig } from "@/providers/system-config-provider";
 import type { SsoProvider } from "@/types/sso";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,7 @@ export function ssoButtonLabel(provider: SsoProvider): string {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, clearTotpRequired } = useAuth();
+  const { login, refreshUser, setupRequired, setupPasswordHint, totpRequired, verifyTotp, beginTotpChallenge, clearTotpRequired } = useAuth();
   const { config: systemConfig, isLoading: systemConfigLoading } =
     useSystemConfig();
   // Absent on backends predating the flag; the parser defaults it to true so
@@ -196,12 +197,18 @@ function LoginContent() {
     setAccountLocked(false);
     try {
       if (selectedProvider.type === "ldap") {
-        // Tokens are set as httpOnly cookies by the backend
-        await ssoApi.ldapLogin(
+        const result = await ssoApi.ldapLogin(
           selectedProvider.id,
           values.username,
           values.password
         );
+        if (result.kind === "totp") {
+          // artifact-keeper#5484: the directory password is one factor. The
+          // component re-renders with the TOTP form, as for local login.
+          beginTotpChallenge(result.totpToken);
+          return;
+        }
+        // Tokens are set as httpOnly cookies by the backend
         await refreshUser();
         router.push("/");
       } else {
@@ -328,7 +335,7 @@ function LoginContent() {
         <CardHeader className="text-center pb-2">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center">
             <Image
-              src="/logo-48.png"
+              src="/logo-96.png"
               alt="Artifact Keeper"
               width={48}
               height={48}
@@ -483,6 +490,26 @@ function LoginContent() {
             </Form>
           )}
 
+          {optionsLoaded && !localLoginOffered && ldapProviders.length > 0 && (
+            // With an LDAP provider enabled and local login not advertised,
+            // every form on the page binds to LDAP, so the built-in admin had
+            // no visible way back to its own password (#4857). Point at the
+            // existing ?fallback=local escape hatch instead of advertising the
+            // break-glass path in the backend flag: the login endpoint still
+            // enforces the policy and rejects everyone but a verified admin.
+            <div className="mt-3 text-center">
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs text-muted-foreground"
+                onClick={() => router.push("/login?fallback=local")}
+              >
+                Sign in with a local account
+              </Button>
+            </div>
+          )}
+
           {optionsLoaded && redirectProviders.length > 0 && (
             <>
               {showLocalForm && (
@@ -501,6 +528,12 @@ function LoginContent() {
                     className="w-full"
                     onClick={() => {
                       if (provider.login_url.startsWith('/')) {
+                        // An explicit sign-in: drop a return path a silent
+                        // probe left behind (one that ended on an IdP error
+                        // never reached the callback to consume it), so the
+                        // callback does not take this round trip for a
+                        // silent one (artifact-keeper#5484).
+                        clearSilentSsoReturnTo();
                         window.location.href = provider.login_url;
                       }
                     }}

@@ -301,6 +301,16 @@ describe("sbomApi", () => {
     expect(out.cve_id).toBe("CVE-2024-001");
   });
 
+  it("updateCveStatus reports the decisions a revoke left in force", async () => {
+    mockUpdateCveStatus.mockResolvedValue({
+      data: { ...SDK_CVE, status: "open", acknowledgements_left_effective: 2 },
+      error: undefined,
+    });
+    const mod = await import("../sbom");
+    const out = await mod.sbomApi.updateCveStatus("cve1", { status: "open" });
+    expect(out.acknowledgements_left_effective).toBe(2);
+  });
+
   it("updateCveStatus throws on error", async () => {
     mockUpdateCveStatus.mockResolvedValue({ data: undefined, error: "fail" });
     const mod = await import("../sbom");

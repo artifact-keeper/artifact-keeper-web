@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { sbomApi } from "@/lib/api/sbom";
 import { dtApi } from "@/lib/api/dependency-track";
 import { mutationErrorToast } from "@/lib/error-utils";
+import { describeRevoke, reportRevokeOutcome } from "@/lib/acknowledgements";
 import {
   ANALYZABLE_DISABLED_REASON,
   isArtifactAnalyzable,
@@ -194,9 +195,23 @@ export function SecurityTabContent({
   const updateStatusMutation = useMutation({
     mutationFn: ({ cveId, status, reason }: { cveId: string; status: CveStatus; reason?: string }) =>
       sbomApi.updateCveStatus(cveId, { status, reason }),
-    onSuccess: () => {
+    onSuccess: (entry, { status }) => {
       queryClient.invalidateQueries({ queryKey: ["cve-history", artifact.id] });
-      toast.success("CVE status updated");
+      if (status !== "open") {
+        toast.success("CVE status updated");
+        return;
+      }
+      // Reopening revokes the decisions on this advisory, as far as this
+      // credential has authority. Those past it stay in force (#1072).
+      const outcome = describeRevoke({
+        leftEffective: entry.acknowledgements_left_effective,
+        stillAcknowledged: entry.status === "acknowledged",
+      });
+      if (outcome.complete) {
+        toast.success("CVE status updated");
+      } else {
+        reportRevokeOutcome(outcome);
+      }
     },
     onError: mutationErrorToast("Failed to update CVE status"),
   });

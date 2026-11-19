@@ -30,6 +30,12 @@ export interface FormatHandler {
    * hardcoded list (#808, backend artifact-keeper#3446).
    */
   capabilities: Record<string, unknown> | null;
+  /**
+   * Repository types the format can be created as, in the order `local`,
+   * `staging`, `remote`, `virtual` (artifact-keeper#5253). Not on the
+   * generated SDK type yet; absent on older backends.
+   */
+  repository_types?: string[];
 }
 
 /** Result of dry-running a handler against sample content. */
@@ -57,7 +63,13 @@ function adapt(sdk: FormatHandlerResponse): FormatHandler {
     priority: sdk.priority,
     plugin_id: sdk.plugin_id ?? null,
     capabilities: sdk.capabilities ?? null,
+    ...repositoryTypes(sdk),
   };
+}
+
+function repositoryTypes(sdk: FormatHandlerResponse): Pick<FormatHandler, 'repository_types'> {
+  const v = (sdk as FormatHandlerResponse & { repository_types?: unknown }).repository_types;
+  return Array.isArray(v) ? { repository_types: v.filter((t): t is string => typeof t === 'string') } : {};
 }
 
 function adaptTest(sdk: TestFormatResponse): FormatTestResult {

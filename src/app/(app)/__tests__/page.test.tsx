@@ -18,6 +18,11 @@ vi.mock("next/link", () => ({
 
 // Controllable useAuth
 const mockUseAuth = vi.fn();
+// The drill-down probe has its own tests; here it would fetch for real.
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => true,
+}));
+
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
@@ -40,9 +45,17 @@ vi.mock("@/lib/api/repositories", () => ({
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
+vi.mock("@/components/common/quota-usage-cards", () => ({
+  QuotaUsageSection: () => null,
+}));
+vi.mock("@/lib/api/mcp", () => ({
+  mcpApi: { pendingSummary: vi.fn().mockResolvedValue(null) },
+}));
 
 // Utils
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  localStorageBytes: (await importOriginal<typeof import("@/lib/utils")>())
+    .localStorageBytes,
   formatBytes: (bytes: number) => `${bytes} B`,
   cn: (...args: any[]) => args.filter(Boolean).join(" "),
 }));

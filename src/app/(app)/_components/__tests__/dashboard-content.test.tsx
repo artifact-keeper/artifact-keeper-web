@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks (hoisted before imports)
@@ -20,6 +20,11 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+const mockCanListFindings = vi.fn();
+vi.mock("@/hooks/use-can-list-findings", () => ({
+  useCanListFindings: () => mockCanListFindings(),
+}));
+
 const mockUseQuery = vi.fn();
 const mockInvalidateQueries = vi.fn();
 vi.mock("@tanstack/react-query", () => ({
@@ -30,14 +35,21 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/lib/api/admin", () => ({
   adminApi: { getHealth: vi.fn(), getStats: vi.fn() },
 }));
+const mockRepositoriesList = vi.fn();
 vi.mock("@/lib/api/repositories", () => ({
-  repositoriesApi: { list: vi.fn() },
+  repositoriesApi: { list: (...a: unknown[]) => mockRepositoriesList(...a) },
 }));
 vi.mock("@/lib/api/sbom", () => ({
   sbomApi: { getCveTrends: vi.fn() },
 }));
+const mockPendingSummary = vi.fn();
+vi.mock("@/lib/api/mcp", () => ({
+  mcpApi: { pendingSummary: (...a: unknown[]) => mockPendingSummary(...a) },
+}));
 
-vi.mock("@/lib/utils", () => ({
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  localStorageBytes: (await importOriginal<typeof import("@/lib/utils")>())
+    .localStorageBytes,
   formatBytes: (bytes: number) => `${bytes} B`,
   cn: (...args: any[]) => args.filter(Boolean).join(" "),
 }));
@@ -63,6 +75,7 @@ vi.mock("lucide-react", () => {
     ShieldAlert: stub("ShieldAlert"),
     ShieldX: stub("ShieldX"),
     ShieldCheck: stub("ShieldCheck"),
+    Plug: stub("Plug"),
   };
 });
 
@@ -76,11 +89,15 @@ vi.mock("@/components/common/page-header", () => ({
   ),
 }));
 vi.mock("@/components/common/stat-card", () => ({
-  StatCard: ({ label, value, href }: any) => (
+  StatCard: ({ label, value, href, tooltip }: any) => (
     <div data-testid={`stat-${label}`} data-href={href}>
-      {label}: {value}
+      <span>{label}: {value}</span>
+      {tooltip}
     </div>
   ),
+}));
+vi.mock("@/components/common/quota-usage-cards", () => ({
+  QuotaUsageSection: () => <div data-testid="quota-usage-section" />,
 }));
 vi.mock("@/components/common/status-badge", () => ({
   StatusBadge: ({ status }: any) => <span>{status}</span>,
@@ -148,6 +165,9 @@ describe("DashboardContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCanListFindings.mockReturnValue(true);
+    mockRepositoriesList.mockResolvedValue({ items: [] });
+    mockPendingSummary.mockResolvedValue(null);
     setupUseQuery({
       "recent-repositories": {
         data: { items: [] },
@@ -161,6 +181,15 @@ describe("DashboardContent", () => {
     mockUseAuth.mockReturnValue({ user: null, isAuthenticated: false });
     render(<DashboardContent />);
     expect(screen.queryByText("System Health")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quota-usage-section")).not.toBeInTheDocument();
+  });
+
+  it("shows the quota section to any signed-in user and refreshes it", () => {
+    mockUseAuth.mockReturnValue({ user: { username: "user1" }, isAuthenticated: true });
+    render(<DashboardContent />);
+    expect(screen.getByTestId("quota-usage-section")).toBeInTheDocument();
+    screen.getByText("Refresh").click();
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["system-quota"] });
   });
 
   it("renders System Health section for authenticated users", () => {
@@ -202,13 +231,37 @@ describe("DashboardContent", () => {
     render(<DashboardContent />);
     expect(screen.getByText("Statistics")).toBeInTheDocument();
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
-    // Cards show the combined total: local + remote (200+50, 1024000+512000).
+    // Artifact counts are disjoint; storage already includes the proxy cache.
     expect(screen.getByTestId("stat-Artifacts")).toHaveTextContent("250");
     // #822: the Repositories tile leads to the repositories page.
     expect(screen.getByTestId("stat-Repositories")).toHaveAttribute("data-href", "/repositories");
     expect(screen.getByTestId("stat-Storage Used")).toHaveTextContent(
-      "1536000 B"
+      "Storage Used: 1024000 B"
     );
+  });
+
+  it.each([
+    [1000, 400, 600],
+    [1000, 0, 1000],
+    [1000, 1000, 0],
+    [0, 0, 0],
+    // Proxy bytes above the total clamp the Local share at 0 (#1214).
+    [400, 1000, 0],
+  ])("shows storage total %i with proxy %i and local %i", (total, proxy, local) => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true }, isAuthenticated: true });
+    setupUseQuery({
+      "admin-stats": {
+        data: { total_repositories: 1, total_artifacts: 2, total_users: 1,
+          total_storage_bytes: total, proxy_artifact_count: 1, proxy_storage_bytes: proxy },
+      },
+    });
+    render(<DashboardContent />);
+    const card = screen.getByTestId("stat-Storage Used");
+    expect(within(card).getByText(`Storage Used: ${total} B`)).toBeInTheDocument();
+    expect(within(within(card).getByText("Local").parentElement!).getByText(`${local} B`))
+      .toBeInTheDocument();
+    expect(within(within(card).getByText("Remote").parentElement!).getByText(`${proxy} B`))
+      .toBeInTheDocument();
   });
 
   it("shows personalized greeting with display_name", () => {
@@ -408,6 +461,111 @@ describe("DashboardContent", () => {
     expect(screen.getByText("medium")).toBeInTheDocument();
     expect(screen.getByText("low")).toBeInTheDocument();
     expect(screen.getByText("7d")).toBeInTheDocument();
+
+    // Every bar and the open/acknowledged counts drill into the findings list.
+    // The counts are open-only, so every severity link carries state=open or
+    // the list would be a strict superset of the number on screen.
+    expect(
+      screen.getByLabelText("View 2 open critical vulnerabilities")
+    ).toHaveAttribute(
+      "href",
+      "/security/findings?severity=critical&state=open"
+    );
+    expect(
+      screen.getByLabelText("View 3 open high vulnerabilities")
+    ).toHaveAttribute("href", "/security/findings?severity=high&state=open");
+    expect(screen.getByText("Open:").closest("a")).toHaveAttribute(
+      "href",
+      "/security/findings?state=open"
+    );
+    expect(screen.getByText("Acknowledged:").closest("a")).toHaveAttribute(
+      "href",
+      "/security/findings?state=acknowledged"
+    );
+    // Fixed is derived by diffing scans, so it has no row list and stays plain.
+    expect(screen.getByText("Fixed:").closest("a")).toBeNull();
+  });
+
+  it("leaves a zero severity bar and a zero count inert", () => {
+    mockUseAuth.mockReturnValue({
+      user: { username: "admin", is_admin: true },
+      isAuthenticated: true,
+    });
+    setupUseQuery({
+      health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
+      "admin-stats": {
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
+        isLoading: false,
+        isFetching: false,
+      },
+      "cve-trends": {
+        data: {
+          total_cves: 2,
+          open_cves: 2,
+          fixed_cves: 0,
+          acknowledged_cves: 0,
+          critical_count: 0,
+          high_count: 2,
+          medium_count: 0,
+          low_count: 0,
+          avg_days_to_fix: null,
+        },
+        isLoading: false,
+        isFetching: false,
+      },
+      "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
+    });
+    render(<DashboardContent />);
+
+    // No critical findings, so no link to an empty critical list.
+    expect(screen.getByText("critical").closest("a")).toBeNull();
+    expect(screen.getByText("high").closest("a")).toHaveAttribute(
+      "href",
+      "/security/findings?severity=high&state=open"
+    );
+    expect(screen.getByText("Acknowledged:").closest("a")).toBeNull();
+    expect(screen.getByText("Open:").closest("a")).toHaveAttribute(
+      "href",
+      "/security/findings?state=open"
+    );
+  });
+
+  it("links no count for an admin the drill-down refuses", () => {
+    // A repository-scoped admin token (403) or an older backend (404).
+    mockCanListFindings.mockReturnValue(false);
+    mockUseAuth.mockReturnValue({
+      user: { username: "admin", is_admin: true },
+      isAuthenticated: true,
+    });
+    setupUseQuery({
+      health: { data: { status: "healthy", checks: {} }, isLoading: false, isFetching: false },
+      "admin-stats": {
+        data: { total_repositories: 1, total_artifacts: 1, total_users: 1, total_storage_bytes: 0, proxy_artifact_count: 0, proxy_storage_bytes: 0 },
+        isLoading: false,
+        isFetching: false,
+      },
+      "cve-trends": {
+        data: {
+          total_cves: 3,
+          open_cves: 2,
+          fixed_cves: 0,
+          acknowledged_cves: 1,
+          critical_count: 1,
+          high_count: 1,
+          medium_count: 0,
+          low_count: 0,
+          avg_days_to_fix: null,
+        },
+        isLoading: false,
+        isFetching: false,
+      },
+      "recent-repositories": { data: { items: [] }, isLoading: false, isFetching: false },
+    });
+    const { container } = render(<DashboardContent />);
+
+    expect(screen.getByText("critical")).toBeInTheDocument();
+    expect(screen.getByText("Open:")).toBeInTheDocument();
+    expect(container.querySelector('a[href^="/security/findings"]')).toBeNull();
   });
 
   it("shows no CVE data message when trends are undefined", () => {
@@ -463,5 +621,55 @@ describe("DashboardContent", () => {
     expect(screen.queryByText("Open CVEs by Severity")).not.toBeInTheDocument();
     // But Security Overview stats should still render
     expect(screen.getByText("Security Overview")).toBeInTheDocument();
+  });
+
+  describe("MCP servers awaiting approval tile", () => {
+    const ADMIN = { user: { username: "admin", is_admin: true }, isAuthenticated: true };
+    const TILE = "stat-MCP servers awaiting approval";
+
+    it("shows the pending count to admins and links to curation", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const tile = screen.getByTestId(TILE);
+      expect(tile).toHaveTextContent("MCP servers awaiting approval: 4");
+      expect(tile).toHaveAttribute("data-href", "/curation");
+    });
+
+    it("reads the total of GET /api/v1/mcp/pending-summary", async () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      mockPendingSummary.mockResolvedValue({ pending: 1, review: 1, drifted: 1, total: 3, repositories: [] });
+      setupUseQuery({ "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      const opts = mockUseQuery.mock.calls.map((c) => c[0]).find((o) => o.queryKey[1] === "pending-count");
+      expect(opts.queryKey).toEqual(["mcp", "pending-count"]);
+      expect(opts.enabled).toBe(true);
+      await expect(opts.queryFn()).resolves.toBe(3);
+      expect(mockRepositoriesList).not.toHaveBeenCalledWith(expect.objectContaining({ format: "mcp" }));
+      mockPendingSummary.mockResolvedValue(null);
+      await expect(opts.queryFn()).resolves.toBeNull();
+    });
+
+    it("hides the tile when nothing is queued", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: 0 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+    });
+
+    it("hides the tile when the backend does not report MCP reviews", () => {
+      mockUseAuth.mockReturnValue(ADMIN);
+      setupUseQuery({ mcp: { data: null }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+    });
+
+    it("never asks for or shows the count to non-admins", () => {
+      mockUseAuth.mockReturnValue({ user: { username: "dev", is_admin: false }, isAuthenticated: true });
+      setupUseQuery({ mcp: { data: 4 }, "recent-repositories": { data: { items: [] } } });
+      render(<DashboardContent />);
+      expect(screen.queryByTestId(TILE)).not.toBeInTheDocument();
+      expect(mockPendingSummary).not.toHaveBeenCalled();
+    });
   });
 });

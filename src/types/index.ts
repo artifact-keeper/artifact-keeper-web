@@ -1,3 +1,5 @@
+import type { InstanceQuota } from '@/lib/quota';
+import type { McpRepositorySettings } from './mcp';
 export * from './groups';
 export * from './migration';
 export * from './permissions';
@@ -52,7 +54,7 @@ export interface CreateUserResponse {
   generated_password?: string;
 }
 
-export interface Repository {
+export interface Repository extends McpRepositorySettings {
   id: string;
   key: string;
   name: string;
@@ -222,6 +224,8 @@ export type RepositoryFormat =
   | 'gitlfs'
   | 'vscode'
   | 'jetbrains'
+  | 'agentplugins'
+  | 'mcp'
   | 'huggingface'
   | 'mlmodel'
   | 'cran'
@@ -243,7 +247,7 @@ export type RepositoryType = 'local' | 'remote' | 'virtual' | 'staging';
  */
 export type RepositoryVisibility = "public" | "internal" | "private";
 
-export interface CreateRepositoryRequest {
+export interface CreateRepositoryRequest extends McpRepositorySettings {
   key: string;
   name: string;
   description?: string;
@@ -508,10 +512,13 @@ export interface AdminStats {
   total_artifacts: number;
   total_storage_bytes: number;
   total_users: number;
-  // Proxy-cached objects, counted separately from the totals above (they have
-  // no `artifacts` row). 0 on older backends.
+  // Proxy artifact counts are disjoint from total_artifacts (no `artifacts` row).
+  // Proxy bytes are already included in total_storage_bytes. 0 on older backends.
   proxy_artifact_count: number;
   proxy_storage_bytes: number;
+  // Instance-wide storage and transfer quotas; null when the backend does not
+  // report them (older backend). Optional so hand-built fixtures stay valid.
+  quota?: InstanceQuota | null;
 }
 
 export interface ApiError {

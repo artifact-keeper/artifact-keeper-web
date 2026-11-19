@@ -53,10 +53,17 @@ export const FORMAT_OPTIONS: { value: RepositoryFormat; label: string; group: st
   // IDE extensions
   { value: "vscode", label: "VS Code Extensions", group: "Extensions" },
   { value: "jetbrains", label: "JetBrains Plugins", group: "Extensions" },
+  // AI coding-agent plugin bundles (Claude Code, Cursor, Codex, VS Code /
+  // Copilot), served on /agentplugins/* (artifact-keeper#5251). Hosted only.
+  { value: "agentplugins", label: "Agent Plugins", group: "Extensions" },
   // Alias of the PyPI handler (artifact-keeper#3784): prebuilt JupyterLab
   // extensions are pip wheels, so a `jupyter` repo gets the PyPI tabs,
   // package rendering and routes.
   { value: "jupyter", label: "JupyterLab Extensions", group: "Extensions" },
+  // MCP server registries (artifact-keeper#5253), served on /mcp/*. The
+  // create dialog hides the option when GET /api/v1/formats does not list
+  // `mcp` (a backend that predates the format).
+  { value: "mcp", label: "MCP Registry", group: "AI Agents" },
   // ML/AI
   { value: "huggingface", label: "HuggingFace", group: "ML/AI" },
   { value: "mlmodel", label: "ML Model", group: "ML/AI" },
@@ -94,6 +101,19 @@ export const FORMAT_GROUPS = Array.from(
     return map;
   }, new Map<string, typeof FORMAT_OPTIONS>())
 );
+
+/**
+ * The list filter's groups, without the `mcp` option when the backend does
+ * not advertise the format (artifact-keeper#5253), so an old backend shows
+ * no filter for a format it cannot hold. A group left empty is dropped.
+ */
+export function formatGroupsFor(
+  mcpSupported: boolean,
+): (readonly [string, typeof FORMAT_OPTIONS])[] {
+  if (mcpSupported) return FORMAT_GROUPS;
+  return FORMAT_GROUPS.map(([group, options]) => [group, options.filter((o) => o.value !== "mcp")] as const)
+    .filter(([, options]) => options.length > 0);
+}
 
 export const TYPE_OPTIONS: { value: RepositoryType; label: string }[] = [
   { value: "local", label: "Local" },

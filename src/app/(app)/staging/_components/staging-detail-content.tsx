@@ -62,6 +62,7 @@ import { POLICY_STATUS_LABELS } from "../_lib/constants";
 import { PromotionDialog } from "./promotion-dialog";
 import { RejectionDialog } from "./rejection-dialog";
 import { PromotionHistory } from "./promotion-history";
+import { SafeText } from "@/components/common/safe-text";
 
 interface StagingDetailContentProps {
   repoKey: string;
@@ -214,9 +215,11 @@ export function StagingDetailContent({
         </span>
       </div>
       {repository.description && (
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          {repository.description}
-        </p>
+        <SafeText
+          as="p"
+          className="text-sm text-muted-foreground max-w-2xl"
+          value={repository.description}
+        />
       )}
     </>
   );

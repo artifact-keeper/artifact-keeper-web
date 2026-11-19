@@ -45,6 +45,8 @@ export type PackageType =
   | 'gitlfs'
   | 'vscode'
   | 'jetbrains'
+  | 'agentplugins'
+  | 'mcp'
   | 'huggingface'
   | 'mlmodel'
   | 'cran'

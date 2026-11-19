@@ -37,14 +37,18 @@ import {
 } from "@/components/ui/breadcrumb";
 import { packagesApi } from "@/lib/api/packages";
 import { getInstallCommand, currentRegistryHost } from "@/lib/package-utils";
+import { formatPackageDownloads, formatVersionLabel } from "@/lib/package-display";
 import {
   formatBytes as formatBytesUtil,
   formatDate,
-  formatNumber,
   isSafeUrl,
 } from "@/lib/utils";
 import { PackageFileTree } from "@/components/package/file-tree";
 import type { PackageVersion } from "@/types/packages";
+import { isMcpFormat } from "@/lib/mcp/format";
+import { McpServerDetail } from "./_components/mcp-server-detail";
+import { SafeText } from "@/components/common/safe-text";
+import { NAME_MAX_LENGTH, safeText } from "@/lib/untrusted-text";
 
 // ---- Helpers ----
 
@@ -146,7 +150,7 @@ function PackageDetailContent() {
     enabled: !!packageId,
   });
 
-  useDocumentTitle(pkg?.name ?? "Package Details");
+  useDocumentTitle(pkg?.name ? safeText(pkg.name, { max: NAME_MAX_LENGTH }) : "Package Details");
 
   // Fetch versions
   const { data: versions, isLoading: versionsLoading } = useQuery({
@@ -201,6 +205,10 @@ function PackageDetailContent() {
     );
   }
 
+  // An MCP server version is a registry document, not an installable file:
+  // it gets its own detail body (artifact-keeper#5253).
+  if (isMcpFormat(pkg.format)) return <McpServerDetail pkg={pkg} />;
+
   const installLocation = { host: currentRegistryHost(), repoKey: pkg.repository_key };
   const installCmd = getInstallCommand(
     pkg.name,
@@ -208,6 +216,8 @@ function PackageDetailContent() {
     pkg.format,
     installLocation
   );
+  // Hidden when the backend has no observed count (#1085).
+  const downloads = formatPackageDownloads(pkg.download_count);
   const license = (pkg.metadata as Record<string, unknown> | undefined)
     ?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)
@@ -238,7 +248,9 @@ function PackageDetailContent() {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>{pkg.name}</BreadcrumbPage>
+            <BreadcrumbPage>
+              <SafeText max={NAME_MAX_LENGTH} value={pkg.name} />
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -258,18 +270,16 @@ function PackageDetailContent() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold truncate">{pkg.name}</h1>
+            <SafeText as="h1" className="text-2xl font-semibold truncate" max={NAME_MAX_LENGTH} value={pkg.name} />
             <Badge variant="secondary">{pkg.format}</Badge>
           </div>
           {pkg.version && (
             <p className="text-sm text-muted-foreground mt-1">
-              Latest: v{pkg.version}
+              Latest: {formatVersionLabel(pkg.version, pkg.format)}
             </p>
           )}
           {pkg.description && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {pkg.description}
-            </p>
+            <SafeText as="p" className="text-sm text-muted-foreground mt-2" value={pkg.description} />
           )}
         </div>
         {homepageUrl && isSafeUrl(homepageUrl) ? (
@@ -320,10 +330,12 @@ function PackageDetailContent() {
                 label="Size"
                 value={formatBytes(pkg.size_bytes)}
               />
-              <MetadataItem
-                label="Downloads"
-                value={formatNumber(pkg.download_count)}
-              />
+              {downloads && (
+                <MetadataItem
+                  label="Downloads"
+                  value={downloads}
+                />
+              )}
               <MetadataItem
                 label="Created"
                 value={formatDate(pkg.created_at)}
@@ -402,7 +414,7 @@ function PackageDetailContent() {
                         {formatBytes(v.size_bytes)}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatNumber(v.download_count)}
+                        {formatPackageDownloads(v.download_count) ?? "-"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(v.created_at)}

@@ -1,0 +1,41 @@
+{
+  "server": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "com.acme/weather",
+    "title": "Acme Weather",
+    "description": "Weather forecasts and severe-weather alerts for any city.",
+    "version": "1.4.2",
+    "repository": { "url": "https://github.com/acme/weather-mcp", "source": "github" },
+    "packages": [
+      {
+        "registryType": "npm",
+        "registryBaseUrl": "http://localhost:8080/npm/e2e-npm-local",
+        "identifier": "@acme/weather-mcp",
+        "version": "1.4.2",
+        "transport": { "type": "stdio" },
+        "environmentVariables": [
+          { "name": "ACME_API_KEY", "description": "Acme API key", "isRequired": true, "isSecret": true },
+          { "name": "ACME_REGION", "description": "Forecast region", "default": "us-east-1" }
+        ],
+        "packageArguments": [
+          { "type": "named", "name": "--units", "choices": ["metric", "imperial"], "default": "metric" }
+        ]
+      }
+    ]
+  },
+  "_meta": {
+    "io.modelcontextprotocol.registry/official": {
+      "status": "active",
+      "isLatest": true,
+      "publishedAt": "2026-10-01T09:00:00Z",
+      "updatedAt": "2026-10-01T09:00:00Z"
+    },
+    "com.artifactkeeper.registry/source": {
+      "repository": "e2e-mcp-local",
+      "artifactId": "00000000-0000-4000-8000-00000000a001",
+      "packagePolicy": "own-repos",
+      "origin": "hosted",
+      "upstreamVerified": false
+    }
+  }
+}

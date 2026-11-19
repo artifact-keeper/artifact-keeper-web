@@ -2,7 +2,8 @@
 
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
-import { useState, useMemo } from "react";
+import { Suspense, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   PackageCheck,
@@ -10,17 +11,16 @@ import {
   Ban,
   RefreshCw,
   AlertCircle,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { curationApi, type CurationPackage } from "@/lib/api/curation";
 import { useRepositories } from "@/hooks/use-repositories";
+import { isRemoteMcpRepo } from "@/lib/mcp/format";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { useAuth } from "@/providers/auth-provider";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,49 +32,59 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
 import { CurationRulesManager } from "./_components/curation-rules-manager";
+import { McpCurationQueue } from "./_components/mcp-curation-queue";
+import { ReasonDialog } from "./_components/reason-dialog";
 import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 
 const STATUSES = ["pending", "approved", "blocked"] as const;
 
+// useSearchParams() requires a Suspense boundary for static prerendering.
 export default function CurationPage() {
+  return (
+    <Suspense fallback={null}>
+      <CurationPageContent />
+    </Suspense>
+  );
+}
+
+function CurationPageContent() {
   useDocumentTitle("Package Curation");
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  // `?repo=<key>` deep link (dashboard "awaiting approval" tile).
+  const deepLinkKey = useSearchParams()?.get("repo") ?? "";
 
-  const [repoId, setRepoId] = useState<string>("");
+  const [pickedRepoId, setRepoId] = useState<string>("");
   const [status, setStatus] = useState<string>("pending");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<null | "approve" | "block">(null);
-  const [reason, setReason] = useState("");
 
   const { data: repos } = useRepositories(
     { per_page: 1000 },
     { enabled: !!user?.is_admin },
   );
-  const stagingRepos = useMemo(
-    () => (repos?.items ?? []).filter((r) => r.repo_type === "staging"),
+  // Staging repositories hold the package queue; Remote MCP repositories
+  // are deny-by-default allowlists with their own approval queue (#5253).
+  const curatedRepos = useMemo(
+    () => (repos?.items ?? []).filter((r) => r.repo_type === "staging" || isRemoteMcpRepo(r)),
     [repos?.items],
   );
+  const repoId =
+    pickedRepoId || curatedRepos.find((r) => r.key === deepLinkKey)?.id || "";
+  const selectedRepo = curatedRepos.find((r) => r.id === repoId);
+  const mcpRepo = selectedRepo && isRemoteMcpRepo(selectedRepo) ? selectedRepo : null;
 
   const packagesQueryKey = ["curation", repoId, status];
   const { data: packages, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: packagesQueryKey,
     queryFn: () => curationApi.listPackages(repoId, { status }),
-    enabled: !!user?.is_admin && repoId !== "",
+    enabled: !!user?.is_admin && repoId !== "" && !mcpRepo,
   });
 
   const invalidate = () => {
@@ -106,7 +116,6 @@ export default function CurationPage() {
     onSuccess: (count, { action }) => {
       invalidate();
       setBulkAction(null);
-      setReason("");
       toast.success(`${count} package${count === 1 ? "" : "s"} ${action === "approve" ? "approved" : "blocked"}`);
     },
     onError: mutationErrorToast("Bulk action failed"),
@@ -158,8 +167,9 @@ export default function CurationPage() {
         <div>
           <h1 className="text-xl font-semibold">Package Curation</h1>
           <p className="text-sm text-muted-foreground">
-            Review packages staged from upstream repositories and author the
-            rules that gate them.
+            Review packages staged from upstream repositories and servers
+            requested from Remote MCP registries, and author the rules that
+            gate them.
           </p>
         </div>
       </div>
@@ -173,15 +183,20 @@ export default function CurationPage() {
         <TabsContent value="queue" className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Select value={repoId} onValueChange={(v) => { setRepoId(v); setSelected(new Set()); }}>
-          <SelectTrigger className="w-64" aria-label="Staging repository">
-            <SelectValue placeholder="Select a staging repository" />
+          <SelectTrigger className="w-64" aria-label="Curation repository">
+            <SelectValue placeholder="Select a repository" />
           </SelectTrigger>
           <SelectContent>
-            {stagingRepos.map((r) => (
-              <SelectItem key={r.id} value={r.id}>{r.key}</SelectItem>
+            {curatedRepos.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {isRemoteMcpRepo(r) ? `${r.key} (MCP remote)` : r.key}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {!mcpRepo && (
+          <>
 
         <Select value={status} onValueChange={(v) => { setStatus(v); setSelected(new Set()); }}>
           <SelectTrigger className="w-40" aria-label="Status filter">
@@ -204,8 +219,10 @@ export default function CurationPage() {
           <RefreshCw className={`size-4 ${reEvaluateMutation.isPending ? "animate-spin" : ""}`} />
           Re-evaluate
         </Button>
+          </>
+        )}
 
-        {selected.size > 0 && (
+        {!mcpRepo && selected.size > 0 && (
           <div className="ml-auto flex items-center gap-2">
             <span className="text-sm text-muted-foreground">{selected.size} selected</span>
             {canApprove && (
@@ -229,18 +246,23 @@ export default function CurationPage() {
 
       {!repoId && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Select a staging repository to review its curation queue.
+          Select a staging repository or an MCP remote to review its curation queue.
         </div>
       )}
 
-      {repoId && isLoading && (
+      {mcpRepo && <McpCurationQueue key={mcpRepo.key} repoKey={mcpRepo.key} />}
+
+      {repoId && !mcpRepo && (
+        <>
+
+      {isLoading && (
         <div className="space-y-2" role="status" aria-busy="true">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
         </div>
       )}
 
-      {repoId && !isLoading && isError && (
+      {!isLoading && isError && (
         <div className="flex flex-col items-center justify-center py-12 text-center" role="alert">
           <AlertCircle className="size-8 mb-2 text-destructive opacity-80" />
           <p className="text-sm font-medium">Couldn&apos;t load the curation queue</p>
@@ -252,13 +274,13 @@ export default function CurationPage() {
         </div>
       )}
 
-      {repoId && !isLoading && !isError && rows.length === 0 && (
+      {!isLoading && !isError && rows.length === 0 && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
           No {status} packages in this queue.
         </div>
       )}
 
-      {repoId && !isLoading && !isError && rows.length > 0 && (
+      {!isLoading && !isError && rows.length > 0 && (
         <div className="overflow-hidden rounded-md border">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
@@ -315,41 +337,18 @@ export default function CurationPage() {
         </div>
       )}
 
-      {/* Bulk reason dialog */}
-      <Dialog open={bulkAction !== null} onOpenChange={(o) => { if (!o) { setBulkAction(null); setReason(""); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {bulkAction === "approve" ? "Approve" : "Block"} {selected.size} package{selected.size === 1 ? "" : "s"}
-            </DialogTitle>
-            <DialogDescription>
-              A reason is recorded in the audit log for this bulk action.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <Input
-              placeholder="Reason (e.g. CVE-free, license OK)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              aria-label="Reason"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => { setBulkAction(null); setReason(""); }}>Cancel</Button>
-            <Button
-              variant={bulkAction === "block" ? "destructive" : "default"}
-              disabled={reason.trim() === "" || bulkMutation.isPending}
-              onClick={() =>
-                bulkAction &&
-                bulkMutation.mutate({ action: bulkAction, ids: [...selected], why: reason.trim() })
-              }
-            >
-              {bulkMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </>
+      )}
+
+      <ReasonDialog
+        open={bulkAction !== null}
+        title={`${bulkAction === "approve" ? "Approve" : "Block"} ${selected.size} package${selected.size === 1 ? "" : "s"}`}
+        description="A reason is recorded in the audit log for this bulk action."
+        destructive={bulkAction === "block"}
+        pending={bulkMutation.isPending}
+        onCancel={() => setBulkAction(null)}
+        onConfirm={(why) => bulkAction && bulkMutation.mutate({ action: bulkAction, ids: [...selected], why })}
+      />
         </TabsContent>
 
         <TabsContent value="rules">

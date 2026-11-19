@@ -23,6 +23,7 @@ import type {
   CacheTtlResponse,
 } from '@artifact-keeper/sdk';
 import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
+import { mcpSettingsBody, readMcpSettings } from '@/lib/api/mcp-settings';
 import { narrowStorageBackend } from '@/lib/storage-backend';
 import type {
   Repository,
@@ -35,6 +36,7 @@ import type {
   RepositoryVisibility,
 } from '@/types';
 import { unwrap } from '@/lib/sdk-utils';
+import { parseRepositoryDeleteJob, type RepositoryDeleteJob } from '@/lib/api/repository-deletions';
 import { backendAtLeast, PROXY_AGE_POLICY_MIN } from '@/lib/backend-version';
 import type { RpmRepodataCapabilities } from '@/lib/rpm-repodata';
 
@@ -317,6 +319,8 @@ const REPO_FORMATS = new Set<RepositoryFormat>([
   'gitlfs',
   'vscode',
   'jetbrains',
+  'agentplugins',
+  'mcp',
   'huggingface',
   'mlmodel',
   'cran',
@@ -416,6 +420,9 @@ function adaptRepository(sdk: RepositoryResponse): Repository {
     storage_backend: narrowStorageBackend(
       (sdk as RepositoryResponse & { storage_backend?: unknown }).storage_backend,
     ),
+    // MCP registry settings (artifact-keeper#5253): not on the generated SDK
+    // type; an MCP repository carries them, every other one omits them.
+    ...readMcpSettings(sdk),
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
@@ -497,6 +504,9 @@ export const repositoriesApi = {
       npm_allowed_scopes: input.npm_allowed_scopes,
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
+      // MCP registry settings (artifact-keeper#5253); only the keys set are
+      // sent, so a repository of another format sends none of them.
+      ...mcpSettingsBody(input),
     };
     const data = await unwrap(createRepository({ body: withVisibility(body, input.visibility) }));
     const repository = assertData(data, 'repositoriesApi.create');
@@ -533,6 +543,8 @@ export const repositoriesApi = {
       npm_allowed_scopes: input.npm_allowed_scopes,
       npm_allowed_name_patterns: input.npm_allowed_name_patterns,
       npm_allow_unscoped: input.npm_allow_unscoped,
+      // MCP registry settings (artifact-keeper#5253). Omitted = unchanged.
+      ...mcpSettingsBody(input),
       // SDK 1.7.0 generates `curation_default_action` as a *required* field on
       // the PATCH `UpdateRepositoryRequest` type, but this endpoint treats every
       // field as optional (omit = leave unchanged) and the repository update
@@ -552,8 +564,13 @@ export const repositoriesApi = {
     return adaptRepository(repository);
   },
 
-  delete: async (key: string): Promise<void> => {
-    await unwrap(deleteRepository({ path: { key } }));
+  /**
+   * The background job a 1.12.0+ backend answers with (202), or `null` from a
+   * backend that deletes synchronously (200/204) (#1048).
+   */
+  delete: async (key: string): Promise<RepositoryDeleteJob | null> => {
+    const body: unknown = await unwrap(deleteRepository({ path: { key } }));
+    return parseRepositoryDeleteJob(body);
   },
 
   // Virtual repository member management

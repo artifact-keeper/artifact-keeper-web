@@ -8,7 +8,7 @@ test.describe('Repositories', () => {
 
   test('shows search input', async ({ page }) => {
     await page.goto('/repositories');
-    await expect(page.getByPlaceholder(/search/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('main').getByPlaceholder(/search/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('shows create repository button', async ({ page }) => {

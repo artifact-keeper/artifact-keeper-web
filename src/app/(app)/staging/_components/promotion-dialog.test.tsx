@@ -259,3 +259,123 @@ describe("PromotionDialog gate results (conda walkthrough)", () => {
     expect(screen.getByText("License allowed")).toBeInTheDocument();
   });
 });
+
+describe("promotion scan_state (artifact-keeper#5224)", () => {
+  it("needs review when the verdict did not travel or a decision stayed behind", async () => {
+    const { promotionNeedsReview } = await import("./promotion-result");
+    const base = {
+      promoted: true,
+      source: "a",
+      target: "b",
+      policy_violations: [],
+    };
+    const bulk = (scan_state: unknown) => ({
+      total: 1,
+      promoted: 1,
+      failed: 0,
+      results: [{ ...base, scan_state }],
+    });
+    const clean = {
+      verdict_carried: true,
+      verdict_not_carried_reason: null,
+      acknowledgements_carried: 0,
+      acknowledgements_left_behind: 0,
+    };
+    expect(promotionNeedsReview(bulk(clean) as never)).toBe(false);
+    expect(promotionNeedsReview(bulk(undefined) as never)).toBe(false);
+    expect(
+      promotionNeedsReview(
+        bulk({ ...clean, verdict_carried: false, verdict_not_carried_reason: "x" }) as never,
+      ),
+    ).toBe(true);
+    expect(
+      promotionNeedsReview(bulk({ ...clean, acknowledgements_left_behind: 1 }) as never),
+    ).toBe(true);
+  });
+
+  it("says why a verdict was not carried and what that means in the target", async () => {
+    const { PromotionResult } = await import("./promotion-result");
+    render(
+      <PromotionResult
+        result={{
+          total: 1,
+          promoted: 1,
+          failed: 0,
+          results: [
+            {
+              promoted: true,
+              source: "a",
+              target: "b",
+              policy_violations: [],
+              scan_state: {
+                verdict_carried: false,
+                verdict_not_carried_reason: "the clean verdict is older than a day",
+                acknowledgements_carried: 1,
+                acknowledgements_left_behind: 2,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+    const state = screen.getByTestId("promotion-scan-state");
+    expect(state).toHaveTextContent("the clean verdict is older than a day");
+    expect(state).toHaveTextContent(/unscanned/i);
+    expect(state).toHaveTextContent(/block_unscanned/);
+    expect(state).toHaveTextContent(/1 acknowledgement carried/i);
+    expect(state).toHaveTextContent(/2 acknowledgements left behind/i);
+    expect(state).toHaveTextContent(/open in the target/i);
+  });
+
+  it("says when the verdict travelled", async () => {
+    const { PromotionResult } = await import("./promotion-result");
+    render(
+      <PromotionResult
+        result={{
+          total: 1,
+          promoted: 1,
+          failed: 0,
+          results: [
+            {
+              promoted: true,
+              source: "a",
+              target: "b",
+              policy_violations: [],
+              scan_state: {
+                verdict_carried: true,
+                verdict_not_carried_reason: null,
+                acknowledgements_carried: 0,
+                acknowledgements_left_behind: 0,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId("promotion-scan-state")).toHaveTextContent(
+      /scan verdict carried/i,
+    );
+  });
+
+  it("says nothing about a verdict for a refused promotion", async () => {
+    const { PromotionResult } = await import("./promotion-result");
+    render(
+      <PromotionResult
+        result={{
+          total: 1,
+          promoted: 0,
+          failed: 1,
+          results: [
+            {
+              promoted: false,
+              source: "a",
+              target: "b",
+              policy_violations: [],
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("promotion-scan-state")).toBeNull();
+  });
+});

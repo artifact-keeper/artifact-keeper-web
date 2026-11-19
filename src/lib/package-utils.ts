@@ -121,12 +121,40 @@ export function getInstallCommand(
       return `code --install-extension ${packageName}@${v}`;
     case "jetbrains":
       return `Download ${packageName} v${v}`;
+    case "agentplugins": {
+      // `ak agent plugins install` resolves the version itself; pin it only
+      // when one is known (artifact-keeper#5251).
+      const repoFlag = repoKey ? ` --repo ${repoKey}` : " --repo <repo>";
+      const versionFlag = version ? ` --version ${version}` : "";
+      return `ak agent plugins install ${packageName}${repoFlag} --harness claude${versionFlag}`;
+    }
+    case "mcp": {
+      // An MCP server entry is a recipe, not a package: the copyable one-liner
+      // is the registry read of the exact version, whose served document
+      // carries the Artifact Keeper coordinates (artifact-keeper#5253). The
+      // per-client snippets live in the server's Install panel.
+      const base = host && repoKey ? `https://${host}/mcp/${repoKey}` : `<registry>/mcp/${repoKey ?? "<repo>"}`;
+      return `curl ${base}/v0.1/servers/${encodeURIComponent(packageName)}/versions/${encodeURIComponent(v)}`;
+    }
     case "chocolatey":
       return `choco install ${packageName} --version ${v}`;
     case "powershell":
       return `Install-Module ${packageName} -RequiredVersion ${v}`;
-    case "huggingface":
-      return `huggingface-cli download ${packageName}`;
+    case "huggingface": {
+      // `hf` downloads from huggingface.co unless HF_ENDPOINT points it at
+      // this repository, so the endpoint is part of the command, not optional
+      // client config (artifact-keeper#5290). `huggingface-cli` is the
+      // deprecated name of the same CLI.
+      const endpoint =
+        host && repoKey
+          ? `https://${host}/huggingface/${repoKey}`
+          : "https://<registry>/huggingface/<repo>";
+      const revision = version ? ` --revision ${version}` : "";
+      return (
+        `HF_ENDPOINT=${endpoint} hf download ${packageName}${revision}\n` +
+        "# If the download fails with a 404 on xet-read-token, add HF_HUB_DISABLE_XET=1"
+      );
+    }
     case "bazel":
       return `bazel_dep(name = "${packageName}", version = "${v}")`;
     case "rpm":
@@ -200,6 +228,8 @@ export const FORMAT_OPTIONS: string[] = [
   "gitlfs",
   "vscode",
   "jetbrains",
+  "agentplugins",
+  "mcp",
   "huggingface",
   "mlmodel",
   "cran",

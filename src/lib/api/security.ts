@@ -33,6 +33,7 @@ import type {
   CreatePolicyRequest as SdkCreatePolicyRequest,
   UpdatePolicyRequest as SdkUpdatePolicyRequest,
   UpsertScanConfigRequest as SdkUpsertScanConfigRequest,
+  AcknowledgeRequest as SdkAcknowledgeRequest,
 } from '@artifact-keeper/sdk';
 import type {
   DashboardSummary,
@@ -47,6 +48,8 @@ import type {
   TriggerScanRequest,
   TriggerScanResponse,
   UpsertScanConfigRequest,
+  AcknowledgeOptions,
+  RevokeAcknowledgmentOptions,
 } from '@/types/security';
 import { assertData } from '@/lib/api/fetch';
 import { adaptPredicates } from '@/lib/policy-predicates';
@@ -85,6 +88,11 @@ export interface ListScansParams {
 
 export interface ListFindingsParams {
   /**
+   * Which artifact's copy of this scan to list (backend 1.12.0). A reused row
+   * reports its source's id, so without this the rows are the source's.
+   */
+  artifact_id?: string;
+  /**
    * One of `critical` / `high` / `medium` / `low` / `info`. Anything else is
    * a backend 400 naming the accepted set.
    */
@@ -108,6 +116,11 @@ function adaptDashboard(sdk: SdkDashboardResponse): DashboardSummary {
     critical_findings: sdk.critical_findings,
     high_findings: sdk.high_findings,
     policy_violations_blocked: sdk.policy_violations_blocked,
+    // Not in the generated SDK yet (backend 1.12.0). Stay undefined on an older
+    // backend, so the page leaves the tile out rather than showing a false zero.
+    proxy_blocked: (sdk as SdkDashboardResponse & { proxy_blocked?: number }).proxy_blocked,
+    proxy_would_block: (sdk as SdkDashboardResponse & { proxy_would_block?: number })
+      .proxy_would_block,
     repos_grade_a: sdk.repos_grade_a,
     repos_grade_f: sdk.repos_grade_f,
   };
@@ -158,6 +171,8 @@ function adaptScan(sdk: SdkScanResponse): ScanResult {
       (sdk as { scan_completeness?: string | null }).scan_completeness ?? null,
     scan_completeness_reason:
       (sdk as { scan_completeness_reason?: string | null }).scan_completeness_reason ?? null,
+    is_reused: sdk.is_reused,
+    source_scan_id: sdk.source_scan_id ?? null,
   };
 }
 
@@ -166,6 +181,11 @@ function adaptScanList(sdk: SdkScanListResponse): ScanListResponse {
 }
 
 function adaptFinding(sdk: SdkFindingResponse): ScanFinding {
+  const decision = sdk as SdkFindingResponse & {
+    acknowledgement_id?: string | null;
+    acknowledgement_expires_at?: string | null;
+    acknowledgements_left_effective?: number | null;
+  };
   return {
     id: sdk.id,
     scan_result_id: sdk.scan_result_id,
@@ -183,6 +203,10 @@ function adaptFinding(sdk: SdkFindingResponse): ScanFinding {
     acknowledged_by: sdk.acknowledged_by ?? null,
     acknowledged_reason: sdk.acknowledged_reason ?? null,
     acknowledged_at: sdk.acknowledged_at ?? null,
+    // Not in the generated SDK yet (backend 1.12.0, artifact-keeper#5224).
+    acknowledgement_id: decision.acknowledgement_id ?? null,
+    acknowledgement_expires_at: decision.acknowledgement_expires_at ?? null,
+    acknowledgements_left_effective: decision.acknowledgements_left_effective ?? null,
     created_at: sdk.created_at,
   };
 }
@@ -222,6 +246,10 @@ function adaptScanConfig(sdk: SdkScanConfigResponse): ScanConfig {
     scan_on_proxy: sdk.scan_on_proxy,
     block_on_policy_violation: sdk.block_on_policy_violation,
     severity_threshold: sdk.severity_threshold,
+    // Not on the SDK 1.7.0 type; anything but a boolean means not reported.
+    ...(typeof (sdk as { instance_locked?: unknown }).instance_locked === 'boolean'
+      ? { instance_locked: (sdk as { instance_locked?: boolean }).instance_locked }
+      : {}),
     created_at: sdk.created_at,
     updated_at: sdk.updated_at,
   };
@@ -273,15 +301,24 @@ function adaptUpdatePolicyRequest(req: UpdatePolicyRequest): SdkUpdatePolicyRequ
 }
 
 function adaptUpsertConfigRequest(
-  req: UpsertScanConfigRequest,
+  req: Partial<UpsertScanConfigRequest>,
 ): SdkUpsertScanConfigRequest {
-  return {
-    scan_enabled: req.scan_enabled,
-    scan_on_upload: req.scan_on_upload,
-    scan_on_proxy: req.scan_on_proxy,
-    block_on_policy_violation: req.block_on_policy_violation,
-    severity_threshold: req.severity_threshold,
-  };
+  // Only the fields given go on the wire: the backend merges a patch over the
+  // stored row, so an absent field keeps its stored value (#1229). That also
+  // keeps `instance_locked`, which is not on the SDK 1.7.0 request type, off
+  // the wire unless given.
+  const body: Record<string, unknown> = {};
+  for (const key of [
+    'scan_enabled',
+    'scan_on_upload',
+    'scan_on_proxy',
+    'block_on_policy_violation',
+    'severity_threshold',
+    'instance_locked',
+  ] as const) {
+    if (req[key] !== undefined) body[key] = req[key];
+  }
+  return body as SdkUpsertScanConfigRequest;
 }
 
 export const securityApi = {
@@ -331,20 +368,34 @@ export const securityApi = {
   },
 
   // Finding acknowledgment
+  //
+  // `repository_id`, `expires_at`, `scope` and the revoke's `?repository_id=` are
+  // not in the generated SDK yet (backend 1.12.0, artifact-keeper#5224). They
+  // still go through the SDK functions: the client serializes the whole body and
+  // forwards every key of `query`, so they reach the wire unchanged. Drop the
+  // casts when the SDK is regenerated against 1.12.0.
   acknowledgeFinding: async (
     findingId: string,
     reason: string,
+    options: AcknowledgeOptions = {},
   ): Promise<ScanFinding> => {
+    const body: SdkAcknowledgeRequest & AcknowledgeOptions = { reason, ...options };
     const data = await unwrap(sdkAcknowledgeFinding({
       path: { id: findingId },
-      body: { reason },
+      body,
     }));
     return adaptFinding(assertData(data, 'securityApi.acknowledgeFinding'));
   },
 
-  revokeAcknowledgment: async (findingId: string): Promise<ScanFinding> => {
+  revokeAcknowledgment: async (
+    findingId: string,
+    options: RevokeAcknowledgmentOptions = {},
+  ): Promise<ScanFinding> => {
     const data = await unwrap(sdkRevokeAcknowledgment({
       path: { id: findingId },
+      ...(options.repository_id
+        ? { query: { repository_id: options.repository_id } as never }
+        : {}),
     }));
     return adaptFinding(
       assertData(data, 'securityApi.revokeAcknowledgment'),
@@ -396,7 +447,7 @@ export const securityApi = {
 
   updateRepoSecurity: async (
     repoKey: string,
-    req: UpsertScanConfigRequest,
+    req: Partial<UpsertScanConfigRequest>,
   ): Promise<ScanConfig> => {
     const data = await unwrap(sdkUpdateRepoSecurity({
       path: { key: repoKey },

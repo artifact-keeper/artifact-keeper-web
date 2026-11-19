@@ -1,42 +1,53 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, isValidInstanceUrl, REPO_TYPE_COLORS } from "../utils";
+import { cn, formatBytes, formatDate, formatNumber, isSafeUrl, isValidInstanceUrl, localStorageBytes, REPO_TYPE_COLORS } from "../utils";
+
+describe("localStorageBytes", () => {
+  it("is the total minus the proxy bytes", () => {
+    expect(localStorageBytes(1000, 400)).toBe(600);
+    expect(localStorageBytes(1000, 1000)).toBe(0);
+  });
+
+  it("clamps at 0 when proxy bytes exceed the total (#1214)", () => {
+    expect(localStorageBytes(400, 1000)).toBe(0);
+  });
+});
 
 describe("formatBytes", () => {
   it("returns '0 B' for zero bytes", () => {
     expect(formatBytes(0)).toBe("0 B");
   });
 
-  it("formats bytes below 1 KB", () => {
+  it("formats bytes below 1 KiB", () => {
     expect(formatBytes(500)).toBe("500 B");
     expect(formatBytes(1)).toBe("1 B");
   });
 
   it("formats kilobytes", () => {
-    expect(formatBytes(1024)).toBe("1 KB");
-    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(1024)).toBe("1 KiB");
+    expect(formatBytes(1536)).toBe("1.5 KiB");
   });
 
   it("formats megabytes", () => {
-    expect(formatBytes(1048576)).toBe("1 MB");
-    expect(formatBytes(1572864)).toBe("1.5 MB");
+    expect(formatBytes(1048576)).toBe("1 MiB");
+    expect(formatBytes(1572864)).toBe("1.5 MiB");
   });
 
   it("formats gigabytes", () => {
-    expect(formatBytes(1073741824)).toBe("1 GB");
+    expect(formatBytes(1073741824)).toBe("1 GiB");
   });
 
   it("formats terabytes", () => {
-    expect(formatBytes(1099511627776)).toBe("1 TB");
+    expect(formatBytes(1099511627776)).toBe("1 TiB");
   });
 
   it("trims trailing zeros in decimal part", () => {
-    // 2048 bytes = 2.00 KB, should display as "2 KB"
-    expect(formatBytes(2048)).toBe("2 KB");
+    // 2048 bytes = 2.00 KiB, should display as "2 KiB"
+    expect(formatBytes(2048)).toBe("2 KiB");
   });
 
   it("handles large byte counts with decimal precision", () => {
-    // 1.23 MB
-    expect(formatBytes(1289748)).toBe("1.23 MB");
+    // 1.23 MiB
+    expect(formatBytes(1289748)).toBe("1.23 MiB");
   });
 
   // ---- Hardening (#348) ----
@@ -62,17 +73,20 @@ describe("formatBytes", () => {
     expect(formatBytes(-1024)).toBe("--");
   });
 
-  it("formats multi-petabyte values without overflowing the unit table", () => {
-    // 1 PB = 1024^5. Original units stop at TB; values larger than ~1 PB
-    // would index off the end of the array and render "X undefined".
-    // The hardened version clamps the unit index so very large values still
-    // render as TB.
-    expect(formatBytes(1125899906842624)).toBe("1024 TB");
+  it("formats pebibyte values and clamps beyond the unit table", () => {
+    // 1 PiB = 1024^5. Values past the last unit must not index off the end
+    // of the array and render "X undefined"; they stay in PiB.
+    expect(formatBytes(1125899906842624)).toBe("1 PiB");
+    expect(formatBytes(1125899906842624 * 2048)).toBe("2048 PiB");
+  });
+
+  it("labels binary sizes with IEC units (11,274,290,864 bytes is 10.5 GiB)", () => {
+    expect(formatBytes(11274290864)).toBe("10.5 GiB");
   });
 
   it("handles non-integer byte counts", () => {
     // Real backends sometimes report fractional bytes (e.g. averages).
-    expect(formatBytes(1024.5)).toBe("1 KB");
+    expect(formatBytes(1024.5)).toBe("1 KiB");
   });
 
   it("handles sub-byte fractional values without overflowing the unit table", () => {

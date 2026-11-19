@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isScanIncomplete, isScanFailed, isScanClean, isScanNotCataloged } from "../scan-utils";
+import { isScanIncomplete, isScanFailed, isScanClean, isScanNotCataloged, isScanRowVisible } from "../scan-utils";
 
 describe("isScanIncomplete", () => {
   it("returns false for completed scans", () => {
@@ -89,5 +89,27 @@ describe("isScanNotCataloged (#4154)", () => {
     expect(isScanClean("completed", 0, "not_cataloged")).toBe(false);
     expect(isScanClean("completed", 0, "complete")).toBe(true);
     expect(isScanClean("completed", 0)).toBe(true);
+  });
+});
+
+describe("isScanRowVisible", () => {
+  it("hides not_applicable rows on the default view", () => {
+    expect(isScanRowVisible("not_applicable", "__all__")).toBe(false);
+  });
+
+  it("shows them when that status is selected explicitly", () => {
+    expect(isScanRowVisible("not_applicable", "not_applicable")).toBe(true);
+  });
+
+  it("hides them under any other status, which the backend filtered anyway", () => {
+    expect(isScanRowVisible("not_applicable", "completed")).toBe(false);
+  });
+
+  it("never hides a real scan row", () => {
+    for (const filter of ["__all__", "completed", "failed", "not_applicable"]) {
+      for (const status of ["completed", "running", "pending", "failed", "error"]) {
+        expect(isScanRowVisible(status, filter)).toBe(true);
+      }
+    }
   });
 });

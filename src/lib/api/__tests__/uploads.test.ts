@@ -34,6 +34,7 @@ import {
   UploadSessionExpiredError,
   ChecksumMismatchError,
 } from "../uploads";
+import { QuotaRefusalError } from "@/lib/quota";
 import type {
   CreateSessionResponse,
   ChunkResult,
@@ -378,6 +379,54 @@ describe("uploads API client", () => {
       await expect(completeUploadSession("sess-001")).rejects.toThrow(
         "Failed to finalize upload: internal error"
       );
+    });
+  });
+
+  // ---- quota and size refusals ----
+
+  describe("quota refusals", () => {
+    const storageBody = {
+      code: "STORAGE_QUOTA_EXCEEDED",
+      message: "Storage quota of 10 GiB reached",
+      scope: "instance",
+      limit_bytes: 10,
+      used_bytes: 10,
+      help_url: "https://example.com/quota",
+    };
+
+    it("createUploadSession throws the server's quota message", async () => {
+      mockCreateSession.mockResolvedValue(sdkErr(storageBody, 403));
+      const err = await createUploadSession({
+        repository_key: "r",
+        artifact_path: "a",
+        total_size: 100,
+        checksum_sha256: "abc",
+      }).catch((e) => e);
+      expect(err).toBeInstanceOf(QuotaRefusalError);
+      expect(err.message).toBe("Storage quota of 10 GiB reached");
+      expect(err.helpUrl).toBe("https://example.com/quota");
+    });
+
+    it("uploadChunk throws a QuotaRefusalError for a 413", async () => {
+      mockFetch.mockResolvedValue(
+        mockResponse({
+          ok: false,
+          status: 413,
+          text: JSON.stringify({ code: "PAYLOAD_TOO_LARGE", message: "Upload exceeds 2 GiB", limit_bytes: 2 }),
+        })
+      );
+      const err = await uploadChunk("s", 0, 10, 10, new Blob(["x"])).catch((e) => e);
+      expect(err).toBeInstanceOf(QuotaRefusalError);
+      expect(err).toMatchObject({ kind: "upload_size", message: "Upload exceeds 2 GiB" });
+    });
+
+    it("completeUploadSession throws the server's quota message", async () => {
+      mockComplete.mockResolvedValue(sdkErr({ code: "QUOTA_EXCEEDED", message: "Repository quota reached" }, 403));
+      await expect(completeUploadSession("sess-001")).rejects.toMatchObject({
+        name: "QuotaRefusalError",
+        kind: "repository",
+        message: "Repository quota reached",
+      });
     });
   });
 

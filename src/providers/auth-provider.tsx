@@ -10,7 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import '@/lib/sdk-client';
+import { localSessionExpired, refreshSession } from '@/lib/sdk-client';
+import { dismissSessionToasts } from '@/lib/session-toasts';
 import {
   login as sdkLogin,
   logout as sdkLogout,
@@ -47,6 +48,14 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
   verifyTotp: (code: string) => Promise<void>;
+  /**
+   * Show the TOTP step for a sign-in that stopped at the second factor
+   * outside `login()`: LDAP login and the OIDC/SAML code exchange
+   * (artifact-keeper#5484). Sets the same state `login()` sets for a "totp"
+   * result, so the login page renders its TOTP form and `verifyTotp` redeems
+   * the token.
+   */
+  beginTotpChallenge: (totpToken: string) => void;
   clearTotpRequired: () => void;
 }
 
@@ -76,6 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [totpToken, setTotpToken] = useState<string | null>(null);
 
   const isAuthenticated = !!user;
+  // Session-bound toasts, such as a failed repository deletion's Retry, go
+  // with the session (#1228).
+  useEffect(() => {
+    if (!user) dismissSessionToasts();
+  }, [user]);
 
   // The principal the cached queries were fetched under: a user id, or null
   // for anonymous. Starts as anonymous, which is what the app fetches as
@@ -140,6 +154,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await syncPrincipal(await loadUser());
   }, [loadUser, syncPrincipal]);
 
+  const beginTotpChallenge = useCallback((token: string) => {
+    setTotpRequired(true);
+    setTotpToken(token);
+  }, []);
+
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
       const body: LoginRequest = { username, password };
@@ -147,8 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const loginData = data as unknown as SdkLoginResponse;
 
       if (loginData.totp_required && loginData.totp_token) {
-        setTotpRequired(true);
-        setTotpToken(loginData.totp_token);
+        beginTotpChallenge(loginData.totp_token);
         return "totp"; // Don't redirect yet
       }
 
@@ -166,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     },
-    [loadUser, syncPrincipal]
+    [beginTotpChallenge, loadUser, syncPrincipal]
   );
 
   const verifyTotp = useCallback(
@@ -269,13 +287,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Try to authenticate via httpOnly cookies (sent automatically by browser).
       // refreshUser will set user state if a valid session cookie exists.
+      //
+      // The access cookie lives only as long as the access token, while the
+      // refresh cookie lasts longer and is scoped to the refresh endpoint, so
+      // it is never sent to `/auth/me`. A 401 here can therefore just mean the
+      // access token expired: refresh once and ask again before deciding the
+      // visitor is anonymous. Otherwise the shell stays signed out until a
+      // reload even though the data requests on the page recover on their own
+      // (#1084).
       try {
-        const { data, error } = await sdkGetCurrentUser();
+        const first = await sdkGetCurrentUser();
+        let { data, error } = first;
+        let refreshed = false;
+        // Not on /callback: the SSO code exchange there sets a new session,
+        // and a refresh of the old one racing it could overwrite it.
+        const onCallback =
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/callback");
+        if (
+          error &&
+          first.response?.status === 401 &&
+          !onCallback &&
+          // With a remote instance active the 401 may be the remote's (#1204).
+          (await localSessionExpired()) &&
+          (await refreshSession())
+        ) {
+          refreshed = true;
+          ({ data, error } = await sdkGetCurrentUser());
+        }
         if (!error && data) {
           const userData = data as unknown as User;
-          // The session cookie went out with the initial system-config
-          // request too, so the cache already matches this principal.
-          principalRef.current = userData.id;
+          if (refreshed) {
+            // The initial system-config request and any data queries went
+            // out before the refresh, so they were answered as anonymous:
+            // refetch them for this principal (#487, #844).
+            void syncPrincipal(userData.id, true);
+          } else {
+            // The session cookie went out with the initial system-config
+            // request too, so the cache already matches this principal.
+            principalRef.current = userData.id;
+          }
           setUser(userData);
           setPasswordExpiresAt(userData.password_expires_at ?? null);
           setMustChangePassword(!!userData.must_change_password);
@@ -316,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     initAuth();
-  }, [refreshUser]);
+  }, [refreshUser, syncPrincipal]);
 
   return (
     <AuthContext.Provider
@@ -336,6 +387,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         clearMustChangePassword,
         verifyTotp,
+        beginTotpChallenge,
         clearTotpRequired,
       }}
     >

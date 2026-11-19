@@ -34,7 +34,11 @@ vi.mock("@/lib/api/conda-allowlist", async (importOriginal) => {
   };
 });
 
-import { CondaAllowlistSettings, EMPTY_ENABLED_WARNING } from "./conda-allowlist-settings";
+import {
+  CondaAllowlistSettings,
+  EMPTY_ENABLED_WARNING,
+  EMPTY_ENABLED_WARNING_REMOTE_ONLY,
+} from "./conda-allowlist-settings";
 import { CondaAllowlistSummary, allowlistSummaryText } from "./conda-allowlist-summary";
 
 afterEach(() => {
@@ -56,8 +60,16 @@ const repo = {
   updated_at: "2026-01-01",
 } as Repository;
 
-function list(enabled: boolean, entries: { name: string; version?: string; subdirs?: string[] }[], error?: string) {
-  return { repository_key: "conda-virtual", enabled, entries, entry_count: entries.length, error };
+type Scope = "all_members" | "remote_only" | null;
+
+/** `scope: null` is what the adapter reports for a backend before 1.11.9. */
+function list(
+  enabled: boolean,
+  entries: { name: string; version?: string; subdirs?: string[] }[],
+  error?: string,
+  scope: Scope = null,
+) {
+  return { repository_key: "conda-virtual", enabled, scope, entries, entry_count: entries.length, error };
 }
 
 function renderSettings(readOnly = false) {
@@ -84,13 +96,104 @@ describe("CondaAllowlistSettings", () => {
     expect(saveButton()).toBeDisabled();
   });
 
-  it("warns when an enabled list is empty", async () => {
-    mockGet.mockResolvedValue(list(false, []));
+  it("warns when an enabled list is empty, in the terms of its scope", async () => {
+    mockGet.mockResolvedValue(list(false, [], undefined, "all_members"));
     renderSettings();
     const toggle = await screen.findByRole("switch");
     expect(screen.queryByText(EMPTY_ENABLED_WARNING)).not.toBeInTheDocument();
     fireEvent.click(toggle);
     expect(screen.getByText(EMPTY_ENABLED_WARNING)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /remote members only/i }));
+    expect(screen.getByText(EMPTY_ENABLED_WARNING_REMOTE_ONLY)).toBeInTheDocument();
+  });
+
+  it("says hosted members are filtered and still serve directly", async () => {
+    mockGet.mockResolvedValue(list(false, [], undefined, "all_members"));
+    renderSettings();
+    await screen.findByRole("switch");
+    expect(screen.queryByText(/hosted members are never filtered/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/applies to every member, hosted and remote/i)).toBeInTheDocument();
+    expect(screen.getByText(/still serve their packages directly/i)).toBeInTheDocument();
+    expect(screen.getByText(/still owns its name/i)).toBeInTheDocument();
+  });
+
+  it("shows the stored scope and saves a switch back to all members (artifact-keeper#5055)", async () => {
+    mockGet.mockResolvedValue(list(true, [{ name: "numpy" }], undefined, "remote_only"));
+    mockSet.mockImplementation(async (_k: string, body: { enabled: boolean; scope?: Scope; entries: unknown[] }) =>
+      list(body.enabled, body.entries as { name: string }[], undefined, body.scope ?? "all_members"),
+    );
+    renderSettings();
+    const remoteOnly = await screen.findByRole("radio", { name: /remote members only/i });
+    const all = screen.getByRole("radio", { name: /all members \(default\)/i });
+    expect(remoteOnly).toBeChecked();
+    expect(all).not.toBeChecked();
+    expect(saveButton()).toBeDisabled();
+
+    fireEvent.click(all);
+    expect(saveButton()).toBeEnabled();
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(mockSet).toHaveBeenCalledWith("conda-virtual", {
+        enabled: true,
+        scope: "all_members",
+        entries: [{ name: "numpy" }],
+      }),
+    );
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+    expect(all).toBeChecked();
+  });
+
+  it("sends the unchanged scope with other edits and opts out on request", async () => {
+    mockGet.mockResolvedValue(list(false, [{ name: "numpy" }], undefined, "all_members"));
+    mockSet.mockImplementation(async (_k: string, body: { enabled: boolean; scope?: Scope; entries: unknown[] }) =>
+      list(body.enabled, body.entries as { name: string }[], undefined, body.scope ?? "all_members"),
+    );
+    renderSettings();
+    expect(await screen.findByRole("radio", { name: /all members/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(mockSet).toHaveBeenLastCalledWith("conda-virtual", {
+        enabled: true,
+        scope: "all_members",
+        entries: [{ name: "numpy" }],
+      }),
+    );
+    await waitFor(() => expect(saveButton()).toBeDisabled());
+    fireEvent.click(screen.getByRole("radio", { name: /remote members only/i }));
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(mockSet).toHaveBeenLastCalledWith("conda-virtual", {
+        enabled: true,
+        scope: "remote_only",
+        entries: [{ name: "numpy" }],
+      }),
+    );
+  });
+
+  it("discards a scope change", async () => {
+    mockGet.mockResolvedValue(list(true, [{ name: "numpy" }], undefined, "all_members"));
+    renderSettings();
+    fireEvent.click(await screen.findByRole("radio", { name: /remote members only/i }));
+    fireEvent.click(screen.getByRole("button", { name: /discard changes/i }));
+    expect(screen.getByRole("radio", { name: /all members/i })).toBeChecked();
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("an older backend: no scope control, and a save sends no scope field", async () => {
+    mockGet.mockResolvedValue(list(false, [{ name: "numpy" }]));
+    mockSet.mockImplementation(async (_k: string, body: { enabled: boolean; entries: unknown[] }) =>
+      list(body.enabled, body.entries as { name: string }[]),
+    );
+    renderSettings();
+    await screen.findByLabelText("Entry 1 name");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByTestId("allowlist-scope-unsupported")).toHaveTextContent(/filters remote members only/);
+    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mockSet).toHaveBeenCalled());
+    expect(mockSet.mock.calls[0][1]).not.toHaveProperty("scope");
+    await waitFor(() => expect(saveButton()).toBeDisabled());
   });
 
   it("validates rows inline and blocks Save on an invalid entry", async () => {
@@ -217,6 +320,12 @@ describe("CondaAllowlistSettings", () => {
     const alert = await screen.findByTestId("allowlist-stored-error");
     expect(alert).toHaveTextContent("expected value at line 1 column 1");
     expect(alert).toHaveTextContent(/nothing from remote members is admitted/i);
+    cleanup();
+    mockGet.mockResolvedValue(list(true, [], "expected value at line 1 column 1", "all_members"));
+    renderSettings();
+    expect(await screen.findByTestId("allowlist-stored-error")).toHaveTextContent(
+      /nothing from any member is admitted/i,
+    );
   });
 
   it("explains a load failure", async () => {
@@ -230,6 +339,8 @@ describe("CondaAllowlistSettings", () => {
     renderSettings(true);
     expect(await screen.findByText("numpy")).toBeInTheDocument();
     expect(screen.getByText(/only a repository administrator can change it/i)).toBeInTheDocument();
+    expect(screen.getByTestId("allowlist-scope-readonly")).toHaveTextContent("remote members only");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /entry 1 name/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save allowlist/i })).not.toBeInTheDocument();
@@ -286,6 +397,18 @@ describe("CondaAllowlistSummary", () => {
   it("summarizes each state", () => {
     expect(allowlistSummaryText(list(false, []))).toBe("off");
     expect(allowlistSummaryText(list(false, [{ name: "a" }]))).toBe("off, 1 entry");
-    expect(allowlistSummaryText(list(true, [], "bad"))).toMatch(/unreadable/);
+    expect(allowlistSummaryText(list(true, [], "bad"))).toBe(
+      "unreadable, nothing from remote members is admitted",
+    );
+    expect(allowlistSummaryText(list(true, [], "bad", "all_members"))).toBe("unreadable, nothing is admitted");
+  });
+
+  it("names the remote_only opt-out and keeps the default terse", () => {
+    const two = [{ name: "a" }, { name: "b" }];
+    expect(allowlistSummaryText(list(true, two, undefined, "all_members"))).toBe("on, 2 entries");
+    expect(allowlistSummaryText(list(true, two, undefined, "remote_only"))).toBe(
+      "on, 2 entries, remote members only",
+    );
+    expect(allowlistSummaryText(list(true, two))).toBe("on, 2 entries");
   });
 });

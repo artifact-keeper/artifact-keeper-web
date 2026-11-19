@@ -41,10 +41,11 @@ describe("QUERY_KEYS", () => {
     CI_OIDC: ["ci-oidc"],
     CI_OIDC_MAPPINGS: ["ci-oidc-mappings"],
     RPM_REPODATA_CAPABILITIES: ["rpm-repodata-capabilities"],
+    MCP: ["mcp"],
   };
 
-  it("has 17 key constants (#213, #669, #906)", () => {
-    expect(Object.keys(QUERY_KEYS)).toHaveLength(17);
+  it("has 18 key constants (#213, #669, #906, #5253)", () => {
+    expect(Object.keys(QUERY_KEYS)).toHaveLength(18);
   });
 
   it.each(Object.entries(expectedKeys))(
@@ -71,6 +72,7 @@ describe("QUERY_KEYS", () => {
 describe("INVALIDATION_GROUPS", () => {
   it("has all expected groups (#213)", () => {
     expect(Object.keys(INVALIDATION_GROUPS).sort((a, b) => a.localeCompare(b))).toEqual([
+      "artifacts",
       "backups",
       "dashboard",
       "groups",
@@ -166,9 +168,9 @@ describe("EVENT_TYPE_MAP", () => {
     ["webhook.deleted", "webhooks"],
     ["webhook.delivery", "webhooks"],
     // Artifacts — invalidate repository lists since artifact CRUD changes
-    // counts shown on repo cards (#213)
-    ["artifact.uploaded", "repositories"],
-    ["artifact.deleted", "repositories"],
+    // counts shown on repo cards (#213), plus the MCP views (#5253)
+    ["artifact.uploaded", "artifacts"],
+    ["artifact.deleted", "artifacts"],
     // Scans (#213)
     ["scan.started", "security"],
     ["scan.completed", "security"],
@@ -209,6 +211,13 @@ describe("getKeysForEvent", () => {
     const keys = getKeysForEvent("user.created");
     expect(keys).toContainEqual(["admin-users"]);
     expect(keys).toContainEqual(["admin-groups"]);
+  });
+
+  it("returns repository keys and the MCP root for artifact.uploaded (#5253)", () => {
+    const keys = getKeysForEvent("artifact.uploaded");
+    expect(keys).toContainEqual(["repositories"]);
+    expect(keys).toContainEqual(["recent-repositories"]);
+    expect(keys).toContainEqual(["mcp"]);
   });
 
   it("returns repository keys for repository.deleted", () => {

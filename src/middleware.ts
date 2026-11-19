@@ -73,6 +73,12 @@ export const PROXY_PATH_PREFIXES: readonly string[] = [
   "/hex",
   "/huggingface",
   "/jetbrains",
+  // Agent plugin zips and marketplace indexes, including the token-in-path
+  // form /agentplugins/t/<token>/<repo>/... (artifact-keeper#5251).
+  "/agentplugins",
+  // MCP registry API v0.1/v0 (VS Code gallery, Copilot policy, mcp-publisher),
+  // served on /mcp/<repo>/... (artifact-keeper#5253).
+  "/mcp",
   "/chef",
   "/puppet",
   "/ansible",

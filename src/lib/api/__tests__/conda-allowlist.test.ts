@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   adaptAllowlist,
   condaAllowlistApi,
+  filtersHostedMembers,
   supportsCondaAllowlist,
 } from "../conda-allowlist";
 import { ApiError } from "../fetch";
@@ -35,6 +36,7 @@ describe("adaptAllowlist", () => {
     expect(a).toEqual({
       repository_key: "k",
       enabled: true,
+      scope: null,
       entries: [{ name: "a", subdirs: ["noarch"] }],
       entry_count: 1,
       error: undefined,
@@ -48,6 +50,19 @@ describe("adaptAllowlist", () => {
     );
     expect(a.enabled).toBe(true);
     expect(a.error).toBe("expected value at line 1");
+  });
+
+  it("reads the scope a 1.11.9+ backend reports (artifact-keeper#5055)", () => {
+    expect(adaptAllowlist({ ...SAVED, scope: "all_members" }, "k").scope).toBe("all_members");
+    expect(adaptAllowlist({ ...SAVED, scope: "remote_only" }, "k").scope).toBe("remote_only");
+  });
+
+  it("reports no scope for an older backend or an unknown value", () => {
+    // An older backend omits the field; an unknown value must not be
+    // overwritten by a save, so it is treated as not reported either.
+    expect(adaptAllowlist(SAVED, "k").scope).toBeNull();
+    expect(adaptAllowlist({ ...SAVED, scope: "hosted_only" }, "k").scope).toBeNull();
+    expect(adaptAllowlist({ ...SAVED, scope: 1 }, "k").scope).toBeNull();
   });
 
   it("treats an empty body as no list", () => {
@@ -74,6 +89,21 @@ describe("condaAllowlistApi", () => {
     expect(JSON.parse(init.body)).toEqual(body);
   });
 
+  it("PUTs the scope when given and leaves it out otherwise", async () => {
+    const fetchMock = stubFetch({ ...SAVED, scope: "remote_only" });
+    const r = await condaAllowlistApi.set("conda-virtual", {
+      enabled: true,
+      scope: "remote_only",
+      entries: SAVED.entries,
+    });
+    expect(r.scope).toBe("remote_only");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).scope).toBe("remote_only");
+
+    const older = stubFetch(SAVED);
+    await condaAllowlistApi.set("conda-virtual", { enabled: true, entries: SAVED.entries });
+    expect(JSON.parse(older.mock.calls[0][1].body)).not.toHaveProperty("scope");
+  });
+
   it("DELETEs the list", async () => {
     const fetchMock = stubFetch({ repository_key: "conda-virtual", enabled: false, entries: [], entry_count: 0 });
     const r = await condaAllowlistApi.remove("conda-virtual");
@@ -89,6 +119,14 @@ describe("condaAllowlistApi", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(400);
     expect(err.body).toContain("entries[1]");
+  });
+});
+
+describe("filtersHostedMembers", () => {
+  it("is true only for an all_members scope; an older backend filters remotes only", () => {
+    expect(filtersHostedMembers({ scope: "all_members" })).toBe(true);
+    expect(filtersHostedMembers({ scope: "remote_only" })).toBe(false);
+    expect(filtersHostedMembers({ scope: null })).toBe(false);
   });
 });
 

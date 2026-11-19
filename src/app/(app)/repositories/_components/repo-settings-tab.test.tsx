@@ -290,6 +290,13 @@ vi.mock("@/components/ui/separator", () => ({
   Separator: () => <hr />,
 }));
 
+// Candidate backing repositories for the MCP section (artifact-keeper#5253).
+vi.mock("@/hooks/use-repositories", () => ({
+  useRepositories: () => ({
+    data: { items: [{ key: "npm-local", format: "npm", repo_type: "local" }] },
+  }),
+}));
+
 // The allowlist section has its own suite (conda-allowlist-settings.test.tsx);
 // here only where it appears matters.
 vi.mock("./conda-allowlist-settings", () => ({
@@ -2159,9 +2166,30 @@ describe("RepoSettingsTab - 1.6.0 format-specific config (#602)", () => {
   );
 });
 
+/**
+ * The Select mock renders a bare native <select>, so the proxy scan action
+ * control is found by its options rather than by an accessible name.
+ */
+function proxyActionSelect(): HTMLSelectElement {
+  const select = screen
+    .getAllByTestId("mock-select")
+    .find((el) =>
+      Array.from((el as HTMLSelectElement).options).some(
+        (o) => o.value === "fail_closed"
+      )
+    );
+  if (!select) throw new Error("proxy scan action select not rendered");
+  return select as HTMLSelectElement;
+}
+
 describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
+  // A backend with every proxy scan action (record_only is 1.11.0, #1194).
+  afterEach(() => {
+    mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.0" });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.12.0" });
     mockListPolicies.mockResolvedValue([]);
     mockUseAuth.mockReturnValue({ user: { is_admin: true } });
     mockGetScanConfig.mockResolvedValue({
@@ -2214,9 +2242,6 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
       "disabled",
       true
     );
-    expect(
-      screen.getByLabelText("Fail closed on proxy downloads")
-    ).toHaveProperty("disabled", true);
   });
 
   it("reflects a fail_closed config and enabled toggles from the backend", async () => {
@@ -2236,9 +2261,7 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
         screen.getByLabelText("Enable scanning").getAttribute("aria-checked")
       ).toBe("true");
     });
-    const failClosed = screen.getByLabelText("Fail closed on proxy downloads");
-    expect(failClosed.getAttribute("aria-checked")).toBe("true");
-    expect(failClosed).toHaveProperty("disabled", false);
+    expect(proxyActionSelect().value).toBe("fail_closed");
     // Security-first caption is shown when fail-closed is active.
     expect(screen.getByText(/Security first/)).toBeTruthy();
   });
@@ -2274,7 +2297,7 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     expect(saveBtn).toHaveProperty("disabled", true);
   });
 
-  it("PUTs the full config with proxy_scan_action=fail_closed on save", async () => {
+  it("PUTs only the changed fields, with proxy_scan_action=fail_closed on save", async () => {
     mockGetScanConfig.mockResolvedValue({
       scan_enabled: true,
       scan_on_upload: false,
@@ -2297,13 +2320,11 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
       wrapper: createWrapper(),
     });
     await waitFor(() => {
-      expect(
-        screen.getByLabelText("Fail closed on proxy downloads")
-      ).toHaveProperty("disabled", false);
+      expect(proxyActionSelect().value).toBe("fail_open");
     });
 
     // Flip to fail-closed and turn on active blocking.
-    await user.click(screen.getByLabelText("Fail closed on proxy downloads"));
+    await user.selectOptions(proxyActionSelect(), "fail_closed");
     await user.click(screen.getByLabelText("Block on policy violation"));
 
     const saveBtn = screen.getByRole("button", {
@@ -2313,19 +2334,557 @@ describe("RepoSettingsTab - Scanning & enforcement (#2954/#3003)", () => {
     await user.click(saveBtn);
 
     await waitFor(() => {
-      expect(mockUpdateScanConfig).toHaveBeenCalledWith(
-        "maven-releases",
-        expect.objectContaining({
-          scan_enabled: true,
-          scan_on_proxy: true,
-          block_on_policy_violation: true,
-          proxy_scan_action: "fail_closed",
-        })
-      );
+      expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+        block_on_policy_violation: true,
+        proxy_scan_action: "fail_closed",
+      });
     });
     expect(toast.success).toHaveBeenCalledWith(
       "Scanning & enforcement settings saved"
     );
+  });
+
+  it("offers all three proxy scan actions (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+    expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toEqual([
+      "fail_open",
+      "fail_closed",
+      "record_only",
+    ]);
+  });
+
+  it("shows a stored record_only action as record only, with its own caption (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("record_only"));
+    expect(screen.getByText(/nothing is blocked/i)).toBeTruthy();
+    expect(screen.queryByText(/Availability first/)).toBeNull();
+  });
+
+  it("does not rewrite a record_only action when an unrelated field is saved (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+      proxy_scan_action: "record_only",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("record_only"));
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    const patch = mockUpdateScanConfig.mock.calls[0][1];
+    expect(patch).toEqual({ block_on_policy_violation: true });
+    expect(patch).not.toHaveProperty("proxy_scan_action");
+  });
+
+  it("keeps a mode it does not know, shows it as unknown and does not send it (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "quarantine",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "high",
+      proxy_scan_action: "quarantine",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("quarantine"));
+
+    const unknown = Array.from(proxyActionSelect().options).find((o) => o.value === "quarantine");
+    expect(unknown?.textContent).toBe("Unknown (quarantine)");
+    expect(screen.getByText(/does not recognise the stored mode/)).toBeTruthy();
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({ block_on_policy_violation: true });
+  });
+
+  it("shows a stored severity threshold it does not offer and keeps it on save (#1069)", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "info",
+      proxy_scan_action: "fail_closed",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "info",
+      proxy_scan_action: "fail_closed",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    const severitySelect = () =>
+      screen
+        .getAllByTestId("mock-select")
+        .find((el) =>
+          Array.from((el as HTMLSelectElement).options).some(
+            (o) => o.value === "critical"
+          )
+        ) as HTMLSelectElement;
+    await waitFor(() => expect(severitySelect().value).toBe("info"));
+    expect(
+      Array.from(severitySelect().options).find((o) => o.value === "info")
+        ?.textContent
+    ).toBe("Info");
+
+    await user.click(screen.getByLabelText("Block on policy violation"));
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+    await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+    expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({
+      block_on_policy_violation: true,
+    });
+  });
+
+  describe("instance lock on the proxy scan policy (#1185)", () => {
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_closed",
+    };
+    const severitySelect = () =>
+      screen
+        .getAllByTestId("mock-select")
+        .find((el) =>
+          Array.from((el as HTMLSelectElement).options).some(
+            (o) => o.value === "critical"
+          )
+        ) as HTMLSelectElement;
+
+    it("sends a handed-back lock back unchanged when another field is saved", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: false });
+      mockUpdateScanConfig.mockResolvedValue({
+        ...base,
+        severity_threshold: "critical",
+        instance_locked: false,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Lock the proxy scan policy").getAttribute("aria-checked")
+        ).toBe("false")
+      );
+      expect(screen.getByText(/Not locked:/)).toBeTruthy();
+
+      await user.selectOptions(severitySelect(), "critical");
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          severity_threshold: "critical",
+          instance_locked: false,
+        })
+      );
+    });
+
+    it("sends the new lock value when only the lock is changed", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: false });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, instance_locked: true });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      const saveBtn = () =>
+        screen.getByRole("button", { name: /save scanning settings/i });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Lock the proxy scan policy")).toBeTruthy()
+      );
+      expect(saveBtn()).toHaveProperty("disabled", true);
+
+      await user.click(screen.getByLabelText("Lock the proxy scan policy"));
+      expect(saveBtn()).toHaveProperty("disabled", false);
+      await user.click(saveBtn());
+
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          instance_locked: true,
+        })
+      );
+    });
+
+    it("shows a locked policy as locked and keeps it locked on save", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, instance_locked: true });
+      mockUpdateScanConfig.mockResolvedValue({
+        ...base,
+        block_on_policy_violation: true,
+        instance_locked: true,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(
+          screen.getByLabelText("Lock the proxy scan policy").getAttribute("aria-checked")
+        ).toBe("true")
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+      await waitFor(() =>
+        expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+          block_on_policy_violation: true,
+          instance_locked: true,
+        })
+      );
+    });
+
+    it("neither shows nor sends the lock when the backend does not report it", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, block_on_policy_violation: true });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      expect(screen.queryByLabelText("Lock the proxy scan policy")).toBeNull();
+
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+      await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({
+        block_on_policy_violation: true,
+      });
+    });
+  });
+
+  it("sends only proxy_scan_action when only the action is changed", async () => {
+    mockGetScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "critical",
+      proxy_scan_action: "fail_open",
+    });
+    mockUpdateScanConfig.mockResolvedValue({
+      scan_enabled: true,
+      scan_on_upload: true,
+      scan_on_proxy: true,
+      block_on_policy_violation: true,
+      severity_threshold: "critical",
+      proxy_scan_action: "record_only",
+    });
+    const user = userEvent.setup();
+    render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+    await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+
+    await user.selectOptions(proxyActionSelect(), "record_only");
+    await user.click(screen.getByRole("button", { name: /save scanning settings/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateScanConfig).toHaveBeenCalledWith("maven-releases", {
+        proxy_scan_action: "record_only",
+      })
+    );
+  });
+
+  describe("stored values, toggles and the first save (#1194)", () => {
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_open",
+    };
+    const severitySelect = () =>
+      screen
+        .getAllByTestId("mock-select")
+        .find((el) =>
+          Array.from((el as HTMLSelectElement).options).some(
+            (o) => o.value === "critical"
+          )
+        ) as HTMLSelectElement;
+    const saveBtn = () =>
+      screen.getByRole("button", { name: /save scanning settings/i });
+
+    it("can pick a stored unknown action again after choosing another, and that is no change", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, proxy_scan_action: "quarantine" });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(proxyActionSelect().value).toBe("quarantine"));
+
+      await user.selectOptions(proxyActionSelect(), "fail_closed");
+      expect(saveBtn()).toHaveProperty("disabled", false);
+      // The stored mode is still listed, and choosing it again undoes the edit.
+      await user.selectOptions(proxyActionSelect(), "quarantine");
+      expect(proxyActionSelect().value).toBe("quarantine");
+      expect(saveBtn()).toHaveProperty("disabled", true);
+    });
+
+    it("can pick a stored info threshold again after choosing another, and that is no change", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base, severity_threshold: "info" });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(severitySelect().value).toBe("info"));
+
+      await user.selectOptions(severitySelect(), "critical");
+      expect(saveBtn()).toHaveProperty("disabled", false);
+      await user.selectOptions(severitySelect(), "info");
+      expect(severitySelect().value).toBe("info");
+      expect(saveBtn()).toHaveProperty("disabled", true);
+    });
+
+    it("does not offer record_only on a backend older than 1.11.0", async () => {
+      mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.2" });
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toEqual([
+          "fail_open",
+          "fail_closed",
+        ])
+      );
+    });
+
+    it("still lists a stored record_only on a backend that reports an older version", async () => {
+      mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.2" });
+      mockGetScanConfig.mockResolvedValue({ ...base, proxy_scan_action: "record_only" });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(proxyActionSelect().value).toBe("record_only"));
+    });
+
+    it("does not offer record_only when no version is known and the backend does not report proxy_scan_action", async () => {
+      mockGetHealth.mockResolvedValue({ status: "healthy" });
+      // What `scanConfigApi.get` returns for a row without the field.
+      mockGetScanConfig.mockResolvedValue({ ...base, proxy_scan_action_reported: false });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+      expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toEqual([
+        "fail_open",
+        "fail_closed",
+      ]);
+    });
+
+    it("offers record_only on a backend whose version does not parse, such as a dev build (#1229)", async () => {
+      mockGetHealth.mockResolvedValue({ status: "healthy", version: "dev" });
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(Array.from(proxyActionSelect().options).map((o) => o.value)).toContain("record_only")
+      );
+    });
+
+    it("does not offer record_only before the backend version has loaded (#1229)", async () => {
+      mockGetHealth.mockReturnValue(new Promise(() => {}));
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(proxyActionSelect().value).toBe("fail_open"));
+      expect(Array.from(proxyActionSelect().options).map((o) => o.value)).not.toContain("record_only");
+    });
+
+    it("sends nothing for a field toggled and toggled back", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, severity_threshold: "critical" });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Block on policy violation")).toBeTruthy());
+
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      // Back where it started: nothing to save.
+      expect(saveBtn()).toHaveProperty("disabled", true);
+
+      await user.selectOptions(severitySelect(), "critical");
+      await user.click(saveBtn());
+      await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({
+        severity_threshold: "critical",
+      });
+    });
+
+    it("sends only the changed field on the first save of a repository with no config row", async () => {
+      // `scanConfigApi.get` answers `config: null` with the documented
+      // defaults and no lock.
+      mockGetScanConfig.mockResolvedValue({
+        scan_enabled: false,
+        scan_on_upload: false,
+        scan_on_proxy: false,
+        block_on_policy_violation: false,
+        severity_threshold: "high",
+        proxy_scan_action: "fail_open",
+      });
+      mockUpdateScanConfig.mockResolvedValue({
+        scan_enabled: true,
+        scan_on_upload: false,
+        scan_on_proxy: false,
+        block_on_policy_violation: false,
+        severity_threshold: "high",
+        proxy_scan_action: "fail_open",
+        instance_locked: true,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Enable scanning")).toBeTruthy());
+
+      await user.click(screen.getByLabelText("Enable scanning"));
+      await user.click(saveBtn());
+      await waitFor(() => expect(mockUpdateScanConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateScanConfig.mock.calls[0][1]).toEqual({ scan_enabled: true });
+      // The saved row re-baselines the form: its lock is now shown.
+      await waitFor(() =>
+        expect(screen.getByLabelText("Lock the proxy scan policy")).toBeTruthy()
+      );
+      expect(saveBtn()).toHaveProperty("disabled", true);
+    });
+  });
+
+  describe("lock follow-ups (#1213)", () => {
+    const base = {
+      scan_enabled: true,
+      scan_on_upload: false,
+      scan_on_proxy: true,
+      block_on_policy_violation: false,
+      severity_threshold: "high",
+      proxy_scan_action: "fail_closed",
+      instance_locked: false,
+    };
+    function clientWrapper() {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      function Wrapper({ children }: { children: React.ReactNode }) {
+        return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+      }
+      return { client, Wrapper };
+    }
+    const saveBtn = () =>
+      screen.getByRole("button", { name: /save scanning settings/i });
+
+    it("disables Save while the scan config is being refetched", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      const { client, Wrapper } = clientWrapper();
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: Wrapper });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      expect(saveBtn()).toHaveProperty("disabled", false);
+
+      // The Security tab's save invalidates this query; until the refetch
+      // lands, the cached lock may be stale.
+      let finish: (v: unknown) => void = () => {};
+      mockGetScanConfig.mockReturnValueOnce(new Promise((r) => (finish = r)));
+      void client.invalidateQueries({ queryKey: ["scan-config"] });
+      await waitFor(() => expect(saveBtn()).toHaveProperty("disabled", true));
+
+      finish({ ...base, instance_locked: true });
+      await waitFor(() => expect(saveBtn()).toHaveProperty("disabled", false));
+    });
+
+    it("refreshes the Security tab's cached copy after a save", async () => {
+      mockGetScanConfig.mockResolvedValue({ ...base });
+      mockUpdateScanConfig.mockResolvedValue({ ...base, block_on_policy_violation: true });
+      const { client, Wrapper } = clientWrapper();
+      const invalidate = vi.spyOn(client, "invalidateQueries");
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={baseRepo} />, { wrapper: Wrapper });
+      await waitFor(() =>
+        expect(screen.getByLabelText("Block on policy violation")).toBeTruthy()
+      );
+      await user.click(screen.getByLabelText("Block on policy violation"));
+      await user.click(saveBtn());
+      await waitFor(() =>
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: ["repository-security", "maven-releases"],
+        })
+      );
+    });
+
+    describe("first save on a repository with no config row", () => {
+      const unconfigured = {
+        scan_enabled: false,
+        scan_on_upload: false,
+        scan_on_proxy: false,
+        block_on_policy_violation: false,
+        severity_threshold: "high",
+        proxy_scan_action: "fail_open",
+        unconfigured: true,
+      };
+      const note = /Saving them for the first time locks the proxy scan policy/;
+      afterEach(() => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.10.0" });
+      });
+
+      it("says the first save locks the policy on a backend with the lock", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.12.0" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByText(note)).toBeTruthy());
+      });
+
+      it("says the first save locks the policy on a dev build (#1231)", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "dev" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByText(note)).toBeTruthy());
+      });
+
+      it("says nothing on a backend without the lock", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.11.3" });
+        mockGetScanConfig.mockResolvedValue(unconfigured);
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() => expect(screen.getByLabelText("Enable scanning")).toBeTruthy());
+        await waitFor(() => expect(mockGetHealth).toHaveBeenCalled());
+        expect(screen.queryByText(note)).toBeNull();
+      });
+
+      it("says nothing once the repository has a config row", async () => {
+        mockGetHealth.mockResolvedValue({ status: "healthy", version: "1.12.0" });
+        mockGetScanConfig.mockResolvedValue({ ...base });
+        render(<RepoSettingsTab repository={baseRepo} />, { wrapper: createWrapper() });
+        await waitFor(() =>
+          expect(screen.getByLabelText("Lock the proxy scan policy")).toBeTruthy()
+        );
+        expect(screen.queryByText(note)).toBeNull();
+      });
+    });
   });
 
   it("toasts an error when the save fails", async () => {
@@ -2538,6 +3097,120 @@ describe("RepoSettingsTab - Age Gate (#701)", () => {
     expect(toast.success).toHaveBeenCalledWith("Age gate enabled");
   });
 
+  describe("instance-admin lock (#1038)", () => {
+    const lockedConfig = (instanceLocked: boolean) => ({
+      repositoryKey: "npm-remote",
+      enabled: true,
+      minAgeDays: 7,
+      instanceLocked,
+    });
+
+    async function renderLoaded() {
+      render(<RepoSettingsTab repository={remoteRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Lock this policy")).toBeTruthy());
+    }
+
+    async function setDays(user: ReturnType<typeof userEvent.setup>, value: string) {
+      const input = screen.getByLabelText("Minimum age (days)");
+      await user.clear(input);
+      await user.type(input, value);
+    }
+
+    it("shows a locked policy as locked, with what that means", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      await renderLoaded();
+      expect(screen.getByLabelText("Lock this policy").getAttribute("aria-checked")).toBe("true");
+      expect(screen.getByText(/only tighten the policy/i)).toBeTruthy();
+    });
+
+    it("shows a handed-back policy as not locked", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      await renderLoaded();
+      expect(screen.getByLabelText("Lock this policy").getAttribute("aria-checked")).toBe("false");
+      expect(screen.getByText(/Not locked/)).toBeTruthy();
+    });
+
+    it("sends the handed-back state with an unrelated save, so it is not re-locked", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 30,
+          instanceLocked: false,
+        }),
+      );
+    });
+
+    it("keeps a locked policy locked on an unrelated save", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 30,
+          instanceLocked: true,
+        }),
+      );
+    });
+
+    it("hands a policy back when the lock is switched off", async () => {
+      mockGetAgeGateConfig.mockResolvedValue(lockedConfig(true));
+      mockUpdateAgeGateConfig.mockResolvedValue(lockedConfig(false));
+      const user = userEvent.setup();
+      await renderLoaded();
+
+      const save = screen.getByRole("button", { name: /save age gate settings/i });
+      expect(save).toHaveProperty("disabled", true);
+      await user.click(screen.getByLabelText("Lock this policy"));
+      expect(save).toHaveProperty("disabled", false);
+      await user.click(save);
+
+      await waitFor(() =>
+        expect(mockUpdateAgeGateConfig).toHaveBeenCalledWith("npm-remote", {
+          enabled: true,
+          minAgeDays: 7,
+          instanceLocked: false,
+        }),
+      );
+    });
+
+    it("shows no lock control and sends no lock when the backend does not report one", async () => {
+      mockGetAgeGateConfig.mockResolvedValue({
+        repositoryKey: "npm-remote",
+        enabled: true,
+        minAgeDays: 7,
+      });
+      mockUpdateAgeGateConfig.mockResolvedValue({
+        repositoryKey: "npm-remote",
+        enabled: true,
+        minAgeDays: 30,
+      });
+      const user = userEvent.setup();
+      render(<RepoSettingsTab repository={remoteRepo} />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByLabelText("Minimum age (days)")).toBeTruthy());
+      expect(screen.queryByLabelText("Lock this policy")).toBeNull();
+
+      await setDays(user, "30");
+      await user.click(screen.getByRole("button", { name: /save age gate settings/i }));
+
+      await waitFor(() => expect(mockUpdateAgeGateConfig).toHaveBeenCalledTimes(1));
+      expect(mockUpdateAgeGateConfig.mock.calls[0][1]).not.toHaveProperty("instanceLocked");
+    });
+  });
+
   it("saves a disabled gate while keeping the loaded minimum age", async () => {
     mockUpdateAgeGateConfig.mockResolvedValue({
       repositoryKey: "npm-remote",
@@ -2731,5 +3404,162 @@ describe("RepoSettingsTab - conda allowlist section (#971)", () => {
       wrapper: createWrapper(),
     });
     expect(!!screen.queryByTestId("allowlist-section-stub")).toBe(shown);
+  });
+});
+
+// MCP registry settings (artifact-keeper#5253): admins edit them in the one
+// save bar, the update body carries only the changed MCP keys, and settings
+// the backend does not report stay hidden.
+describe("RepoSettingsTab - MCP registry", () => {
+  const mcpRepo: Repository = {
+    ...baseRepo,
+    key: "mcp-local",
+    name: "MCP Local",
+    format: "mcp",
+    repo_type: "local",
+    mcp_package_policy: "own-repos",
+    mcp_namespace_allow: ["com.acme"],
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockListPolicies.mockResolvedValue([]);
+    mockUpdate.mockResolvedValue(mcpRepo);
+  });
+  afterEach(() => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+  });
+  const show = (repo: Repository) =>
+    render(<RepoSettingsTab repository={repo} />, { wrapper: createWrapper() });
+
+  it("is absent for other formats", () => {
+    show(baseRepo);
+    expect(screen.queryByRole("heading", { name: "MCP Registry" })).toBeNull();
+  });
+
+  it("saves only the changed MCP keys and resets after the save", async () => {
+    const user = userEvent.setup();
+    show(mcpRepo);
+    expect(screen.getByRole("heading", { name: "MCP Registry" })).toBeTruthy();
+    expect(screen.queryByText("You have unsaved changes")).toBeNull();
+    await user.type(screen.getByLabelText("Namespace allowlist"), "org.example{Enter}");
+    const npm = screen.getByRole("option", { name: "npm-local (local)" }).closest("select")!;
+    fireEvent.change(npm, { target: { value: "npm-local" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-local", {
+        mcp_namespace_allow: ["com.acme", "org.example"],
+        mcp_package_repos: { npm: "npm-local" },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("You have unsaved changes")).toBeNull());
+  });
+
+  it("discards MCP edits", async () => {
+    const user = userEvent.setup();
+    show(mcpRepo);
+    await user.click(screen.getByRole("button", { name: "Remove com.acme" }));
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Remove com.acme" })).toBeTruthy();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it("is read-only for non-admin users", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show(mcpRepo);
+    expect(screen.getByText("Only an administrator can change these settings.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove com.acme" })).toBeNull();
+    expect(screen.queryByLabelText("Namespace allowlist")).toBeNull();
+  });
+
+  it("shows the namespace-grant switch only when the backend reports it", async () => {
+    show(mcpRepo);
+    expect(screen.queryByLabelText("Require a namespace grant to publish")).toBeNull();
+    cleanup();
+    show({ ...mcpRepo, mcp_require_namespace_grant: false });
+    fireEvent.click(screen.getByLabelText("Require a namespace grant to publish"));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-local", { mcp_require_namespace_grant: true }),
+    );
+  });
+
+  const lockedRemote: Repository = {
+    ...mcpRepo,
+    key: "mcp-remote",
+    repo_type: "remote",
+    upstream_url: "https://registry.modelcontextprotocol.io",
+    mcp_remote_posture: "approval_required",
+    mcp_remote_posture_locked: true,
+  };
+
+  it("shows only the Remote settings the backend reports, locked for a non-admin", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show(lockedRemote);
+    expect(screen.getByText("Remote posture")).toBeTruthy();
+    expect(screen.getByTestId("mcp-lock-indicator")).toBeTruthy();
+    expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(true);
+    expect(screen.queryByLabelText("Lock for repository administrators")).toBeNull();
+    expect(screen.queryByLabelText("Namespace allowlist")).toBeNull();
+    expect(screen.queryByLabelText("Deny")).toBeNull();
+    expect(screen.queryByText("Remote probe")).toBeNull();
+  });
+
+  it("lets an instance administrator unlock the posture and saves only the lock", async () => {
+    show(lockedRemote);
+    expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
+    const lock = screen.getByLabelText("Lock for repository administrators");
+    expect(lock.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(lock);
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith("mcp-remote", { mcp_remote_posture_locked: false }),
+    );
+  });
+
+  it("believes mcp_caller_can_lock over is_admin: a caller who cannot lock sees the lock", () => {
+    show({ ...lockedRemote, mcp_caller_can_lock: false });
+    expect(screen.getByTestId("mcp-lock-indicator")).toBeTruthy();
+    expect(screen.queryByLabelText("Lock for repository administrators")).toBeNull();
+    expect((screen.getByLabelText(/Allow with gates/) as HTMLInputElement).matches(":disabled")).toBe(true);
+  });
+
+  it.each([
+    [422, "UNPROCESSABLE_ENTITY", "mcp_server_deny: `com.acme` matches no server name (patterns match the full name `namespace/name`); use `com.acme/*` for every server in the namespace", "Not saved: not a full-name glob."],
+    [400, "VALIDATION_ERROR", "mcp_server_deny: `a b` is not a valid pattern", "Not saved: invalid pattern."],
+  ])("shows a %s refusal of the deny list on its field until the next edit", async (status, code, message, lead) => {
+    const user = userEvent.setup();
+    mockUpdate.mockRejectedValue({ status, code, message });
+    show({ ...mcpRepo, mcp_server_deny: [] });
+    await user.type(screen.getByLabelText("Deny"), "com.evil/*{Enter}");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const alert = await screen.findByText((_, el) => el?.getAttribute("data-status") === String(status));
+    expect(alert.textContent).toBe(`${lead} ${message}`);
+    await user.click(screen.getByRole("button", { name: "Remove com.evil/*" }));
+    expect(screen.queryByText((_, el) => el?.getAttribute("data-status") === String(status))).toBeNull();
+  });
+
+  it("keeps other save errors off the glob fields", async () => {
+    const user = userEvent.setup();
+    mockUpdate.mockRejectedValue({ status: 500, message: "boom" });
+    show({ ...mcpRepo, mcp_server_deny: [] });
+    await user.type(screen.getByLabelText("Deny"), "com.evil/*{Enter}");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    expect(screen.queryByText(/^Not saved:/)).toBeNull();
+  });
+
+  it("lets a repository admin who is not an instance admin edit the MCP settings", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: false } });
+    show({ ...mcpRepo, mcp_caller_is_repo_admin: true });
+    expect(screen.getByLabelText("Namespace allowlist")).toBeTruthy();
+    expect(screen.queryByText("Only an administrator can change these settings.")).toBeNull();
+  });
+
+  it("offers the lock switch when the backend says the caller can lock", () => {
+    show({ ...lockedRemote, mcp_caller_can_lock: true });
+    expect(screen.queryByTestId("mcp-lock-indicator")).toBeNull();
+    expect(screen.getByLabelText("Lock for repository administrators").getAttribute("aria-checked")).toBe("true");
   });
 });

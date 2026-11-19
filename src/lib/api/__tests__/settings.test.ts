@@ -504,7 +504,7 @@ describe("settingsApi", () => {
   });
 
   // -------------------------------------------------------------------------
-  // parseStorageSettings non-object guard (line 128-132) + updateMaxUploadSize
+  // parseStorageSettings non-object guard, read-only upload limit
   // -------------------------------------------------------------------------
 
   it("getStorageSettings throws when the response is not an object at all", async () => {
@@ -515,57 +515,8 @@ describe("settingsApi", () => {
     );
   });
 
-  it("updateMaxUploadSize reads current settings then POSTs them with the new size", async () => {
-    mockGetSettings.mockResolvedValue({
-      data: {
-        storage_backend: "fs",
-        storage_path: "/data",
-        max_upload_size_bytes: 1024,
-        anonymous_download: true,
-      },
-      error: undefined,
-    });
-    mockApiFetch.mockResolvedValue(undefined);
+  it("offers no writer for the upload limit, MAX_UPLOAD_SIZE sets it (artifact-keeper#5751)", async () => {
     const mod = await import("../settings");
-    await mod.settingsApi.updateMaxUploadSize(5000);
-
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
-      method: "POST",
-      body: JSON.stringify({
-        storage_backend: "fs",
-        storage_path: "/data",
-        max_upload_size_bytes: 5000,
-        anonymous_download: true,
-      }),
-    });
-  });
-
-  it("updateMaxUploadSize accepts 0 as 'no limit'", async () => {
-    mockGetSettings.mockResolvedValue({
-      data: { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 1024 },
-      error: undefined,
-    });
-    mockApiFetch.mockResolvedValue(undefined);
-    const mod = await import("../settings");
-    await mod.settingsApi.updateMaxUploadSize(0);
-    const body = JSON.parse(mockApiFetch.mock.calls[0][1].body as string);
-    expect(body.max_upload_size_bytes).toBe(0);
-  });
-
-  it("updateMaxUploadSize throws when loading current settings fails", async () => {
-    mockGetSettings.mockResolvedValue({ data: undefined, error: "boom" });
-    const mod = await import("../settings");
-    await expect(mod.settingsApi.updateMaxUploadSize(100)).rejects.toThrow(
-      /Failed to load current settings: boom/
-    );
-    expect(mockApiFetch).not.toHaveBeenCalled();
-  });
-
-  it("updateMaxUploadSize throws when current settings are not an object", async () => {
-    mockGetSettings.mockResolvedValue({ data: 42, error: undefined });
-    const mod = await import("../settings");
-    await expect(mod.settingsApi.updateMaxUploadSize(100)).rejects.toThrow(
-      /System settings response was not an object/
-    );
+    expect(mod.settingsApi).not.toHaveProperty("updateMaxUploadSize");
   });
 });

@@ -54,12 +54,14 @@ import {
   currentRegistryHost,
   FORMAT_OPTIONS,
 } from "@/lib/package-utils";
-import { formatBytes as formatBytesUtil, formatDate, formatNumber, isSafeUrl } from "@/lib/utils";
+import { formatPackageDownloads, formatVersionLabel } from "@/lib/package-display";
+import { formatBytes as formatBytesUtil, formatDate, isSafeUrl } from "@/lib/utils";
 import type {
   Package,
   PackageVersion,
 } from "@/types/packages";
 import type { Repository } from "@/types";
+import { SafeText } from "@/components/common/safe-text";
 
 // ---- Helpers ----
 
@@ -127,23 +129,23 @@ function PackageListItem({
               </Badge>
               {pkg.version && (
                 <span className="text-xs text-muted-foreground">
-                  v{pkg.version}
+                  {formatVersionLabel(pkg.version, pkg.format)}
                 </span>
               )}
             </div>
           </div>
         </div>
         {pkg.description && (
-          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-            {pkg.description}
-          </p>
+          <SafeText as="p" className="text-xs text-muted-foreground mt-2 line-clamp-2" value={pkg.description} />
         )}
-        <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <ArrowDownToLine className="size-3" />
-            {formatNumber(pkg.download_count)}
-          </span>
-        </div>
+        {formatPackageDownloads(pkg.download_count) && (
+          <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <ArrowDownToLine className="size-3" />
+              {formatPackageDownloads(pkg.download_count)}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -178,8 +180,10 @@ function PackageListItem({
         </Badge>
       </div>
       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-        {pkg.version && <span>v{pkg.version}</span>}
-        <span>{formatNumber(pkg.download_count)} downloads</span>
+        {pkg.version && <span>{formatVersionLabel(pkg.version, pkg.format)}</span>}
+        {formatPackageDownloads(pkg.download_count) && (
+          <span>{formatPackageDownloads(pkg.download_count)} downloads</span>
+        )}
       </div>
     </div>
   );
@@ -211,6 +215,8 @@ function PackageDetailPanel({
     setTimeout(() => setCopiedInstall(false), 2000);
   }, [installCmd]);
 
+  // Hidden when the backend has no observed count (#1085).
+  const downloads = formatPackageDownloads(pkg.download_count);
   const license = (pkg.metadata as Record<string, unknown> | undefined)?.license as string | undefined;
   const author = (pkg.metadata as Record<string, unknown> | undefined)?.author as string | undefined;
   const homepageUrl = (pkg.metadata as Record<string, unknown> | undefined)?.homepage_url as string | undefined;
@@ -227,13 +233,11 @@ function PackageDetailPanel({
             </div>
             {pkg.version && (
               <p className="text-sm text-muted-foreground mt-0.5">
-                Latest: v{pkg.version}
+                Latest: {formatVersionLabel(pkg.version, pkg.format)}
               </p>
             )}
             {pkg.description && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
-                {pkg.description}
-              </p>
+              <SafeText as="p" className="text-sm text-muted-foreground mt-2 line-clamp-3" value={pkg.description} />
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -309,10 +313,9 @@ function PackageDetailPanel({
                     label="Size"
                     value={formatBytes(pkg.size_bytes)}
                   />
-                  <MetadataItem
-                    label="Downloads"
-                    value={formatNumber(pkg.download_count)}
-                  />
+                  {downloads && (
+                    <MetadataItem label="Downloads" value={downloads} />
+                  )}
                   {license && (
                     <MetadataItem label="License" value={license} />
                   )}
@@ -371,7 +374,7 @@ function PackageDetailPanel({
                         {formatBytes(v.size_bytes)}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {formatNumber(v.download_count)}
+                        {formatPackageDownloads(v.download_count) ?? "-"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(v.created_at)}

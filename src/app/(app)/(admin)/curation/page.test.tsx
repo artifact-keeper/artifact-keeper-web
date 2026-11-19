@@ -76,6 +76,13 @@ vi.mock("@/lib/api/curation", () => ({
 }));
 vi.mock("@/lib/api/repositories", () => ({ repositoriesApi: { list: vi.fn() } }));
 
+let searchParams = new URLSearchParams();
+vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams }));
+// The MCP queue has its own tests; here it only has to be the one rendered.
+vi.mock("./_components/mcp-curation-queue", () => ({
+  McpCurationQueue: ({ repoKey }: { repoKey: string }) => <div data-testid="mcp-queue">{repoKey}</div>,
+}));
+
 let isAdmin = true;
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => ({ user: isAdmin ? { is_admin: true } : { is_admin: false } }),
@@ -133,6 +140,14 @@ const PKG = {
   created_at: "x",
   updated_at: "y",
 };
+const MIXED = {
+  items: [
+    { id: "r1", key: "staging-npm", repo_type: "staging", format: "npm" },
+    { id: "r2", key: "local", repo_type: "local", format: "npm" },
+    { id: "m1", key: "mcp-proxy", repo_type: "remote", format: "mcp" },
+    { id: "m2", key: "mcp-local", repo_type: "local", format: "mcp" },
+  ],
+};
 const STAGING = { items: [{ id: "r1", key: "staging-npm", repo_type: "staging" }, { id: "r2", key: "local", repo_type: "local" }] };
 
 const approveMutate = () => mutateFns[mutateFns.length - 4];
@@ -147,11 +162,12 @@ beforeEach(() => {
   isAdmin = true;
   reposData = { items: [] };
   packagesData = { data: [], isLoading: false };
+  searchParams = new URLSearchParams();
 });
 afterEach(() => cleanup());
 
 async function selectRepo(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText("Staging repository"), "r1");
+  await user.selectOptions(screen.getByLabelText("Curation repository"), "r1");
 }
 
 describe("CurationPage", () => {
@@ -163,7 +179,43 @@ describe("CurationPage", () => {
 
   it("prompts to pick a staging repo before loading", () => {
     render(<CurationPage />);
-    expect(screen.getByText(/Select a staging repository to review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select a staging repository or an MCP remote to review/i)).toBeInTheDocument();
+  });
+
+  it("lists MCP remotes beside staging repositories", () => {
+    reposData = MIXED;
+    render(<CurationPage />);
+    const options = within(screen.getByLabelText("Curation repository")).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toContain("staging-npm");
+    expect(options).toContain("mcp-proxy (MCP remote)");
+    expect(options).not.toContain("local");
+    expect(options).not.toContain("mcp-local");
+  });
+
+  it("renders the MCP queue instead of the package queue for an MCP remote", async () => {
+    const user = userEvent.setup();
+    reposData = MIXED;
+    render(<CurationPage />);
+    await user.selectOptions(screen.getByLabelText("Curation repository"), "m1");
+    expect(screen.getByTestId("mcp-queue")).toHaveTextContent("mcp-proxy");
+    expect(screen.queryByLabelText("Status filter")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Re-evaluate/i })).not.toBeInTheDocument();
+    expect(api.listPackages).not.toHaveBeenCalled();
+  });
+
+  it("selects the repository named by ?repo=", () => {
+    reposData = MIXED;
+    searchParams = new URLSearchParams("repo=mcp-proxy");
+    render(<CurationPage />);
+    expect(screen.getByTestId("mcp-queue")).toHaveTextContent("mcp-proxy");
+    expect((screen.getByLabelText("Curation repository") as HTMLSelectElement).value).toBe("m1");
+  });
+
+  it("ignores a ?repo= that is not curated", () => {
+    reposData = MIXED;
+    searchParams = new URLSearchParams("repo=local");
+    render(<CurationPage />);
+    expect(screen.getByText(/Select a staging repository or an MCP remote/i)).toBeInTheDocument();
   });
 
   it("shows the empty queue after selecting a repo", async () => {

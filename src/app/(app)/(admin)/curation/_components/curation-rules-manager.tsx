@@ -433,7 +433,10 @@ export function CurationRulesManager() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           Standing policy the curation queue is evaluated against: pattern,
-          publisher-trust, and popularity (typo-squat) gates.
+          publisher-trust, and popularity (typo-squat) gates. On an MCP remote,
+          a pattern matches the full server name, so a namespace glob such as{" "}
+          <code className="font-mono text-xs">io.github.acme/*</code> covers a
+          whole publisher.
         </p>
         <Button onClick={openCreate}>
           <Plus className="size-4" />
