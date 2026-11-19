@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { NpmUpstreamFeedCard } from "@/components/settings/npm-upstream-feed-card";
 import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
+import { BuildRetentionCard } from "@/components/settings/build-retention-card";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
 import { formatBytes } from "@/lib/utils";
@@ -337,6 +338,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          <BuildRetentionCard className="mt-4" />
         </TabsContent>
 
         <TabsContent value="storage" className="mt-4">

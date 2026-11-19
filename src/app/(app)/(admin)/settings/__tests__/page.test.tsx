@@ -46,6 +46,10 @@ vi.mock("@/components/settings/maintenance-card", () => ({
   MaintenanceCard: () => <div data-testid="maintenance-card" />,
 }));
 
+vi.mock("@/components/settings/build-retention-card", () => ({
+  BuildRetentionCard: () => <div data-testid="build-retention-card" />,
+}));
+
 vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
@@ -538,6 +542,15 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     expect(screen.getByTestId("maintenance-card")).toBeDefined();
+  });
+
+  it("mounts the build retention card on the General tab (#618)", () => {
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    mockAdminSettings();
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId("build-retention-card")).toBeDefined();
   });
 
   it("renders SMTP Configuration heading", () => {
