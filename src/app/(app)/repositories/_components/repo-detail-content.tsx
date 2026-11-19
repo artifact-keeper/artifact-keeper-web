@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api/admin";
-import { SCAN_POLICY_LOCK_MIN, backendAtLeast } from "@/lib/backend-version";
+import {
+  PERMANENT_ARTIFACT_DELETE_MIN,
+  SCAN_POLICY_LOCK_MIN,
+  backendAtLeast,
+} from "@/lib/backend-version";
 import {
   ArrowLeft,
   Boxes,
@@ -588,6 +592,31 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
     },
     onError: mutationErrorToast("Failed to delete artifact"),
   });
+
+  const deletePermanentlyMutation = useMutation({
+    mutationFn: (path: string) => artifactsApi.deletePermanently(repoKey, path),
+    onSuccess: () => {
+      setDetailOpen(false);
+      setSelectedArtifact(null);
+      toast.success("Artifact permanently deleted");
+      setActionAnnounce("Artifact permanently deleted.");
+    },
+    onError: mutationErrorToast("Failed to permanently delete artifact"),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
+      queryClient.invalidateQueries({ queryKey: ["repository", repoKey] });
+    },
+  });
+  // The backend refuses a permanent delete of OCI content: tags and shared
+  // layers are reclaimed by storage GC. Older backends ignore `permanent` and
+  // only move the artifact to the trash.
+  const canDeletePermanently =
+    !!user?.is_admin &&
+    !!repoFormat &&
+    !DOCKER_FAMILY_FORMATS.has(repoFormat) &&
+    !isMcpRepo &&
+    backendAtLeast(health?.version, PERMANENT_ARTIFACT_DELETE_MIN);
 
   const scanArtifactMutation = useMutation({
     mutationFn: (artifactId: string) =>
@@ -2184,16 +2213,64 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     </Button>
                   )
                 ) : (
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
-                    }}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="size-4" />
-                    Delete
-                  </Button>
+                  <>
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (selectedArtifact) deleteMutation.mutate(selectedArtifact.path);
+                      }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete
+                    </Button>
+                    {canDeletePermanently && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            disabled={deletePermanentlyMutation.isPending}
+                            title="Delete and skip the trash, so this path can be re-uploaded"
+                          >
+                            <Trash2 className="size-4" />
+                            {deletePermanentlyMutation.isPending
+                              ? "Deleting..."
+                              : "Delete permanently"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete permanently?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This deletes{" "}
+                              <span className="font-medium">
+                                {selectedArtifact.name}
+                              </span>{" "}
+                              without keeping it in the trash, so it cannot be
+                              restored. Its path is freed straight away, so a
+                              different file can be uploaded there.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              variant="destructive"
+                              onClick={() => {
+                                if (selectedArtifact) {
+                                  deletePermanentlyMutation.mutate(
+                                    selectedArtifact.path
+                                  );
+                                }
+                              }}
+                            >
+                              Delete permanently
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </>
                 )}
                 {repository.repo_type === "remote" && (
                   <AlertDialog>

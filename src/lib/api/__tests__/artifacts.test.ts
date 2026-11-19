@@ -801,6 +801,48 @@ describe("artifactsApi", () => {
     await expect(artifactsApi.delete("repo-key", "lib.jar")).rejects.toBe("fail");
   });
 
+  describe("deletePermanently", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("issues DELETE with permanent=true and encodes each path segment", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue(""),
+      });
+      global.fetch = fetchMock;
+
+      const { artifactsApi } = await import("../artifacts");
+      await artifactsApi.deletePermanently(
+        "maven-releases",
+        "org/acme/app 1/1.0/app-1.0.jar"
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const url = String(fetchMock.mock.calls[0][0]);
+      expect(url).toContain(
+        "/api/v1/repositories/maven-releases/artifacts/org/acme/app%201/1.0/app-1.0.jar?permanent=true"
+      );
+      expect(fetchMock.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ method: "DELETE", credentials: "include" })
+      );
+    });
+
+    it("throws on a non-ok response (e.g. 403 for a non-admin)", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        text: vi.fn().mockResolvedValue(""),
+      });
+      const { artifactsApi } = await import("../artifacts");
+      await expect(
+        artifactsApi.deletePermanently("repo-key", "lib.jar")
+      ).rejects.toThrow(/API error 403/);
+    });
+  });
+
   // -------------------------------------------------------------------------
   // invalidateCache (artifact-keeper#1539 / artifact-keeper-web#446)
   // -------------------------------------------------------------------------

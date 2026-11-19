@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Admins can delete an artifact permanently from its detail dialog** (#1007, backend artifact-keeper#4700) - a deleted release stayed in the backend's trash, and the registry refused a different file at the same path until storage GC removed it, so a bad release could not be replaced. The artifact detail dialog now has a "Delete permanently" action for admins, behind a confirmation, which calls `DELETE …/artifacts/{path}?permanent=true` and frees the path at once. It is hidden for OCI repositories, where the backend refuses it, and goes through `apiFetch` until the generated SDK carries the `permanent` parameter. There is still no trash page and no whole-version delete in the Maven grouped view. Needs backend 1.12.0 (artifact-keeper#4701), hidden on older backends.
+
 ## [1.12.0] - 2026-11-18
 
 The web UI for backend 1.12.0. Highlights: MCP Registry and Agent Plugins repositories, a vulnerability drill-down behind every dashboard count, durable acknowledgements and the proxy enforcement preview, instance quotas, a scan queue view, live migration progress, and the TOTP step after LDAP and SSO sign-in.
