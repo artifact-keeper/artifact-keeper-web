@@ -125,9 +125,10 @@ export function McpServerDetail({ pkg }: { pkg: Package }) {
     queryFn: () => mcpApi.listVersions(repoKey, name),
   });
   // Same key as the generic page, so the catalog rows come from its cache.
+  const repositoryKey = searchParams.get("repository_key") ?? undefined;
   const catalogQ = useQuery({
-    queryKey: ["package-versions", pkg.id],
-    queryFn: () => packagesApi.getVersions(pkg.id),
+    queryKey: ["package-versions", pkg.id, repositoryKey],
+    queryFn: () => packagesApi.getVersions(pkg.id, { repository_key: repositoryKey }),
   });
   const served = useMemo(() => versionsQ.data ?? [], [versionsQ.data]);
 
