@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Build retention on Settings, General** (#1165, #618) - A Build retention card with the two values from artifact-keeper#6132: days after which a finished build record is deleted, and how many builds per name to keep, 0 for off. It renders nothing against a backend that does not report them
+- **Permissions: a person past the first 100 can now be picked** (#892) - The User picker in the create-permission dialog loaded one page of 100 people, the most the backend returns, so on an instance with more people anyone after the first 100 could not be chosen as a principal. The picker now asks the server as you type (a search matches username, email and display name) and says how many people matched when a search is still capped, so you know to narrow it. The chosen person's name stays on the button after the picker closes and the search resets. Trade-off: each keystroke can be a request, and the results are not filtered a second time in the browser, so a match on email shows under the person's display name.
 
 ### Fixed
 
