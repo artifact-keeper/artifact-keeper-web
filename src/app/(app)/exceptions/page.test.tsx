@@ -649,7 +649,9 @@ describe("row rendering", () => {
   it("opens the repository's scan findings from a scan-gate row only", () => {
     withRows(ROW, { ...ROW, id: "ex-age", gate: "age" });
     render(<ExceptionsPage />);
-    const links = screen.getAllByRole("link", { name: "Scan gate" });
+    const links = screen.getAllByRole("link", {
+      name: "Scan gate: scan findings for npm-remote",
+    });
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "/repositories/npm-remote?tab=security");
     expect(table().getByText("Age gate")).not.toHaveAttribute("href");
@@ -658,7 +660,7 @@ describe("row rendering", () => {
   it("links the repository badge to where its gates are configured", () => {
     withRows(ROW);
     render(<ExceptionsPage />);
-    expect(screen.getByRole("link", { name: "npm-remote" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "npm-remote settings" })).toHaveAttribute(
       "href",
       "/repositories/npm-remote?tab=settings",
     );
@@ -667,7 +669,7 @@ describe("row rendering", () => {
   it("percent-encodes a repository key into every link it builds", () => {
     withRows({ ...ROW, repositoryKey: "team/npm remote" });
     render(<ExceptionsPage />);
-    expect(screen.getByRole("link", { name: "team/npm remote" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "team/npm remote settings" })).toHaveAttribute(
       "href",
       "/repositories/team%2Fnpm%20remote?tab=settings",
     );
