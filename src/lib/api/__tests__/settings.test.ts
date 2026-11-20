@@ -444,6 +444,44 @@ describe("settingsApi", () => {
     expect(all.environment).toBe("");
   });
 
+  it("getAllSettings keeps an absent exception_request_url apart from an unset one", async () => {
+    const base = { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 0 };
+    const mod = await import("../settings");
+
+    mockGetSettings.mockResolvedValue({ data: base, error: undefined });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeUndefined();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: null },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeNull();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: "  " },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeNull();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: "https://t.example/{package}" },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBe(
+      "https://t.example/{package}",
+    );
+  });
+
+  it("updateExceptionRequestUrl posts only that field, trimmed", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateExceptionRequestUrl("  https://t.example/{package} ");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ exception_request_url: "https://t.example/{package}" }),
+    });
+  });
+
   it("getAllSettings throws on SDK error (#349)", async () => {
     mockGetSettings.mockResolvedValue({ data: undefined, error: "unauthorized" });
     const mod = await import("../settings");

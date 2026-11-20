@@ -15,6 +15,29 @@ vi.mock("@/providers/auth-provider", () => ({
 const mockUseQuery = vi.hoisted(() => vi.fn());
 const mockUseMutation = vi.hoisted(() => vi.fn());
 const mockUseQueryClient = vi.hoisted(() => vi.fn());
+// The exception queue needs backend 1.13.0 (EXCEPTIONS_MIN); tests default
+// to a backend that has it and the gate tests turn it off.
+const mockExceptionsSupported = vi.hoisted(() =>
+  vi.fn(() => ({ supported: true, isLoading: false })),
+);
+vi.mock("@/hooks/use-exceptions-supported", () => ({
+  useExceptionsSupported: () => mockExceptionsSupported(),
+}));
+beforeEach(() => {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: true,
+    isLoading: false,
+  }));
+});
+
+/** Drive the exception-queue gate from a `/health` version, as the hook does */
+function onBackend(version: string | undefined) {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: backendAtLeast(version, EXCEPTIONS_MIN),
+    isLoading: false,
+  }));
+}
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
   useMutation: (opts: any) => mockUseMutation(opts),
@@ -145,6 +168,9 @@ vi.mock("@/components/ui/select", () => ({
 vi.mock("@/components/settings/token-expiry-policy-card", () => ({
   TokenExpiryPolicyCard: () => <div>API token expiry policy</div>,
 }));
+vi.mock("@/components/settings/exception-request-link-card", () => ({
+  ExceptionRequestLinkCard: () => <div>Exception request link</div>,
+}));
 
 vi.mock("@/components/common/page-header", () => ({
   PageHeader: ({ title }: any) => <h1>{title}</h1>,
@@ -157,6 +183,7 @@ vi.mock("@/components/common/page-header", () => ({
 import SettingsPage from "../page";
 import type { AdminSettings, SmtpConfig } from "@/lib/api/settings";
 import { ADMIN_SETTINGS_QUERY_KEY } from "@/hooks/use-admin-settings";
+import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
 
 // Lock the mock map key to the same constant the production code uses.
 // If the queryKey ever drifts, every test that pins admin-settings would
@@ -522,6 +549,24 @@ describe("SettingsPage", () => {
 
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.getByText("API token expiry policy")).toBeDefined();
+  });
+
+  it.each([["1.12.1"], [undefined]])(
+    "hides the exception request link card on backend %s",
+    (version) => {
+      onBackend(version);
+      mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+      render(<SettingsPage />);
+      expect(screen.getByText("API token expiry policy")).toBeDefined();
+      expect(screen.queryByText("Exception request link")).toBeNull();
+    },
+  );
+
+  it("shows the exception request link card on backend 1.13.0", () => {
+    onBackend("1.13.0");
+    mockUseAuth.mockReturnValue({ user: { is_admin: true } });
+    render(<SettingsPage />);
+    expect(screen.getByText("Exception request link")).toBeDefined();
   });
 
   it("renders the npm Upstream tab and its read-only feed card (#702)", () => {
