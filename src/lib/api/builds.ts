@@ -19,7 +19,7 @@ import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
 export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff, BuildDeleteResult } from '@/types/builds';
-import type { Build, BuildStatus, BuildDiff, BuildModule, BuildDeleteResult } from '@/types/builds';
+import type { Build, BuildArtifact, BuildStatus, BuildDiff, BuildModule, BuildDeleteResult } from '@/types/builds';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListBuildsParams {
@@ -42,16 +42,32 @@ const BUILD_STATUSES = new Set<BuildStatus>([
   'cancelled',
 ]);
 
+/** Link fields a backend with build artifact links (#618) adds, not in the SDK yet */
+type ArtifactLinkFields = {
+  artifact_id?: string | null;
+  repository_key?: string | null;
+  artifact_deleted?: boolean | null;
+};
+
+function adaptBuildArtifact(
+  a: SdkBuildModule['artifacts'][number] & ArtifactLinkFields,
+): BuildArtifact {
+  return {
+    name: a.name,
+    path: a.path,
+    checksum_sha256: a.checksum_sha256,
+    size_bytes: a.size_bytes,
+    artifact_id: a.artifact_id ?? undefined,
+    repository_key: a.repository_key ?? undefined,
+    artifact_deleted: a.artifact_deleted ?? undefined,
+  };
+}
+
 function adaptBuildModule(sdk: SdkBuildModule): BuildModule {
   return {
     id: sdk.id,
     name: sdk.name,
-    artifacts: sdk.artifacts.map((a) => ({
-      name: a.name,
-      path: a.path,
-      checksum_sha256: a.checksum_sha256,
-      size_bytes: a.size_bytes,
-    })),
+    artifacts: sdk.artifacts.map(adaptBuildArtifact),
   };
 }
 
@@ -90,8 +106,8 @@ function adaptBuildDiff(sdk: BuildDiffResponse): BuildDiff {
   return {
     build_a: sdk.build_a,
     build_b: sdk.build_b,
-    added: sdk.added,
-    removed: sdk.removed,
+    added: sdk.added.map(adaptBuildArtifact),
+    removed: sdk.removed.map(adaptBuildArtifact),
     modified: sdk.modified,
   };
 }

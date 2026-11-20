@@ -185,6 +185,29 @@ describe("buildsApi", () => {
     expect(result.modules).toEqual([moduleWithTwoArtifacts]);
   });
 
+  it("keeps the stored artifact link of an entry", async () => {
+    const linked = {
+      name: "app.jar",
+      path: "libs/app.jar",
+      checksum_sha256: "c",
+      size_bytes: 1,
+      artifact_id: "a-1",
+      repository_key: "maven-releases",
+      artifact_deleted: true,
+    };
+    mockGetBuild.mockResolvedValue({
+      data: buildFixture({ modules: [{ id: "m", name: "app", artifacts: [linked] }] }),
+      error: undefined,
+    });
+    mockGetBuildDiff.mockResolvedValue({
+      data: { build_a: "b1", build_b: "b2", added: [linked], removed: [], modified: [] },
+      error: undefined,
+    });
+    const { buildsApi } = await import("../builds");
+    expect((await buildsApi.get("b1")).modules?.[0].artifacts[0]).toEqual(linked);
+    expect((await buildsApi.diff("b1", "b2")).added[0]).toEqual(linked);
+  });
+
   it("passes vcs fields and metadata through", async () => {
     const vcs = {
       vcs_url: "https://vcs.example.test/org/repo",

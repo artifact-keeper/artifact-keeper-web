@@ -7,6 +7,7 @@ import type { Build } from "@/types/builds";
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
+  get: vi.fn(),
   deleteMany: vi.fn(),
   getHealth: vi.fn(),
 }));
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api/builds", () => ({
   buildsApi: {
     list: mocks.list,
-    get: vi.fn(),
+    get: mocks.get,
     diff: vi.fn(),
     deleteMany: mocks.deleteMany,
   },
@@ -144,5 +145,31 @@ describe("BuildsPage selection", () => {
     await waitFor(() => expect(mocks.deleteMany).toHaveBeenCalledWith(["b21"]));
     expect(await screen.findByText("#1")).toBeInTheDocument();
     expect(screen.queryByText("No builds found")).not.toBeInTheDocument();
+  });
+});
+
+describe("BuildsPage modules", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("lists an artifact a module names twice without a duplicate key", async () => {
+    mocks.getHealth.mockResolvedValue({ status: "healthy", version: "1.12.1" });
+    mocks.list.mockResolvedValue(pageOf([build(1)], 1, 1));
+    const artifact = { name: "app.jar", path: "libs/app.jar", checksum_sha256: "c", size_bytes: 1 };
+    mocks.get.mockResolvedValue({
+      ...build(1),
+      modules: [{ id: "m1", name: "core", artifacts: [artifact, artifact] }],
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderPage();
+    fireEvent.click(await screen.findByText("#1"));
+    const tab = await screen.findByRole("tab", { name: /Modules/ });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    expect(await screen.findAllByText("app.jar")).toHaveLength(2);
+    const keyWarnings = errors.mock.calls.filter((c) => String(c[0]).includes("same key"));
+    expect(keyWarnings).toEqual([]);
   });
 });

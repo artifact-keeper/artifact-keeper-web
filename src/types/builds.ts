@@ -31,6 +31,11 @@ export interface BuildArtifact {
   path: string;
   checksum_sha256: string;
   size_bytes: number;
+  /** The stored artifact this entry links to, when the caller can read it */
+  artifact_id?: string;
+  repository_key?: string;
+  /** The linked artifact is in the trash */
+  artifact_deleted?: boolean;
 }
 
 export interface BuildArtifactDiff {
