@@ -327,9 +327,9 @@ function ModuleCard({ module }: { module: BuildModule }) {
         </span>
       </div>
       <ul className="divide-y">
-        {module.artifacts.map((artifact) => (
+        {module.artifacts.map((artifact, i) => (
           <li
-            key={`${artifact.path}-${artifact.checksum_sha256}`}
+            key={`${artifact.path}-${artifact.checksum_sha256}-${i}`}
             className="flex items-center justify-between gap-3 px-3 py-2"
           >
             <div className="flex items-center gap-2 min-w-0">

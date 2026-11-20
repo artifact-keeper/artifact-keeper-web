@@ -21,6 +21,7 @@ export function BuildArtifactName({ artifact }: { artifact: BuildArtifact }) {
       ) : (
         <Link
           href={`/repositories/${encodeURIComponent(artifact.repository_key)}`}
+          aria-label={`${artifact.name}, open repository ${artifact.repository_key}`}
           className="truncate text-blue-600 hover:underline dark:text-blue-400"
         >
           {artifact.name}

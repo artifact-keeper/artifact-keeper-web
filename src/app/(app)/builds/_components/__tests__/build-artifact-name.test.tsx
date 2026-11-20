@@ -24,6 +24,7 @@ describe("BuildArtifactName", () => {
     );
     expect(screen.getByRole("link").getAttribute("href")).toBe("/repositories/maven-releases");
     expect(screen.getByText("maven-releases")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "app.jar, open repository maven-releases" })).toBeTruthy();
   });
 
   it("prints a link the caller can't see into as text", () => {
