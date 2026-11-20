@@ -8,12 +8,15 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
-import { Loader2, Lock, LogIn, Shield, Terminal } from "lucide-react";
+import { Loader2, LogIn, Shield, Terminal } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import { toUserMessage, isAccountLocked } from "@/lib/error-utils";
+import { toUserMessage } from "@/lib/error-utils";
 import {
   INVALID_CREDENTIALS_MESSAGE,
+  REPEATED_FAILURE_HINT,
+  REPEATED_FAILURE_THRESHOLD,
   isCredentialRejection,
+  rateLimitMessage,
   sameOriginLoginUrl,
 } from "@/lib/sign-in-guards";
 import { ssoApi } from "@/lib/api/sso";
@@ -109,7 +112,8 @@ function LoginContent() {
   // those deployments keep a working login form.
   const localLoginEnabled = systemConfig.auth.local_login_enabled;
   const [error, setError] = useState<string | null>(null);
-  const [accountLocked, setAccountLocked] = useState(false);
+  // Rejected sign-ins in this tab, whatever the username (#1239).
+  const [failedAttempts, setFailedAttempts] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [totpCode, setTotpCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
@@ -199,7 +203,6 @@ function LoginContent() {
   async function onSubmit(values: LoginValues) {
     setIsLoading(true);
     setError(null);
-    setAccountLocked(false);
     try {
       if (selectedProvider.type === "ldap") {
         const result = await ssoApi.ldapLogin(
@@ -230,16 +233,17 @@ function LoginContent() {
         }
       }
     } catch (err) {
-      // accountLocked and error were both reset above; only set the branch we hit.
-      if (isAccountLocked(err)) {
-        setAccountLocked(true);
+      // #1153: never echo the backend's 401 text for a password sign-in, so
+      // the page cannot tell an unknown user from a wrong password. A locked
+      // account gets the same 401 from the backend (#1239), so there is no
+      // lockout state to show here.
+      if (isCredentialRejection(err)) {
+        setFailedAttempts((n) => n + 1);
+        setError(INVALID_CREDENTIALS_MESSAGE);
       } else {
-        // #1153: never echo the backend's 401 text for a password sign-in, so
-        // the page cannot tell an unknown user from a wrong password.
         setError(
-          isCredentialRejection(err)
-            ? INVALID_CREDENTIALS_MESSAGE
-            : toUserMessage(err, "Login failed. Please check your credentials.")
+          rateLimitMessage(err) ??
+            toUserMessage(err, "Login failed. Please check your credentials.")
         );
       }
     } finally {
@@ -356,21 +360,15 @@ function LoginContent() {
           <CardDescription>{setupRequired ? "Complete first-time setup" : "Sign in to your account"}</CardDescription>
         </CardHeader>
         <CardContent>
-          {accountLocked && (
-            <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-              <Lock className="size-4 text-amber-600 dark:text-amber-400" />
-              <AlertTitle className="text-amber-800 dark:text-amber-200">Account Locked</AlertTitle>
-              <AlertDescription className="text-amber-700 dark:text-amber-300">
-                Your account has been temporarily locked due to too many failed
-                login attempts. Please wait a few minutes and try again, or
-                contact an administrator to unlock your account.
-              </AlertDescription>
-            </Alert>
-          )}
-          {error && !accountLocked && (
+          {error && (
             <div className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {error}
             </div>
+          )}
+          {failedAttempts >= REPEATED_FAILURE_THRESHOLD && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              {REPEATED_FAILURE_HINT}
+            </p>
           )}
 
           {optionsLoaded && showProviderTabs && (
