@@ -6,10 +6,12 @@ import { PasswordExpiryBanner } from "@/components/layout/password-expiry-banner
 import { QuotaBanner } from "@/components/layout/quota-banner";
 import { RemoteKeyRejectedBanner } from "@/components/layout/remote-key-rejected-banner";
 import { EventStreamProvider } from "@/components/layout/event-stream-provider";
+import { ProjectProvider } from "@/providers/project-provider";
 import { SkipNavLink } from "@/components/layout/skip-nav-link";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
+    <ProjectProvider>
     <SidebarProvider>
       <SkipNavLink />
       <EventStreamProvider />
@@ -28,5 +30,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </SidebarProvider>
+    </ProjectProvider>
   );
 }

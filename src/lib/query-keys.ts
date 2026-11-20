@@ -23,6 +23,7 @@ export const QUERY_KEYS = {
   ADMIN_USERS: ["admin-users"],
   ADMIN_GROUPS: ["admin-groups"],
   ADMIN_PERMISSIONS: ["admin-permissions"],
+  PROJECTS: ["projects"],
   SERVICE_ACCOUNTS: ["service-accounts"],
   WEBHOOKS: ["webhooks"],
   WEBHOOK_DELIVERIES: ["webhook-deliveries"],
@@ -81,6 +82,8 @@ export const INVALIDATION_GROUPS: Record<string, readonly (readonly string[])[]>
   groups: [QUERY_KEYS.ADMIN_GROUPS, QUERY_KEYS.ADMIN_PERMISSIONS],
   serviceAccounts: [QUERY_KEYS.SERVICE_ACCOUNTS],
   permissions: [QUERY_KEYS.ADMIN_PERMISSIONS],
+  // Prefix key: also covers ["projects", id, "members"] and per-project repo lists.
+  projects: [QUERY_KEYS.PROJECTS, QUERY_KEYS.REPOSITORIES],
   qualityGates: [QUERY_KEYS.QUALITY_GATES, QUERY_KEYS.QUALITY_HEALTH],
   webhooks: [QUERY_KEYS.WEBHOOKS, QUERY_KEYS.WEBHOOK_DELIVERIES],
   backups: [QUERY_KEYS.BACKUPS],

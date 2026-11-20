@@ -17,7 +17,7 @@ import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useRepositories } from "@/hooks/use-repositories";
+import { useRepositories, useUnassignedRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -53,6 +53,7 @@ import { backendSupportsMcp } from "@/lib/mcp/format";
 import { RepoListItem } from "./repo-list-item";
 import { RepoDetailPanel } from "./repo-detail-panel";
 import { RepoDialogs } from "./repo-dialogs";
+import { useActiveProject } from "@/providers/project-provider";
 
 /**
  * A repository list row with its Remote's upstream mode (#1094). The list
@@ -71,9 +72,20 @@ export function RepositoriesContent() {
   const { isAuthenticated, user } = useAuth();
   const isMobile = useIsMobile();
 
+  const { projects, activeProject, setActiveProjectId } = useActiveProject();
+  // `?new=1&project=<id>` (from a project page) opens the create dialog preselected.
+  const [urlProjectId] = useState<string | undefined>(() => {
+    if (globalThis.window === undefined) return undefined;
+    const params = new URL(globalThis.window.location.href).searchParams;
+    return params.get("new") === "1" ? (params.get("project") ?? undefined) : undefined;
+  });
+
   // filter state
   const [formatFilter, setFormatFilter] = useState("__all__");
   const [typeFilter, setTypeFilter] = useState("__all__");
+  // "__all__" follows the header project switcher; picking one here overrides it.
+  const [projectOverride, setProjectOverride] = useState<string | null>(null);
+  const projectFilter = projectOverride ?? activeProject?.id ?? "__all__";
   const [searchQuery, setSearchQuery] = useState("");
   // Defer the search value so the backend list query (`q`) and artifact search
   // don't refetch on every keystroke.
@@ -90,7 +102,11 @@ export function RepositoriesContent() {
   });
 
   // dialog state
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(
+    () =>
+      globalThis.window !== undefined &&
+      new URL(globalThis.window.location.href).searchParams.get("new") === "1",
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [dialogRepo, setDialogRepo] = useState<Repository | null>(null);
@@ -103,15 +119,31 @@ export function RepositoriesContent() {
   }>({ state: "idle" });
 
   // --- query ---
-  const { data, isLoading, isFetching, isError, error, refetch } = useRepositories({
-    per_page: pageSize,
-    page,
+  const listFilters = {
     format: formatFilter === "__all__" ? undefined : formatFilter,
     repo_type: typeFilter === "__all__" ? undefined : typeFilter,
     // Server-side name/key search so matches on other pages are found, not just
     // the ones already loaded on the current page (#pagination-search).
     q: deferredSearch || undefined,
+  };
+  // The backend can only filter *to* a project, not to "none", so that one
+  // choice is answered by a separate paged scan (see useUnassignedRepositories).
+  const unassignedMode = projectFilter === "__none__";
+  const listQuery = useRepositories(
+    {
+      per_page: pageSize,
+      page,
+      ...listFilters,
+      project: unassignedMode || projectFilter === "__all__" ? undefined : projectFilter,
+    },
+    { enabled: !unassignedMode },
+  );
+  const unassigned = useUnassignedRepositories(listFilters, page, pageSize, {
+    enabled: unassignedMode,
   });
+  const { data, isLoading, isFetching, isError, error, refetch } = unassignedMode
+    ? unassigned
+    : listQuery;
 
   // Installed format handlers — drives the create dialog's custom WASM
   // plugin layouts (#591) and the plugin layout labels in the list (#592).
@@ -301,6 +333,7 @@ export function RepositoriesContent() {
 
   // Fetch full repo data for artifact-matched repos not on the current page
   const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const currentPageKeys = useMemo(() => new Set(items.map((r) => r.key)), [items]);
   const missingRepoKeys = useMemo(() => {
     if (!searchQuery) return [];
@@ -403,6 +436,43 @@ export function RepositoriesContent() {
             </SelectContent>
           </Select>
         </div>
+        {projects.length > 0 && (
+          <Select
+            value={projectFilter}
+            onValueChange={(v) => { setProjectOverride(v); setPage(1); }}
+          >
+            <SelectTrigger className="h-7 text-xs w-full" aria-label="Filter by project">
+              <SelectValue placeholder="Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All projects</SelectItem>
+              <SelectItem value="__none__">No project</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {/* The sidebar scope filters this list; say so, so it is never a surprise (#988 review). */}
+        {activeProject && projectOverride === null && (
+          <div
+            className="flex items-center justify-between gap-2 rounded-md bg-muted px-2 py-1 text-xs"
+            role="status"
+          >
+            <span className="truncate">
+              Showing only <strong>{activeProject.name}</strong>
+            </span>
+            <button
+              type="button"
+              className="shrink-0 underline underline-offset-2 hover:no-underline"
+              onClick={() => { setActiveProjectId(null); setPage(1); }}
+            >
+              Show all
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Repository list */}
@@ -460,6 +530,7 @@ export function RepositoriesContent() {
                 onDelete={isAdmin ? handleDelete : undefined}
                 artifactMatchCount={searchQuery ? artifactMatchMap.get(repo.key) : undefined}
                 formatLabel={repoFormatLabel(repo, formatHandlers)}
+                projectName={repo.project_id ? projectNames.get(repo.project_id) : undefined}
               />
             ))}
           </div>
@@ -468,6 +539,12 @@ export function RepositoriesContent() {
 
       {/* Pagination — total_pages reflects the (searched) result set, so it
           auto-hides when a filter narrows results to a single page. */}
+      {unassignedMode && unassigned.truncated && (
+        <p className="border-t px-3 py-2 text-xs text-muted-foreground" role="status">
+          Checked the first {unassigned.scanned} of {unassigned.total} repositories. Search or
+          filter to narrow the list.
+        </p>
+      )}
       {totalPages > 1 && (
         <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>
@@ -595,6 +672,7 @@ export function RepositoriesContent() {
         deletePending={deleteMutation.isPending}
         availableRepos={items}
         pluginFormats={pluginFormats}
+        initialProjectId={urlProjectId}
       />
     </div>
   );

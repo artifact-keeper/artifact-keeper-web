@@ -17,7 +17,7 @@ import { assertData, narrowEnum } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
 
 export type PermissionAction = 'read' | 'write' | 'delete' | 'admin';
-export type PermissionTargetType = 'repository' | 'group' | 'artifact';
+export type PermissionTargetType = 'repository' | 'group' | 'artifact' | 'project';
 export type PermissionPrincipalType = 'user' | 'service_account' | 'group';
 
 export interface Permission {
@@ -55,7 +55,7 @@ const PRINCIPAL_TYPES = new Set<PermissionPrincipalType>([
   'service_account',
   'group',
 ]);
-const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'artifact']);
+const TARGET_TYPES = new Set<PermissionTargetType>(['repository', 'group', 'artifact', 'project']);
 const ACTIONS = new Set<PermissionAction>(['read', 'write', 'delete', 'admin']);
 
 // A new backend principal_type variant would otherwise silently flatten to

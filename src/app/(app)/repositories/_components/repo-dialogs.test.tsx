@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RepoDialogs } from './repo-dialogs';
@@ -102,6 +102,15 @@ vi.mock('@/providers/auth-provider', () => ({
   useAuth: () => mockAuth,
 }));
 
+// Projects the caller can pick from. Empty by default so existing tests see no project field.
+const mockProjects = vi.hoisted(() => ({
+  projects: [] as { id: string; key: string; name: string }[],
+  activeProject: null as { id: string; key: string; name: string } | null,
+}));
+vi.mock('@/providers/project-provider', () => ({
+  useActiveProject: () => mockProjects,
+}));
+
 // Feature flags come from the system-config provider. Default to guest access
 // enabled (the provider's own permissive default); gating tests override this.
 const mockFlags = vi.hoisted(() => ({ guestAccessEnabled: true }));
@@ -114,6 +123,8 @@ vi.mock('@/providers/system-config-provider', () => ({
 beforeEach(() => {
   mockFlags.guestAccessEnabled = true;
   mockAuth.user = { is_admin: false };
+  mockProjects.projects = [];
+  mockProjects.activeProject = null;
   depthSupport.data = { supported: true, min: 0, max: 1023, default: 0 };
   depthSupport.error = null;
   depthSupport.isLoading = false;
@@ -2777,5 +2788,165 @@ describe('RepoDialogs - Upstream Mode (Create, #1094)', () => {
 
     expect(onCreateSubmit).toHaveBeenCalledTimes(1);
     expect(onCreateSubmit.mock.calls[0][0]).not.toHaveProperty('upstream_mode');
+  });
+});
+
+describe('RepoDialogs - project field (#988)', () => {
+  const alpha = { id: 'p1', key: 'alpha', name: 'Alpha' };
+  const beta = { id: 'p2', key: 'beta', name: 'Beta' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cleanup();
+    mockProjects.projects = [alpha, beta];
+    mockProjects.activeProject = null;
+  });
+  afterEach(cleanup);
+
+  /** The project <select> is the one that offers "No project". */
+  function projectSelect(): HTMLSelectElement {
+    const el = screen
+      .getAllByTestId('mock-select')
+      .find((s) => Array.from((s as HTMLSelectElement).options).some((o) => o.value === '__none__'));
+    if (!el) throw new Error('project select not rendered');
+    return el as HTMLSelectElement;
+  }
+
+  describe('create', () => {
+    it('shows no project field until a project exists', () => {
+      mockProjects.projects = [];
+      render(<RepoDialogs {...defaultProps} />);
+      expect(
+        screen.getAllByTestId('mock-select').some((s) =>
+          Array.from((s as HTMLSelectElement).options).some((o) => o.value === '__none__'),
+        ),
+      ).toBe(false);
+    });
+
+    it('offers No project and every project, starting on No project', () => {
+      render(<RepoDialogs {...defaultProps} />);
+      expect(Array.from(projectSelect().options).map((o) => [o.value, o.textContent])).toEqual([
+        ['__none__', 'No project'],
+        ['p1', 'Alpha (alpha)'],
+        ['p2', 'Beta (beta)'],
+      ]);
+      expect(projectSelect().value).toBe('__none__');
+    });
+
+    it("starts on the sidebar's active project", () => {
+      mockProjects.activeProject = beta;
+      render(<RepoDialogs {...defaultProps} />);
+      expect(projectSelect().value).toBe('p2');
+    });
+
+    it('starts on the project the page asked for', () => {
+      render(<RepoDialogs {...defaultProps} initialProjectId="p1" />);
+      expect(projectSelect().value).toBe('p1');
+    });
+
+    it('suggests the project key as a prefix when the key is empty', () => {
+      render(<RepoDialogs {...defaultProps} />);
+      fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+      expect(screen.getByPlaceholderText('my-repo')).toHaveProperty('value', 'alpha-');
+    });
+
+    it("switches the suggested prefix with the project, but never overwrites a key the user typed", () => {
+      render(<RepoDialogs {...defaultProps} />);
+      const key = screen.getByPlaceholderText('my-repo');
+      fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+      fireEvent.change(projectSelect(), { target: { value: 'p2' } });
+      expect(key).toHaveProperty('value', 'beta-');
+
+      fireEvent.change(key, { target: { value: 'beta-libs' } });
+      fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+      expect(key).toHaveProperty('value', 'beta-libs');
+    });
+
+    it('clears an unedited suggestion when going back to No project', () => {
+      render(<RepoDialogs {...defaultProps} />);
+      fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+      fireEvent.change(projectSelect(), { target: { value: '__none__' } });
+      expect(screen.getByPlaceholderText('my-repo')).toHaveProperty('value', '');
+    });
+
+    it('creates inside the chosen project', () => {
+      const onCreateSubmit = vi.fn();
+      render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+      fireEvent.change(projectSelect(), { target: { value: 'p2' } });
+      fireEvent.change(screen.getByPlaceholderText('my-repo'), { target: { value: 'beta-libs' } });
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Beta libs' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+      expect(onCreateSubmit).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'p2' }));
+    });
+
+    it('creates with no project when No project is chosen', () => {
+      const onCreateSubmit = vi.fn();
+      render(<RepoDialogs {...defaultProps} onCreateSubmit={onCreateSubmit} />);
+      fireEvent.change(screen.getByPlaceholderText('my-repo'), { target: { value: 'loose' } });
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Loose' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+      expect(onCreateSubmit.mock.calls[0][0].project_id).toBeUndefined();
+    });
+  });
+
+  describe('edit', () => {
+    const inAlpha = { ...mockEditRepo, project_id: 'p1' } as Repository;
+
+    function renderEdit(repo: Repository, onEditSubmit = vi.fn()) {
+      render(
+        <RepoDialogs
+          {...defaultProps}
+          createOpen={false}
+          editOpen={true}
+          editRepo={repo}
+          onEditSubmit={onEditSubmit}
+        />,
+      );
+      return onEditSubmit;
+    }
+    const save = () => fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    it("shows the repository's current project", () => {
+      renderEdit(inAlpha);
+      expect(projectSelect().value).toBe('p1');
+    });
+
+    it('shows No project for a repository that has none', () => {
+      renderEdit(mockEditRepo);
+      expect(projectSelect().value).toBe('__none__');
+    });
+
+    it('does not send the project when it was not changed', () => {
+      const onEditSubmit = renderEdit(inAlpha);
+      save();
+      expect(onEditSubmit).toHaveBeenCalledTimes(1);
+      expect(onEditSubmit.mock.calls[0][1]).not.toHaveProperty('project_id');
+    });
+
+    it('moves the repository to another project', () => {
+      const onEditSubmit = renderEdit(inAlpha);
+      fireEvent.change(projectSelect(), { target: { value: 'p2' } });
+      save();
+      expect(onEditSubmit).toHaveBeenCalledWith('test-repo', expect.objectContaining({ project_id: 'p2' }));
+    });
+
+    it('takes the repository out of its project with an explicit null', () => {
+      const onEditSubmit = renderEdit(inAlpha);
+      fireEvent.change(projectSelect(), { target: { value: '__none__' } });
+      save();
+      expect(onEditSubmit.mock.calls[0][1].project_id).toBeNull();
+    });
+
+    it('puts an unassigned repository into a project', () => {
+      const onEditSubmit = renderEdit(mockEditRepo);
+      fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+      save();
+      expect(onEditSubmit.mock.calls[0][1].project_id).toBe('p1');
+    });
+
+    it('explains that moving changes access but not the key or URLs', () => {
+      renderEdit(inAlpha);
+      expect(screen.getByText(/The key and package-client URLs stay the same/)).toBeTruthy();
+    });
   });
 });
