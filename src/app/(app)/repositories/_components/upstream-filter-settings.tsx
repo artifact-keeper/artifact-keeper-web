@@ -10,6 +10,7 @@ import {
   upstreamFilterApi,
   type UpstreamFilter,
 } from "@/lib/api/upstream-filter";
+import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 import { mutationErrorToast } from "@/lib/error-utils";
 import type { Repository } from "@/types";
 
@@ -31,10 +32,24 @@ interface PatternListFieldProps {
   hint: string;
   value: string;
   disabled: boolean;
+  problem: string | null;
   onChange: (value: string) => void;
 }
 
-function PatternListField({ id, label, hint, value, disabled, onChange }: PatternListFieldProps) {
+/** The backend's limits per list (artifact-keeper `upstream_filter.rs`), checked before a PUT it would refuse */
+export const MAX_PATTERNS_PER_LIST = 64;
+export const MAX_PATTERN_BYTES = 512;
+
+export function patternListProblem(patterns: string[]): string | null {
+  if (patterns.length > MAX_PATTERNS_PER_LIST) {
+    return `At most ${MAX_PATTERNS_PER_LIST} patterns, this list has ${patterns.length}`;
+  }
+  const encoder = new TextEncoder();
+  const long = patterns.findIndex((p) => encoder.encode(p).length > MAX_PATTERN_BYTES);
+  return long === -1 ? null : `Pattern ${long + 1} is longer than ${MAX_PATTERN_BYTES} bytes`;
+}
+
+function PatternListField({ id, label, hint, value, disabled, problem, onChange }: PatternListFieldProps) {
   return (
     <div className="space-y-1">
       <Label htmlFor={id}>{label}</Label>
@@ -44,7 +59,8 @@ function PatternListField({ id, label, hint, value, disabled, onChange }: Patter
         rows={4}
         spellCheck={false}
         placeholder="One regular expression per line"
-        aria-describedby={`${id}-hint`}
+        aria-describedby={problem ? `${id}-hint ${id}-problem` : `${id}-hint`}
+        aria-invalid={problem !== null}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
@@ -52,6 +68,11 @@ function PatternListField({ id, label, hint, value, disabled, onChange }: Patter
       <p id={`${id}-hint`} className="text-xs text-muted-foreground">
         {hint}
       </p>
+      {problem && (
+        <p id={`${id}-problem`} className="text-xs text-destructive">
+          {problem}
+        </p>
+      )}
     </div>
   );
 }
@@ -65,7 +86,7 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
   const queryClient = useQueryClient();
   const queryKey = ["repository", repository.key, "upstream-filter"];
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey,
     queryFn: () => upstreamFilterApi.get(repository.key),
     retry: false,
@@ -78,6 +99,8 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
 
   const includePatterns = parsePatternLines(include);
   const excludePatterns = parsePatternLines(exclude);
+  const includeProblem = patternListProblem(includePatterns);
+  const excludeProblem = patternListProblem(excludePatterns);
   const dirty =
     synced !== null &&
     (asText(includePatterns) !== asText(synced.include_patterns) ||
@@ -119,6 +142,10 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
 
   const busy = saveMutation.isPending || clearMutation.isPending;
 
+  // A backend without the route (before 1.11.0) answers a bodyless 404, hide the section there like Upstream Mode
+  const status = error instanceof ApiError ? error.status : null;
+  if (status === 404 && !apiErrorMessage(error)) return null;
+
   return (
     <section aria-labelledby="settings-upstream-filter-heading">
       <div className="flex items-center gap-2 mb-2">
@@ -143,7 +170,9 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
         <Skeleton className="h-24 w-full" />
       ) : isError || !data ? (
         <p className="text-sm text-muted-foreground">
-          The upstream filter could not be loaded from this server.
+          {status === 403
+            ? `This session is not allowed to administer ${repository.key}, so its upstream filter cannot be read.`
+            : "The upstream filter could not be loaded from this server."}
         </p>
       ) : (
         <div className="space-y-4">
@@ -163,6 +192,7 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
               hint="When set, only paths matching one of them are fetched"
               value={include}
               disabled={busy}
+              problem={includeProblem}
               onChange={setInclude}
             />
             <PatternListField
@@ -171,11 +201,16 @@ export function UpstreamFilterSettings({ repository }: UpstreamFilterSettingsPro
               hint="Paths matching any of them are never fetched"
               value={exclude}
               disabled={busy}
+              problem={excludeProblem}
               onChange={setExclude}
             />
           </div>
           <div className="flex gap-2">
-            <Button size="sm" disabled={busy || !dirty} onClick={() => saveMutation.mutate()}>
+            <Button
+              size="sm"
+              disabled={busy || !dirty || includeProblem !== null || excludeProblem !== null}
+              onClick={() => saveMutation.mutate()}
+            >
               {saveMutation.isPending && <Loader2 className="size-4 animate-spin" />}
               Save
             </Button>
