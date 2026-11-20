@@ -205,3 +205,52 @@ describe("LoginPage SSO button label (#351)", () => {
     expect(screen.queryByText("Sign in with Default")).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1153: the button navigates only to a same-origin login_url
+// ---------------------------------------------------------------------------
+
+describe("LoginPage SSO login_url origin check (#1153)", () => {
+  const realLocation = window.location;
+  let fakeLocation: { origin: string; href: string };
+
+  beforeEach(() => {
+    mockListProviders.mockReset();
+    fakeLocation = { origin: "https://registry.example.com", href: "https://registry.example.com/login" };
+    Object.defineProperty(window, "location", { configurable: true, value: fakeLocation });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    Object.defineProperty(window, "location", { configurable: true, value: realLocation });
+    vi.restoreAllMocks();
+  });
+
+  async function clickProvider(loginUrl: string): Promise<string> {
+    mockListProviders.mockResolvedValue([
+      makeProvider({ provider_type: "oidc", name: "Okta", login_url: loginUrl }),
+    ]);
+    await renderAndWaitForProviders();
+    const button = await screen.findByText(/Okta/);
+    await act(async () => {
+      button.closest("button")!.click();
+    });
+    return fakeLocation.href;
+  }
+
+  it("navigates to a same-origin path", async () => {
+    expect(await clickProvider("/api/v1/auth/sso/oidc/1/login")).toBe(
+      "/api/v1/auth/sso/oidc/1/login"
+    );
+  });
+
+  it.each([
+    "//attacker.example/login",
+    "/\\attacker.example/login",
+    "https://other.example/login",
+    "javascript:alert(1)",
+  ])("ignores %s", async (loginUrl) => {
+    expect(await clickProvider(loginUrl)).toBe("https://registry.example.com/login");
+  });
+});

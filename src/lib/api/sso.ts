@@ -52,6 +52,7 @@ import type {
 } from '@/types/sso';
 import { assertData, narrowEnum } from '@/lib/api/fetch';
 import { unwrap } from '@/lib/sdk-utils';
+import { unwrapSignIn } from '@/lib/sign-in-guards';
 import { totpChallengeToken } from '@/lib/totp-challenge';
 
 type SsoProviderType = 'oidc' | 'ldap' | 'saml';
@@ -330,7 +331,7 @@ export const ssoApi = {
     username: string,
     password: string,
   ): Promise<LdapLoginResult> => {
-    const data = await unwrap(sdkLdapLogin({
+    const data = await unwrapSignIn(sdkLdapLogin({
       path: { id: providerId },
       body: { username, password },
     }));

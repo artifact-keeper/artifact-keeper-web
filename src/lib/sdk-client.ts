@@ -216,7 +216,16 @@ export function refreshSession(): Promise<boolean> {
  * always local.
  */
 export async function localSessionExpired(): Promise<boolean> {
-  if (!isRemoteInstance()) return true;
+  return (await localSessionState()) === 'expired';
+}
+
+/**
+ * The local session as `GET /api/v1/instances` sees it: `expired` on a 401,
+ * `valid` on a 2xx, `unknown` otherwise (unreachable, 5xx). Without a remote
+ * instance active it is reported `expired` so a 401 is always refreshed.
+ */
+export async function localSessionState(): Promise<'expired' | 'valid' | 'unknown'> {
+  if (!isRemoteInstance()) return 'expired';
   try {
     // The remote-instance registry is local-only and needs the local session.
     // A plain fetch, so the 401 interceptor does not refresh on its own.
@@ -224,9 +233,31 @@ export async function localSessionExpired(): Promise<boolean> {
       headers: { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE },
       credentials: 'include',
     });
-    return res.status === 401;
+    if (res.status === 401) return 'expired';
+    return res.ok ? 'valid' : 'unknown';
   } catch {
     // Unreachable: a refresh would fail the same way.
+    return 'unknown';
+  }
+}
+
+/**
+ * Window event fired when the active remote instance answered 401 while the
+ * local session is still valid: the remote refused its stored API key
+ * (#1227). The shell listens for it to say so instead of looking signed out.
+ */
+export const REMOTE_KEY_REJECTED_EVENT = 'ak:remote-key-rejected';
+
+export function notifyRemoteKeyRejected(): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  window.dispatchEvent(new Event(REMOTE_KEY_REJECTED_EVENT));
+}
+
+/** Whether a request URL went through the remote-instance proxy. */
+function isProxiedRequest(url: string): boolean {
+  try {
+    return /\/api\/v1\/instances\/[^/]+\/proxy(\/|$)/.test(new URL(url).pathname);
+  } catch {
     return false;
   }
 }
@@ -265,10 +296,6 @@ client.interceptors.response.use(async (response, request) => {
   }
 
   // --- 401 token refresh ---
-  // With a remote instance active a 401 usually means the local session
-  // behind the proxy expired, so it is refreshed the same way. If the remote
-  // itself refused the stored API key, the single retry gets the same 401
-  // and it is returned unchanged.
   if (response.status !== 401 || typeof window === 'undefined') return response;
 
   const url = request.url;
@@ -277,6 +304,19 @@ client.interceptors.response.use(async (response, request) => {
     url.includes('/auth/refresh') ||
     url.includes('/auth/login');
   if (isAuthEndpoint) return response;
+
+  // A 401 relayed through the remote-instance proxy comes either from this
+  // backend (the local session expired) or from the remote refusing its
+  // stored API key. Refresh only in the first case; in the second, refreshing
+  // would rotate the local session on every remote request and then send a
+  // signed-in user to /login (#1227).
+  if (isProxiedRequest(url)) {
+    const local = await localSessionState();
+    if (local !== 'expired') {
+      if (local === 'valid') notifyRemoteKeyRejected();
+      return response;
+    }
+  }
 
   if (isRefreshing) {
     // Another request is already refreshing -- wait for it, then retry

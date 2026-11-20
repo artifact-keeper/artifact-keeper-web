@@ -20,6 +20,19 @@ test.describe('Authentication', () => {
     await expect(page.getByText(/invalid|incorrect|failed|error/i)).toBeVisible({ timeout: 5000 });
   });
 
+  test('an unknown user and a wrong password show the same message (#1153)', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const message = page.getByText('Invalid username or password', { exact: true });
+
+    await loginPage.goto();
+    await loginPage.login(`no-such-user-${Date.now()}`, 'whatever-password');
+    await expect(message).toBeVisible({ timeout: 5000 });
+
+    await loginPage.goto();
+    await loginPage.login('admin', 'definitely-the-wrong-password');
+    await expect(message).toBeVisible({ timeout: 5000 });
+  });
+
   test('successful login redirects to dashboard', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();

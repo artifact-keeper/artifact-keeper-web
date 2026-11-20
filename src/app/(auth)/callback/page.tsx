@@ -44,13 +44,27 @@ function isSsoBrowserMismatch(status: number, body: unknown): boolean {
   return typeof message === "string" && message.startsWith(SSO_BROWSER_MISMATCH_PREFIX);
 }
 
+function scrubCodeFromLocation(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("code")) return;
+  url.searchParams.delete("code");
+  window.history.replaceState(
+    window.history.state,
+    "",
+    url.pathname + url.search + url.hash
+  );
+}
+
 function CallbackHandler() {
   useDocumentTitle("Signing In");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshUser, beginTotpChallenge } = useAuth();
 
-  const code = searchParams.get("code");
+  // Captured once: the effect below scrubs `code` from the URL (#1153), and
+  // Next.js syncs `history.replaceState` into `useSearchParams`, so reading it
+  // live would flip to "no code received" mid-exchange.
+  const [code] = useState(() => searchParams.get("code"));
   const urlError = searchParams.get("error");
   // Set by the backend when a silent (`prompt=none`) check-sso probe found no
   // live IdP session. That is the EXPECTED outcome for an anonymous visitor:
@@ -71,6 +85,12 @@ function CallbackHandler() {
   const [error, setError] = useState<string | null>(immediateError);
 
   useEffect(() => {
+    // #1153: the code is single use; drop it from the address bar and history
+    // before anything else runs, so no outcome (success, refused exchange,
+    // network failure) leaves `/callback?code=...` behind. Other params
+    // (`error`, `silent_denied`) are kept.
+    scrubCodeFromLocation();
+
     if (silentDenied) {
       // Remain anonymous: record the attempt (belt-and-braces — the probe
       // initiator already recorded it before navigating) and put the visitor

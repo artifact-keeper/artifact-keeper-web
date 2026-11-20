@@ -13,7 +13,10 @@ import React from "react";
  * sign-in path.
  */
 
-vi.mock("@/lib/sdk-client", () => ({}));
+vi.mock("@/lib/sdk-client", () => ({
+  REMOTE_KEY_REJECTED_EVENT: "ak:remote-key-rejected",
+  notifyRemoteKeyRejected: () => {},
+}));
 
 const mockSdkLogin = vi.fn();
 const mockSdkLogout = vi.fn();
