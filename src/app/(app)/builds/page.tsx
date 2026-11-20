@@ -57,7 +57,12 @@ import {
 } from "@/components/ui/dialog";
 import { buildsApi } from "@/lib/api/builds";
 import { adminApi } from "@/lib/api/admin";
-import { backendAtLeast, BUILD_DELETE_MIN } from "@/lib/backend-version";
+import {
+  backendAtLeast,
+  BUILD_DELETE_MIN,
+  BUILD_FILTERS_MIN,
+} from "@/lib/backend-version";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { apiErrorMessage } from "@/lib/api/fetch";
 import { formatBytes } from "@/lib/utils";
 import type {
@@ -544,9 +549,13 @@ export default function BuildsPage() {
     staleTime: 5 * 60 * 1000,
   });
   const canDelete = backendAtLeast(health?.version, BUILD_DELETE_MIN);
+  // Older backends ignore these params and return every build
+  const canFilter = backendAtLeast(health?.version, BUILD_FILTERS_MIN);
+  const queryFilters = useDebouncedValue(filters, 300);
+  const activeFilters = canFilter ? buildFilterParams(queryFilters) : {};
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // A selection belongs to the rows on screen, so a new page, sort or filter drops it
-  const selectionScope = [search, statusFilter, sortBy, page, pageSize].join("|");
+  const selectionScope = JSON.stringify([search, statusFilter, sortBy, page, pageSize, activeFilters]);
   const [checkedScope, setCheckedScope] = useState(selectionScope);
   if (checkedScope !== selectionScope) {
     setCheckedScope(selectionScope);
@@ -568,18 +577,18 @@ export default function BuildsPage() {
     },
   });
 
-  const toggleChecked = useCallback((id: string, on: boolean) => {
+  const toggleChecked = (id: string, on: boolean) => {
     setChecked((prev) => {
       const next = new Set(prev);
       if (on) next.add(id);
       else next.delete(id);
       return next;
     });
-  }, []);
+  };
 
   // Fetch builds
   const { data: buildsData, isLoading } = useQuery({
-    queryKey: ["builds", search, statusFilter, sortBy, page, pageSize, filters],
+    queryKey: ["builds", search, statusFilter, sortBy, page, pageSize, activeFilters],
     queryFn: () =>
       buildsApi.list({
         page,
@@ -588,7 +597,7 @@ export default function BuildsPage() {
         status: statusFilter || undefined,
         sort_by: sortBy,
         sort_order: "desc",
-        ...buildFilterParams(filters),
+        ...activeFilters,
       }),
   });
 
@@ -650,7 +659,9 @@ export default function BuildsPage() {
   }, []);
 
   const hasFilters =
-    search || statusFilter || Object.values(filters).some((v) => v !== "");
+    search ||
+    statusFilter ||
+    (canFilter && Object.values(filters).some((v) => v !== ""));
 
   return (
     <div className="space-y-6">
@@ -745,34 +756,38 @@ export default function BuildsPage() {
               </SelectContent>
             </Select>
 
-            <Input
-              aria-label="Branch"
-              placeholder="Branch"
-              value={filters.branch}
-              onChange={(e) => setFilter("branch", e.target.value)}
-              className="w-[140px]"
-            />
-            <Input
-              aria-label="Agent"
-              placeholder="Agent"
-              value={filters.agent}
-              onChange={(e) => setFilter("agent", e.target.value)}
-              className="w-[140px]"
-            />
-            <Input
-              type="date"
-              aria-label="Created from"
-              value={filters.from}
-              onChange={(e) => setFilter("from", e.target.value)}
-              className="w-[150px]"
-            />
-            <Input
-              type="date"
-              aria-label="Created to"
-              value={filters.to}
-              onChange={(e) => setFilter("to", e.target.value)}
-              className="w-[150px]"
-            />
+            {canFilter && (
+              <>
+                <Input
+                  aria-label="Branch"
+                  placeholder="Branch"
+                  value={filters.branch}
+                  onChange={(e) => setFilter("branch", e.target.value)}
+                  className="w-[140px]"
+                />
+                <Input
+                  aria-label="Agent"
+                  placeholder="Agent"
+                  value={filters.agent}
+                  onChange={(e) => setFilter("agent", e.target.value)}
+                  className="w-[140px]"
+                />
+                <Input
+                  type="date"
+                  aria-label="Created from"
+                  value={filters.from}
+                  onChange={(e) => setFilter("from", e.target.value)}
+                  className="w-[150px]"
+                />
+                <Input
+                  type="date"
+                  aria-label="Created to"
+                  value={filters.to}
+                  onChange={(e) => setFilter("to", e.target.value)}
+                  className="w-[150px]"
+                />
+              </>
+            )}
 
             {hasFilters && (
               <Button
