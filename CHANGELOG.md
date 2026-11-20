@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-11-20
+
+A patch on 1.12.0: sign-in hardening, remote-instance 401 handling and clearer login errors.
+
 ### Fixed
 
 - **A remote instance's 401 no longer refreshes the local session, and a rejected key says so** (#1227) - With a remote instance active, a 401 relayed through the proxy on any request now first asks the local `GET /api/v1/instances` whether the local session expired, as #1223 did for the first `/auth/me` load. Only then is the local session refreshed; otherwise the 401 is returned as is, with no refresh and no trip to /login. When the local session is valid, a banner says the remote instance rejected its API key and offers a switch back to Local, instead of the shell just looking signed out.
