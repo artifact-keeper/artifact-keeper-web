@@ -56,6 +56,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildsApi } from "@/lib/api/builds";
+import { adminApi } from "@/lib/api/admin";
+import { backendAtLeast, BUILD_DELETE_MIN } from "@/lib/backend-version";
 import { apiErrorMessage } from "@/lib/api/fetch";
 import { formatBytes } from "@/lib/utils";
 import type {
@@ -513,7 +515,13 @@ export default function BuildsPage() {
   const [compareBuildB, setCompareBuildB] = useState<string | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
 
-  // Rows checked for delete
+  // Rows checked for delete, offered only where the backend has bulk delete
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const canDelete = backendAtLeast(health?.version, BUILD_DELETE_MIN);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -629,7 +637,7 @@ export default function BuildsPage() {
             Exit comparison
           </Button>
         )}
-        {!comparisonMode && checked.size > 0 && (
+        {canDelete && !comparisonMode && checked.size > 0 && (
           <Button
             variant="destructive"
             size="sm"
@@ -742,7 +750,7 @@ export default function BuildsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {!comparisonMode && (
+                  {canDelete && !comparisonMode && (
                     <TableHead className="w-10">
                       <Checkbox
                         aria-label="Select all builds on this page"
@@ -780,7 +788,7 @@ export default function BuildsPage() {
                       }`}
                       onClick={() => handleRowClick(build)}
                     >
-                      {!comparisonMode && (
+                      {canDelete && !comparisonMode && (
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             aria-label={`Select ${build.name} #${build.number}`}
