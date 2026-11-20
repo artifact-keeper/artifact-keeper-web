@@ -110,6 +110,17 @@ describe("downloadsApi", () => {
     expect(mod.buildDownloadsQueryString({})).toBe("");
   });
 
+  it("sends downloader=anonymous|authenticated and drops all (#1036)", async () => {
+    const mod = await import("../downloads");
+    expect(mod.buildDownloadsQueryString({ downloader: "anonymous" })).toBe(
+      "?downloader=anonymous"
+    );
+    expect(mod.buildDownloadsQueryString({ downloader: "authenticated" })).toBe(
+      "?downloader=authenticated"
+    );
+    expect(mod.buildDownloadsQueryString({ downloader: "all" })).toBe("");
+  });
+
   it("clamps per_page to the backend max and floors page at 1", async () => {
     const mod = await import("../downloads");
     const qs = new URLSearchParams(

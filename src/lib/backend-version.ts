@@ -88,3 +88,10 @@ export const RECORD_ONLY_MIN = "1.11.0";
  * Earlier backends answer 404, so every entry point is hidden on them.
  */
 export const EXCEPTIONS_MIN = "1.13.0";
+
+/**
+ * Backend release whose downloads listing filters on
+ * `downloader=anonymous|authenticated` (artifact-keeper#4935). 1.11.x
+ * ignores the parameter and returns every download
+ */
+export const DOWNLOADER_FILTER_MIN = "1.12.0";
