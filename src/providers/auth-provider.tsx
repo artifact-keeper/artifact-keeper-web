@@ -34,6 +34,7 @@ import type {
 } from '@artifact-keeper/sdk';
 import type { User, LoginResponse } from "@/types";
 import { unwrap } from "@/lib/sdk-utils";
+import { unwrapSignIn } from "@/lib/sign-in-guards";
 import { clearSilentSsoAttempt } from "@/lib/silent-sso";
 import { SYSTEM_CONFIG_QUERY_KEY } from "./system-config-provider";
 
@@ -180,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string): Promise<boolean | "totp"> => {
       const body: LoginRequest = { username, password };
-      const data = await unwrap(sdkLogin({ body }));
+      const data = await unwrapSignIn(sdkLogin({ body }));
       const loginData = data as unknown as SdkLoginResponse;
 
       if (loginData.totp_required && loginData.totp_token) {
