@@ -7,7 +7,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Repository } from "@/types";
 
 const mockApiFetch = vi.fn();
-vi.mock("@/lib/api/fetch", () => ({
+vi.mock("@/lib/api/fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/fetch")>()),
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }));
 
@@ -19,7 +20,8 @@ vi.mock("sonner", () => ({
   toast: { success: mockToastSuccess, error: mockToastError },
 }));
 
-import { UpstreamFilterSettings } from "./upstream-filter-settings";
+import { ApiError } from "@/lib/api/fetch";
+import { UpstreamFilterSettings, patternListProblem } from "./upstream-filter-settings";
 import { adaptUpstreamFilter, parsePatternLines } from "@/lib/api/upstream-filter";
 
 afterEach(() => cleanup());
@@ -138,6 +140,46 @@ describe("UpstreamFilterSettings (#1034)", () => {
     expect(screen.getByRole("button", { name: "Clear" })).toBeEnabled();
   });
 
+  it("hides the section on a backend without the route (bodyless 404)", async () => {
+    mockApiFetch.mockRejectedValue(new ApiError(404, ""));
+    const { container } = show();
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it("names the repository when the session may not administer it (403)", async () => {
+    mockApiFetch.mockRejectedValue(
+      new ApiError(403, JSON.stringify({ code: "FORBIDDEN", message: "Repository admin required" }))
+    );
+    show();
+    expect(
+      await screen.findByText(/not allowed to administer npm-proxy/i)
+    ).toBeInTheDocument();
+  });
+
+  it("refuses more patterns or longer ones than the backend accepts, before sending", async () => {
+    routeApi(NONE);
+    show();
+
+    const include = await screen.findByLabelText("Include patterns");
+    fireEvent.change(include, {
+      target: { value: Array.from({ length: 65 }, (_, i) => `^p${i}`).join("\n") },
+    });
+    expect(include).toHaveAccessibleDescription(/at most 64 patterns, this list has 65/i);
+    expect(include).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    fireEvent.change(include, { target: { value: "^ok" } });
+    fireEvent.change(screen.getByLabelText("Exclude patterns"), {
+      target: { value: `^ok\n${"é".repeat(257)}` },
+    });
+    expect(screen.getByLabelText("Exclude patterns")).toHaveAccessibleDescription(
+      /pattern 2 is longer than 512 bytes/i
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(mockApiFetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
   it("says so when the filter cannot be loaded", async () => {
     mockApiFetch.mockRejectedValue(new Error("403"));
     show();
@@ -157,6 +199,11 @@ describe("upstream filter helpers", () => {
       active: false,
       error: undefined,
     });
+  });
+
+  it("accepts exactly the backend's limits", () => {
+    expect(patternListProblem(Array.from({ length: 64 }, () => "a".repeat(512)))).toBeNull();
+    expect(patternListProblem([])).toBeNull();
   });
 
   it("reads one pattern per non-empty line", () => {
