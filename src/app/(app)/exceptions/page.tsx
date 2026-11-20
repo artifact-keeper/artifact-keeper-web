@@ -716,6 +716,7 @@ function ExceptionsQueue() {
                           configured, as the Age Gate page did (#701). */}
                       <Link
                         href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=settings`}
+                        aria-label={`${r.repositoryKey} settings`}
                         title={`Settings for ${r.repositoryKey}`}
                       >
                         <Badge variant="outline">{r.repositoryKey}</Badge>
@@ -730,6 +731,8 @@ function ExceptionsQueue() {
                       {r.gate === "scan" ? (
                         <Link
                           href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=security`}
+                          // A links list has no row context, so the name carries the repository
+                          aria-label={`${GATE_LABEL.scan}: scan findings for ${r.repositoryKey}`}
                           title={`${GATE_HELP.scan} Opens the scan findings for ${r.repositoryKey}.`}
                         >
                           <Badge
