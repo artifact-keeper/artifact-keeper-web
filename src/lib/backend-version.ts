@@ -98,7 +98,7 @@ export const BUILD_DELETE_MIN = "1.13.0";
 
 /**
  * Backend release whose downloads listing filters on
- * `downloader=anonymous|authenticated` (artifact-keeper#4935). 1.11.12 and
- * earlier ignore the parameter and return every download
+ * `downloader=anonymous|authenticated` (artifact-keeper#4935). 1.11.x
+ * ignores the parameter and returns every download
  */
 export const DOWNLOADER_FILTER_MIN = "1.12.0";
