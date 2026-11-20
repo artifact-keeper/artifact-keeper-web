@@ -219,3 +219,20 @@ export function formatQuarantineExpiry(quarantineUntil: string | null | undefine
     day: "numeric",
   })}`;
 }
+
+/**
+ * The digest to bind an admin action to (`expected_digest`, #1238): for an
+ * OCI manifest row (`v2/<name>/manifests/<ref>`, the shape the backend binds
+ * on), `sha256:` plus the row's checksum as the page loaded it. `undefined`
+ * for any other row or a checksum that is not 64 hex characters, so the
+ * request is exactly what it was before.
+ */
+export function ociExpectedDigest(artifact: {
+  path?: string | null;
+  checksum_sha256?: string | null;
+}): string | undefined {
+  const path = artifact.path ?? '';
+  if (!/^v2\/.+\/manifests\/[^/]+$/.test(path)) return undefined;
+  const hex = artifact.checksum_sha256?.trim().toLowerCase() ?? '';
+  return /^[0-9a-f]{64}$/.test(hex) ? `sha256:${hex}` : undefined;
+}

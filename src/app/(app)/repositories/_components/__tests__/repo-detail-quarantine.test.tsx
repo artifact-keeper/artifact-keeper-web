@@ -118,8 +118,10 @@ vi.mock("@/providers/system-config-provider", () => ({
 
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockToastWarning = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
+    warning: (...a: unknown[]) => mockToastWarning(...a),
     success: (...a: unknown[]) => mockToastSuccess(...a),
     error: (...a: unknown[]) => mockToastError(...a),
   },
@@ -423,7 +425,7 @@ describe("artifact detail dialog — release and reject", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
-    await waitFor(() => expect(quarantineApiMock.release).toHaveBeenCalledWith("a1"));
+    await waitFor(() => expect(quarantineApiMock.release).toHaveBeenCalledWith("a1", undefined));
     await waitFor(() =>
       expect(mockInvalidate).toHaveBeenCalledWith({ queryKey: ["artifacts", "demo"] }),
     );
@@ -467,7 +469,7 @@ describe("artifact detail dialog — release and reject", () => {
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
-      expect(quarantineApiMock.reject).toHaveBeenCalledWith("a1", "Confirmed malware"),
+      expect(quarantineApiMock.reject).toHaveBeenCalledWith("a1", "Confirmed malware", undefined),
     );
   });
 
@@ -484,7 +486,7 @@ describe("artifact detail dialog — release and reject", () => {
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
-      expect(quarantineApiMock.reject).toHaveBeenCalledWith("a1", undefined),
+      expect(quarantineApiMock.reject).toHaveBeenCalledWith("a1", undefined, undefined),
     );
   });
 
@@ -520,6 +522,74 @@ describe("artifact detail dialog — release and reject", () => {
 
     await waitFor(() => expect(mockToastError).toHaveBeenCalled());
     expect(mockToastSuccess).not.toHaveBeenCalled();
+    expect(screen.getByText("This artifact is quarantined")).toBeInTheDocument();
+  });
+});
+
+// #1238: an action on an OCI manifest row is bound to the digest reviewed.
+describe("artifact detail dialog — expected_digest on OCI manifest rows", () => {
+  const HEX = "d".repeat(64);
+  const OCI_HELD = {
+    ...HELD,
+    path: "v2/team/app/manifests/latest",
+    checksum_sha256: HEX,
+  };
+
+  it("sends sha256:<checksum> with a release of an OCI manifest row", async () => {
+    artifactRow = OCI_HELD;
+    quarantineApiMock.release.mockResolvedValue({ artifact_id: "a1", new_status: "released", message: "ok" });
+    await openDetailDialog();
+    await userEvent.click(screen.getByRole("button", { name: "Release" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() =>
+      expect(quarantineApiMock.release).toHaveBeenCalledWith("a1", `sha256:${HEX}`),
+    );
+  });
+
+  it("sends it with a rejection too", async () => {
+    artifactRow = OCI_HELD;
+    quarantineApiMock.reject.mockResolvedValue({ artifact_id: "a1", new_status: "rejected", message: "ok" });
+    await openDetailDialog();
+    await userEvent.click(screen.getByRole("button", { name: "Reject" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() =>
+      expect(quarantineApiMock.reject).toHaveBeenCalledWith("a1", undefined, `sha256:${HEX}`),
+    );
+  });
+
+  it("sends no digest for a non-OCI row", async () => {
+    artifactRow = HELD;
+    quarantineApiMock.release.mockResolvedValue({ artifact_id: "a1", new_status: "released", message: "ok" });
+    await openDetailDialog();
+    await userEvent.click(screen.getByRole("button", { name: "Release" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() =>
+      expect(quarantineApiMock.release).toHaveBeenCalledWith("a1", undefined),
+    );
+  });
+
+  it("names held_digest and moved_to_digest when the tag moved, and leaves the row held", async () => {
+    artifactRow = OCI_HELD;
+    const moved = `sha256:${"e".repeat(64)}`;
+    quarantineApiMock.release.mockResolvedValue({
+      artifact_id: "a1",
+      new_status: "released",
+      message: "The tag moved",
+      held_artifact_id: "a0",
+      held_digest: `sha256:${HEX}`,
+      moved_to_digest: moved,
+    });
+    await openDetailDialog();
+    await userEvent.click(screen.getByRole("button", { name: "Release" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(mockToastWarning).toHaveBeenCalled());
+    const msg = mockToastWarning.mock.calls[0][0] as string;
+    expect(msg).toContain(moved);
+    expect(msg).toContain(`sha256:${HEX}`);
+    expect(msg).toMatch(/was released; the new image was not changed/);
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+    expect(mockInvalidate).toHaveBeenCalledWith({ queryKey: ["quarantine-status", "a1"] });
+    // The row now names the new image, still held: the banner stays.
     expect(screen.getByText("This artifact is quarantined")).toBeInTheDocument();
   });
 });
