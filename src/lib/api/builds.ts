@@ -15,11 +15,11 @@ import type {
   UpdateBuildRequest as SdkUpdateBuildRequest,
 } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
-import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
-export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
-import type { Build, BuildStatus, BuildDiff, BuildModule } from '@/types/builds';
+export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff, BuildDeleteResult } from '@/types/builds';
+import type { Build, BuildStatus, BuildDiff, BuildModule, BuildDeleteResult } from '@/types/builds';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListBuildsParams {
@@ -30,6 +30,9 @@ export interface ListBuildsParams {
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
 }
+
+/** Most ids `POST /api/v1/builds/delete` takes at once */
+const BULK_DELETE_MAX = 100;
 
 const BUILD_STATUSES = new Set<BuildStatus>([
   'pending',
@@ -140,6 +143,20 @@ export const buildsApi = {
     };
     const data = await unwrap(sdkUpdateBuild({ path: { id: buildId }, body }));
     return adaptBuild(assertData(data, 'buildsApi.updateStatus'));
+  },
+
+  /** Delete build records (not the artifacts they name), 100 ids per request */
+  deleteMany: async (ids: string[]): Promise<BuildDeleteResult> => {
+    const result: BuildDeleteResult = { deleted: [], failed: [] };
+    for (let i = 0; i < ids.length; i += BULK_DELETE_MAX) {
+      const part = await apiFetch<BuildDeleteResult>('/api/v1/builds/delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: ids.slice(i, i + BULK_DELETE_MAX) }),
+      });
+      result.deleted.push(...part.deleted);
+      result.failed.push(...part.failed);
+    }
+    return result;
   },
 
   diff: async (buildIdA: string, buildIdB: string): Promise<BuildDiff> => {

@@ -88,3 +88,10 @@ export const RECORD_ONLY_MIN = "1.11.0";
  * Earlier backends answer 404, so every entry point is hidden on them.
  */
 export const EXCEPTIONS_MIN = "1.13.0";
+
+/**
+ * Backend release with bulk build delete (`POST /api/v1/builds/delete`,
+ * artifact-keeper#6119). Earlier backends answer 405, so the Builds page
+ * hides the row checkboxes and the delete button.
+ */
+export const BUILD_DELETE_MIN = "1.13.0";

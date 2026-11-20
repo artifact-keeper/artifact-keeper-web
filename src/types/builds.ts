@@ -49,3 +49,14 @@ export interface BuildDiff {
   removed: BuildArtifact[];
   modified: BuildArtifactDiff[];
 }
+
+export interface BuildDeleteFailure {
+  id: string;
+  /** `not_found` or `forbidden` */
+  reason: string;
+}
+
+export interface BuildDeleteResult {
+  deleted: string[];
+  failed: BuildDeleteFailure[];
+}
