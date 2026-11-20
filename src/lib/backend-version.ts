@@ -95,3 +95,11 @@ export const EXCEPTIONS_MIN = "1.13.0";
  * hides the row checkboxes and the delete button.
  */
 export const BUILD_DELETE_MIN = "1.13.0";
+
+/**
+ * Backend release whose build list takes `branch`, `agent`,
+ * `created_after` and `created_before` (artifact-keeper#6123). Earlier
+ * backends drop them and return every build, so the Builds page hides those
+ * filters.
+ */
+export const BUILD_FILTERS_MIN = "1.13.0";
