@@ -523,6 +523,13 @@ export default function BuildsPage() {
   });
   const canDelete = backendAtLeast(health?.version, BUILD_DELETE_MIN);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // A selection belongs to the rows on screen, so a new page, sort or filter drops it
+  const selectionScope = [search, statusFilter, sortBy, page, pageSize].join("|");
+  const [checkedScope, setCheckedScope] = useState(selectionScope);
+  if (checkedScope !== selectionScope) {
+    setCheckedScope(selectionScope);
+    setChecked(new Set());
+  }
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
   const deleteMutation = useMutation({
@@ -566,6 +573,10 @@ export default function BuildsPage() {
   const allOnPageChecked =
     builds.length > 0 && builds.every((b) => checked.has(b.id));
   const totalPages = buildsData?.pagination?.total_pages ?? 0;
+  // Deleting every row of the last page leaves it past the end, step back
+  if (buildsData && page > 1 && page > totalPages) {
+    setPage(Math.max(totalPages, 1));
+  }
   const totalBuilds = buildsData?.pagination?.total ?? 0;
 
   // Fetch build detail
