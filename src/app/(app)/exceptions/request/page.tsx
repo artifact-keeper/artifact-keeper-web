@@ -17,6 +17,7 @@ import { toUserMessage } from "@/lib/error-utils";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 
 import { MyExceptionRequests } from "@/components/exceptions/my-exception-requests";
+import { RequireExceptionsBackend } from "@/components/exceptions/require-exceptions-backend";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -246,7 +247,9 @@ export default function RequestExceptionPage() {
         </div>
       }
     >
-      <RequestExceptionForm />
+      <RequireExceptionsBackend>
+        <RequestExceptionForm />
+      </RequireExceptionsBackend>
     </Suspense>
   );
 }

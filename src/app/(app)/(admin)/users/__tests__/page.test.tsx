@@ -77,6 +77,29 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+// The exception queue needs backend 1.13.0 (EXCEPTIONS_MIN); tests default
+// to a backend that has it and the gate tests turn it off.
+const mockExceptionsSupported = vi.hoisted(() =>
+  vi.fn(() => ({ supported: true, isLoading: false })),
+);
+vi.mock("@/hooks/use-exceptions-supported", () => ({
+  useExceptionsSupported: () => mockExceptionsSupported(),
+}));
+beforeEach(() => {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: true,
+    isLoading: false,
+  }));
+});
+
+/** Drive the exception-queue gate from a `/health` version, as the hook does */
+function onBackend(version: string | undefined) {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: backendAtLeast(version, EXCEPTIONS_MIN),
+    isLoading: false,
+  }));
+}
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: any) => mockUseQuery(opts),
   useMutation: (opts: any) => mockUseMutation(opts),
@@ -455,6 +478,7 @@ function setupMocks(opts: {
 // ---------------------------------------------------------------------------
 
 import UsersPage from "../page";
+import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
 
 describe("UsersPage", () => {
   afterEach(() => cleanup());
@@ -2094,5 +2118,33 @@ describe("UsersPage security reviewer toggle", () => {
     render(<UsersPage />);
     expect(screen.queryByText("Security reviewer")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^Security reviewer:/)).not.toBeInTheDocument();
+  });
+
+  it.each([["1.12.1"], [undefined]])(
+    "has no reviewer column, and asks for none, on backend %s",
+    (version) => {
+      onBackend(version);
+      withReviewers({
+      users: [{ id: regularUser.id, username: "jdoe", display_name: null, is_active: true }],
+      groups: [],
+    });
+      render(<UsersPage />);
+      expect(screen.queryByText("Security reviewer")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Security reviewer:/)).not.toBeInTheDocument();
+      const asked = mockUseQuery.mock.calls.find(
+        ([q]: any[]) => q.queryKey[0] === "security-reviewers",
+      );
+      expect(asked?.[0].enabled).toBe(false);
+    },
+  );
+
+  it("shows the reviewer column on backend 1.13.0", () => {
+    onBackend("1.13.0");
+    withReviewers({
+      users: [{ id: regularUser.id, username: "jdoe", display_name: null, is_active: true }],
+      groups: [],
+    });
+    render(<UsersPage />);
+    expect(screen.getAllByLabelText(/^Security reviewer:/).length).toBeGreaterThan(0);
   });
 });

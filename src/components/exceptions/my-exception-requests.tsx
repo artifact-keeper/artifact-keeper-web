@@ -6,6 +6,7 @@ import { exceptionsApi, type PackageException } from "@/lib/api/exceptions";
 import { ApiError } from "@/lib/api/fetch";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useExceptionsSupported } from "@/hooks/use-exceptions-supported";
 
 /** Most recent requests shown, the backend sorts by last activity */
 const SHOWN = 20;
@@ -25,14 +26,19 @@ function outcome(r: PackageException): { label: string; detail: string | null } 
 
 /**
  * What became of the caller's own requests. Renders nothing on a backend
- * without the endpoint, or while there is nothing to show
+ * without the endpoint (older than `EXCEPTIONS_MIN`, where it is not even
+ * asked), or while there is nothing to show
  */
 export function MyExceptionRequests() {
+  const { supported } = useExceptionsSupported();
   const { data, error } = useQuery({
     queryKey: ["exceptions", "mine"],
     queryFn: () => exceptionsApi.mine({ perPage: SHOWN }),
+    enabled: supported,
     retry: false,
   });
+
+  if (!supported) return null;
 
   if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
     return null;

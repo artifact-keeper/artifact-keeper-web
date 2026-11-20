@@ -25,6 +25,7 @@ import { MaintenanceCard } from "@/components/settings/maintenance-card";
 import { TokenExpiryPolicyCard } from "@/components/settings/token-expiry-policy-card";
 import { BuildRetentionCard } from "@/components/settings/build-retention-card";
 import { ExceptionRequestLinkCard } from "@/components/settings/exception-request-link-card";
+import { useExceptionsSupported } from "@/hooks/use-exceptions-supported";
 import type { PasswordPolicy, StorageSettings } from "@/lib/api/settings";
 import { currentWebBuildLabel } from "@/lib/build-version";
 import { formatBytes } from "@/lib/utils";
@@ -188,6 +189,7 @@ function SmtpSettingsTab() {
 // -- page --
 
 export default function SettingsPage() {
+  const { supported: exceptionsSupported } = useExceptionsSupported();
   const { user } = useAuth();
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -420,7 +422,7 @@ export default function SettingsPage() {
 
         <TabsContent value="security" className="mt-4 space-y-4">
           <TokenExpiryPolicyCard />
-          <ExceptionRequestLinkCard />
+          {exceptionsSupported && <ExceptionRequestLinkCard />}
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">

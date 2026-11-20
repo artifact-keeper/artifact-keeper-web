@@ -24,6 +24,29 @@ interface MutationConfig {
 const mutationConfigs: MutationConfig[] = [];
 const mutateFns: Array<ReturnType<typeof vi.fn>> = [];
 
+// The exception queue needs backend 1.13.0 (EXCEPTIONS_MIN); tests default
+// to a backend that has it and the gate tests turn it off.
+const mockExceptionsSupported = vi.hoisted(() =>
+  vi.fn(() => ({ supported: true, isLoading: false })),
+);
+vi.mock("@/hooks/use-exceptions-supported", () => ({
+  useExceptionsSupported: () => mockExceptionsSupported(),
+}));
+beforeEach(() => {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: true,
+    isLoading: false,
+  }));
+});
+
+/** Drive the exception-queue gate from a `/health` version, as the hook does */
+function onBackend(version: string | undefined) {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: backendAtLeast(version, EXCEPTIONS_MIN),
+    isLoading: false,
+  }));
+}
+
 vi.mock("@tanstack/react-query", () => ({
   useMutation: (config: MutationConfig) => {
     mutationConfigs.push(config);
@@ -117,12 +140,14 @@ vi.mock("lucide-react", () => {
   return {
     HelpCircle: icon("help"),
     Loader2: icon("loader"),
+    ServerOff: icon("server-off"),
     CheckCircle2: icon("check"),
   };
 });
 
 import { ApiError } from "@/lib/api/fetch";
 import RequestExceptionPage from "./page";
+import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
 
 const lastMutate = () => mutateFns[mutateFns.length - 1];
 const fill = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -138,6 +163,28 @@ beforeEach(() => {
   search = new URLSearchParams();
 });
 afterEach(() => cleanup());
+
+describe("backend version gate", () => {
+  it.each([["1.12.1"], [undefined]])(
+    "says requests need backend 1.13.0, with no form, on backend %s",
+    (version) => {
+      onBackend(version);
+      render(<RequestExceptionPage />);
+      expect(
+        screen.getByText(/requires backend 1\.13\.0 or later/),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("my-requests")).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows the form on backend 1.13.0", () => {
+    onBackend("1.13.0");
+    render(<RequestExceptionPage />);
+    expect(screen.getByLabelText("Repository")).toBeInTheDocument();
+    expect(screen.queryByText(/requires backend/)).not.toBeInTheDocument();
+  });
+});
 
 describe("prefill from a refusal link", () => {
   it("starts empty, on the scan gate, with nothing to send", () => {

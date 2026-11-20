@@ -358,6 +358,43 @@ describe("AppSidebar", () => {
   });
 
   describe("package exceptions", () => {
+    // The queue needs backend 1.13.0 (EXCEPTIONS_MIN); the gate tests below
+    // override this.
+    beforeEach(() => {
+      mockUseQuery.mockReturnValue({ data: { version: "1.13.0" } });
+    });
+
+    it.each([
+      ["1.12.1", { version: "1.12.1" }],
+      ["a pre-release of 1.13.0", { version: "1.13.0-rc.1" }],
+      ["an unknown version", undefined],
+    ])("hides every exception entry on backend %s", (_label, health) => {
+      mockUseQuery.mockReturnValue({ data: health });
+      authState({
+        isAuthenticated: true,
+        isAdmin: true,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Request Exception")).toBeNull();
+      expect(screen.queryByText("Exceptions")).toBeNull();
+      // The rest of the admin Security group is unaffected.
+      expect(screen.getByText("Age Gate")).toBeDefined();
+    });
+
+    it("hides the non-admin reviewer's Security group on backend 1.12.1", () => {
+      mockUseQuery.mockReturnValue({ data: { version: "1.12.1" } });
+      authState({
+        isAuthenticated: true,
+        isAdmin: false,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Security")).toBeNull();
+      expect(screen.queryByText("Exceptions")).toBeNull();
+      expect(screen.queryByText("Request Exception")).toBeNull();
+    });
+
     it("offers the request form to every signed-in user, admin or not", () => {
       // Anyone can be blocked by a gate, so anyone can ask. The backend is
       // what bounds the write, not this entry.

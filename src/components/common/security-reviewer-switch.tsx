@@ -10,6 +10,7 @@ import {
   securityReviewersApi,
   type ReviewerKind,
 } from "@/lib/api/security-reviewers";
+import { useExceptionsSupported } from "@/hooks/use-exceptions-supported";
 
 const KEY = ["security-reviewers"];
 
@@ -54,14 +55,19 @@ function SecurityReviewerSwitch({
   );
 }
 
-/** The "Security reviewer" column for an admin table, none until the backend answers with the API */
+/**
+ * The "Security reviewer" column for an admin table, none until the backend
+ * answers with the API, and none (nor a request) on a backend older than
+ * `EXCEPTIONS_MIN`
+ */
 export function useSecurityReviewerColumn<T extends { id: string }>(
   kind: ReviewerKind,
   isAdmin: boolean,
   nameOf: (row: T) => string,
 ): DataTableColumn<T>[] {
-  const { data } = useSecurityReviewers(isAdmin);
-  if (!data) return [];
+  const { supported } = useExceptionsSupported();
+  const { data } = useSecurityReviewers(isAdmin && supported);
+  if (!supported || !data) return [];
   const granted: Array<{ id: string }> = data[kind];
   const ids = new Set(granted.map((r) => r.id));
   return [

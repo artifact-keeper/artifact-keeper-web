@@ -1,11 +1,14 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+import { backendAtLeast, EXCEPTIONS_MIN } from '../../../../src/lib/backend-version';
 
 /**
  * Request-and-grant, end to end: a user asks for a package a gate is
  * withholding, then a reviewer grants the exception from the queue.
  *
- * Skips wholesale on a backend that predates the exception queue, which is
- * what `/api/v1/exceptions/reviews` 404ing means. Vitest already covers the
+ * The UI offers the queue only when `/health` reports backend 1.13.0 or later
+ * (`EXCEPTIONS_MIN`), so the request-and-grant test skips unless both the
+ * route answers and the version clears the gate; the other test checks the
+ * notice shown when it does not. Vitest already covers the
  * rendering and the validation; what only a browser can prove is that the
  * form's fields reach the API and the row comes back on the queue.
  */
@@ -19,11 +22,20 @@ async function queueAvailable(request: APIRequestContext): Promise<boolean> {
   return probe.ok();
 }
 
+/** Whether the UI will offer the queue: the same gate the app applies */
+async function uiOffersQueue(request: APIRequestContext): Promise<boolean> {
+  // Read the version whatever the status: a degraded backend answers 503
+  // with the same body.
+  const health = await request.get('/health');
+  const body = (await health.json().catch(() => null)) as { version?: string } | null;
+  return backendAtLeast(body?.version, EXCEPTIONS_MIN);
+}
+
 test.describe('Package exceptions', () => {
   test('a user requests a package and a reviewer grants it', async ({ page, request }) => {
     test.skip(
-      !(await queueAvailable(request)),
-      'This backend has no package exception queue',
+      !(await queueAvailable(request)) || !(await uiOffersQueue(request)),
+      'This backend has no package exception queue, or reports a version below 1.13.0',
     );
 
     // --- ask ---------------------------------------------------------------
@@ -82,22 +94,23 @@ test.describe('Package exceptions', () => {
     await expect(granted).toContainText(/until /i);
   });
 
-  test('the queue says so plainly when the backend has no exception queue', async ({
+  test('the queue says so plainly when the backend is older than 1.13.0', async ({
     page,
     request,
   }) => {
     test.skip(
-      await queueAvailable(request),
-      'This backend has the exception queue, so the degraded path is unreachable',
+      await uiOffersQueue(request),
+      'This backend reports 1.13.0 or later, so the version notice is unreachable',
     );
 
     await page.goto('/exceptions');
     await page.waitForLoadState('domcontentloaded');
 
-    // Degrade, never crash: the page is reachable from the sidebar on any
-    // backend, so a missing endpoint has to read as a missing feature.
+    // Degrade, never crash: the sidebar hides the entry on such a backend,
+    // but a bookmark or a refusal link still lands here, so the page has to
+    // name the release it needs rather than call routes that 404.
     await expect(
-      page.getByText(/does not have the package exception queue/i),
+      page.getByText(/requires backend 1\.13\.0 or later/i),
     ).toBeVisible({ timeout: 10000 });
     expect(await page.textContent('body')).not.toContain('Application error');
   });

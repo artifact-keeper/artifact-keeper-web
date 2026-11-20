@@ -64,6 +64,7 @@ import {
 } from "@/components/auth/require-capability";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
+import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { backendSupportsMcp } from "@/lib/mcp/format";
 import {
@@ -215,9 +216,14 @@ export function AppSidebar() {
   // format (artifact-keeper#5253); an older one would show an empty page.
   const { data: formatHandlers } = useFormatHandlers();
   const mcpSupported = backendSupportsMcp(Array.isArray(formatHandlers) ? formatHandlers : undefined);
-  const visibleArtifactItems = mcpSupported
-    ? artifactItems
-    : artifactItems.filter((item) => item.href !== "/mcp-servers");
+  // The exception queue needs backend EXCEPTIONS_MIN (artifact-keeper#5782,
+  // #5783); an older one 404s every call, so its entries are hidden there.
+  const exceptionsSupported = backendAtLeast(health?.version, EXCEPTIONS_MIN);
+  const visibleArtifactItems = artifactItems.filter(
+    (item) =>
+      (mcpSupported || item.href !== "/mcp-servers") &&
+      (exceptionsSupported || item.href !== "/exceptions/request"),
+  );
 
   // For integration items, non-admin authenticated users don't see Migration
   const visibleIntegrationItems = isAdmin
@@ -238,6 +244,9 @@ export function AppSidebar() {
     }
     if (item.href === "/security/findings") {
       return canListFindings;
+    }
+    if (item.href === "/exceptions") {
+      return exceptionsSupported;
     }
     return true;
   });
@@ -285,7 +294,7 @@ export function AppSidebar() {
             pathname={pathname}
           />
         )}
-        {isReviewer && !isAdmin && (
+        {isReviewer && !isAdmin && exceptionsSupported && (
           <NavGroup
             label="Security"
             items={reviewerItems}

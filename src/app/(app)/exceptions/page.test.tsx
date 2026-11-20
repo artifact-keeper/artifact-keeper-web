@@ -39,6 +39,29 @@ let reviewersData: unknown = null;
 const disabledQueries = new Set<string>();
 const declaredQueries = new Set<string>();
 
+// The exception queue needs backend 1.13.0 (EXCEPTIONS_MIN); tests default
+// to a backend that has it and the gate tests turn it off.
+const mockExceptionsSupported = vi.hoisted(() =>
+  vi.fn(() => ({ supported: true, isLoading: false })),
+);
+vi.mock("@/hooks/use-exceptions-supported", () => ({
+  useExceptionsSupported: () => mockExceptionsSupported(),
+}));
+beforeEach(() => {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: true,
+    isLoading: false,
+  }));
+});
+
+/** Drive the exception-queue gate from a `/health` version, as the hook does */
+function onBackend(version: string | undefined) {
+  mockExceptionsSupported.mockImplementation(() => ({
+    supported: backendAtLeast(version, EXCEPTIONS_MIN),
+    isLoading: false,
+  }));
+}
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: {
     queryKey: unknown[];
@@ -203,12 +226,14 @@ vi.mock("lucide-react", () => {
     RefreshCw: icon("refresh"),
     AlertCircle: icon("alert-circle"),
     Loader2: icon("loader"),
+    ServerOff: icon("server-off"),
     Infinity: icon("infinity"),
   };
 });
 
 import { ApiError } from "@/lib/api/fetch";
 import ExceptionsPage from "./page";
+import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
 
 const ROW = {
   id: "ex1",
@@ -329,6 +354,39 @@ describe("capability gate", () => {
   it("renders the queue for an admin with no capability list", () => {
     render(<ExceptionsPage />);
     expect(screen.getByText("Package Exceptions")).toBeInTheDocument();
+  });
+});
+
+describe("backend version gate", () => {
+  it.each([["1.12.1"], [undefined]])(
+    "says the queue needs backend 1.13.0, and fetches nothing, on backend %s",
+    (version) => {
+      onBackend(version);
+      render(<ExceptionsPage />);
+      expect(
+        screen.getByText(/requires backend 1\.13\.0 or later/),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Package Exceptions")).not.toBeInTheDocument();
+      expect(declaredQueries.size).toBe(0);
+      expect(api.list).not.toHaveBeenCalled();
+    },
+  );
+
+  it("waits for /health rather than flashing the upgrade notice", () => {
+    mockExceptionsSupported.mockImplementation(() => ({
+      supported: false,
+      isLoading: true,
+    }));
+    render(<ExceptionsPage />);
+    expect(screen.queryByText(/requires backend/)).not.toBeInTheDocument();
+    expect(declaredQueries.size).toBe(0);
+  });
+
+  it("renders the queue on backend 1.13.0", () => {
+    onBackend("1.13.0");
+    render(<ExceptionsPage />);
+    expect(screen.getByText("Package Exceptions")).toBeInTheDocument();
+    expect(screen.queryByText(/requires backend/)).not.toBeInTheDocument();
   });
 });
 

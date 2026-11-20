@@ -26,6 +26,7 @@ import {
   RequireCapability,
   CAP_SECURITY_REVIEW,
 } from "@/components/auth/require-capability";
+import { RequireExceptionsBackend } from "@/components/exceptions/require-exceptions-backend";
 import { toUserMessage, isForbiddenError } from "@/lib/error-utils";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 import { useAuth } from "@/providers/auth-provider";
@@ -993,8 +994,10 @@ function ExceptionsQueue() {
 
 export default function ExceptionsPage() {
   return (
-    <RequireCapability capability={CAP_SECURITY_REVIEW}>
-      <ExceptionsQueue />
-    </RequireCapability>
+    <RequireExceptionsBackend>
+      <RequireCapability capability={CAP_SECURITY_REVIEW}>
+        <ExceptionsQueue />
+      </RequireCapability>
+    </RequireExceptionsBackend>
   );
 }
