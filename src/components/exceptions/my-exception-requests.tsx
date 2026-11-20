@@ -77,6 +77,11 @@ export function MyExceptionRequests() {
           );
         })}
       </ul>
+      {data.total > data.items.length && (
+        <p className="text-xs text-muted-foreground">
+          Your {data.items.length} most recent of {data.total} requests
+        </p>
+      )}
     </section>
   );
 }
