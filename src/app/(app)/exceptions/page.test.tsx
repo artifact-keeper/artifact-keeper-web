@@ -559,6 +559,25 @@ describe("filters", () => {
     expect(screen.getByText(/No gate-filed refusals match/i)).toBeInTheDocument();
   });
 
+  it("says the server has more rows when attempted-only hides every row it sent", async () => {
+    const user = userEvent.setup();
+    queueData = { data: { items: [ROW], total: 250 }, isLoading: false };
+    render(<ExceptionsPage />);
+    await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
+    expect(screen.getByText(/No gate-filed refusals match/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /first 1 of 250 rows were loaded, and all of them were asked for/,
+    );
+  });
+
+  it("does not mention unloaded rows when the server sent them all", async () => {
+    const user = userEvent.setup();
+    withRows(ROW);
+    render(<ExceptionsPage />);
+    await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("says plainly when nothing matches an unrestricted origin filter", async () => {
     const user = userEvent.setup();
     render(<ExceptionsPage />);
@@ -607,6 +626,18 @@ describe("row rendering", () => {
     expect(table().getByText("0.0.1")).toBeInTheDocument();
     expect(table().getByText("Scan gate")).toBeInTheDocument();
     expect(table().getByText(/the build needs it/)).toBeInTheDocument();
+  });
+
+  it("names a whole-package request as every version, not a bare asterisk", async () => {
+    const user = userEvent.setup();
+    withRows({ ...ROW, packageVersion: "*" });
+    render(<ExceptionsPage />);
+    expect(table().getByText("all versions")).toBeInTheDocument();
+    expect(table().queryByText("*")).not.toBeInTheDocument();
+    const dialog = await openDialog(user, /^Grant leftpad-clone \(all versions\)$/);
+    expect(
+      within(dialog).getByText("leftpad-clone (all versions) in npm-remote."),
+    ).toBeInTheDocument();
   });
 
   it("labels a row from a backend that sends no gate as unknown rather than guessing", () => {
