@@ -455,6 +455,74 @@ describe("DownloadsPage", () => {
     }
   });
 
+  it.each([
+    ["1.11.14", false],
+    ["1.12.0-rc.1", false],
+    [undefined, false],
+    ["dev", false],
+    ["1.12.0", true],
+    ["1.13.0", true],
+  ])("offers the downloader filter on backend %s: %s", (version, offered) => {
+    backendVersion = version as string;
+    queryState({
+      events: { data: page([]), ...IDLE },
+      sample: { data: page([{ ...EVENT, user_id: null, username: null }]), ...IDLE },
+    });
+
+    render(<DownloadsPage />);
+    expect(screen.queryByLabelText("Downloader") !== null).toBe(offered);
+    fireEvent.click(screen.getByRole("button", { name: /by user/i }));
+    expect(
+      screen.queryByRole("button", { name: /view anonymous downloads/i }) !== null
+    ).toBe(offered);
+  });
+
+  it("explains why User ID is disabled on Anonymous only", () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+
+    render(<DownloadsPage />);
+    expect(screen.getByLabelText(/user id/i)).not.toHaveAccessibleDescription(/no user/i);
+    fireEvent.change(screen.getByLabelText("Downloader"), {
+      target: { value: "anonymous" },
+    });
+    expect(screen.getByLabelText(/user id/i)).toHaveAccessibleDescription(
+      /anonymous downloads have no user/i
+    );
+  });
+
+  it("ignores and drops a hand-made ?downloader= value it does not know", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams("downloader=bogus&artifact_id=x");
+    try {
+      render(<DownloadsPage />);
+      await latestEventsQuery().queryFn();
+      expect(mockList.mock.calls[0][0].downloader).toBeUndefined();
+      expect(mockReplace).toHaveBeenLastCalledWith("?artifact_id=x", { scroll: false });
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it("drops Anonymous only when drilling into a signed-in user, which the backend would refuse", async () => {
+    queryState({
+      events: { data: page([]), ...IDLE },
+      sample: { data: page([EVENT]), ...IDLE },
+    });
+    mockSearch = new URLSearchParams("downloader=anonymous");
+    try {
+      render(<DownloadsPage />);
+      fireEvent.click(screen.getByRole("button", { name: /by user/i }));
+      fireEvent.click(screen.getByRole("button", { name: /view downloads by alice/i }));
+      await latestEventsQuery().queryFn();
+      expect(mockListByUser).toHaveBeenCalledWith(
+        USER_ID,
+        expect.objectContaining({ downloader: undefined })
+      );
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
   it("opens the anonymous group's events from the by-user view", async () => {
     queryState({
       events: { data: page([]), ...IDLE },

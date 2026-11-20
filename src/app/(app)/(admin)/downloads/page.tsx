@@ -664,8 +664,17 @@ function DownloadsContent() {
               }}
               onKeyDown={(e) => e.key === "Enter" && applyFilters()}
               aria-invalid={filterError != null}
-              aria-describedby="downloads-filter-error"
+              aria-describedby={
+                anonymousOnly
+                  ? "downloads-filter-error downloads-filter-user-id-hint"
+                  : "downloads-filter-error"
+              }
             />
+            {anonymousOnly && (
+              <p id="downloads-filter-user-id-hint" className="text-xs text-muted-foreground">
+                Anonymous downloads have no user
+              </p>
+            )}
           </div>
           {downloaderFilter && (
             <div className="space-y-1">
