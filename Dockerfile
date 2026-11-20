@@ -59,11 +59,61 @@ RUN mkdir -p /mnt/rootfs && \
     && dnf --installroot /mnt/rootfs clean all \
     && rm -rf /mnt/rootfs/var/cache/* /mnt/rootfs/var/log/* /mnt/rootfs/tmp/*
 
+# Drop the userland that ca-certificates drags in. openssl-libs requires
+# ca-certificates, and ca-certificates hard-requires bash, coreutils, grep,
+# sed, findutils and p11-kit (for its update-ca-trust scriptlet), which in turn
+# pull pcre/pcre2, libselinux, libacl, libcap, gmp, ncurses and alternatives.
+# Node never executes or links any of them, but scanners that grade RHEL
+# packages by NVD score (Docker Scout) report them as high findings: 6 of its
+# 7 "high" were openssl-libs and pcre2/pcre2-syntax. openssl-libs itself stays:
+# Red Hat's Node RPM links the SYSTEM OpenSSL (node_shared_openssl), so
+# libssl/libcrypto, and crypto-policies that openssl.cnf includes, are hard
+# runtime requirements.
+#
+# `rpm -e` fails if any name below is not installed, so a change in the UBI
+# dependency tree breaks the build instead of silently leaving packages in.
+# --noscripts: the erase scriptlets would need the very shell being removed.
+RUN rpm --root /mnt/rootfs -e --nodeps --noscripts \
+        ca-certificates p11-kit p11-kit-trust libffi \
+        bash coreutils coreutils-common findutils grep sed \
+        pcre pcre2 pcre2-syntax libselinux libsepol libacl libattr libcap \
+        gmp libsigsegv ncurses-base ncurses-libs alternatives \
+    && test ! -e /mnt/rootfs/usr/bin/sh && test ! -e /mnt/rootfs/usr/bin/bash
+
+# Removing ca-certificates took the CA trust store with it. Put the bundles the
+# builder extracted back as plain files, with the RHEL paths OpenSSL (and so
+# Node's --use-openssl-ca and NODE_EXTRA_CA_CERTS users) expects: OPENSSLDIR
+# is /etc/pki/tls, so the default CA file is /etc/pki/tls/cert.pem and the CA
+# dir /etc/pki/tls/certs. /etc/ssl/* are the compatibility links
+# ca-certificates normally ships.
+COPY --from=registry.access.redhat.com/ubi9/ubi:9.8 \
+    /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    /mnt/rootfs/etc/pki/ca-trust/extracted/pem/
+COPY --from=registry.access.redhat.com/ubi9/ubi:9.8 \
+    /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
+    /mnt/rootfs/etc/pki/ca-trust/extracted/openssl/
+RUN mkdir -p /mnt/rootfs/etc/pki/tls/certs /mnt/rootfs/etc/ssl && \
+    ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /mnt/rootfs/etc/pki/tls/cert.pem && \
+    ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /mnt/rootfs/etc/pki/tls/certs/ca-bundle.crt && \
+    ln -sf /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt /mnt/rootfs/etc/pki/tls/certs/ca-bundle.trust.crt && \
+    ln -sf /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /mnt/rootfs/etc/ssl/cert.pem && \
+    ln -sfn /etc/pki/tls/certs /mnt/rootfs/etc/ssl/certs && \
+    ln -sf /etc/pki/tls/openssl.cnf /mnt/rootfs/etc/ssl/openssl.cnf && \
+    ln -sf /etc/pki/tls/ct_log_list.cnf /mnt/rootfs/etc/ssl/ct_log_list.cnf
+
 # Create non-root user and app directory
 RUN echo 'nextjs:x:1001:0:Next.js:/app:/sbin/nologin' >> /mnt/rootfs/etc/passwd && \
     echo 'nodejs:x:1001:' >> /mnt/rootfs/etc/group && \
     mkdir -p /mnt/rootfs/app /mnt/rootfs/usr/local/bin && \
     chown -R 1001:0 /mnt/rootfs/app
+
+# Next.js needs a writable cache directory for image optimization at runtime.
+# g=rwX keeps it writable for an arbitrary OpenShift UID (GID 0 under
+# restricted-v2), not just the numeric 1001 the USER directive names. Created
+# here because the runtime image has no shell to RUN it in.
+RUN mkdir -p /mnt/rootfs/app/.next/cache && \
+    chown 1001:0 /mnt/rootfs/app/.next/cache && \
+    chmod g=rwX /mnt/rootfs/app/.next/cache
 
 # ---------- STIG hardening (applicable subset for ubi-micro) ----------
 # Derived from DISA STIG controls applied in registry.access.redhat.com/ubi9/ubi-stig
@@ -102,11 +152,18 @@ RUN if [ -f /mnt/rootfs/etc/dnf/dnf.conf ]; then \
 # Remove leftover cache/tmp artifacts
 RUN rm -rf /mnt/rootfs/var/cache/* /mnt/rootfs/var/log/* /mnt/rootfs/tmp/*
 
-# ---------- Stage 4: UBI 9 Micro runtime ----------
-FROM registry.access.redhat.com/ubi9/ubi-micro:9.8
+# ---------- Stage 4: runtime (the rootfs above, nothing else) ----------
+# Built FROM scratch rather than ubi-micro: ubi-micro itself ships bash,
+# coreutils-single, pcre2, ncurses, libselinux, libacl and libcap, and since
+# the rootfs's rpmdb replaces ubi-micro's on COPY, those files would stay in
+# the image while no longer being listed for scanners. Every package in this
+# image is one the rpmdb below accounts for.
+FROM scratch
 
-# Copy minimal rootfs (glibc, libstdc++, openssl, brotli, ca-certs, user/group)
+# Copy minimal rootfs (glibc, libstdc++, openssl, brotli, CA bundle, user/group)
 COPY --from=rootfs-builder /mnt/rootfs /
+# Red Hat content-set metadata, which scanners use to pick the RHEL feed
+COPY --from=registry.access.redhat.com/ubi9/ubi-micro:9.8 /root/buildinfo/ /root/buildinfo/
 
 # Copy Node.js binary and shared libraries from build stage (compiled against same RHEL 9 glibc)
 COPY --from=node-base /usr/bin/node /usr/local/bin/
@@ -123,11 +180,6 @@ ENV NODE_ENV=production \
 COPY --from=build --chown=root:root --chmod=555 /app/public ./public
 COPY --from=build --chown=root:root --chmod=555 /app/.next/standalone ./
 COPY --from=build --chown=root:root --chmod=555 /app/.next/static ./.next/static
-
-# Next.js needs a writable cache directory for image optimization at runtime.
-# g=rwX keeps it writable for an arbitrary OpenShift UID (GID 0 under
-# restricted-v2), not just the numeric 1001 the USER directive names.
-RUN mkdir -p .next/cache && chown 1001:0 .next/cache && chmod g=rwX .next/cache
 
 USER 1001
 
