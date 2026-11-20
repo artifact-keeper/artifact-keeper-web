@@ -29,6 +29,16 @@ export interface ListBuildsParams {
   search?: string;
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
+  /** Exact build name */
+  name?: string;
+  /** Exact VCS branch */
+  branch?: string;
+  /** Exact agent */
+  agent?: string;
+  /** RFC 3339, builds created at or after */
+  created_after?: string;
+  /** RFC 3339, builds created before */
+  created_before?: string;
 }
 
 /** Most ids `POST /api/v1/builds/delete` takes at once */
