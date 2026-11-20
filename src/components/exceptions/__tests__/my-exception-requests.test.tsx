@@ -108,6 +108,18 @@ describe("MyExceptionRequests", () => {
     expect(screen.getByText("use the patched release")).toBeInTheDocument();
   });
 
+  it("says when older requests are not listed", () => {
+    queryResult = { data: { items: [ROW], total: 35 } };
+    render(<MyExceptionRequests />);
+    expect(screen.getByText("Your 1 most recent of 35 requests")).toBeInTheDocument();
+  });
+
+  it("adds no count when every request is listed", () => {
+    queryResult = { data: { items: [ROW], total: 1 } };
+    render(<MyExceptionRequests />);
+    expect(screen.queryByText(/most recent of/)).not.toBeInTheDocument();
+  });
+
   it("says until when a grant lasts", () => {
     queryResult = {
       data: { total: 1, items: [{ ...ROW, status: "approved", expiresAt: "2027-02-01T00:00:00Z" }] },

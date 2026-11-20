@@ -182,7 +182,7 @@ function RequestExceptionForm() {
         <div className="space-y-1.5">
           <Label htmlFor="req-gate">Why do you think it is blocked?</Label>
           <Select value={gate} onValueChange={(v) => setGate(v as ExceptionGate)}>
-            <SelectTrigger id="req-gate" aria-label="Reason it is blocked">
+            <SelectTrigger id="req-gate" aria-describedby="req-gate-hint">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -193,7 +193,7 @@ function RequestExceptionForm() {
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
+          <p id="req-gate-hint" className="text-xs text-muted-foreground">
             If you are not sure, check the error your package manager printed.
             Each reason is excepted separately, so a grant for the wrong one
             does not unblock the package.

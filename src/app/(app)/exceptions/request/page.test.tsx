@@ -92,14 +92,20 @@ vi.mock("@/components/ui/select", () => ({
     children: React.ReactNode;
   }) => {
     const items: Array<{ value: string; label: string }> = [];
-    let ariaLabel = "";
+    let ariaLabel: string | undefined;
+    let id: string | undefined;
+    let describedBy: string | undefined;
     React.Children.forEach(children, (child) => {
       if (!React.isValidElement(child)) return;
       const el = child as React.ReactElement<{
         "aria-label"?: string;
+        "aria-describedby"?: string;
+        id?: string;
         children?: React.ReactNode;
       }>;
       if (el.props["aria-label"]) ariaLabel = el.props["aria-label"];
+      if (el.props.id) id = el.props.id;
+      if (el.props["aria-describedby"]) describedBy = el.props["aria-describedby"];
       React.Children.forEach(el.props.children, (sub) => {
         if (React.isValidElement(sub) && (sub.props as Record<string, unknown>).value) {
           const p = sub.props as { value: string; children: React.ReactNode };
@@ -109,7 +115,9 @@ vi.mock("@/components/ui/select", () => ({
     });
     return (
       <select
+        id={id}
         aria-label={ariaLabel}
+        aria-describedby={describedBy}
         value={value}
         onChange={(e) => onValueChange?.(e.target.value)}
       >
@@ -186,13 +194,24 @@ describe("backend version gate", () => {
   });
 });
 
+/** The gate select's visible label, tied to it with htmlFor */
+const GATE_LABEL = "Why do you think it is blocked?";
+
 describe("prefill from a refusal link", () => {
+  it("names the gate select by its visible label and describes it with the hint", () => {
+    render(<RequestExceptionPage />);
+    expect(screen.getByLabelText(GATE_LABEL)).toHaveAccessibleDescription(
+      /check the error your package manager printed/,
+    );
+  });
+
+
   it("starts empty, on the scan gate, with nothing to send", () => {
     render(<RequestExceptionPage />);
     expect(screen.getByLabelText("Repository")).toHaveValue("");
     expect(screen.getByLabelText("Package")).toHaveValue("");
     expect(screen.getByLabelText("Version")).toHaveValue("");
-    expect(screen.getByLabelText("Reason it is blocked")).toHaveValue("scan");
+    expect(screen.getByLabelText(GATE_LABEL)).toHaveValue("scan");
     expect(screen.getByRole("button", { name: /send request/i })).toBeDisabled();
   });
 
@@ -208,13 +227,13 @@ describe("prefill from a refusal link", () => {
     expect(screen.getByLabelText("Repository")).toHaveValue("npm-remote");
     expect(screen.getByLabelText("Package")).toHaveValue("@scope/leftpad");
     expect(screen.getByLabelText("Version")).toHaveValue("0.0.1");
-    expect(screen.getByLabelText("Reason it is blocked")).toHaveValue("age");
+    expect(screen.getByLabelText(GATE_LABEL)).toHaveValue("age");
   });
 
   it("ignores a gate the backend does not model rather than sending it on", () => {
     search = new URLSearchParams({ gate: "javascript:alert(1)" });
     render(<RequestExceptionPage />);
-    expect(screen.getByLabelText("Reason it is blocked")).toHaveValue("scan");
+    expect(screen.getByLabelText(GATE_LABEL)).toHaveValue("scan");
   });
 });
 
@@ -258,7 +277,7 @@ describe("submitting", () => {
     render(<RequestExceptionPage />);
     await fill(user);
     await user.type(screen.getByLabelText("Version"), "0.0.1");
-    await user.selectOptions(screen.getByLabelText("Reason it is blocked"), "curation");
+    await user.selectOptions(screen.getByLabelText(GATE_LABEL), "curation");
     await mutationConfigs.at(-1)!.mutationFn();
     expect(mockRequest).toHaveBeenCalledWith({
       repositoryKey: "npm-remote",

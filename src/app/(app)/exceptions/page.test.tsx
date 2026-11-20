@@ -559,6 +559,25 @@ describe("filters", () => {
     expect(screen.getByText(/No gate-filed refusals match/i)).toBeInTheDocument();
   });
 
+  it("says the server has more rows when attempted-only hides every row it sent", async () => {
+    const user = userEvent.setup();
+    queueData = { data: { items: [ROW], total: 250 }, isLoading: false };
+    render(<ExceptionsPage />);
+    await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
+    expect(screen.getByText(/No gate-filed refusals match/i)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /first 1 of 250 rows were loaded, and all of them were asked for/,
+    );
+  });
+
+  it("does not mention unloaded rows when the server sent them all", async () => {
+    const user = userEvent.setup();
+    withRows(ROW);
+    render(<ExceptionsPage />);
+    await user.selectOptions(screen.getByLabelText("Requested by"), "attempted");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("says plainly when nothing matches an unrestricted origin filter", async () => {
     const user = userEvent.setup();
     render(<ExceptionsPage />);
@@ -609,6 +628,18 @@ describe("row rendering", () => {
     expect(table().getByText(/the build needs it/)).toBeInTheDocument();
   });
 
+  it("names a whole-package request as every version, not a bare asterisk", async () => {
+    const user = userEvent.setup();
+    withRows({ ...ROW, packageVersion: "*" });
+    render(<ExceptionsPage />);
+    expect(table().getByText("all versions")).toBeInTheDocument();
+    expect(table().queryByText("*")).not.toBeInTheDocument();
+    const dialog = await openDialog(user, /^Grant leftpad-clone \(all versions\)$/);
+    expect(
+      within(dialog).getByText("leftpad-clone (all versions) in npm-remote."),
+    ).toBeInTheDocument();
+  });
+
   it("labels a row from a backend that sends no gate as unknown rather than guessing", () => {
     withRows({ ...ROW, gate: null });
     render(<ExceptionsPage />);
@@ -618,7 +649,9 @@ describe("row rendering", () => {
   it("opens the repository's scan findings from a scan-gate row only", () => {
     withRows(ROW, { ...ROW, id: "ex-age", gate: "age" });
     render(<ExceptionsPage />);
-    const links = screen.getAllByRole("link", { name: "Scan gate" });
+    const links = screen.getAllByRole("link", {
+      name: "Scan gate: scan findings for npm-remote",
+    });
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "/repositories/npm-remote?tab=security");
     expect(table().getByText("Age gate")).not.toHaveAttribute("href");
@@ -627,7 +660,7 @@ describe("row rendering", () => {
   it("links the repository badge to where its gates are configured", () => {
     withRows(ROW);
     render(<ExceptionsPage />);
-    expect(screen.getByRole("link", { name: "npm-remote" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "npm-remote settings" })).toHaveAttribute(
       "href",
       "/repositories/npm-remote?tab=settings",
     );
@@ -636,7 +669,7 @@ describe("row rendering", () => {
   it("percent-encodes a repository key into every link it builds", () => {
     withRows({ ...ROW, repositoryKey: "team/npm remote" });
     render(<ExceptionsPage />);
-    expect(screen.getByRole("link", { name: "team/npm remote" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "team/npm remote settings" })).toHaveAttribute(
       "href",
       "/repositories/team%2Fnpm%20remote?tab=settings",
     );

@@ -133,6 +133,20 @@ function decisionErrorMessage(err: unknown): string {
   return toUserMessage(err, "Could not record the decision");
 }
 
+/** A request left the version blank, so the backend stores `*`: every version */
+const ALL_VERSIONS = "*";
+
+function versionLabel(version: string): string {
+  return version === ALL_VERSIONS ? "all versions" : version;
+}
+
+/** `name@version`, or `name (all versions)` for a whole-package row */
+function coordinate(r: { packageName: string; packageVersion: string }): string {
+  return r.packageVersion === ALL_VERSIONS
+    ? `${r.packageName} (all versions)`
+    : `${r.packageName}@${r.packageVersion}`;
+}
+
 /** What an approval will actually grant, said before the reviewer commits. */
 function describeGrant(neverExpires: boolean, days: number): string {
   if (neverExpires) {
@@ -433,7 +447,7 @@ function ExceptionsQueue() {
           : target === "rejected"
             ? "Refused"
             : "Returned to pending";
-      toast.success(`${verb} ${row.packageName}@${row.packageVersion}`);
+      toast.success(`${verb} ${coordinate(row)}`);
     },
     onError: (err: unknown) => {
       toast.error(decisionErrorMessage(err));
@@ -623,6 +637,16 @@ function ExceptionsQueue() {
                 ? "No gate-filed refusals match these filters."
                 : "No packages match these filters."}
           </p>
+          {/* "Gate attempted only" narrows the one page the server sent, so
+              an empty table says nothing about the rows it did not send. */}
+          {originFilter === "attempted" &&
+            (data?.total ?? 0) > (data?.items.length ?? 0) && (
+              <p role="status">
+                Only the first {data?.items.length} of {data?.total} rows were
+                loaded, and all of them were asked for by someone. Narrow by
+                reason or status to load others.
+              </p>
+            )}
           <p>
             <Link href="/exceptions/request" className="underline">
               Ask for a package that is not listed
@@ -670,7 +694,7 @@ function ExceptionsQueue() {
                     <td className="px-3 py-2">
                       <div className="font-medium">{r.packageName}</div>
                       <div className="font-mono text-xs text-muted-foreground">
-                        {r.packageVersion}
+                        {versionLabel(r.packageVersion)}
                       </div>
                       {age && (
                         <div className="mt-0.5 text-xs text-muted-foreground">
@@ -692,6 +716,7 @@ function ExceptionsQueue() {
                           configured, as the Age Gate page did (#701). */}
                       <Link
                         href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=settings`}
+                        aria-label={`${r.repositoryKey} settings`}
                         title={`Settings for ${r.repositoryKey}`}
                       >
                         <Badge variant="outline">{r.repositoryKey}</Badge>
@@ -706,6 +731,8 @@ function ExceptionsQueue() {
                       {r.gate === "scan" ? (
                         <Link
                           href={`/repositories/${encodeURIComponent(r.repositoryKey)}?tab=security`}
+                          // A links list has no row context, so the name carries the repository
+                          aria-label={`${GATE_LABEL.scan}: scan findings for ${r.repositoryKey}`}
                           title={`${GATE_HELP.scan} Opens the scan findings for ${r.repositoryKey}.`}
                         >
                           <Badge
@@ -830,7 +857,7 @@ function ExceptionsQueue() {
                             }
                             // Every row repeats these two words, so the
                             // accessible name carries the coordinate.
-                            aria-label={`${a.label} ${r.packageName}@${r.packageVersion}`}
+                            aria-label={`${a.label} ${coordinate(r)}`}
                             onClick={() =>
                               setDecision({ row: r, target: a.target })
                             }
@@ -869,7 +896,7 @@ function ExceptionsQueue() {
             </DialogTitle>
             <DialogDescription>
               {decision
-                ? `${decision.row.packageName}@${decision.row.packageVersion} in ${decision.row.repositoryKey}.`
+                ? `${coordinate(decision.row)} in ${decision.row.repositoryKey}.`
                 : null}
             </DialogDescription>
           </DialogHeader>
