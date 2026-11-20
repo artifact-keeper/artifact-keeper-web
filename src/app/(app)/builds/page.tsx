@@ -69,6 +69,7 @@ import type {
 import { BuildMetadata, BuildUrl } from "./_components/build-links";
 import { deleteSummary } from "./_components/delete-summary";
 import { BuildArtifactName } from "./_components/build-artifact-name";
+import { PAGE_SIZES } from "./_components/build-filters";
 
 // ---- Helpers ----
 
@@ -510,7 +511,7 @@ export default function BuildsPage() {
   const [statusFilter, setStatusFilter] = useState<BuildStatus | "">("");
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
 
   // Selection
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
@@ -871,11 +872,31 @@ export default function BuildsPage() {
       </Card>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {(totalPages > 1 || totalBuilds > PAGE_SIZES[0]) && (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[110px]" aria-label="Builds per page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} / page
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
