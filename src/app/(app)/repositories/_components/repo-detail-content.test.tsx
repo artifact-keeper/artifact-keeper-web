@@ -82,6 +82,7 @@ const artifactFixture = {
   content_type: "application/x-yaml",
   download_count: 0,
   created_at: "2026-07-01T00:00:00Z",
+  uploaded_by_username: undefined as string | undefined,
 };
 
 // One server-grouped Docker tag rollup (`?group_by=docker_tag`), surfaced
@@ -744,6 +745,56 @@ describe("RepoDetailContent artifact detail dialog — Last downloaded (#472)", 
   });
 });
 
+describe("RepoDetailContent artifact detail dialog, Uploaded by (#472)", () => {
+  const originalType = repository.repo_type;
+  beforeEach(() => {
+    cleanup();
+    repository.repo_type = "local";
+  });
+  afterEach(() => {
+    cleanup();
+    repository.format = "generic";
+    repository.repo_type = originalType;
+    h.artifactDetail = undefined;
+    artifactFixture.uploaded_by_username = undefined;
+  });
+
+  async function openDetailDialog() {
+    render(<RepoDetailContent repoKey="demo" />);
+    await userEvent.click(screen.getByRole("tab", { name: /artifacts/i }));
+    const row = await screen.findByTestId("stub-row-a1", {}, { timeout: 2000 });
+    row.click();
+    return await screen.findByRole("dialog", {}, { timeout: 2000 });
+  }
+
+  it("names the uploader of a hosted Maven artifact from the by-id response", async () => {
+    repository.format = "maven";
+    h.artifactDetail = { ...artifactFixture, uploaded_by_username: "ci-publisher" };
+    const dialog = await openDetailDialog();
+    const label = within(dialog).getByText("Uploaded by");
+    expect(label.parentElement).toHaveTextContent("Uploaded byci-publisher");
+  });
+
+  it("falls back to the listing row when the by-id response has not arrived", async () => {
+    artifactFixture.uploaded_by_username = "ci-publisher";
+    const dialog = await openDetailDialog();
+    expect(within(dialog).getByText("ci-publisher")).toBeInTheDocument();
+  });
+
+  it("shows no row when the backend names no uploader", async () => {
+    h.artifactDetail = { ...artifactFixture, uploaded_by_username: null };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByText("Uploaded by")).toBeNull();
+    expect(within(dialog).getByText("Created")).toBeInTheDocument();
+  });
+
+  it("shows no row for an empty uploader name", async () => {
+    h.artifactDetail = { ...artifactFixture, uploaded_by_username: "" };
+    const dialog = await openDetailDialog();
+    expect(within(dialog).queryByText("Uploaded by")).toBeNull();
+  });
+});
+
 describe("RepoDetailContent artifact detail dialog — Origin (#914)", () => {
   beforeEach(() => {
     cleanup();
@@ -804,7 +855,8 @@ describe("RepoDetailContent artifact detail dialog — Origin (#914)", () => {
     };
     try {
       const dialog = await openDetailDialog();
-      expect(within(dialog).getByTestId("conda-package")).toHaveTextContent("ci-publisher");
+      expect(within(dialog).getAllByText("ci-publisher")).toHaveLength(1);
+      expect(within(dialog).getByTestId("conda-package")).not.toHaveTextContent("ci-publisher");
       expect(within(dialog).getByTestId("artifact-attestation")).toHaveTextContent("Verified");
     } finally {
       repository.format = "generic";
