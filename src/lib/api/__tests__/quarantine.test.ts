@@ -141,3 +141,60 @@ describe("quarantineApi.quarantine", () => {
     );
   });
 });
+
+// #1238: bind each action to the OCI manifest digest the admin reviewed.
+const HEX = "ab".repeat(32);
+const DIGEST = `sha256:${HEX}`;
+
+// Compat (#1238): expected_digest is sent whatever the backend version. Before
+// 1.12.4, `/release` has no body extractor (the body is never read) and
+// `/reject` and `/quarantine` deserialize it with `#[serde(default)]` and no
+// `deny_unknown_fields` since 1.12.0, so an older 1.12.x backend ignores it
+// and binds to the row as before; 1.12.4+ binds to the digest.
+describe("expected_digest on the admin actions", () => {
+  it("release sends expected_digest when given, and `{}` without it", async () => {
+    mockApiFetch.mockResolvedValue({});
+    await quarantineApi.release(ARTIFACT_ID, DIGEST);
+    expect(mockApiFetch).toHaveBeenLastCalledWith(
+      `/api/v1/quarantine/${ARTIFACT_ID}/release`,
+      { method: "POST", body: JSON.stringify({ expected_digest: DIGEST }) },
+    );
+    await quarantineApi.release(ARTIFACT_ID, undefined);
+    expect(mockApiFetch).toHaveBeenLastCalledWith(
+      `/api/v1/quarantine/${ARTIFACT_ID}/release`,
+      { method: "POST", body: "{}" },
+    );
+  });
+
+  it("reject sends the reason and expected_digest", async () => {
+    mockApiFetch.mockResolvedValue({});
+    await quarantineApi.reject(ARTIFACT_ID, "bad", DIGEST);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/api/v1/quarantine/${ARTIFACT_ID}/reject`,
+      { method: "POST", body: JSON.stringify({ reason: "bad", expected_digest: DIGEST }) },
+    );
+  });
+
+  it("quarantine sends a null reason and expected_digest", async () => {
+    mockApiFetch.mockResolvedValue({});
+    await quarantineApi.quarantine(ARTIFACT_ID, undefined, DIGEST);
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      `/api/v1/quarantine/${ARTIFACT_ID}/quarantine`,
+      { method: "POST", body: JSON.stringify({ reason: null, expected_digest: DIGEST }) },
+    );
+  });
+
+  it("passes held_digest / moved_to_digest through from the response", async () => {
+    mockApiFetch.mockResolvedValue({
+      artifact_id: ARTIFACT_ID,
+      new_status: "released",
+      message: "The tag moved",
+      held_artifact_id: "11111111-1111-4111-8111-111111111111",
+      held_digest: DIGEST,
+      moved_to_digest: `sha256:${"cd".repeat(32)}`,
+    });
+    const r = await quarantineApi.release(ARTIFACT_ID, DIGEST);
+    expect(r.held_digest).toBe(DIGEST);
+    expect(r.moved_to_digest).toBe(`sha256:${"cd".repeat(32)}`);
+  });
+});

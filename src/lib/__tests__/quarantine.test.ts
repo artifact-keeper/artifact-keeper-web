@@ -10,6 +10,7 @@ import {
   QUARANTINE_REJECTED_DOWNLOAD_REASON,
   QUARANTINE_BADGE_LABELS,
   quarantineBadgeKind,
+  ociExpectedDigest,
 } from "../quarantine";
 import type { Artifact } from "@/types";
 
@@ -359,5 +360,36 @@ describe("quarantineBadgeKind", () => {
     expect(quarantineBadgeKind(null)).toBeNull();
     expect(quarantineBadgeKind({})).toBeNull();
     expect(quarantineBadgeKind({ quarantine_status: null })).toBeNull();
+  });
+});
+
+// #1238: the digest an admin action on an OCI manifest row binds to.
+const OCI_HEX = "ab".repeat(32);
+
+describe("ociExpectedDigest", () => {
+  it("returns sha256:<checksum> for a tag-path manifest row", () => {
+    expect(
+      ociExpectedDigest({ path: "v2/team/app/manifests/latest", checksum_sha256: OCI_HEX }),
+    ).toBe(`sha256:${OCI_HEX}`);
+  });
+
+  it("normalizes a padded, upper-case checksum", () => {
+    expect(
+      ociExpectedDigest({
+        path: "v2/app/manifests/v1",
+        checksum_sha256: ` ${OCI_HEX.toUpperCase()} `,
+      }),
+    ).toBe(`sha256:${OCI_HEX}`);
+  });
+
+  it("returns undefined for a non-manifest row", () => {
+    expect(ociExpectedDigest({ path: "v2/app/blobs/sha256:x", checksum_sha256: OCI_HEX })).toBeUndefined();
+    expect(ociExpectedDigest({ path: "pkg/foo-1.0.tgz", checksum_sha256: OCI_HEX })).toBeUndefined();
+    expect(ociExpectedDigest({ path: "v2/manifests/latest", checksum_sha256: OCI_HEX })).toBeUndefined();
+  });
+
+  it("returns undefined when the checksum is missing or not sha256 hex", () => {
+    expect(ociExpectedDigest({ path: "v2/app/manifests/v1" })).toBeUndefined();
+    expect(ociExpectedDigest({ path: "v2/app/manifests/v1", checksum_sha256: "xyz" })).toBeUndefined();
   });
 });
