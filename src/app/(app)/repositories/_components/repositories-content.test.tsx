@@ -26,6 +26,7 @@ let useQueryCallIndex = 0;
 const useQueryCallKeys: string[][] = [];
 
 vi.mock("@tanstack/react-query", () => ({
+  keepPreviousData: (previous: unknown) => previous,
   useQuery: (opts: any) => {
     const key = opts.queryKey;
     useQueryCallKeys.push(key);
@@ -93,6 +94,11 @@ vi.mock("@/lib/api/search", () => ({
 vi.mock("@/lib/query-keys", () => ({
   invalidateGroup: vi.fn(),
   QUERY_KEYS: { REPOSITORIES: ["repositories"] },
+}));
+
+const mockUseActiveProject = vi.fn();
+vi.mock("@/providers/project-provider", () => ({
+  useActiveProject: () => mockUseActiveProject(),
 }));
 
 const mockUseAuth = vi.fn();
@@ -251,6 +257,7 @@ vi.mock("./repo-dialogs", () => ({
 // ---------------------------------------------------------------------------
 
 import { RepositoriesContent } from "./repositories-content";
+import { repositoriesApi } from "@/lib/api/repositories";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -269,6 +276,7 @@ describe("RepositoriesContent", () => {
     useQueryCallIndex = 0;
     useQueryCallKeys.length = 0;
     mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    mockUseActiveProject.mockReturnValue({ projects: [], activeProject: null, setActiveProjectId: vi.fn() });
     mockUseIsMobile.mockReturnValue(false);
 
     useQueryResponses = {
@@ -653,6 +661,102 @@ describe("RepositoriesContent", () => {
     render(<RepositoriesContent />);
     // The RefreshCw icon should be rendered (even if not spinning in mock)
     expect(screen.getByTestId("icon-RefreshCw")).toBeInTheDocument();
+  });
+
+  // ---- Project filter and scope (#988) ----
+
+  describe("project filter and scope (#988)", () => {
+    const alpha = { id: "p1", key: "alpha", name: "Alpha" };
+    const beta = { id: "p2", key: "beta", name: "Beta" };
+
+    function withProjects(extra: Record<string, unknown> = {}) {
+      const setActiveProjectId = vi.fn();
+      mockUseActiveProject.mockReturnValue({
+        projects: [alpha, beta],
+        activeProject: null,
+        setActiveProjectId,
+        ...extra,
+      });
+      return setActiveProjectId;
+    }
+
+    /** The project filter is the <select> that offers "No project". */
+    function projectSelect(): HTMLSelectElement {
+      const el = screen
+        .getAllByTestId("mock-select")
+        .find((s) => Array.from((s as HTMLSelectElement).options).some((o) => o.value === "__none__"));
+      if (!el) throw new Error("project filter not rendered");
+      return el as HTMLSelectElement;
+    }
+
+    const listCalls = () => (repositoriesApi.list as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+
+    it("offers no project filter until a project exists", () => {
+      render(<RepositoriesContent />);
+      expect(screen.queryByLabelText("Filter by project")).toBeNull();
+      expect(
+        screen.getAllByTestId("mock-select").some((s) =>
+          Array.from((s as HTMLSelectElement).options).some((o) => o.value === "__none__"),
+        ),
+      ).toBe(false);
+    });
+
+    it("lists every project, All projects and No project", () => {
+      withProjects();
+      render(<RepositoriesContent />);
+      expect(Array.from(projectSelect().options).map((o) => o.value)).toEqual(["__all__", "__none__", "p1", "p2"]);
+    });
+
+    it("asks the backend for one project's repositories when it is picked", () => {
+      withProjects();
+      render(<RepositoriesContent />);
+      vi.mocked(repositoriesApi.list).mockClear();
+      fireEvent.change(projectSelect(), { target: { value: "p2" } });
+      expect(listCalls().some((c) => c.project === "p2")).toBe(true);
+    });
+
+    it("does not send a project when All projects is chosen", () => {
+      withProjects();
+      render(<RepositoriesContent />);
+      vi.mocked(repositoriesApi.list).mockClear();
+      fireEvent.change(projectSelect(), { target: { value: "__all__" } });
+      expect(listCalls().every((c) => c.project === undefined)).toBe(true);
+    });
+
+    it("answers No project with a paged scan, 100 at a time, not one 1000-item request", () => {
+      withProjects();
+      render(<RepositoriesContent />);
+      vi.mocked(repositoriesApi.list).mockClear();
+      fireEvent.change(projectSelect(), { target: { value: "__none__" } });
+      const calls = listCalls();
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls.every((c) => c.per_page === 100 && c.project === undefined)).toBe(true);
+      expect(calls.some((c) => c.per_page === 1000)).toBe(false);
+    });
+
+    it("scopes the list to the sidebar's project and says so", () => {
+      const setActiveProjectId = withProjects({ activeProject: alpha });
+      render(<RepositoriesContent />);
+      expect(screen.getByRole("status").textContent).toMatch(/Showing only\s*Alpha/);
+      expect(listCalls().some((c) => c.project === "p1")).toBe(true);
+
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+      expect(setActiveProjectId).toHaveBeenCalledWith(null);
+    });
+
+    it("shows no scope notice when nothing is scoped", () => {
+      withProjects();
+      render(<RepositoriesContent />);
+      expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
+    });
+
+    it("drops the notice once the list's own filter overrides the scope", () => {
+      withProjects({ activeProject: alpha });
+      render(<RepositoriesContent />);
+      expect(screen.getByRole("button", { name: "Show all" })).toBeInTheDocument();
+      fireEvent.change(projectSelect(), { target: { value: "__all__" } });
+      expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
+    });
   });
 
   // ---- Non-admin user ----

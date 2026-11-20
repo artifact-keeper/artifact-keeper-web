@@ -1,5 +1,9 @@
 import { ApiError, apiFetch } from '@/lib/api/fetch';
 import { repositoriesApi } from '@/lib/api/repositories';
+import { BACKEND_MAX_PAGE_SIZE, fetchAllPages } from '@/lib/fetch-all-pages';
+
+/** Repositories scanned (100 per page) to find a non-admin's projects. */
+const PROJECT_DISCOVERY_MAX_PAGES = 10;
 
 // Projects (backend 1.11, artifact-keeper#2472) are not in the SDK 1.7.0 this
 // build pins, so these calls go through `apiFetch` with local wire types.
@@ -117,21 +121,33 @@ function adaptMember(sdk: WireMember): ProjectMember {
 
 export const projectsApi = {
   /**
-   * `GET /projects` is global-admin only (artifact-keeper 1.11). A project
-   * admin who is not a global admin gets a 403, so fall back to the projects
-   * their visible repositories belong to, reading each one (which a project
-   * admin may do). Projects where the caller is only a plain member are not
-   * readable and are skipped: the backend gives them no way to see the
-   * project record.
+   * `GET /projects` is global-admin only (artifact-keeper 1.11), so there is no
+   * endpoint that returns "the projects I belong to". Until the backend has one,
+   * a caller who is not a global admin gets the projects their visible
+   * repositories belong to, reading each one (which a project admin may do).
+   * Projects where the caller is only a plain member are not readable and are
+   * skipped: the backend gives them no way to see the project record.
+   *
+   * Pass `isGlobalAdmin: false` to go straight to that path instead of sending
+   * a request that is certain to be refused with a 403 on every load. When it
+   * is unknown, try the endpoint and fall back on a 403.
+   *
+   * The fallback costs one repository listing (paged, 100 at a time, capped)
+   * plus one read per distinct project, so callers cache it (see `useProjects`).
    */
-  list: async (): Promise<Project[]> => {
-    try {
-      const data = await apiFetch<{ items: WireProject[] }>('/api/v1/projects');
-      return data.items.map(adaptProject);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 403) throw error;
+  list: async (options: { isGlobalAdmin?: boolean } = {}): Promise<Project[]> => {
+    if (options.isGlobalAdmin !== false) {
+      try {
+        const data = await apiFetch<{ items: WireProject[] }>('/api/v1/projects');
+        return data.items.map(adaptProject);
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 403) throw error;
+      }
     }
-    const repos = await repositoriesApi.list({ per_page: 1000 });
+    const repos = await fetchAllPages(
+      (page) => repositoriesApi.list({ page, per_page: BACKEND_MAX_PAGE_SIZE }),
+      { maxPages: PROJECT_DISCOVERY_MAX_PAGES },
+    );
     const ids = [
       ...new Set(repos.items.map((r) => r.project_id).filter((id): id is string => !!id)),
     ];

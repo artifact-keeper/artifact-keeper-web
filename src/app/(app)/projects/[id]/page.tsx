@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/common/page-header";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
-import { useProjectMembers } from "@/hooks/use-projects";
 import { projectsApi } from "@/lib/api/projects";
 import { mutationErrorToast } from "@/lib/error-utils";
 import { invalidateGroup, QUERY_KEYS } from "@/lib/query-keys";
@@ -42,13 +41,13 @@ export default function ProjectDetailPage() {
     queryKey: [...QUERY_KEYS.PROJECTS, id],
     queryFn: () => projectsApi.get(id),
   });
-  const { data: members = [] } = useProjectMembers(id);
 
-  // The backend decides; this only controls whether the controls are shown.
-  const isProjectAdmin = members.some(
-    (m) => m.principal_type === "user" && m.principal_id === user?.id && m.actions.includes("admin"),
-  );
-  const canManage = isGlobalAdmin || isProjectAdmin;
+  // `GET /projects/{id}` is refused unless the caller is a project admin (or a
+  // global admin), so a project that loaded is itself the proof, however the
+  // admin right was granted: directly, or through a group. Looking for a direct
+  // user row in the member list missed group admins (#988 review). The backend
+  // still decides every write; this only controls whether the controls show.
+  const canManage = isGlobalAdmin || !!project;
 
   const updateMutation = useMutation({
     mutationFn: (v: ProjectFormValues) =>

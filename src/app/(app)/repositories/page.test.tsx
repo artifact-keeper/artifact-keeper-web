@@ -28,6 +28,7 @@ const DEFAULT_FIRST_QUERY: Record<string, unknown> = {
 // test — e.g. to simulate a failed request (#478).
 let firstQueryResult: Record<string, unknown> = DEFAULT_FIRST_QUERY;
 vi.mock('@tanstack/react-query', () => ({
+  keepPreviousData: (previous: unknown) => previous,
   useQuery: () => {
     const idx = useQueryCallIndex++;
     if (idx === 0) {

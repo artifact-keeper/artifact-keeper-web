@@ -41,6 +41,10 @@ import {
   type ProjectRole,
 } from "@/lib/api/projects";
 import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
+import { BACKEND_MAX_PAGE_SIZE, fetchAllPages } from "@/lib/fetch-all-pages";
+
+/** Directory lookups stop here (100 per page): 1000 people or groups. */
+const DIRECTORY_MAX_PAGES = 10;
 
 const PRINCIPAL_LABELS: Record<ProjectPrincipalType, string> = {
   user: "User",
@@ -69,14 +73,35 @@ interface PrincipalOption {
  * by every signed-in user.
  */
 function usePrincipalDirectory(isGlobalAdmin: boolean) {
+  // The backend returns at most 100 per request, whatever is asked for, so a
+  // directory read in one request silently missed everyone after the first 100
+  // and their rows fell back to a raw id (#988 review). Page through it.
   const users = useQuery({
     queryKey: ["project-directory", "users"],
-    queryFn: () => adminApi.listUsersPage({ perPage: 100 }),
+    queryFn: () =>
+      fetchAllPages(
+        async (page) => {
+          const r = await adminApi.listUsersPage({ page, perPage: BACKEND_MAX_PAGE_SIZE });
+          return {
+            items: r.items,
+            pagination: {
+              page,
+              per_page: BACKEND_MAX_PAGE_SIZE,
+              total: r.total,
+              total_pages: Math.max(1, Math.ceil(r.total / BACKEND_MAX_PAGE_SIZE)),
+            },
+          };
+        },
+        { maxPages: DIRECTORY_MAX_PAGES },
+      ),
     enabled: isGlobalAdmin,
   });
   const groups = useQuery({
     queryKey: ["project-directory", "groups"],
-    queryFn: () => groupsApi.list({ per_page: 1000 }),
+    queryFn: () =>
+      fetchAllPages((page) => groupsApi.list({ page, per_page: BACKEND_MAX_PAGE_SIZE }), {
+        maxPages: DIRECTORY_MAX_PAGES,
+      }),
   });
   const serviceAccounts = useQuery({
     queryKey: ["project-directory", "service-accounts"],

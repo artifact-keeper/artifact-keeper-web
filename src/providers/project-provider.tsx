@@ -15,6 +15,30 @@ import type { Project } from "@/lib/api/projects";
 
 const STORAGE_KEY = "ak-active-project";
 
+/**
+ * The scope lives in `sessionStorage`, not `localStorage` (#988 review): it
+ * filters the Repositories list, and a choice that survived closing the browser
+ * kept filtering later visits without the user noticing. A session scope ends
+ * with the tab. Storage can be unavailable (privacy modes, blocked cookies), in
+ * which case the scope simply is not remembered.
+ */
+function readStoredProjectId(): string | null {
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeProjectId(id: string | null): void {
+  try {
+    if (id) window.sessionStorage.setItem(STORAGE_KEY, id);
+    else window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Not remembered; the scope still applies for this page.
+  }
+}
+
 interface ProjectContextValue {
   projects: Project[];
   /** The project the app is scoped to, or null for "All projects". */
@@ -29,20 +53,24 @@ const ProjectContext = createContext<ProjectContextValue>({
 });
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  const { data } = useProjects({ enabled: isAuthenticated });
+  const { isAuthenticated, user } = useAuth();
+  const { data } = useProjects({
+    enabled: isAuthenticated,
+    // A signed-in user who is not a global admin would only get a 403 from the
+    // project list, so go straight to the repository-derived list.
+    isGlobalAdmin: user ? !!user.is_admin : undefined,
+  });
   const projects = useMemo(() => data ?? [], [data]);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount to keep SSR markup stable
-    setActiveId(window.localStorage.getItem(STORAGE_KEY));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from sessionStorage after mount to keep SSR markup stable
+    setActiveId(readStoredProjectId());
   }, []);
 
   const setActiveProjectId = useCallback((id: string | null) => {
     setActiveId(id);
-    if (id) window.localStorage.setItem(STORAGE_KEY, id);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    storeProjectId(id);
   }, []);
 
   // A stored id for a deleted project (or one the user lost access to)

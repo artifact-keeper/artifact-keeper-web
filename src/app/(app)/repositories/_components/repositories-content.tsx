@@ -17,7 +17,7 @@ import { invalidateGroup } from "@/lib/query-keys";
 import type { Repository, CreateRepositoryRequest } from "@/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useRepositories } from "@/hooks/use-repositories";
+import { useRepositories, useUnassignedRepositories } from "@/hooks/use-repositories";
 import { useFormatHandlers, wasmPluginFormats } from "@/hooks/use-format-handlers";
 import { repoFormatLabel } from "@/lib/repo-format";
 import { useDocumentTitle } from "@/hooks/use-document-title";
@@ -72,7 +72,7 @@ export function RepositoriesContent() {
   const { isAuthenticated, user } = useAuth();
   const isMobile = useIsMobile();
 
-  const { projects, activeProject } = useActiveProject();
+  const { projects, activeProject, setActiveProjectId } = useActiveProject();
   // `?new=1&project=<id>` (from a project page) opens the create dialog preselected.
   const [urlProjectId] = useState<string | undefined>(() => {
     if (globalThis.window === undefined) return undefined;
@@ -119,19 +119,31 @@ export function RepositoriesContent() {
   }>({ state: "idle" });
 
   // --- query ---
-  const { data, isLoading, isFetching, isError, error, refetch } = useRepositories({
-    per_page: pageSize,
-    page,
+  const listFilters = {
     format: formatFilter === "__all__" ? undefined : formatFilter,
     repo_type: typeFilter === "__all__" ? undefined : typeFilter,
     // Server-side name/key search so matches on other pages are found, not just
     // the ones already loaded on the current page (#pagination-search).
     q: deferredSearch || undefined,
-    // The backend can only filter *to* a project, so "No project" loads one
-    // large page and drops assigned repositories client-side.
-    project: projectFilter === "__all__" || projectFilter === "__none__" ? undefined : projectFilter,
-    ...(projectFilter === "__none__" ? { page: 1, per_page: 1000 } : {}),
+  };
+  // The backend can only filter *to* a project, not to "none", so that one
+  // choice is answered by a separate paged scan (see useUnassignedRepositories).
+  const unassignedMode = projectFilter === "__none__";
+  const listQuery = useRepositories(
+    {
+      per_page: pageSize,
+      page,
+      ...listFilters,
+      project: unassignedMode || projectFilter === "__all__" ? undefined : projectFilter,
+    },
+    { enabled: !unassignedMode },
+  );
+  const unassigned = useUnassignedRepositories(listFilters, page, pageSize, {
+    enabled: unassignedMode,
   });
+  const { data, isLoading, isFetching, isError, error, refetch } = unassignedMode
+    ? unassigned
+    : listQuery;
 
   // Installed format handlers — drives the create dialog's custom WASM
   // plugin layouts (#591) and the plugin layout labels in the list (#592).
@@ -320,10 +332,7 @@ export function RepositoriesContent() {
   }, [artifactSearchResults]);
 
   // Fetch full repo data for artifact-matched repos not on the current page
-  const items = useMemo(() => {
-    const all = data?.items ?? [];
-    return projectFilter === "__none__" ? all.filter((r) => !r.project_id) : all;
-  }, [data?.items, projectFilter]);
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const currentPageKeys = useMemo(() => new Set(items.map((r) => r.key)), [items]);
   const missingRepoKeys = useMemo(() => {
@@ -446,6 +455,24 @@ export function RepositoriesContent() {
             </SelectContent>
           </Select>
         )}
+        {/* The sidebar scope filters this list; say so, so it is never a surprise (#988 review). */}
+        {activeProject && projectOverride === null && (
+          <div
+            className="flex items-center justify-between gap-2 rounded-md bg-muted px-2 py-1 text-xs"
+            role="status"
+          >
+            <span className="truncate">
+              Showing only <strong>{activeProject.name}</strong>
+            </span>
+            <button
+              type="button"
+              className="shrink-0 underline underline-offset-2 hover:no-underline"
+              onClick={() => { setActiveProjectId(null); setPage(1); }}
+            >
+              Show all
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Repository list */}
@@ -512,6 +539,12 @@ export function RepositoriesContent() {
 
       {/* Pagination — total_pages reflects the (searched) result set, so it
           auto-hides when a filter narrows results to a single page. */}
+      {unassignedMode && unassigned.truncated && (
+        <p className="border-t px-3 py-2 text-xs text-muted-foreground" role="status">
+          Checked the first {unassigned.scanned} of {unassigned.total} repositories. Search or
+          filter to narrow the list.
+        </p>
+      )}
       {totalPages > 1 && (
         <div className="border-t px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>

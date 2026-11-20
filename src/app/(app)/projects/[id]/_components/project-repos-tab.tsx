@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Database, Plus, Unlink } from "lucide-react";
+import { Check, Database, Plus, Unlink } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
@@ -33,6 +27,8 @@ import { mutationErrorToast, toUserMessage } from "@/lib/error-utils";
 import { invalidateGroup } from "@/lib/query-keys";
 import { formatBytes } from "@/lib/utils";
 import type { Repository } from "@/types";
+
+const PAGE_SIZE = 50;
 
 interface ProjectReposTabProps {
   projectId: string;
@@ -46,8 +42,15 @@ export function ProjectReposTab({
   canManage,
 }: ProjectReposTabProps) {
   const queryClient = useQueryClient();
-  const { data, isLoading, isError, error } = useRepositories({ project: projectId, per_page: 1000 });
+  // The backend clamps per_page to 100, so a project with more repositories
+  // needs real paging; asking for 1000 silently stopped at 100 (#988 review).
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isFetching, isError, error } = useRepositories(
+    { project: projectId, page, per_page: PAGE_SIZE },
+    { keepPreviousData: true },
+  );
   const repos = data?.items ?? [];
+  const total = data?.pagination?.total ?? repos.length;
   const [assignOpen, setAssignOpen] = useState(false);
   const [removing, setRemoving] = useState<Repository | null>(null);
 
@@ -155,7 +158,13 @@ export function ProjectReposTab({
         <DataTable
           columns={columns}
           data={repos}
+          total={total}
+          page={page}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          pageSizeOptions={[PAGE_SIZE]}
           loading={isLoading}
+          fetching={isFetching && !isLoading}
           rowKey={(r) => r.id}
           emptyMessage="No repositories"
         />
@@ -180,6 +189,9 @@ export function ProjectReposTab({
   );
 }
 
+/** The picker shows this many matches; more are reached by searching. */
+const PICKER_LIMIT = 50;
+
 function AssignRepoDialog({
   open,
   onOpenChange,
@@ -192,8 +204,18 @@ function AssignRepoDialog({
   onAssigned: () => void;
 }) {
   const [repoKey, setRepoKey] = useState("");
-  const { data } = useRepositories({ per_page: 1000 }, { enabled: open });
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search).trim();
+
+  // Searched on the server: loading "every repository" stopped at the
+  // backend's 100-per-page clamp, so a repository past the first hundred
+  // could not be added (#988 review).
+  const { data, isFetching } = useRepositories(
+    { q: deferredSearch || undefined, per_page: PICKER_LIMIT },
+    { enabled: open, keepPreviousData: true },
+  );
   const candidates = (data?.items ?? []).filter((r) => r.project_id !== projectId);
+  const total = data?.pagination?.total ?? candidates.length;
 
   const assign = useMutation({
     mutationFn: () => repositoriesApi.update(repoKey, { project_id: projectId }),
@@ -201,6 +223,7 @@ function AssignRepoDialog({
       toast.success("Repository added to project");
       onAssigned();
       setRepoKey("");
+      setSearch("");
       onOpenChange(false);
     },
     onError: mutationErrorToast("Failed to add repository to project"),
@@ -217,19 +240,44 @@ function AssignRepoDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="assign-repo">Repository</Label>
-          <Select value={repoKey} onValueChange={setRepoKey}>
-            <SelectTrigger id="assign-repo">
-              <SelectValue placeholder="Select a repository" />
-            </SelectTrigger>
-            <SelectContent>
-              {candidates.map((r) => (
-                <SelectItem key={r.id} value={r.key}>
-                  {r.key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label htmlFor="assign-repo-search">Find a repository</Label>
+          <Input
+            id="assign-repo-search"
+            value={search}
+            placeholder="Search by key or name..."
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <ul
+            aria-label="Repositories"
+            aria-busy={isFetching}
+            className="max-h-56 overflow-y-auto rounded-md border"
+          >
+            {candidates.length === 0 && (
+              <li className="px-3 py-2 text-sm text-muted-foreground">
+                {isFetching ? "Searching..." : "No repositories match."}
+              </li>
+            )}
+            {candidates.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  aria-pressed={repoKey === r.key}
+                  onClick={() => setRepoKey(r.key)}
+                  className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/50 ${
+                    repoKey === r.key ? "bg-muted font-medium" : ""
+                  }`}
+                >
+                  <span className="truncate">{r.key}</span>
+                  {repoKey === r.key && <Check className="size-4 shrink-0" aria-hidden="true" />}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {total > PICKER_LIMIT && (
+            <p className="text-xs text-muted-foreground">
+              Showing the first {PICKER_LIMIT} of {total}. Search to narrow the list.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

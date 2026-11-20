@@ -34,6 +34,7 @@ afterEach(cleanup);
 describe("ProjectProvider", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
     mockUseAuth.mockReturnValue({ isAuthenticated: true });
     mockUseProjects.mockReturnValue({ data: projects });
   });
@@ -51,14 +52,22 @@ describe("ProjectProvider", () => {
     expect(screen.getByTestId("active").textContent).toBe("none");
   });
 
-  it("hydrates the active project from localStorage", () => {
-    window.localStorage.setItem("ak-active-project", "p2");
+  it("hydrates the active project from the session", () => {
+    window.sessionStorage.setItem("ak-active-project", "p2");
     render(<ProjectProvider><Probe /></ProjectProvider>);
     expect(screen.getByTestId("active").textContent).toBe("Beta");
   });
 
+  it("does not carry a scope over from an earlier browser session (#988 review)", () => {
+    // A scope kept in localStorage outlived the browser and kept filtering the
+    // Repositories list on later visits without the user noticing.
+    window.localStorage.setItem("ak-active-project", "p2");
+    render(<ProjectProvider><Probe /></ProjectProvider>);
+    expect(screen.getByTestId("active").textContent).toBe("none");
+  });
+
   it("resolves a stale stored id to null", () => {
-    window.localStorage.setItem("ak-active-project", "gone");
+    window.sessionStorage.setItem("ak-active-project", "gone");
     render(<ProjectProvider><Probe /></ProjectProvider>);
     expect(screen.getByTestId("active").textContent).toBe("none");
   });
@@ -67,10 +76,41 @@ describe("ProjectProvider", () => {
     render(<ProjectProvider><Probe /></ProjectProvider>);
     act(() => screen.getByText("pick").click());
     expect(screen.getByTestId("active").textContent).toBe("Alpha");
-    expect(window.localStorage.getItem("ak-active-project")).toBe("p1");
+    expect(window.sessionStorage.getItem("ak-active-project")).toBe("p1");
+    expect(window.localStorage.getItem("ak-active-project")).toBeNull();
     act(() => screen.getByText("clear").click());
     expect(screen.getByTestId("active").textContent).toBe("none");
-    expect(window.localStorage.getItem("ak-active-project")).toBeNull();
+    expect(window.sessionStorage.getItem("ak-active-project")).toBeNull();
+  });
+
+  it("still works for this page when storage is unavailable", () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      render(<ProjectProvider><Probe /></ProjectProvider>);
+      expect(screen.getByTestId("active").textContent).toBe("none");
+      act(() => screen.getByText("pick").click());
+      expect(screen.getByTestId("active").textContent).toBe("Alpha");
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+
+  it("skips the global-admin-only project list for a user who is not a global admin", () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: false } });
+    render(<ProjectProvider><Probe /></ProjectProvider>);
+    expect(mockUseProjects).toHaveBeenCalledWith({ enabled: true, isGlobalAdmin: false });
+  });
+
+  it("lists every project for a global admin", () => {
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, user: { is_admin: true } });
+    render(<ProjectProvider><Probe /></ProjectProvider>);
+    expect(mockUseProjects).toHaveBeenCalledWith({ enabled: true, isGlobalAdmin: true });
   });
 
   it("provides inert defaults outside a provider", () => {

@@ -69,6 +69,35 @@ describe("projectsApi", () => {
     expect(result.map((p) => p.key)).toEqual(["alpha", "beta"]);
   });
 
+  it("list skips the admin-only endpoint for a user who is not a global admin", async () => {
+    mockApiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/v1/projects/p-a") return wire("p-a", "alpha");
+      throw new ApiError(403, "{}");
+    });
+    mockRepoList.mockResolvedValue({
+      items: [{ project_id: "p-a" }],
+      pagination: { page: 1, per_page: 100, total: 1, total_pages: 1 },
+    });
+    const result = await projectsApi.list({ isGlobalAdmin: false });
+    expect(result.map((p) => p.key)).toEqual(["alpha"]);
+    expect(mockApiFetch).not.toHaveBeenCalledWith("/api/v1/projects");
+  });
+
+  it("list finds projects on every page of repositories, 100 at a time", async () => {
+    mockApiFetch.mockImplementation(async (path: string) => {
+      const id = path.split("/").pop()!;
+      return wire(id, id);
+    });
+    mockRepoList.mockImplementation(async ({ page }: { page: number }) => ({
+      items: [{ project_id: page === 1 ? "p-a" : "p-b" }],
+      pagination: { page, per_page: 100, total: 101, total_pages: 2 },
+    }));
+    const result = await projectsApi.list({ isGlobalAdmin: false });
+    expect(result.map((p) => p.key)).toEqual(["p-a", "p-b"]);
+    expect(mockRepoList).toHaveBeenCalledWith({ page: 1, per_page: 100 });
+    expect(mockRepoList).toHaveBeenCalledWith({ page: 2, per_page: 100 });
+  });
+
   it("list rethrows non-403 errors", async () => {
     mockApiFetch.mockRejectedValue(new ApiError(500, "boom"));
     await expect(projectsApi.list()).rejects.toThrow("boom");

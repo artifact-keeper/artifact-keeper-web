@@ -891,7 +891,7 @@ export function RepoDialogs({
                     <SelectItem value="__none__">No project</SelectItem>
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.key})
+                        {`${p.name} (${p.key})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1061,7 +1061,7 @@ export function RepoDialogs({
                     <SelectItem value="__none__">No project</SelectItem>
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} ({p.key})
+                        {`${p.name} (${p.key})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
