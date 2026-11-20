@@ -129,7 +129,7 @@ import LoginPage from "../login/page";
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("LoginPage lockout UI", () => {
+describe("LoginPage sign-in errors", () => {
   beforeEach(() => {
     mockPush.mockClear();
     mockLogin.mockClear();
@@ -155,46 +155,7 @@ describe("LoginPage lockout UI", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not show the lockout alert by default", () => {
-    render(<LoginPage />);
-
-    expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
-  });
-
-  it("shows Account Locked alert after a lockout error from login", async () => {
-    mockLogin.mockRejectedValueOnce({
-      message: "Account temporarily locked due to too many failed login attempts",
-    });
-
-    render(<LoginPage />);
-
-    // Fill in username and password using the actual react-hook-form bindings
-    const usernameInput = await screen.findByPlaceholderText("Enter your username");
-    const passwordInput = screen.getByPlaceholderText("Enter your password");
-
-    await act(async () => {
-      fireEvent.change(usernameInput, { target: { value: "testuser" } });
-      fireEvent.change(passwordInput, { target: { value: "testpass" } });
-    });
-
-    // Submit the form
-    const submitButton = screen.getByText("Sign In");
-    await act(async () => {
-      fireEvent.click(submitButton);
-    });
-
-    // Wait for the lockout alert to appear
-    await waitFor(() => {
-      expect(screen.getByText("Account Locked")).toBeInTheDocument();
-    });
-
-    // Verify the lockout description is shown
-    expect(
-      screen.getByText(/temporarily locked due to too many failed/)
-    ).toBeInTheDocument();
-  });
-
-  it("shows generic error for non-lockout login failures", async () => {
+  it("shows generic error for a rejected login", async () => {
     mockLogin.mockRejectedValueOnce(
       new Error("Invalid username or password")
     );
@@ -218,8 +179,6 @@ describe("LoginPage lockout UI", () => {
       expect(screen.getByText("Invalid username or password")).toBeInTheDocument();
     });
 
-    // The lockout alert should NOT be shown for generic errors
-    expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -247,76 +206,102 @@ describe("LoginPage lockout UI", () => {
     expect(screen.queryByText(detail)).not.toBeInTheDocument();
   });
 
-  it("hides the generic error text when lockout is shown", async () => {
-    mockLogin.mockRejectedValueOnce({
-      error: "Account locked",
-    });
-
-    render(<LoginPage />);
-
+  async function submit(username = "someone", password = "whatever") {
     const usernameInput = await screen.findByPlaceholderText("Enter your username");
     const passwordInput = screen.getByPlaceholderText("Enter your password");
-
     await act(async () => {
-      fireEvent.change(usernameInput, { target: { value: "testuser" } });
-      fireEvent.change(passwordInput, { target: { value: "testpass" } });
+      fireEvent.change(usernameInput, { target: { value: username } });
+      fireEvent.change(passwordInput, { target: { value: password } });
     });
-
-    const submitButton = screen.getByText("Sign In");
     await act(async () => {
-      fireEvent.click(submitButton);
+      fireEvent.click(screen.getByText("Sign In"));
     });
+  }
 
-    await waitFor(() => {
-      expect(screen.getByText("Account Locked")).toBeInTheDocument();
-    });
-
-    // The generic error div should NOT be rendered when accountLocked is true
-    // (the component has: {error && !accountLocked && <div>...error...</div>})
-    const errorDivs = document.querySelectorAll(".bg-destructive\\/10");
-    expect(errorDivs.length).toBe(0);
-  });
-
-  it("clears lockout state on next submission attempt", async () => {
-    // First attempt: lockout
+  // #1239: backend v1.12.1 answers a locked account with the same 401 as a
+  // wrong password, so the page has no lockout state to show.
+  it("never shows lockout copy, even for a lockout-worded error", async () => {
     mockLogin.mockRejectedValueOnce({
+      code: "AUTH_ERROR",
+      status: 401,
       message: "Account temporarily locked due to too many failed login attempts",
     });
-
     render(<LoginPage />);
-
-    const usernameInput = await screen.findByPlaceholderText("Enter your username");
-    const passwordInput = screen.getByPlaceholderText("Enter your password");
-
-    await act(async () => {
-      fireEvent.change(usernameInput, { target: { value: "testuser" } });
-      fireEvent.change(passwordInput, { target: { value: "testpass" } });
-    });
-
-    const submitButton = screen.getByText("Sign In");
-    await act(async () => {
-      fireEvent.click(submitButton);
-    });
+    await submit();
 
     await waitFor(() => {
-      expect(screen.getByText("Account Locked")).toBeInTheDocument();
+      expect(screen.getByText("Invalid username or password")).toBeInTheDocument();
     });
+    expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/lock/i);
+  });
 
-    // Second attempt: regular failure (lockout should clear)
-    mockLogin.mockRejectedValueOnce(new Error("Invalid credentials"));
+  it("shows the account-neutral hint only after three rejected sign-ins, any username", async () => {
+    const reject = { code: "AUTH_ERROR", status: 401, message: "Invalid username or password" };
+    mockLogin.mockRejectedValue(reject);
+    render(<LoginPage />);
+    const hint = /Still can't sign in\? Check your username and password, or ask an administrator to reset your password\./;
 
-    await act(async () => {
-      fireEvent.change(usernameInput, { target: { value: "testuser" } });
-      fireEvent.change(passwordInput, { target: { value: "newpass" } });
+    await submit("alice", "a");
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(1));
+    await submit("bob", "b");
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+    await submit("carol", "c");
+    await waitFor(() => expect(screen.getByText(hint)).toBeInTheDocument());
+    expect(document.body.textContent).not.toMatch(/lock/i);
+  });
+
+  it("does not count non-credential failures toward the hint", async () => {
+    mockLogin.mockRejectedValue({ status: 503, code: "DATABASE_UNAVAILABLE", message: "Database unavailable" });
+    render(<LoginPage />);
+    for (let i = 0; i < 3; i++) await submit();
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("Database unavailable")).toBeInTheDocument();
+    expect(screen.queryByText(/Still can't sign in/)).not.toBeInTheDocument();
+  });
+
+  it("shows the rate-limit message with Retry-After seconds on a 429", async () => {
+    mockLogin.mockRejectedValueOnce({
+      status: 429,
+      retryAfter: 42,
+      message: "Rate limit exceeded. Please try again later.",
     });
-
-    await act(async () => {
-      fireEvent.click(submitButton);
-    });
-
+    render(<LoginPage />);
+    await submit();
     await waitFor(() => {
-      expect(screen.queryByText("Account Locked")).not.toBeInTheDocument();
-      expect(screen.getByText("Invalid credentials")).toBeInTheDocument();
+      expect(
+        screen.getByText("Too many sign-in attempts. Try again in 42 seconds.")
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Rate limit exceeded/)).not.toBeInTheDocument();
+  });
+
+  it("shows the rate-limit message without a count when Retry-After is absent", async () => {
+    mockLogin.mockRejectedValueOnce({ status: 429, message: "Rate limit exceeded. Please try again later." });
+    render(<LoginPage />);
+    await submit();
+    await waitFor(() => {
+      expect(
+        screen.getByText("Too many sign-in attempts. Try again in a moment.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows the rate-limit message for an LDAP sign-in too", async () => {
+    mockListProviders.mockResolvedValue([
+      { id: "ldap-1", name: "Corp LDAP", provider_type: "ldap", login_url: "" },
+    ]);
+    localLoginEnabled = false;
+    mockLdapLogin.mockRejectedValueOnce({ status: 429, retryAfter: 1, message: "Rate limit exceeded." });
+    render(<LoginPage />);
+    await screen.findByText(/Sign in with your Corp LDAP account/);
+    await submit();
+    await waitFor(() => {
+      expect(
+        screen.getByText("Too many sign-in attempts. Try again in 1 second.")
+      ).toBeInTheDocument();
     });
   });
 

@@ -296,6 +296,18 @@ describe("ssoApi", () => {
     ).rejects.toBe("fail");
   });
 
+  it("ldapLogin carries the 429 status and Retry-After (#1239)", async () => {
+    mockLdapLogin.mockResolvedValue({
+      data: undefined,
+      error: "Rate limit exceeded. Please try again later.",
+      response: new Response(null, { status: 429, headers: { "Retry-After": "12" } }),
+    });
+    const { ssoApi } = await import("../sso");
+    await expect(
+      ssoApi.ldapLogin("l1", "alice", "secret"),
+    ).rejects.toMatchObject({ status: 429, retryAfter: 12 });
+  });
+
   it("updateOidc returns config", async () => {
     mockUpdateOidc.mockResolvedValue({ data: SDK_OIDC, error: undefined });
     const { ssoApi } = await import("../sso");
@@ -474,7 +486,7 @@ describe("ssoApi", () => {
     const { ssoApi } = await import("../sso");
     await expect(
       ssoApi.ldapLogin("l1", "alice", "secret"),
-    ).rejects.toBe("fail");
+    ).rejects.toEqual({ message: "fail" });
   });
 
   it("ldapLogin returns the TOTP challenge for a TOTP-enrolled account (artifact-keeper#5484)", async () => {
