@@ -501,6 +501,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   const selectedDetail =
     artifactDetail?.id === selectedArtifactId ? artifactDetail : undefined;
   const selectedMetadata = selectedDetail?.metadata ?? selectedArtifact?.metadata;
+  const selectedUploader =
+    selectedDetail?.uploaded_by_username ?? selectedArtifact?.uploaded_by_username;
   // A rejection is terminal: the backend only accepts
   // `quarantined -> released|rejected`, so offering either on an already
   // rejected artifact would only ever produce a 409.
@@ -2026,6 +2028,9 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                     label="Created"
                     value={new Date(selectedArtifact.created_at).toLocaleString()}
                   />
+                  {selectedUploader && (
+                    <DetailRow label="Uploaded by" value={selectedUploader} />
+                  )}
                   {repository.repo_type === "remote" &&
                     selectedArtifact.cache_cached_at && (
                       <DetailRow
@@ -2071,7 +2076,6 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                       <CondaPackageSection
                         path={selectedArtifact.path}
                         metadata={selectedMetadata}
-                        uploadedBy={selectedDetail?.uploaded_by_username}
                       />
                       <ArtifactAttestationSection
                         metadata={selectedMetadata}

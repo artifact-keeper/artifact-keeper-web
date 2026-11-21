@@ -15,17 +15,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 /**
  * Conda package fields in the artifact detail dialog: the `index.json` values
- * a reviewer checks (platform subdir, build, license, run dependencies) and
- * who uploaded it, instead of leaving them inside the raw metadata dump.
+ * a reviewer checks (platform subdir, build, license, run dependencies),
+ * instead of leaving them inside the raw metadata dump.
  */
 export function CondaPackageSection({
   path,
   metadata,
-  uploadedBy,
 }: {
   path: string;
   metadata: Record<string, unknown> | null | undefined;
-  uploadedBy?: string | null;
 }) {
   const f = condaPackageFields(path, metadata);
   const publisher = readPublisher(metadata);
@@ -70,7 +68,6 @@ export function CondaPackageSection({
           </ul>
         )}
       </Row>
-      {uploadedBy && <Row label="Uploaded by">{uploadedBy}</Row>}
     </div>
   );
 }
