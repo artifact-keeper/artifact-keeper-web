@@ -28,6 +28,7 @@ const {
   mockList,
   mockListByIp,
   mockListByUser,
+  mockReplace,
   tabsState,
 } = vi.hoisted(() => ({
   mockUseAuth: vi.fn(),
@@ -36,6 +37,7 @@ const {
   mockList: vi.fn(),
   mockListByIp: vi.fn(),
   mockListByUser: vi.fn(),
+  mockReplace: vi.fn(),
   tabsState: { onValueChange: undefined as ((v: string) => void) | undefined },
 }));
 
@@ -53,6 +55,7 @@ vi.mock("@/lib/sdk-client", () => ({}));
 let mockSearch = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockSearch,
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 vi.mock("@/lib/api/downloads", async (importOriginal) => {
@@ -229,6 +232,9 @@ function page(downloads: any[], total = downloads.length) {
 
 const IDLE = { isLoading: false, isError: false, isFetching: false };
 
+/** What `/health` reports; the downloader filter needs 1.12.0 (#1036). */
+let backendVersion = "1.12.0";
+
 /** Route the two useQuery calls (events / grouped sample) by query key. */
 function queryState({
   events = { data: undefined, ...IDLE },
@@ -244,12 +250,16 @@ function queryState({
       return opts.queryKey?.[1] === "sample" ? sample : events;
     }
     if (opts.queryKey?.[0] === "repositories") return repositories;
+    if (opts.queryKey?.[0] === "health") {
+      return { data: { version: backendVersion }, ...IDLE };
+    }
     throw new Error(`Unexpected query key: ${JSON.stringify(opts.queryKey)}`);
   });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  backendVersion = "1.12.0";
   mockUseAuth.mockReturnValue({ user: ADMIN });
   mockList.mockResolvedValue(page([]));
   mockListByIp.mockResolvedValue(page([]));
@@ -377,6 +387,157 @@ describe("DownloadsPage", () => {
     mockList.mockClear();
     await latest.queryFn();
     expect(mockList.mock.calls[0][0].source).toBeUndefined();
+  });
+
+  function latestEventsQuery() {
+    return mockUseQuery.mock.calls
+      .map(([o]) => o)
+      .filter(
+        (o) => o.queryKey?.[0] === "admin-downloads" && o.queryKey?.[1] !== "sample"
+      )
+      .at(-1);
+  }
+
+  it("filters to anonymous downloads, disables User ID and keeps it in the URL (#1036)", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+
+    render(<DownloadsPage />);
+    fireEvent.change(screen.getByLabelText(/user id/i), {
+      target: { value: USER_ID },
+    });
+    fireEvent.change(screen.getByLabelText("Downloader"), {
+      target: { value: "anonymous" },
+    });
+
+    await latestEventsQuery().queryFn();
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ downloader: "anonymous", user_id: undefined, page: 1 })
+    );
+    expect(screen.getByLabelText(/user id/i)).toBeDisabled();
+    expect(screen.getByLabelText(/user id/i)).toHaveValue("");
+    expect(mockReplace).toHaveBeenLastCalledWith("?downloader=anonymous", { scroll: false });
+
+    fireEvent.change(screen.getByLabelText("Downloader"), {
+      target: { value: "__all__" },
+    });
+    mockList.mockClear();
+    await latestEventsQuery().queryFn();
+    expect(mockList.mock.calls[0][0].downloader).toBeUndefined();
+  });
+
+  it("starts filtered from a ?downloader= link", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams("downloader=authenticated");
+    try {
+      render(<DownloadsPage />);
+      await latestEventsQuery().queryFn();
+      expect(mockList).toHaveBeenCalledWith(
+        expect.objectContaining({ downloader: "authenticated" })
+      );
+      expect(mockReplace).not.toHaveBeenCalled();
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it("offers no downloader filter and never sends it to a backend before 1.12.0", async () => {
+    backendVersion = "1.11.12";
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams("downloader=anonymous");
+    try {
+      render(<DownloadsPage />);
+      expect(screen.queryByLabelText("Downloader")).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/user id/i)).not.toBeDisabled();
+      await latestEventsQuery().queryFn();
+      expect(mockList.mock.calls[0][0].downloader).toBeUndefined();
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it.each([
+    ["1.11.14", false],
+    ["1.12.0-rc.1", false],
+    [undefined, false],
+    ["dev", false],
+    ["1.12.0", true],
+    ["1.13.0", true],
+  ])("offers the downloader filter on backend %s: %s", (version, offered) => {
+    backendVersion = version as string;
+    queryState({
+      events: { data: page([]), ...IDLE },
+      sample: { data: page([{ ...EVENT, user_id: null, username: null }]), ...IDLE },
+    });
+
+    render(<DownloadsPage />);
+    expect(screen.queryByLabelText("Downloader") !== null).toBe(offered);
+    fireEvent.click(screen.getByRole("button", { name: /by user/i }));
+    expect(
+      screen.queryByRole("button", { name: /view anonymous downloads/i }) !== null
+    ).toBe(offered);
+  });
+
+  it("explains why User ID is disabled on Anonymous only", () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+
+    render(<DownloadsPage />);
+    expect(screen.getByLabelText(/user id/i)).not.toHaveAccessibleDescription(/no user/i);
+    fireEvent.change(screen.getByLabelText("Downloader"), {
+      target: { value: "anonymous" },
+    });
+    expect(screen.getByLabelText(/user id/i)).toHaveAccessibleDescription(
+      /anonymous downloads have no user/i
+    );
+  });
+
+  it("ignores and drops a hand-made ?downloader= value it does not know", async () => {
+    queryState({ events: { data: page([]), ...IDLE } });
+    mockSearch = new URLSearchParams("downloader=bogus&artifact_id=x");
+    try {
+      render(<DownloadsPage />);
+      await latestEventsQuery().queryFn();
+      expect(mockList.mock.calls[0][0].downloader).toBeUndefined();
+      expect(mockReplace).toHaveBeenLastCalledWith("?artifact_id=x", { scroll: false });
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it("drops Anonymous only when drilling into a signed-in user, which the backend would refuse", async () => {
+    queryState({
+      events: { data: page([]), ...IDLE },
+      sample: { data: page([EVENT]), ...IDLE },
+    });
+    mockSearch = new URLSearchParams("downloader=anonymous");
+    try {
+      render(<DownloadsPage />);
+      fireEvent.click(screen.getByRole("button", { name: /by user/i }));
+      fireEvent.click(screen.getByRole("button", { name: /view downloads by alice/i }));
+      await latestEventsQuery().queryFn();
+      expect(mockListByUser).toHaveBeenCalledWith(
+        USER_ID,
+        expect.objectContaining({ downloader: undefined })
+      );
+    } finally {
+      mockSearch = new URLSearchParams();
+    }
+  });
+
+  it("opens the anonymous group's events from the by-user view", async () => {
+    queryState({
+      events: { data: page([]), ...IDLE },
+      sample: { data: page([EVENT, { ...EVENT, user_id: null, username: null }]), ...IDLE },
+    });
+
+    render(<DownloadsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /by user/i }));
+    fireEvent.click(screen.getByRole("button", { name: /view anonymous downloads/i }));
+
+    expect(screen.getByTestId("tabs")).toHaveAttribute("data-value", "events");
+    await latestEventsQuery().queryFn();
+    expect(mockList).toHaveBeenCalledWith(
+      expect.objectContaining({ downloader: "anonymous" })
+    );
   });
 
   it("shows 'anonymous' for unauthenticated downloads and a truncated id for unknown users", () => {
@@ -648,6 +809,7 @@ describe("fetchDownloads endpoint routing", () => {
     from: "",
     to: "",
     source: "" as const,
+    downloader: "" as const,
   };
 
   beforeEach(() => vi.clearAllMocks());
