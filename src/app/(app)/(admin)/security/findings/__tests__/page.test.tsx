@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("lucide-react", () => {
   const stub = (name: string) => {
@@ -20,18 +20,29 @@ vi.mock("lucide-react", () => {
   };
 });
 
-const { mockUseQuery, mockReplace, mockPush, mockList, searchParamsState } =
-  vi.hoisted(() => ({
-    mockUseQuery: vi.fn(),
-    mockReplace: vi.fn(),
-    mockPush: vi.fn(),
-    mockList: vi.fn(),
-    searchParamsState: { value: "" },
-  }));
+const {
+  mockUseQuery,
+  mockReplace,
+  mockPush,
+  mockList,
+  mockRepoList,
+  searchParamsState,
+} = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(),
+  mockReplace: vi.fn(),
+  mockPush: vi.fn(),
+  mockList: vi.fn(),
+  mockRepoList: vi.fn(),
+  searchParamsState: { value: "" },
+}));
 
 vi.mock("@/lib/api/cve-findings", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   cveFindingsApi: { list: mockList },
+}));
+
+vi.mock("@/lib/api/repositories", () => ({
+  repositoriesApi: { list: mockRepoList },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -186,6 +197,7 @@ const FINDING = {
   artifact_id: "a1",
   artifact_path: "libs-release/log4j-core-2.14.1.jar",
   repository_id: "r1",
+  repository_key: "libs-release",
   cve_id: "CVE-2021-44228",
   severity: "critical",
   is_acknowledged: false,
@@ -226,6 +238,7 @@ describe("FindingsPage", () => {
     mockUseQuery.mockReset();
     mockReplace.mockReset();
     mockPush.mockReset();
+    mockRepoList.mockReset();
     searchParamsState.value = "";
     loaded({ items: [], artifacts: [], total: 0 });
   });
@@ -289,13 +302,20 @@ describe("FindingsPage", () => {
     );
   });
 
-  it("goes to the artifact page from the artifact cell", () => {
+  it("opens the artifact's repository from the artifact cell", async () => {
     loaded({ items: [FINDING], artifacts: [], total: 1 });
     render(<FindingsPage />);
     fireEvent.click(
       screen.getByRole("button", { name: FINDING.artifact_path }),
     );
-    expect(mockPush).toHaveBeenCalledWith(`/artifacts/${FINDING.artifact_id}`);
+    // There is no /artifacts/{id} page; the repository key on the row is used
+    // directly, without a repository lookup.
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        `/repositories/libs-release?path=${encodeURIComponent(FINDING.artifact_path)}`,
+      ),
+    );
+    expect(mockRepoList).not.toHaveBeenCalled();
     // The row click must not also fire, or we would navigate twice.
     expect(mockPush).toHaveBeenCalledTimes(1);
   });
@@ -397,8 +417,45 @@ describe("FindingsPage", () => {
     expect(
       screen.getByRole("columnheader", { name: "Critical" }),
     ).toBeInTheDocument();
+  });
+
+  it("resolves a grouped row's repository id to its key before navigating", async () => {
+    searchParamsState.value = "group_by=artifact";
+    loaded({ items: [], artifacts: [ARTIFACT], total: 1 });
+    mockRepoList
+      .mockResolvedValueOnce({
+        items: [{ id: "r0", key: "other" }],
+        pagination: { page: 1, per_page: 100, total: 2, total_pages: 2 },
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: "r1", key: "libs-release" }],
+        pagination: { page: 2, per_page: 100, total: 2, total_pages: 2 },
+      });
+    render(<FindingsPage />);
     fireEvent.click(screen.getByTestId("dt-row-0"));
-    expect(mockPush).toHaveBeenCalledWith(`/artifacts/${ARTIFACT.artifact_id}`);
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        `/repositories/libs-release?path=${encodeURIComponent(ARTIFACT.artifact_path)}`,
+      ),
+    );
+    expect(mockRepoList).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays on the findings page, scoped to the repository, when the key cannot be resolved", async () => {
+    searchParamsState.value = "group_by=artifact";
+    loaded({ items: [], artifacts: [ARTIFACT], total: 1 });
+    mockRepoList.mockResolvedValueOnce({
+      items: [],
+      pagination: { page: 1, per_page: 100, total: 0, total_pages: 0 },
+    });
+    render(<FindingsPage />);
+    fireEvent.click(screen.getByTestId("dt-row-0"));
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        "/security/findings?repository_id=r1",
+      ),
+    );
+    expect(mockPush).not.toHaveBeenCalledWith(expect.stringContaining("/artifacts/"));
   });
 
   it("disables the severity selector in the grouped view but keeps it rendered", () => {
