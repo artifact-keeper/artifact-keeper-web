@@ -28,6 +28,7 @@ import { VulnIdLink } from "@/components/common/vuln-id-link";
 import { formatRelativeTimestamp } from "@/lib/cache-time";
 import { ApiError, apiErrorMessage } from "@/lib/api/fetch";
 import { isForbiddenError, toUserMessage } from "@/lib/error-utils";
+import { repositoriesApi } from "@/lib/api/repositories";
 
 const DEFAULT_PER_PAGE = 50;
 
@@ -118,8 +119,20 @@ function FindingsPageContent() {
       }),
   });
 
-  const goToArtifact = (row: { artifact_id: string }) =>
-    router.push(`/artifacts/${row.artifact_id}`);
+  // There is no per-artifact page: `/artifacts/{id}` is a 404. Open the
+  // artifact's repository instead, with the same `?path=` link search uses.
+  const goToArtifact = async (row: ArtifactLinkRow) => {
+    const key =
+      row.repository_key ??
+      (await repoKeyForId(row.repository_id).catch(() => undefined));
+    router.push(
+      key
+        ? artifactHref(key, row.artifact_path)
+        : // Repository not resolvable (deleted, or not visible): stay on this
+          // page, scoped to the repository, rather than open a dead link.
+          `/security/findings?repository_id=${encodeURIComponent(row.repository_id)}`,
+    );
+  };
 
   // Shared by the flat and the grouped table: same paging, same loading and
   // empty behaviour, only the rows differ.
@@ -289,6 +302,31 @@ function artifactCell(path: string, onClick: () => void) {
       {path}
     </button>
   );
+}
+
+type ArtifactLinkRow = {
+  artifact_path: string;
+  repository_id: string;
+  repository_key?: string | null;
+};
+
+/** Repository page for an artifact, the same link search results use. */
+function artifactHref(repoKey: string, artifactPath: string): string {
+  return `/repositories/${encodeURIComponent(repoKey)}?path=${encodeURIComponent(artifactPath)}`;
+}
+
+/**
+ * Grouped (`group_by=artifact`) rows carry only `repository_id`, and the
+ * repository API is addressed by key, so look the key up in the repository
+ * list. Only runs on click, page by page, and stops at the first match.
+ */
+async function repoKeyForId(repositoryId: string): Promise<string | undefined> {
+  for (let page = 1; ; page++) {
+    const res = await repositoriesApi.list({ page, per_page: 100 });
+    const hit = res.items.find((r) => r.id === repositoryId);
+    if (hit) return hit.key;
+    if (page >= res.pagination.total_pages) return undefined;
+  }
 }
 
 function findingColumns(
