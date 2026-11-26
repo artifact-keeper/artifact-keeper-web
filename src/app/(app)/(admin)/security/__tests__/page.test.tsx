@@ -248,7 +248,7 @@ function makeScore(overrides: Partial<{
   id: string;
   repository_id: string;
   score: number;
-  grade: string;
+  grade: string | null;
   total_findings: number;
   critical_count: number;
   high_count: number;
@@ -1207,6 +1207,17 @@ describe("SecurityDashboardPage", () => {
       // Each grade badge renders the grade letter
       expect(screen.getByText("A")).toBeInTheDocument();
       expect(screen.getByText("F")).toBeInTheDocument();
+    });
+
+    it("labels a repository with nothing assessed as Unrated (#1177)", () => {
+      setupQueries({
+        scores: [makeScore({ id: "s1", repository_id: "id-u", grade: null, score: 0 })],
+        repos: [],
+      });
+
+      render(<SecurityDashboardPage />);
+
+      expect(screen.getByText("Unrated")).toBeInTheDocument();
     });
   });
 

@@ -25,7 +25,8 @@ export interface RepoSecurityScore {
   id: string;
   repository_id: string;
   score: number;
-  grade: string;
+  /** `null` when nothing in the repository was assessed (backend 1.12, artifact-keeper#4336) */
+  grade: string | null;
   total_findings: number;
   critical_count: number;
   high_count: number;
