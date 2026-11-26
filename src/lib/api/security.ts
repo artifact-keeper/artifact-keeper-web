@@ -131,7 +131,7 @@ function adaptScore(sdk: SdkScoreResponse): RepoSecurityScore {
     id: sdk.id,
     repository_id: sdk.repository_id,
     score: sdk.score,
-    grade: sdk.grade,
+    grade: sdk.grade ?? null,
     total_findings: sdk.critical_count + sdk.high_count + sdk.medium_count + sdk.low_count,
     critical_count: sdk.critical_count,
     high_count: sdk.high_count,

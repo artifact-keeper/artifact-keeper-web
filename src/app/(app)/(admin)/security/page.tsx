@@ -74,12 +74,12 @@ const GRADE_COLORS: Record<string, string> = {
   F: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
 };
 
-function GradeBadge({ grade }: { grade: string }) {
+function GradeBadge({ grade }: { grade: string | null }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-md px-2.5 py-0.5 text-sm font-bold ${GRADE_COLORS[grade] ?? "bg-muted text-muted-foreground"}`}
+      className={`inline-flex items-center justify-center rounded-md px-2.5 py-0.5 text-sm font-bold ${(grade && GRADE_COLORS[grade]) || "bg-muted text-muted-foreground"}`}
     >
-      {grade}
+      {grade ?? "Unrated"}
     </span>
   );
 }
