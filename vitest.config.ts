@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
+    env: {
+      // Tests assert on en-US formatting; don't let the host locale change it.
+      LC_ALL: 'en_US.UTF-8'
+    },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
       provider: 'v8',
