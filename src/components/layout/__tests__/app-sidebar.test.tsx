@@ -76,6 +76,8 @@ vi.mock("lucide-react", () => {
   const icon = () => null;
   return {
     LayoutDashboard: icon,
+    HelpCircle: icon,
+    ShieldAlert: icon,
     Database: icon,
     Boxes: icon,
     Hammer: icon,
@@ -153,10 +155,15 @@ import { AppSidebar } from "../app-sidebar";
 function authState({
   isAuthenticated = false,
   isAdmin = false,
-}: { isAuthenticated?: boolean; isAdmin?: boolean } = {}) {
+  capabilities,
+}: {
+  isAuthenticated?: boolean;
+  isAdmin?: boolean;
+  capabilities?: string[];
+} = {}) {
   mockUseAuth.mockReturnValue({
     isAuthenticated,
-    user: isAuthenticated ? { is_admin: isAdmin } : null,
+    user: isAuthenticated ? { is_admin: isAdmin, capabilities } : null,
   });
 }
 
@@ -348,6 +355,99 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Security")).toBeDefined();
     expect(screen.getByText("Operations")).toBeDefined();
     expect(screen.getByText("Administration")).toBeDefined();
+  });
+
+  describe("package exceptions", () => {
+    // The queue needs backend 1.13.0 (EXCEPTIONS_MIN); the gate tests below
+    // override this.
+    beforeEach(() => {
+      mockUseQuery.mockReturnValue({ data: { version: "1.13.0" } });
+    });
+
+    it.each([
+      ["1.12.1", { version: "1.12.1" }],
+      ["a pre-release of 1.13.0", { version: "1.13.0-rc.1" }],
+      ["an unknown version", undefined],
+    ])("hides every exception entry on backend %s", (_label, health) => {
+      mockUseQuery.mockReturnValue({ data: health });
+      authState({
+        isAuthenticated: true,
+        isAdmin: true,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Request Exception")).toBeNull();
+      expect(screen.queryByText("Exceptions")).toBeNull();
+      // The rest of the admin Security group is unaffected.
+      expect(screen.getByText("Age Gate")).toBeDefined();
+    });
+
+    it("hides the non-admin reviewer's Security group on backend 1.12.1", () => {
+      mockUseQuery.mockReturnValue({ data: { version: "1.12.1" } });
+      authState({
+        isAuthenticated: true,
+        isAdmin: false,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Security")).toBeNull();
+      expect(screen.queryByText("Exceptions")).toBeNull();
+      expect(screen.queryByText("Request Exception")).toBeNull();
+    });
+
+    it("offers the request form to every signed-in user, admin or not", () => {
+      // Anyone can be blocked by a gate, so anyone can ask. The backend is
+      // what bounds the write, not this entry.
+      authState({ isAuthenticated: true, isAdmin: false });
+      render(<AppSidebar />);
+      expect(screen.getByText("Request Exception")).toBeDefined();
+    });
+
+    it("puts the queue in the admin Security group", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      render(<AppSidebar />);
+      expect(screen.getByText("Security")).toBeDefined();
+      expect(screen.getByText("Exceptions")).toBeDefined();
+    });
+
+    it("gives a non-admin security reviewer a Security group of their own", () => {
+      // The Security group is admin-only, so without this the one page a
+      // reviewer exists to use would have no way in.
+      authState({
+        isAuthenticated: true,
+        isAdmin: false,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.getByText("Security")).toBeDefined();
+      expect(screen.getByText("Exceptions")).toBeDefined();
+      // Still not an admin: none of the rest of the group comes with it.
+      expect(screen.queryByText("Permissions")).toBeNull();
+      expect(screen.queryByText("Signing")).toBeNull();
+      expect(screen.queryByText("Administration")).toBeNull();
+    });
+
+    it("shows the queue once, not twice, to an admin who also holds the capability", () => {
+      authState({
+        isAuthenticated: true,
+        isAdmin: true,
+        capabilities: ["security_review"],
+      });
+      render(<AppSidebar />);
+      expect(screen.getAllByText("Exceptions")).toHaveLength(1);
+    });
+
+    it("hides the queue from a user with neither admin nor the capability", () => {
+      authState({ isAuthenticated: true, isAdmin: false });
+      render(<AppSidebar />);
+      expect(screen.queryByText("Exceptions")).toBeNull();
+    });
+
+    it("keeps the Age Gate entry, which is still the admin view of that queue", () => {
+      authState({ isAuthenticated: true, isAdmin: true });
+      render(<AppSidebar />);
+      expect(screen.getByText("Age Gate")).toBeDefined();
+    });
   });
 
   it("hides Scan Results and DT Projects when no scanner is configured (#271)", () => {

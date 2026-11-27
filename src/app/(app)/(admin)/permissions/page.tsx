@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useState, useCallback, useMemo } from "react";
+import { Suspense, useState, useCallback, useMemo, useDeferredValue } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus, Pencil, Trash2, Shield } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,9 +67,22 @@ import { PageHeader } from "@/components/common/page-header";
 import { DataTable, type DataTableColumn } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListTruncationNotice } from "@/components/common/list-truncation-notice";
 import { McpNamespaceGrants } from "./_components/mcp-namespace-grants";
+import { PermissionFilterBar } from "./_components/permission-filter-bar";
+import {
+  EMPTY_PERMISSION_FILTERS,
+  filterPermissions,
+  filtersFromSearch,
+  filtersToSearch,
+  hasActiveFilters,
+  type PermissionFilters,
+} from "@/lib/permission-filters";
 
 // -- constants --
+
+// The backend clamps `per_page` to 100, so this is also the most one search returns.
+const USER_PICKER_PAGE_SIZE = 100;
 
 const ALL_ACTIONS: PermissionAction[] = ["read", "write", "delete", "admin"];
 
@@ -125,21 +138,51 @@ export default function PermissionsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
 
+  // Permissions are paged on the server (#1181); changing a filter returns to page 1.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PERMISSIONS_MAX_PER_PAGE);
+
+  // Filters live in the query string so a filtered view can be shared or
+  // bookmarked (#1096). Read once on mount; written with replaceState so
+  // typing does not fill the history.
+  const [filters, setFiltersState] = useState<PermissionFilters>(() =>
+    globalThis.window === undefined
+      ? EMPTY_PERMISSION_FILTERS
+      : filtersFromSearch(globalThis.window.location.search),
+  );
+  const setFilters = useCallback((next: PermissionFilters) => {
+    setFiltersState(next);
+    setPage(1);
+    const url = new URL(globalThis.window.location.href);
+    url.search = filtersToSearch(next, url.search);
+    globalThis.window.history.replaceState(null, "", url);
+  }, []);
+
   const [form, setForm] = useState<PermissionForm>(EMPTY_FORM);
   const [principalPickerOpen, setPrincipalPickerOpen] = useState(false);
   const [principalSearch, setPrincipalSearch] = useState("");
+  // A searched-for user can drop out of the result list when the query
+  // changes, so the chosen principal's label is kept here rather than looked up.
+  const [chosenPrincipal, setChosenPrincipal] = useState<{ id: string; label: string } | null>(null);
 
   // -- queries --
-  // Paged on the server: the backend caps per_page at 100, so one big request stopped there (#1181)
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PERMISSIONS_MAX_PER_PAGE);
+  // Paged on the server: the backend caps per_page at 100, so one big request stopped there (#1181).
+  // The type filters are answered by the server too (#1096). Name and action have no
+  // API parameter, so those apply to the loaded page below. The key stays under the
+  // "admin-permissions" prefix that mutations invalidate.
   const {
     data: permissionsData,
     isLoading: permissionsLoading,
     isPlaceholderData: permissionsPageLoading,
   } = useQuery({
-    queryKey: ["admin-permissions", page, pageSize],
-    queryFn: () => permissionsApi.list({ page, per_page: pageSize }),
+    queryKey: ["admin-permissions", page, pageSize, filters.principalType, filters.targetType],
+    queryFn: () =>
+      permissionsApi.list({
+        page,
+        per_page: pageSize,
+        principal_type: filters.principalType || undefined,
+        target_type: filters.targetType || undefined,
+      }),
     enabled: !!currentUser?.is_admin,
     placeholderData: (prev) => prev,
   });
@@ -151,11 +194,21 @@ export default function PermissionsPage() {
   // is distinct from the audit page's unfiltered ["admin-users"] entry (its
   // actor filter must still list service accounts) while staying under that
   // prefix for invalidation. perPage 100 is the backend maximum: users past
-  // the first 100 cannot be picked until the picker searches server-side.
+  // the first 100 cannot be picked without searching, so the picker queries
+  // the server as the admin types (#892). The search term is part of the key,
+  // which stays under the "admin-users" prefix.
+  const userSearch = useDeferredValue(principalSearch).trim();
   const { data: usersData } = useQuery({
-    queryKey: ["admin-users", "principal-picker"],
-    queryFn: () => adminApi.listUsers({ isServiceAccount: false, perPage: 100 }),
+    queryKey: ["admin-users", "principal-picker", userSearch],
+    queryFn: () =>
+      adminApi.listUsersPage({
+        isServiceAccount: false,
+        perPage: USER_PICKER_PAGE_SIZE,
+        search: userSearch || undefined,
+      }),
     enabled: !!currentUser?.is_admin,
+    // Keep the previous results on screen while the next search loads.
+    placeholderData: keepPreviousData,
   });
 
   const { data: groupsData } = useQuery({
@@ -175,7 +228,7 @@ export default function PermissionsPage() {
     enabled: !!currentUser?.is_admin,
   });
 
-  const permissions = permissionsData?.items ?? [];
+  const allPermissions = useMemo(() => permissionsData?.items ?? [], [permissionsData]);
   const permissionsTotal = permissionsData?.pagination?.total ?? 0;
 
   // Deleting the last rule on the last page leaves that page empty; step back
@@ -184,7 +237,8 @@ export default function PermissionsPage() {
   // derived from a previous render.
   const lastPage = Math.max(1, Math.ceil(permissionsTotal / pageSize));
   if (permissionsData && page > lastPage) setPage(lastPage);
-  const users = usersData ?? [];
+  const users = usersData?.items ?? [];
+  const total = usersData?.total ?? 0;
   const groups = groupsData?.items ?? [];
   const repositories = repositoriesData?.items ?? [];
 
@@ -237,16 +291,28 @@ export default function PermissionsPage() {
     [serviceAccountNames]
   );
 
+  const permissions = useMemo(
+    () =>
+      filterPermissions(allPermissions, filters, {
+        principalLabel: getPrincipalLabel,
+        targetLabel: (p) => p.target_name ?? p.target_id,
+      }),
+    [allPermissions, filters, getPrincipalLabel],
+  );
+  const filtersActive = hasActiveFilters(filters);
+
   const filteredPrincipalOptions = useMemo(() => {
     const search = principalSearch.trim().toLowerCase();
-    if (!search) return principalOptions;
+    // Users are already filtered by the server (it also matches username and
+    // email, which the label does not show), so do not filter them again.
+    if (!search || form.principal_type === "user") return principalOptions;
 
     return principalOptions.filter((principal) =>
       principal.label.toLowerCase().includes(search) ||
       principal.searchText?.toLowerCase().includes(search) ||
       principal.value.toLowerCase().startsWith(search)
     );
-  }, [principalOptions, principalSearch]);
+  }, [principalOptions, principalSearch, form.principal_type]);
 
   const repositoryOptions = useMemo(() =>
     repositories.map((r: Repository) => ({
@@ -492,6 +558,7 @@ export default function PermissionsPage() {
                   {form.principal_type === "service_account" && serviceAccountsLoading
                     ? "Loading service accounts..."
                     : selectedPrincipal?.label ??
+                      (chosenPrincipal?.id === form.principal_id ? chosenPrincipal.label : undefined) ??
                       (editOpen && selectedPermission
                         ? getPrincipalLabel(selectedPermission)
                         : "Select...")}
@@ -518,6 +585,13 @@ export default function PermissionsPage() {
                         : "No principals are available."}
                     </CommandEmpty>
                   )}
+                  {form.principal_type === "user" && (
+                    <ListTruncationNotice
+                      shown={users.length}
+                      total={total}
+                      className="px-3 py-2 text-xs"
+                    />
+                  )}
                   {filteredPrincipalOptions.length > 0 && (
                     <CommandGroup heading="Principals">
                       {filteredPrincipalOptions.map((principal) => (
@@ -526,6 +600,7 @@ export default function PermissionsPage() {
                           value={principal.value}
                           onSelect={() => {
                             setForm((f) => ({ ...f, principal_id: principal.value }));
+                            setChosenPrincipal({ id: principal.value, label: principal.label });
                             setPrincipalPickerOpen(false);
                             setPrincipalSearch("");
                           }}
@@ -678,7 +753,16 @@ export default function PermissionsPage() {
         }
       />
 
-      {!permissionsLoading && permissionsTotal === 0 ? (
+      {(permissionsTotal > 0 || filtersActive) && (
+        <PermissionFilterBar
+          filters={filters}
+          onChange={setFilters}
+          shown={permissions.length}
+          total={allPermissions.length}
+        />
+      )}
+
+      {!permissionsLoading && permissionsTotal === 0 && !filtersActive ? (
         <EmptyState
           icon={Shield}
           title="No permissions configured"
@@ -701,7 +785,7 @@ export default function PermissionsPage() {
               so a column sort can only order the page on screen (#1187) */}
           {permissionsTotal > pageSize && (
             <p className="text-xs text-muted-foreground">
-              Sorting by a column orders the rules on this page only.
+              Sorting by a column, and filtering by name or action, applies to the rules on this page only.
             </p>
           )}
           <DataTable
@@ -719,7 +803,7 @@ export default function PermissionsPage() {
             loading={permissionsLoading}
             // the previous page stays up as placeholder data until the next arrives (#1188)
             fetching={permissionsPageLoading}
-            emptyMessage="No permissions found."
+            emptyMessage={filtersActive ? "No permissions match these filters." : "No permissions found."}
             rowKey={(p) => p.id}
           />
         </div>

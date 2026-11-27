@@ -104,3 +104,40 @@ describe("callback page — exchange bound to the starting browser (artifact-kee
     expect(mockRefreshUser).not.toHaveBeenCalled();
   });
 });
+
+describe("callback page — scrubs ?code= from history on every outcome (#1153)", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/callback?code=abc123&keep=1");
+  });
+
+  async function settle(expectText?: string) {
+    render(<SsoCallbackPage />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    if (expectText) await screen.findByText(expectText);
+  }
+
+  it("on success", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { access_token: "t" }));
+    await settle();
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
+    expect(window.location.search).toBe("?keep=1");
+  });
+
+  it("when the exchange is refused", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(401, { code: "AUTH_ERROR", message: "x" }));
+    await settle("Authentication failed. Please try again.");
+    expect(window.location.search).toBe("?keep=1");
+  });
+
+  it("on a network failure", async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+    await settle("Failed to complete sign-in. Please try again.");
+    expect(window.location.search).toBe("?keep=1");
+  });
+
+  it("still sends the captured code to the exchange", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(200, { access_token: "t" }));
+    await settle();
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ code: "abc123" });
+  });
+});

@@ -1,5 +1,6 @@
 import type { InstanceQuota } from '@/lib/quota';
 import type { McpRepositorySettings } from './mcp';
+import type { UpstreamMode } from '@/lib/upstream-mode';
 export * from './groups';
 export * from './migration';
 export * from './permissions';
@@ -37,6 +38,13 @@ export interface User {
   password_expires_at?: string | null;
   totp_enabled?: boolean;
   auth_provider?: string;
+  /**
+   * Global capabilities this user holds, e.g. `security_review`. Optional
+   * because a backend older than the exception queue does not send it; treat
+   * an absent list as "no capabilities" rather than as unknown, since admins
+   * are authorised through `is_admin` regardless.
+   */
+  capabilities?: string[];
 }
 
 export interface LoginResponse {
@@ -271,6 +279,12 @@ export interface CreateRepositoryRequest extends McpRepositorySettings {
   upstream_auth_type?: string;
   upstream_username?: string;
   upstream_password?: string;
+  /**
+   * Remote only: the upstream mode the repository is born with (#1094,
+   * artifact-keeper#5406). `cache_only` never contacts the upstream. Omit for
+   * the default, `online`.
+   */
+  upstream_mode?: UpstreamMode;
   // For virtual repositories - array of member repo keys with priorities
   member_repos?: VirtualRepoMemberInput[];
   // --- 1.6.0 format-specific config (#602) ---

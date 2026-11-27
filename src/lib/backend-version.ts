@@ -80,3 +80,18 @@ export const SCAN_POLICY_LOCK_MIN = "1.12.0";
  * (artifact-keeper#3645). Earlier backends store it as `fail_open`.
  */
 export const RECORD_ONLY_MIN = "1.11.0";
+
+/**
+ * Backend release with the package exception queue: `/api/v1/exceptions/reviews`,
+ * `/api/v1/exceptions/requests`, `/api/v1/admin/security-reviewers` and the
+ * `exception_request_url` setting (artifact-keeper#5782, artifact-keeper#5783).
+ * Earlier backends answer 404, so every entry point is hidden on them.
+ */
+export const EXCEPTIONS_MIN = "1.13.0";
+
+/**
+ * Backend release with bulk build delete (`POST /api/v1/builds/delete`,
+ * artifact-keeper#6119). Earlier backends answer 405, so the Builds page
+ * hides the row checkboxes and the delete button.
+ */
+export const BUILD_DELETE_MIN = "1.13.0";

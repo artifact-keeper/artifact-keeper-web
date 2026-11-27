@@ -444,6 +444,44 @@ describe("settingsApi", () => {
     expect(all.environment).toBe("");
   });
 
+  it("getAllSettings keeps an absent exception_request_url apart from an unset one", async () => {
+    const base = { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 0 };
+    const mod = await import("../settings");
+
+    mockGetSettings.mockResolvedValue({ data: base, error: undefined });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeUndefined();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: null },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeNull();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: "  " },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBeNull();
+
+    mockGetSettings.mockResolvedValue({
+      data: { ...base, exception_request_url: "https://t.example/{package}" },
+      error: undefined,
+    });
+    expect((await mod.settingsApi.getAllSettings()).exceptionRequestUrl).toBe(
+      "https://t.example/{package}",
+    );
+  });
+
+  it("updateExceptionRequestUrl posts only that field, trimmed", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateExceptionRequestUrl("  https://t.example/{package} ");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ exception_request_url: "https://t.example/{package}" }),
+    });
+  });
+
   it("getAllSettings throws on SDK error (#349)", async () => {
     mockGetSettings.mockResolvedValue({ data: undefined, error: "unauthorized" });
     const mod = await import("../settings");
@@ -518,5 +556,41 @@ describe("settingsApi", () => {
   it("offers no writer for the upload limit, MAX_UPLOAD_SIZE sets it (artifact-keeper#5751)", async () => {
     const mod = await import("../settings");
     expect(mod.settingsApi).not.toHaveProperty("updateMaxUploadSize");
+  });
+
+  it("getBuildRetention reads both values, null on a backend without them", async () => {
+    const mod = await import("../settings");
+    mockGetSettings.mockResolvedValue({
+      data: { build_retention_days: 30, build_retention_keep_last: 5 },
+      error: undefined,
+    });
+    await expect(mod.settingsApi.getBuildRetention()).resolves.toEqual({
+      days: 30,
+      keep_last: 5,
+    });
+    mockGetSettings.mockResolvedValue({
+      data: { storage_backend: "fs", storage_path: "/data", max_upload_size_bytes: 1 },
+      error: undefined,
+    });
+    await expect(mod.settingsApi.getBuildRetention()).resolves.toBeNull();
+  });
+
+  it("getBuildRetention throws when loading the settings fails", async () => {
+    mockGetSettings.mockResolvedValue({ data: undefined, error: "boom" });
+    const mod = await import("../settings");
+    await expect(mod.settingsApi.getBuildRetention()).rejects.toThrow(
+      /Failed to load build retention: boom/
+    );
+  });
+
+  it("updateBuildRetention posts only the two values", async () => {
+    mockApiFetch.mockResolvedValue(undefined);
+    const mod = await import("../settings");
+    await mod.settingsApi.updateBuildRetention({ days: 14, keep_last: 3 });
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ build_retention_days: 14, build_retention_keep_last: 3 }),
+    });
+    expect(mockGetSettings).not.toHaveBeenCalled();
   });
 });

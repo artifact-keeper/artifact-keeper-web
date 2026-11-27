@@ -3,7 +3,8 @@
 import { useDocumentTitle } from "@/hooks/use-document-title";
 
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   SearchIcon,
   Loader2,
@@ -24,7 +25,10 @@ import {
   CircleDashed,
   Ban,
   CalendarDays,
+  Trash2,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +56,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildsApi } from "@/lib/api/builds";
+import { adminApi } from "@/lib/api/admin";
+import { backendAtLeast, BUILD_DELETE_MIN } from "@/lib/backend-version";
+import { apiErrorMessage } from "@/lib/api/fetch";
 import { formatBytes } from "@/lib/utils";
 import type {
   Build,
@@ -59,6 +66,10 @@ import type {
   BuildDiff,
   BuildModule,
 } from "@/types/builds";
+import { BuildMetadata, BuildUrl } from "./_components/build-links";
+import { deleteSummary } from "./_components/delete-summary";
+import { BuildArtifactName } from "./_components/build-artifact-name";
+import { PAGE_SIZES } from "./_components/build-filters";
 
 // ---- Helpers ----
 
@@ -220,6 +231,13 @@ function BuildDetailDialog({
                 </InfoItem>
               </div>
 
+              {build.vcs_url && (
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Repository:</span>{" "}
+                  <BuildUrl url={build.vcs_url} />
+                </div>
+              )}
+
               {build.vcs_message && (
                 <div className="text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">Commit:</span>{" "}
@@ -235,6 +253,8 @@ function BuildDetailDialog({
                   </span>
                 </div>
               )}
+
+              <BuildMetadata metadata={build.metadata} />
 
               <div className="pt-2">
                 <Button
@@ -297,15 +317,39 @@ function InfoItem({
 function ModuleCard({ module }: { module: BuildModule }) {
   return (
     <div className="rounded-lg border">
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <FileText className="size-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-sm truncate">{module.module_name || module.name}</span>
-        </div>
+      <div className="flex items-center gap-2 p-3 border-b">
+        <Layers className="size-4 text-muted-foreground shrink-0" />
+        <span className="font-medium text-sm truncate">
+          {module.name || "No module"}
+        </span>
         <span className="text-xs text-muted-foreground">
-          {formatBytes(module.size_bytes)}
+          {module.artifacts.length}{" "}
+          {module.artifacts.length === 1 ? "artifact" : "artifacts"}
         </span>
       </div>
+      <ul className="divide-y">
+        {module.artifacts.map((artifact, i) => (
+          <li
+            key={`${artifact.path}-${artifact.checksum_sha256}-${i}`}
+            className="flex items-center justify-between gap-3 px-3 py-2"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="size-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm truncate">
+                  <BuildArtifactName artifact={artifact} />
+                </p>
+                <p className="text-xs text-muted-foreground truncate font-mono">
+                  {artifact.path}
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {formatBytes(artifact.size_bytes)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -371,7 +415,9 @@ function BuildDiffDialog({
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-green-600 dark:text-green-400">+</span>
-                        <span className="font-mono text-xs">{art.name}</span>
+                        <span className="font-mono text-xs">
+                          <BuildArtifactName artifact={art} />
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(art.size_bytes)}
@@ -396,7 +442,9 @@ function BuildDiffDialog({
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-red-600 dark:text-red-400">-</span>
-                        <span className="font-mono text-xs">{art.name}</span>
+                        <span className="font-mono text-xs">
+                          <BuildArtifactName artifact={art} />
+                        </span>
                       </div>
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(art.size_bytes)}
@@ -463,7 +511,7 @@ export default function BuildsPage() {
   const [statusFilter, setStatusFilter] = useState<BuildStatus | "">("");
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
 
   // Selection
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
@@ -474,6 +522,46 @@ export default function BuildsPage() {
   const [compareBuildA, setCompareBuildA] = useState<string | null>(null);
   const [compareBuildB, setCompareBuildB] = useState<string | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
+
+  // Rows checked for delete, offered only where the backend has bulk delete
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => adminApi.getHealth(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const canDelete = backendAtLeast(health?.version, BUILD_DELETE_MIN);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  // A selection belongs to the rows on screen, so a new page, sort or filter drops it
+  const selectionScope = [search, statusFilter, sortBy, page, pageSize].join("|");
+  const [checkedScope, setCheckedScope] = useState(selectionScope);
+  if (checkedScope !== selectionScope) {
+    setCheckedScope(selectionScope);
+    setChecked(new Set());
+  }
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (ids: string[]) => buildsApi.deleteMany(ids),
+    onSuccess: (result) => {
+      toast.success(deleteSummary(result));
+      setChecked(new Set());
+      setConfirmDeleteOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["builds"] });
+      queryClient.invalidateQueries({ queryKey: ["build-detail"] });
+    },
+    onError: (error) => {
+      toast.error(apiErrorMessage(error) ?? "Failed to delete builds");
+    },
+  });
+
+  const toggleChecked = useCallback((id: string, on: boolean) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   // Fetch builds
   const { data: buildsData, isLoading } = useQuery({
@@ -490,7 +578,13 @@ export default function BuildsPage() {
   });
 
   const builds = buildsData?.items ?? [];
+  const allOnPageChecked =
+    builds.length > 0 && builds.every((b) => checked.has(b.id));
   const totalPages = buildsData?.pagination?.total_pages ?? 0;
+  // Deleting every row of the last page leaves it past the end, step back
+  if (buildsData && page > 1 && page > totalPages) {
+    setPage(Math.max(totalPages, 1));
+  }
   const totalBuilds = buildsData?.pagination?.total ?? 0;
 
   // Fetch build detail
@@ -560,6 +654,17 @@ export default function BuildsPage() {
           >
             <X className="size-3.5" />
             Exit comparison
+          </Button>
+        )}
+        {canDelete && !comparisonMode && checked.size > 0 && (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmDeleteOpen(true)}
+            className="gap-1.5"
+          >
+            <Trash2 className="size-3.5" />
+            Delete selected ({checked.size})
           </Button>
         )}
       </div>
@@ -664,6 +769,17 @@ export default function BuildsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {canDelete && !comparisonMode && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        aria-label="Select all builds on this page"
+                        checked={allOnPageChecked}
+                        onCheckedChange={(on) =>
+                          builds.forEach((b) => toggleChecked(b.id, on === true))
+                        }
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="w-10" />
                   <TableHead>Build</TableHead>
                   <TableHead>Status</TableHead>
@@ -691,6 +807,17 @@ export default function BuildsPage() {
                       }`}
                       onClick={() => handleRowClick(build)}
                     >
+                      {canDelete && !comparisonMode && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            aria-label={`Select ${build.name} #${build.number}`}
+                            checked={checked.has(build.id)}
+                            onCheckedChange={(on) =>
+                              toggleChecked(build.id, on === true)
+                            }
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>{statusIcon(build.status)}</TableCell>
                       <TableCell>
                         <div>
@@ -745,11 +872,31 @@ export default function BuildsPage() {
       </Card>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {(totalPages > 1 || totalBuilds > PAGE_SIZES[0]) && (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[110px]" aria-label="Builds per page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} / page
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -781,6 +928,17 @@ export default function BuildsPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onCompare={handleStartComparison}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title={`Delete ${checked.size} ${checked.size === 1 ? "build" : "builds"}?`}
+        description="The build records and their artifact lists are deleted. The artifacts in repositories are not touched."
+        confirmText="Delete"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate([...checked])}
       />
 
       {/* Build Diff Dialog */}

@@ -47,6 +47,7 @@ import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { isPluginBackedRepo, repoFormatLabel } from "@/lib/repo-format";
 import {
   isActivelyQuarantined,
+  ociExpectedDigest,
   quarantineBadgeKind,
   isQuarantineRejected,
   quarantineKnowledge,
@@ -88,6 +89,8 @@ import { supportsCondaAllowlist } from "@/lib/api/conda-allowlist";
 import { PypiTracksPanel } from "./pypi-tracks-panel";
 import { RepoLabelsPanel } from "./repo-labels-panel";
 import { StorageBackendBadge } from "./storage-backend-badge";
+import { CacheOnlyBadge } from "./upstream-mode-badge";
+import { useUpstreamMode } from "@/hooks/use-upstream-mode";
 import { ScanOnProxyNote } from "./scan-on-proxy-note";
 import { ArtifactOriginSection } from "./artifact-origin-section";
 import { artifactDetailKey } from "@/lib/query-keys";
@@ -283,6 +286,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
   // backed by a WASM plugin (#592), which report `format: "generic"`.
   const { data: formatHandlers } = useFormatHandlers();
 
+  // A Remote's upstream mode for the "Cache-only" header badge (#1094).
+  const { data: upstreamMode } = useUpstreamMode(repository);
   const repoFormat = repository?.format;
   // Derive effective view mode: explicit user choice wins; otherwise default
   // to `grouped` for formats that support grouping.
@@ -634,15 +639,34 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
       artifactId,
       action,
       reason,
+      expectedDigest,
     }: {
       artifactId: string;
       action: QuarantineAction;
       reason: string;
+      /** The OCI manifest digest the admin reviewed (#1238). */
+      expectedDigest?: string;
     }) =>
       action === "release"
-        ? quarantineApi.release(artifactId)
-        : quarantineApi.reject(artifactId, reason || undefined),
-    onSuccess: (_result, { artifactId, action }) => {
+        ? quarantineApi.release(artifactId, expectedDigest)
+        : quarantineApi.reject(artifactId, reason || undefined, expectedDigest),
+    onSuccess: (result, { artifactId, action }) => {
+      // The tag moved before the action landed (#1238): the backend applied it
+      // to the reviewed image's row and left the image the tag names now, and
+      // so this row, unchanged. Refetch rather than rewrite the dialog copy.
+      if (result?.moved_to_digest) {
+        queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
+        queryClient.invalidateQueries({ queryKey: ["artifact-tree", repoKey] });
+        queryClient.invalidateQueries({ queryKey: ["quarantine-status", artifactId] });
+        closeQuarantineDialog();
+        const verb = action === "release" ? "released" : "rejected";
+        const message = `The tag moved to ${result.moved_to_digest} before the action landed. The image you reviewed${
+          result.held_digest ? ` (${result.held_digest})` : ""
+        } was ${verb}; the new image was not changed.`;
+        toast.warning(message);
+        setActionAnnounce(message);
+        return;
+      }
       // The listing row for this artifact now carries a stale verdict, as does
       // any cached status lookup for it.
       queryClient.invalidateQueries({ queryKey: ["artifacts", repoKey] });
@@ -1229,6 +1253,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                 className="text-xs font-normal"
               />
               <StorageBackendBadge storageBackend={repository.storage_backend} />
+              {/* Only a Remote's mode is read (#1094). */}
+              <CacheOnlyBadge upstreamMode={upstreamMode} className="text-xs" />
               <span className="text-sm text-muted-foreground ml-2">
                 {repoHeaderSize(repository)}
               </span>
@@ -1277,6 +1303,8 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
               className="text-xs font-normal"
             />
             <StorageBackendBadge storageBackend={repository.storage_backend} />
+            {/* Only a Remote's mode is read (#1094). */}
+            <CacheOnlyBadge upstreamMode={upstreamMode} className="text-xs" />
             <span className="text-sm text-muted-foreground ml-2">
               {repoHeaderSize(repository)}
             </span>
@@ -2306,6 +2334,7 @@ export function RepoDetailContent({ repoKey, standalone = false }: RepoDetailCon
                   artifactId: selectedArtifact.id,
                   action: quarantineAction,
                   reason: quarantineReason.trim(),
+                  expectedDigest: ociExpectedDigest(selectedArtifact),
                 });
               }}
             >

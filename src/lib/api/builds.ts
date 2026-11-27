@@ -15,11 +15,11 @@ import type {
   UpdateBuildRequest as SdkUpdateBuildRequest,
 } from '@artifact-keeper/sdk';
 import type { PaginatedResponse } from '@/types';
-import { assertData, narrowEnum } from '@/lib/api/fetch';
+import { apiFetch, assertData, narrowEnum } from '@/lib/api/fetch';
 
 // Re-export types from the canonical types/ module
-export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff } from '@/types/builds';
-import type { Build, BuildStatus, BuildDiff, BuildModule } from '@/types/builds';
+export type { BuildStatus, Build, BuildModule, BuildDiff, BuildArtifact, BuildArtifactDiff, BuildDeleteResult } from '@/types/builds';
+import type { Build, BuildArtifact, BuildStatus, BuildDiff, BuildModule, BuildDeleteResult } from '@/types/builds';
 import { unwrap } from '@/lib/sdk-utils';
 
 export interface ListBuildsParams {
@@ -31,6 +31,9 @@ export interface ListBuildsParams {
   sort_order?: 'asc' | 'desc';
 }
 
+/** Most ids `POST /api/v1/builds/delete` takes at once */
+const BULK_DELETE_MAX = 100;
+
 const BUILD_STATUSES = new Set<BuildStatus>([
   'pending',
   'running',
@@ -39,47 +42,32 @@ const BUILD_STATUSES = new Set<BuildStatus>([
   'cancelled',
 ]);
 
-// SDK BuildModule: { id, name, artifacts: BuildArtifact[] }
-// Local BuildModule: { id, build_id, module_name, name, path, checksum_sha256,
-// size_bytes, created_at }. The SDK shape is a parent record holding its
-// artifacts; the local shape was modeled per-artifact-row.
-//
-// INTENTIONAL LOSS: this adapter collapses an N-artifact SDK module to a
-// single local BuildModule by keeping only `artifacts[0]`. Pages that need
-// per-artifact data should consume the SDK shape directly via
-// `BuildResponse.modules[i].artifacts`. Pending: rework the local BuildModule
-// type to carry an `artifacts` array so the collapse can be removed (#206
-// follow-up).
-//
-// While the local type still drops siblings, log a warning when a module
-// arrives with multiple artifacts so the regression is observable rather
-// than silent.
-function adaptBuildModule(
-  sdk: SdkBuildModule,
-  buildId: string,
-  buildCreatedAt: string,
-): BuildModule {
-  if (sdk.artifacts.length > 1) {
-    console.warn(
-      `buildsApi: collapsing SDK BuildModule "${sdk.name}" (${sdk.artifacts.length} artifacts) ` +
-        `to a single local BuildModule entry — extra artifacts are dropped. ` +
-        `Pages that need full per-artifact data must consume modules[i].artifacts directly.`
-    );
-  }
-  const first = sdk.artifacts[0];
+/** Link fields a backend with build artifact links (#618) adds, not in the SDK yet */
+type ArtifactLinkFields = {
+  artifact_id?: string | null;
+  repository_key?: string | null;
+  artifact_deleted?: boolean | null;
+};
+
+function adaptBuildArtifact(
+  a: SdkBuildModule['artifacts'][number] & ArtifactLinkFields,
+): BuildArtifact {
+  return {
+    name: a.name,
+    path: a.path,
+    checksum_sha256: a.checksum_sha256,
+    size_bytes: a.size_bytes,
+    artifact_id: a.artifact_id ?? undefined,
+    repository_key: a.repository_key ?? undefined,
+    artifact_deleted: a.artifact_deleted ?? undefined,
+  };
+}
+
+function adaptBuildModule(sdk: SdkBuildModule): BuildModule {
   return {
     id: sdk.id,
-    build_id: buildId,
-    module_name: sdk.name,
-    name: first?.name ?? sdk.name,
-    path: first?.path ?? '',
-    checksum_sha256: first?.checksum_sha256 ?? '',
-    size_bytes: first?.size_bytes ?? 0,
-    // SDK's BuildModule has no per-module timestamp. Falling back to the parent
-    // build's created_at gives the UI a valid date to render (vs '' which
-    // produces "Invalid Date"). Modules are scoped to a build so this is a
-    // reasonable approximation until the SDK exposes a real field.
-    created_at: buildCreatedAt,
+    name: sdk.name,
+    artifacts: sdk.artifacts.map(adaptBuildArtifact),
   };
 }
 
@@ -97,7 +85,7 @@ function adaptBuild(sdk: BuildResponse): Build {
     updated_at: sdk.updated_at,
     artifact_count: sdk.artifact_count ?? undefined,
     modules: sdk.modules
-      ? sdk.modules.map((m) => adaptBuildModule(m, sdk.id, sdk.created_at))
+      ? sdk.modules.map(adaptBuildModule)
       : undefined,
     vcs_url: sdk.vcs_url ?? undefined,
     vcs_revision: sdk.vcs_revision ?? undefined,
@@ -118,8 +106,8 @@ function adaptBuildDiff(sdk: BuildDiffResponse): BuildDiff {
   return {
     build_a: sdk.build_a,
     build_b: sdk.build_b,
-    added: sdk.added,
-    removed: sdk.removed,
+    added: sdk.added.map(adaptBuildArtifact),
+    removed: sdk.removed.map(adaptBuildArtifact),
     modified: sdk.modified,
   };
 }
@@ -171,6 +159,20 @@ export const buildsApi = {
     };
     const data = await unwrap(sdkUpdateBuild({ path: { id: buildId }, body }));
     return adaptBuild(assertData(data, 'buildsApi.updateStatus'));
+  },
+
+  /** Delete build records (not the artifacts they name), 100 ids per request */
+  deleteMany: async (ids: string[]): Promise<BuildDeleteResult> => {
+    const result: BuildDeleteResult = { deleted: [], failed: [] };
+    for (let i = 0; i < ids.length; i += BULK_DELETE_MAX) {
+      const part = await apiFetch<BuildDeleteResult>('/api/v1/builds/delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids: ids.slice(i, i + BULK_DELETE_MAX) }),
+      });
+      result.deleted.push(...part.deleted);
+      result.failed.push(...part.failed);
+    }
+    return result;
   },
 
   diff: async (buildIdA: string, buildIdB: string): Promise<BuildDiff> => {

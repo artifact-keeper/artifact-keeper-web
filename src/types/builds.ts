@@ -22,13 +22,8 @@ export interface Build {
 
 export interface BuildModule {
   id: string;
-  build_id: string;
-  module_name: string;
   name: string;
-  path: string;
-  checksum_sha256: string;
-  size_bytes: number;
-  created_at: string;
+  artifacts: BuildArtifact[];
 }
 
 export interface BuildArtifact {
@@ -36,6 +31,11 @@ export interface BuildArtifact {
   path: string;
   checksum_sha256: string;
   size_bytes: number;
+  /** The stored artifact this entry links to, when the caller can read it */
+  artifact_id?: string;
+  repository_key?: string;
+  /** The linked artifact is in the trash */
+  artifact_deleted?: boolean;
 }
 
 export interface BuildArtifactDiff {
@@ -53,4 +53,15 @@ export interface BuildDiff {
   added: BuildArtifact[];
   removed: BuildArtifact[];
   modified: BuildArtifactDiff[];
+}
+
+export interface BuildDeleteFailure {
+  id: string;
+  /** `not_found` or `forbidden` */
+  reason: string;
+}
+
+export interface BuildDeleteResult {
+  deleted: string[];
+  failed: BuildDeleteFailure[];
 }

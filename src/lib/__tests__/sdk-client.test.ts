@@ -710,51 +710,98 @@ describe("sdk-client", () => {
       expect(result.status).toBe(401);
     });
 
-    it("refreshes the local session, not the remote one, for a remote instance (#829)", async () => {
+    const PROXIED = "http://localhost:3000/api/v1/instances/remote-1/proxy/api/v1/repos";
+
+    it("refreshes the local session, not the remote one, when the local session expired (#829, #1227)", async () => {
       setupBrowserEnv();
       mockStorage["ak_active_instance"] = "remote-1";
 
       const mockFetch = vi.fn();
-      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
-      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 200 }));
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 401 })); // GET /instances
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 })); // refresh
+      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 200 })); // retry
       vi.stubGlobal("fetch", mockFetch);
 
       await import("../sdk-client");
       const interceptor = responseInterceptors[0];
 
-      const response = new Response("Unauthorized", { status: 401 });
-      const request = new Request(
-        "http://localhost:3000/api/v1/instances/remote-1/proxy/api/v1/repos"
+      const result = await interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request(PROXIED)
       );
-
-      const result = await interceptor(response, request);
+      expect(mockFetch).toHaveBeenNthCalledWith(1, "/api/v1/instances", expect.anything());
       expect(mockFetch).toHaveBeenNthCalledWith(
-        1,
+        2,
         "/api/v1/auth/refresh",
         expect.objectContaining({ method: "POST", credentials: "include" })
       );
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(result.status).toBe(200);
     });
 
-    it("returns the remote's 401 when the retry is refused again", async () => {
+    it("does not refresh or redirect when the remote rejected its key, and reports it (#1227)", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+
+      const mockFetch = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+      vi.stubGlobal("fetch", mockFetch);
+      const onRejected = vi.fn();
+      (window as unknown as { dispatchEvent: typeof onRejected }).dispatchEvent = onRejected;
+
+      const { REMOTE_KEY_REJECTED_EVENT } = await import("../sdk-client");
+      expect(REMOTE_KEY_REJECTED_EVENT).toBe("ak:remote-key-rejected");
+      const interceptor = responseInterceptors[0];
+      const result = await interceptor(
+        new Response("Unauthorized", { status: 401 }),
+        new Request(PROXIED)
+      );
+
+      expect(result.status).toBe(401);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledWith("/api/v1/instances", expect.anything());
+      expect(mockFetch.mock.calls.some(([u]) => String(u).includes("/auth/refresh"))).toBe(false);
+      expect(onRejected).toHaveBeenCalledTimes(1);
+      expect(onRejected.mock.calls[0][0].type).toBe("ak:remote-key-rejected");
+      expect(window.location.href).toBe("/");
+    });
+
+    it("neither refreshes nor blames the key when the local check is inconclusive (#1227)", async () => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+
+      const mockFetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      vi.stubGlobal("fetch", mockFetch);
+      const onRejected = vi.fn();
+      (window as unknown as { dispatchEvent: typeof onRejected }).dispatchEvent = onRejected;
+
+      await import("../sdk-client");
+      const result = await responseInterceptors[0](
+        new Response("Unauthorized", { status: 401 }),
+        new Request(PROXIED)
+      );
+
+      expect(result.status).toBe(401);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(onRejected).not.toHaveBeenCalled();
+      expect(window.location.href).toBe("/");
+    });
+
+    it("still refreshes a local-only request directly while a remote is active (#1227)", async () => {
       setupBrowserEnv();
       mockStorage["ak_active_instance"] = "remote-1";
 
       const mockFetch = vi.fn();
-      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 }));
-      mockFetch.mockResolvedValueOnce(new Response("Unauthorized", { status: 401 }));
+      mockFetch.mockResolvedValueOnce(new Response("{}", { status: 200 })); // refresh
+      mockFetch.mockResolvedValueOnce(new Response("ok", { status: 200 })); // retry
       vi.stubGlobal("fetch", mockFetch);
 
       await import("../sdk-client");
-      const interceptor = responseInterceptors[0];
-      const result = await interceptor(
+      const result = await responseInterceptors[0](
         new Response("Unauthorized", { status: 401 }),
-        new Request("http://localhost:3000/api/v1/instances/remote-1/proxy/api/v1/repos")
+        new Request("http://localhost:3000/api/v1/instances")
       );
-      expect(result.status).toBe(401);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(window.location.href).toBe("/");
+      expect(mockFetch).toHaveBeenNthCalledWith(1, "/api/v1/auth/refresh", expect.anything());
+      expect(result.status).toBe(200);
     });
 
     it("redirects to /login when refresh fails", async () => {
@@ -1163,6 +1210,21 @@ describe("sdk-client", () => {
       const { localSessionExpired } = await import("../sdk-client");
 
       await expect(localSessionExpired()).resolves.toBe(false);
+    });
+  });
+
+  describe("localSessionState (#1227)", () => {
+    it.each([
+      [200, "valid"],
+      [401, "expired"],
+      [500, "unknown"],
+    ])("maps a %i from the local registry to %s", async (status, expected) => {
+      setupBrowserEnv();
+      mockStorage["ak_active_instance"] = "remote-1";
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status })));
+      const { localSessionState } = await import("../sdk-client");
+
+      await expect(localSessionState()).resolves.toBe(expected);
     });
   });
 

@@ -32,6 +32,19 @@ export interface SendTestEmailResponse {
   message: string;
 }
 
+export interface BuildRetention {
+  days: number;
+  keep_last: number;
+}
+
+function parseBuildRetention(data: unknown): BuildRetention | null {
+  if (!isPlainObject(data)) return null;
+  const days = data.build_retention_days;
+  const keep = data.build_retention_keep_last;
+  if (typeof days !== "number" || typeof keep !== "number") return null;
+  return { days, keep_last: keep };
+}
+
 /**
  * Storage configuration surfaced on the admin Settings → Storage tab.
  *
@@ -126,6 +139,13 @@ export interface AdminSettings {
    * into a display fallback rather than treating it as an error.
    */
   environment: string;
+  /**
+   * Template for the "request an exception" link every gate refusal carries
+   * (artifact-keeper#5782). `null` when unset, so refusals use the built-in
+   * `/exceptions/request` link; `undefined` on a backend without the setting,
+   * which hides the control.
+   */
+  exceptionRequestUrl?: string | null;
 }
 
 // ---- Pure parsers (#349 — extracted so getAllSettings can reuse them) ----
@@ -174,6 +194,16 @@ function parseEnvironment(data: unknown): string {
     return data.environment.trim();
   }
   return "";
+}
+
+/**
+ * Read `exception_request_url`, keeping "absent" (older backend) apart from
+ * "unset" (null or empty). Soft, like parseEnvironment.
+ */
+function parseExceptionRequestUrl(data: unknown): string | null | undefined {
+  if (!isPlainObject(data) || !("exception_request_url" in data)) return undefined;
+  const v = data.exception_request_url;
+  return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
 function parsePasswordPolicy(data: unknown): PasswordPolicy {
@@ -264,7 +294,22 @@ export const settingsApi = {
       storageSettings: parseStorageSettings(data),
       smtpConfig: parseSmtpConfig(data),
       environment: parseEnvironment(data),
+      exceptionRequestUrl: parseExceptionRequestUrl(data),
     };
+  },
+
+  /**
+   * Set the exception request link template. An empty string clears it.
+   *
+   * Sends only this field: every field of the settings update is optional on
+   * a backend new enough to have this one. The backend refuses (400) anything
+   * but an absolute http(s) URL without whitespace or control characters.
+   */
+  updateExceptionRequestUrl: async (template: string): Promise<void> => {
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({ exception_request_url: template.trim() }),
+    });
   },
 
   /**
@@ -310,6 +355,31 @@ export const settingsApi = {
       throw new Error(`Failed to load SMTP config: ${String(error)}`);
     }
     return parseSmtpConfig(data);
+  },
+
+  /**
+   * Build record retention (#618): `days` deletes builds
+   * older than that, `keep_last` keeps only the newest builds per name, 0
+   * turns a rule off, `null` when the backend does not report them (it has no
+   * build retention)
+   */
+  getBuildRetention: async (): Promise<BuildRetention | null> => {
+    const { data, error } = await getSettings();
+    if (error) {
+      throw new Error(`Failed to load build retention: ${String(error)}`);
+    }
+    return parseBuildRetention(data);
+  },
+
+  /** Save both build retention values, the settings update is partial */
+  updateBuildRetention: async (retention: BuildRetention): Promise<void> => {
+    await apiFetch<void>("/api/v1/admin/settings", {
+      method: "POST",
+      body: JSON.stringify({
+        build_retention_days: retention.days,
+        build_retention_keep_last: retention.keep_last,
+      }),
+    });
   },
 
   /**

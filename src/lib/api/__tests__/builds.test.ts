@@ -8,6 +8,12 @@ const mockCreateBuild = vi.fn();
 const mockUpdateBuild = vi.fn();
 const mockGetBuildDiff = vi.fn();
 
+const mockApiFetch = vi.fn();
+vi.mock("@/lib/api/fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/fetch")>()),
+  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+}));
+
 vi.mock("@artifact-keeper/sdk", () => ({
   listBuilds: (...args: unknown[]) => mockListBuilds(...args),
   getBuild: (...args: unknown[]) => mockGetBuild(...args),
@@ -55,6 +61,29 @@ function adaptedBuildFixture(overrides: Record<string, unknown> = {}) {
 
 describe("buildsApi", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("deleteMany posts the ids and returns the per-id result", async () => {
+    const result = { deleted: ["a"], failed: [{ id: "b", reason: "forbidden" }] };
+    mockApiFetch.mockResolvedValue(result);
+    const { buildsApi } = await import("../builds");
+    await expect(buildsApi.deleteMany(["a", "b"])).resolves.toEqual(result);
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/v1/builds/delete", {
+      method: "POST",
+      body: JSON.stringify({ ids: ["a", "b"] }),
+    });
+  });
+
+  it("deleteMany splits more than 100 ids over several requests", async () => {
+    mockApiFetch.mockImplementation((_path: string, init: RequestInit) => {
+      const { ids } = JSON.parse(init.body as string) as { ids: string[] };
+      return Promise.resolve({ deleted: ids, failed: [] });
+    });
+    const { buildsApi } = await import("../builds");
+    const ids = Array.from({ length: 205 }, (_, i) => `b${i}`);
+    const result = await buildsApi.deleteMany(ids);
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
+    expect(result.deleted).toEqual(ids);
+  });
 
   it("list returns paginated builds", async () => {
     const response = { items: [buildFixture()], pagination: { total: 1 } };
@@ -138,8 +167,7 @@ describe("buildsApi", () => {
     await expect(buildsApi.diff("b1", "b2")).rejects.toBe("fail");
   });
 
-  it("warns when adaptBuildModule collapses a multi-artifact module", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("keeps every artifact of a module", async () => {
     const moduleWithTwoArtifacts = {
       id: "mod1",
       name: "mod-a",
@@ -154,8 +182,47 @@ describe("buildsApi", () => {
     });
     const { buildsApi } = await import("../builds");
     const result = await buildsApi.get("b1");
-    expect(result.modules?.[0].name).toBe("a1");
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/collapsing SDK BuildModule/));
-    warn.mockRestore();
+    expect(result.modules).toEqual([moduleWithTwoArtifacts]);
+  });
+
+  it("keeps the stored artifact link of an entry", async () => {
+    const linked = {
+      name: "app.jar",
+      path: "libs/app.jar",
+      checksum_sha256: "c",
+      size_bytes: 1,
+      artifact_id: "a-1",
+      repository_key: "maven-releases",
+      artifact_deleted: true,
+    };
+    mockGetBuild.mockResolvedValue({
+      data: buildFixture({ modules: [{ id: "m", name: "app", artifacts: [linked] }] }),
+      error: undefined,
+    });
+    mockGetBuildDiff.mockResolvedValue({
+      data: { build_a: "b1", build_b: "b2", added: [linked], removed: [], modified: [] },
+      error: undefined,
+    });
+    const { buildsApi } = await import("../builds");
+    expect((await buildsApi.get("b1")).modules?.[0].artifacts[0]).toEqual(linked);
+    expect((await buildsApi.diff("b1", "b2")).added[0]).toEqual(linked);
+  });
+
+  it("passes vcs fields and metadata through", async () => {
+    const vcs = {
+      vcs_url: "https://vcs.example.test/org/repo",
+      vcs_revision: "0123abcd",
+      vcs_branch: "main",
+      vcs_message: "fix things",
+      metadata: { pipeline_url: "https://ci.example.test/p/1" },
+    };
+    mockListBuilds.mockResolvedValue({
+      data: { items: [buildFixture(vcs)], pagination: { total: 1 } },
+      error: undefined,
+    });
+    const { buildsApi } = await import("../builds");
+    const result = await buildsApi.list({ sort_by: "created_at" });
+    expect(result.items[0]).toEqual(adaptedBuildFixture(vcs));
+    expect(mockListBuilds).toHaveBeenCalledWith({ query: { sort_by: "created_at" } });
   });
 });

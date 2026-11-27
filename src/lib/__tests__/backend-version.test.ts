@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { backendAtLeast } from "../backend-version";
+import { backendAtLeast, BUILD_DELETE_MIN } from "../backend-version";
 
 describe("backendAtLeast", () => {
   it.each([
@@ -42,5 +42,14 @@ describe("backendAtLeast", () => {
   it("is false for an unparseable or pre-release minimum", () => {
     expect(backendAtLeast("1.11.0", "soon")).toBe(false);
     expect(backendAtLeast("1.11.0", "1.11.0-rc.1")).toBe(false);
+  });
+});
+
+describe("BUILD_DELETE_MIN gate", () => {
+  it("is closed below and open at the minimum", () => {
+    expect(backendAtLeast("1.12.1", BUILD_DELETE_MIN)).toBe(false);
+    expect(backendAtLeast("1.13.0-rc.1", BUILD_DELETE_MIN)).toBe(false);
+    expect(backendAtLeast(undefined, BUILD_DELETE_MIN)).toBe(false);
+    expect(backendAtLeast("1.13.0", BUILD_DELETE_MIN)).toBe(true);
   });
 });
