@@ -78,7 +78,21 @@ export const packagesApi = {
     return adaptPackage(assertData(data, 'packages.get'));
   },
 
-  getVersions: async (packageId: string): Promise<PackageVersion[]> => {
+  getVersions: async (
+    packageId: string,
+    params: GetPackageParams = {},
+  ): Promise<PackageVersion[]> => {
+    // Same virtual-repo context as `get`: a token scoped only to the virtual
+    // repository reads the member's versions through it (backend
+    // artifact-keeper#4808). `GetPackageVersionsData.query` is typed `never`
+    // in the pinned SDK, so the context goes through `apiFetch`.
+    if (params.repository_key) {
+      const query = new URLSearchParams({ repository_key: params.repository_key });
+      const response = await apiFetch<PackageVersionsResponse>(
+        `/api/v1/packages/${encodeURIComponent(packageId)}/versions?${query.toString()}`,
+      );
+      return assertData(response, 'packages.getVersions').versions;
+    }
     const data = await unwrap(getPackageVersions({ path: { id: packageId } }));
     const response: PackageVersionsResponse = assertData(data, 'packages.getVersions');
     return response.versions;
