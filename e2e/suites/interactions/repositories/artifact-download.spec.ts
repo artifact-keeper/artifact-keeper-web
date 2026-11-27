@@ -92,6 +92,30 @@ test.describe('Artifact Download', () => {
     await request.delete(`/api/v1/repositories/${REPO_KEY}/artifacts/${artifactPath}`).catch(() => {});
   });
 
+  test('artifact detail panel names the uploader (#472)', async ({ page, request }) => {
+    const me = await request.get('/api/v1/auth/me');
+    expect(me.ok(), `GET /auth/me failed: ${me.status()}`).toBeTruthy();
+    const { username } = await me.json();
+    const artifactPath = await uploadArtifact(request);
+    const artifactName = artifactPath.split('/').pop()!;
+
+    try {
+      await page.goto(`/repositories/${REPO_KEY}?view=flat`);
+      await page.getByPlaceholder('Search artifacts...').fill(artifactName);
+      const dialog = page.getByRole('dialog');
+      // The name cell elides the middle of the name, so find it by its full-name title. Retry while the search re-renders the table
+      await expect(async () => {
+        await page.getByTitle(artifactName, { exact: true }).first().click();
+        await expect(dialog).toBeVisible({ timeout: 2000 });
+      }).toPass({ timeout: 20000 });
+
+      await expect(dialog.getByText('Uploaded by', { exact: true })).toBeVisible({ timeout: 10000 });
+      await expect(dialog.getByText(username, { exact: true })).toBeVisible();
+    } finally {
+      await request.delete(`/api/v1/repositories/${REPO_KEY}/artifacts/${artifactPath}`).catch(() => {});
+    }
+  });
+
   test('download button triggers file download', async ({ page, request }) => {
     const artifactPath = await uploadArtifact(request);
     const artifactName = artifactPath.split('/').pop()!;

@@ -68,18 +68,16 @@ describe("ArtifactAttestationSection", () => {
 });
 
 describe("CondaPackageSection", () => {
-  it("lists subdir, build, license, depends and uploader", () => {
+  it("lists subdir, build, license and depends", () => {
     render(
       <CondaPackageSection
         path={CHANNEL.path}
-        uploadedBy="ci-publisher"
         metadata={{ license: "Apache-2.0", build_number: 0, depends: ["acme-core >=0.1", "pandas"] }}
       />,
     );
     expect(screen.getByText("noarch")).toBeInTheDocument();
     expect(screen.getByText("Apache-2.0")).toBeInTheDocument();
     expect(screen.getByText("acme-core >=0.1")).toBeInTheDocument();
-    expect(screen.getByText("ci-publisher")).toBeInTheDocument();
   });
 
   it("shows a verified publisher badge distinctly from a declared maintainer (#921)", () => {
