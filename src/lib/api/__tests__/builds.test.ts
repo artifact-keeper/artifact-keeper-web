@@ -208,6 +208,20 @@ describe("buildsApi", () => {
     expect((await buildsApi.diff("b1", "b2")).added[0]).toEqual(linked);
   });
 
+  it("list sends the name, branch, agent and date filters", async () => {
+    mockListBuilds.mockResolvedValue({ data: { items: [], pagination: { total: 0 } }, error: undefined });
+    const { buildsApi } = await import("../builds");
+    const query = {
+      name: "app",
+      branch: "main",
+      agent: "runner-a",
+      created_after: "2026-11-01T00:00:00Z",
+      created_before: "2026-12-01T00:00:00Z",
+    };
+    await buildsApi.list(query);
+    expect(mockListBuilds).toHaveBeenCalledWith({ query });
+  });
+
   it("passes vcs fields and metadata through", async () => {
     const vcs = {
       vcs_url: "https://vcs.example.test/org/repo",

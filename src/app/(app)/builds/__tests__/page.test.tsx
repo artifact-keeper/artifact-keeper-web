@@ -45,7 +45,12 @@ function build(n: number): Build {
 function pageOf(items: Build[], page: number, totalPages: number) {
   return {
     items,
-    pagination: { page, per_page: 20, total: items.length, total_pages: totalPages },
+    pagination: {
+      page,
+      per_page: 20,
+      total: totalPages > 1 ? totalPages * 20 : items.length,
+      total_pages: totalPages,
+    },
   };
 }
 
@@ -171,5 +176,86 @@ describe("BuildsPage modules", () => {
     expect(await screen.findAllByText("app.jar")).toHaveLength(2);
     const keyWarnings = errors.mock.calls.filter((c) => String(c[0]).includes("same key"));
     expect(keyWarnings).toEqual([]);
+  });
+});
+
+describe("BuildsPage filters gate", () => {
+  beforeEach(() => {
+    mocks.list.mockResolvedValue(pageOf([build(1)], 1, 1));
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it.each([["1.12.1"], ["1.13.0-rc.1"], [undefined]])(
+    "backend %s hides branch, agent and date filters and never sends them",
+    async (version) => {
+      mocks.getHealth.mockResolvedValue({ status: "healthy", version });
+      renderPage();
+      await screen.findByText("#1");
+      await waitFor(() => expect(mocks.getHealth).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 0));
+      for (const label of ["Branch", "Agent", "Created from", "Created to"]) {
+        expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+      }
+      for (const [params] of mocks.list.mock.calls) {
+        expect(params).not.toHaveProperty("branch");
+        expect(params).not.toHaveProperty("created_after");
+      }
+    }
+  );
+
+  it("backend 1.13.0 sends the branch once typing stops", async () => {
+    mocks.getHealth.mockResolvedValue({ status: "healthy", version: "1.13.0" });
+    renderPage();
+    const branch = await screen.findByLabelText("Branch");
+    for (const value of ["m", "ma", "main"]) {
+      fireEvent.change(branch, { target: { value } });
+    }
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ branch: "main" }))
+    );
+    const branches = mocks.list.mock.calls.map(([p]) => p.branch).filter(Boolean);
+    expect(branches).toEqual(["main"]);
+  });
+});
+
+describe("BuildsPage selection with filters", () => {
+  beforeEach(() => {
+    mocks.getHealth.mockResolvedValue({ status: "healthy", version: "1.13.0" });
+    mocks.list.mockImplementation(({ page }: { page: number }) =>
+      Promise.resolve(pageOf([build(page)], page, 2))
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn(() => false);
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("drops the selection when the branch filter changes", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByLabelText("Select app #1"));
+    fireEvent.change(screen.getByLabelText("Branch"), { target: { value: "main" } });
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ branch: "main" }))
+    );
+    await screen.findByLabelText("Select app #1");
+    expect(screen.queryByRole("button", { name: /Delete selected/ })).not.toBeInTheDocument();
+  });
+
+  it("drops the selection when the page size changes", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByLabelText("Select app #1"));
+    fireEvent.keyDown(screen.getByLabelText("Builds per page"), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "50 / page" }));
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenCalledWith(expect.objectContaining({ per_page: 50 }))
+    );
+    await screen.findByLabelText("Select app #1");
+    expect(screen.queryByRole("button", { name: /Delete selected/ })).not.toBeInTheDocument();
   });
 });
