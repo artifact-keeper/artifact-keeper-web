@@ -64,7 +64,7 @@ import {
 } from "@/components/auth/require-capability";
 import { useFeatureFlags } from "@/providers/system-config-provider";
 import { adminApi } from "@/lib/api/admin";
-import { backendAtLeast, EXCEPTIONS_MIN } from "@/lib/backend-version";
+import { useExceptionsSupported } from "@/hooks/use-exceptions-supported";
 import { useFormatHandlers } from "@/hooks/use-format-handlers";
 import { backendSupportsMcp } from "@/lib/mcp/format";
 import {
@@ -218,7 +218,7 @@ export function AppSidebar() {
   const mcpSupported = backendSupportsMcp(Array.isArray(formatHandlers) ? formatHandlers : undefined);
   // The exception queue needs backend EXCEPTIONS_MIN (artifact-keeper#5782,
   // #5783); an older one 404s every call, so its entries are hidden there.
-  const exceptionsSupported = backendAtLeast(health?.version, EXCEPTIONS_MIN);
+  const { supported: exceptionsSupported } = useExceptionsSupported();
   const visibleArtifactItems = artifactItems.filter(
     (item) =>
       (mcpSupported || item.href !== "/mcp-servers") &&
